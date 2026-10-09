@@ -1,0 +1,73 @@
+# Gen 3 HD Sprites
+
+A library mod for gen1recomp's Gen 3 games (**FireRed, LeafGreen, Ruby, Sapphire, Emerald**).
+Sprite mods use it to draw their battle Pokémon and overworld Pokémon at your screen's full
+resolution, at any size, instead of on the game's 240×160 pixel grid. On its own it does nothing:
+only images another mod tags are affected.
+
+Gen 3 draws a battle into a 240×160 canvas and the field into a world canvas, then scales them up
+by a whole number. A sprite that is shrunk, or moved by part of a pixel, is resampled on that grid,
+so only 50% and 100% look clean. With this mod a tagged sprite keeps every pixel of its art at
+any size (62%, 75%…), and walkers move smoothly between pixels.
+
+## Used by
+
+- **g9-battle-sprites-gen3**: battle pics are drawn from its atlas at window resolution; a
+  per-species size (Noivern at 60%) only applies with this mod.
+- **Wilds of Hoenn**: wild Pokémon and the follower; its *Overworld Size* option needs this mod.
+
+## Options
+
+- **Battle HD** (on): tagged battle Pokémon.
+- **Field HD** (on): tagged overworld Pokémon. It adds a few window-sized layers to each frame;
+  turn it off on a slow device.
+
+## How it works
+
+A "pass" is the drawing of one canvas: the battle (from `Battle.draw` to the frame's end) or the
+field (`Renderer:beginWorldPass` … `endWorldPass`). While a pass runs, a draw of a tagged image is
+not drawn but recorded, and everything drawn after it goes to a fresh transparent layer. When the
+Renderer blits that canvas to the window (`Renderer:blitCanvas`), the blit becomes: the canvas, each
+recorded sprite at window resolution, the next layer, and so on, with the Renderer's own arguments.
+The game's draw order is kept exactly: the battle HUD, text box, menus and fades stay on top; in the
+field, roofs and tree tops still cover what walks under them, and the player and NPCs still sort
+against tagged Pokémon.
+
+When a frame cannot be composited that way it is put back the usual low-res way, so nothing is
+ever lost: a canvas swapped out mid-pass (Ruby/Sapphire/Emerald weather that reads the field), tilt
+mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle, 6 in the
+field).
+
+## API (`mod.exports`)
+
+```lua
+local hd = mod:find("gen3-hd-sprites")
+local ex = hd and hd.exports
+if ex and ex.isActive() then
+  -- an overworld sheet: drawn where it is drawn, 75% of its size, standing on its feet
+  ex.tag(sheetImage, { scale = 0.75, anchor = "feet" })
+  -- a battle pic: the engine draws the 64x64 `pic`, this draws `frame` of `page` instead
+  ex.tag(pic, { texture = page, quad = frame, pivot = { 47, 90 }, lowPivot = { 32, 32 }, scale = 1 })
+end
+```
+
+| Field | Meaning |
+|---|---|
+| `scale` | size multiplier, any value (default 1) |
+| `anchor = "feet"` | scale about the bottom-centre of the drawn quad |
+| `texture`, `quad` | draw this full-resolution frame in place of the tagged image |
+| `pivot` | the point of `texture`/`quad` that stands where the tagged image's `lowPivot` was drawn |
+| `lowPivot` | default `{32, 32}`, the engine's battle-pic origin |
+| `filter` | `"nearest"` (default) or `"linear"` |
+
+Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)` and `stats()`
+(`splits`, `composites`, `flattened`, `overCap`). Tags are weak: an image that is freed drops its tag.
+Keep the tagged image itself a real low-res picture: it is what shows whenever a frame falls back.
+
+## Tests
+
+`luajit tests/hd_test.lua` (a fake `love.graphics`; no game needed).
+
+## License
+
+MIT.

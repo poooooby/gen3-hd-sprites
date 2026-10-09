@@ -1,0 +1,23 @@
+{
+  "id": "gen3-hd-sprites",
+  "name": "Gen 3 HD Sprites",
+  "version": "0.1.0",
+  "api": 2,
+  "entry": "main.lua",
+  "options_schema": "options.lua",
+  "profile": "content",
+  "games": [
+    "gen3"
+  ],
+  "category": "OTHER",
+  "priority": 240,
+  "permissions": [
+    "engine_internals"
+  ],
+  "dependencies": [],
+  "optional_dependencies": [],
+  "conflicts": [],
+  "incompatible": [],
+  "description": "Library for sprite mods: draws the battle Pokemon and overworld Pokemon they tag at your screen's full resolution, at any size, on FireRed, LeafGreen, Ruby, Sapphire and Emerald. Does nothing on its own.",
+  "github": "poooooby/gen3-hd-sprites"
+}

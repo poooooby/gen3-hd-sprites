@@ -1,0 +1,2 @@
+# Exact relative paths excluded from the distributed package.
+tests/hd_test.lua
