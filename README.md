@@ -1,80 +1,54 @@
-# Gen 3 HD Sprites
+<div align="center">
 
-A library mod for gen1recomp's Gen 3 games (**FireRed, LeafGreen, Ruby, Sapphire, Emerald**).
-Sprite mods use it to draw their battle Pokémon and overworld Pokémon at your screen's full
-resolution, at any size, instead of on the game's 240×160 pixel grid. On its own it does nothing:
-only images another mod tags are affected.
+# Gen 3 HD Sprites 🖥️
 
-Gen 3 draws a battle into a 240×160 canvas and the field into a world canvas, then scales them up
-by a whole number. A sprite that is shrunk, or moved by part of a pixel, is resampled on that grid,
-so only 50% and 100% look clean. With this mod a tagged sprite keeps every pixel of its art at
-any size (62%, 75%…), and walkers move smoothly between pixels.
+*Crisp Pokémon at any size. Battle and overworld Pokémon drawn at your screen's full
+resolution in FireRed, LeafGreen, Ruby, Sapphire and Emerald.*
 
-## Used by
+</div>
 
-- **g9-battle-sprites-gen3**: battle pics are drawn from its atlas at window resolution; a
-  per-species size (Noivern at 60%) only applies with this mod. Pokédex pics (both the
-  Ruby/Sapphire/Emerald and the FireRed/LeafGreen Pokédex) are drawn whole at window
-  resolution, fitted to the Pokédex's 64×64 picture.
-- **Wilds of Hoenn**: wild Pokémon and the follower; its *Overworld Size* option needs this mod.
+A library mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp)'s Generation 3 games.
+On its own it changes nothing; sprite mods that support it look sharper with it.
 
-## Options
+## ✨ Features
 
-- **Battle HD** (on): tagged battle Pokémon.
-- **Pokédex HD** (on): tagged Pokémon on the Pokédex screens.
-- **Field HD** (on): tagged overworld Pokémon. It adds a few window-sized layers to each frame;
-  turn it off on a slow device.
+### Core Mechanics
 
-## How it works
+- 🔍 **Every pixel kept, at any size:** The game scales its screen up by whole numbers, so a
+  Pokémon drawn at 62% or 75% normally comes out lumpy. With this mod it's drawn at your
+  window's resolution and keeps every pixel of its art.
+- 🚶 **Smooth movement:** Overworld Pokémon glide between pixels instead of stepping on the
+  game's grid.
+- 🧱 **Nothing out of place:** The battle HUD, text box and menus stay on top. On the field,
+  roofs and tree tops still cover what walks beneath them, and Pokémon still sort in front of or
+  behind the player and NPCs.
+- 🛟 **Never breaks a frame:** If a frame can't be drawn this way (a weather effect, a battle
+  transition), it's drawn the usual way instead. Nothing goes missing.
 
-A "pass" is the drawing of one canvas: the battle (from `Battle.draw` to the frame's end), a Pokédex
-screen (from its `Pokedex.draw` to the frame's end; inside a battle the battle pass covers it) or
-the field (`Renderer:beginWorldPass` … `endWorldPass`). While a pass runs, a draw of a tagged image is
-not drawn but recorded, and everything drawn after it goes to a fresh transparent layer. When the
-Renderer blits that canvas to the window (`Renderer:blitCanvas`), the blit becomes: the canvas, each
-recorded sprite at window resolution, the next layer, and so on, with the Renderer's own arguments.
-The game's draw order is kept exactly: the battle HUD, text box, menus and fades stay on top; in the
-field, roofs and tree tops still cover what walks under them, and the player and NPCs still sort
-against tagged Pokémon.
+## ⚙️ Options
 
-When a frame cannot be composited that way it is put back the usual low-res way, so nothing is
-ever lost: a canvas swapped out mid-pass (Ruby/Sapphire/Emerald weather that reads the field), tilt
-mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle and the Pokédex, 12 in the
-field; `cap(pass)` / `setCap(pass, n)`). Each one past it is drawn at its low-res size,
-not dropped. A layer is one window-sized canvas, so a high cap costs memory only in
-scenes that use it.
+Open **OPTIONS → MODS → Gen 3 HD Sprites**.
 
-## API (`mod.exports`)
+| Option | Choices | Default | What it does |
+|---|---|---|---|
+| **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
+| **Pokedex HD** | On / Off | On | Pokédex Pokémon at full resolution, fitted to the Pokédex. |
+| **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
-```lua
-local hd = mod:find("gen3-hd-sprites")
-local ex = hd and hd.exports
-if ex and ex.isActive() then
-  -- an overworld sheet: drawn where it is drawn, 75% of its size, standing on its feet
-  ex.tag(sheetImage, { scale = 0.75, anchor = "feet" })
-  -- a battle pic: the engine draws the 64x64 `pic`, this draws `frame` of `page` instead
-  ex.tag(pic, { texture = page, quad = frame, pivot = { 47, 90 }, lowPivot = { 32, 32 }, scale = 1 })
-end
-```
+## 💾 Installation
 
-| Field | Meaning |
-|---|---|
-| `scale` | size multiplier, any value (default 1) |
-| `anchor = "feet"` | scale about the bottom-centre of the drawn quad |
-| `texture`, `quad` | draw this full-resolution frame in place of the tagged image |
-| `pivot` | the point of `texture`/`quad` that stands where the tagged image's `lowPivot` was drawn |
-| `lowPivot` | default `{32, 32}`, the engine's battle-pic origin |
-| `quadPivots` | `{ [quad] = {x, y, scale} }`: a draw through one of these quads scales about its own quad-local point (and, with `scale`, its own size; `1` = a slice already drawn at its final size). Read at draw time, so it may grow. Check `features.quadPivots` |
-| `filter` | `"nearest"` (default) or `"linear"` |
+1. Download the latest release from the
+   [Releases](https://github.com/poooooby/gen3-hd-sprites/releases) page.
+2. Import it with the Gen1Recomp Mod Manager, or drop it in your mods folder.
+3. Enable it alongside a mod that uses it.
 
-Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`, `setCap(pass, n)`, `features` and `stats()`
-(`splits`, `composites`, `flattened`, `overCap`). Tags are weak: an image that is freed drops its tag.
-Keep the tagged image itself a real low-res picture: it is what shows whenever a frame falls back.
+## 🔗 Works With
 
-## Tests
+- [G9 Battle Sprites (Gen 3)](https://github.com/poooooby/g9-battle-sprites-gen3): sharp battle
+  and Pokédex sprites, each Pokémon sized to match its original sprite.
+- [Wilds of Hoenn](https://github.com/poooooby/wilds-of-hoenn): wild Pokémon and your partner at
+  their true relative sizes, with its **Species Sizes** and **Overworld Size** options.
 
-`luajit tests/hd_test.lua` (a fake `love.graphics`; no game needed).
+---
 
-## License
-
-MIT.
+Licence: [MIT](LICENSE). Making a mod that uses it? See [DEVELOPMENT.md](DEVELOPMENT.md).
