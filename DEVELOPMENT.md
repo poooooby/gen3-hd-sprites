@@ -25,6 +25,64 @@ Pokédex, 12 in the field; `cap(pass)` / `setCap(pass, n)`). Tagged draws with n
 between them share one layer. A layer is one window-sized canvas, so a high cap costs memory
 only in scenes that use it.
 
+## Battle Fit
+
+A battle pass is cut into the **scene** and the **UI** over it.
+
+- **The UI seam:** `hd.seam("ui")` is called right after `BallOpen.draw`, the last scene draw
+  in `Ui.draw` (`src/core/game3/battle/ui.lua`), for singles and doubles alike.
+- **The wallpaper and pads:** with Battle Fit on, `BattleChrome.drawTerrain` draws the
+  terrain's split art, the same art the intro slide uses:
+  - the wallpaper goes to `hd.backdrop`, recorded rather than drawn;
+  - the two pads go through `hd.drawStage`.
+
+At composite time:
+
+- **The stage** zooms by `z` about `fit.focus = (120, 112)`, the text box's top centre. The
+  stage is the base canvas, the scene's layers and the tagged sprites before the seam.
+- **The wallpaper** zooms by `1 - (1 - z) * fit.parallax`. It is drawn straight from its image,
+  wrapped horizontally and clamped vertically, so it covers the view.
+- **Whole-scene draws in the scene** get a layer of their own that is not zoomed, so they still
+  cover everything. These are fill rectangles and non-canvas images covering 240×112 or more,
+  such as a move's background or a flash.
+- **The UI** is blitted exactly as before.
+
+The target zoom:
+
+- For each tagged draw in the scene, the top of its art is `Y_pivot - (pivotY - spec.top) * size`.
+- With `T` the highest of those tops, `target = (112 - margin) / (112 - T)` (`margin = 2`).
+- Zoomed about the focus, the enemy's feet line (`fit.feetY = 72`, the bottom of its pic box)
+  would sink into the player's HP box. Past the point where it would go below
+  `fit.feetMax = 76`, the stage also rises by `lift = 112 + (72 - 112) * z - 76`, which holds the
+  feet on 76. The target is then `(76 - margin) / (72 - T)`.
+- Either target is clamped to `[zMin, 1]`. `zMin` is 0.5 for Fit Sprites and 0.4 for Fit Tall
+  Too. The wallpaper does not rise: its rows below y = 112 are hidden by the text box on the cart, so its bottom edge stays on the text box line.
+- The zoom snaps to the target at a battle's first frame and eases out about 20% per frame.
+- It eases back in about 5% per frame, but only after the target has stayed larger for 45
+  frames.
+- A frame with no UI seam (the post-catch Pokédex scene) is not zoomed.
+
+With no `top`, the frame's own top row counts, empty margin included. Pass `top` (the first
+row of art, the highest over the animation) so the camera fits the art and not the frame.
+
+**The player's pad, whole** (`src/pads.lua`). The cart stores only the top 11 rows of the
+player's pad, because the rest is always under the text box, and a raised camera would show
+that cut. On every FRLG and RSE terrain the player's pad is the same 128×32 oval as the
+enemy's, 112 px left and 53 px down. So the enemy pad is copied there, once per terrain:
+
+- Every pixel inside the oval is copied.
+- Outside the oval, only pixels that differ from the wallpaper are copied: the rim, tufts and
+  rocks. The pad tiles' ground corners would not line up with the wallpaper's 4-row stripes
+  53 rows lower.
+- Everything else is transparent.
+
+The art is read back from the images the game imported from the player's ROM, so nothing is
+shipped. A terrain whose enemy pad does not fill the oval, or is mostly ground, keeps the
+game's own pad.
+
+If `BattleChrome.drawTerrain`, `BattleChrome.terrain` or `BallOpen.draw` is missing,
+`fit.available` is false and the option does nothing. The HD sprites are unaffected.
+
 ## API (`mod.exports`)
 
 ```lua
@@ -47,10 +105,13 @@ end
 | `lowPivot` | default `{32, 32}`, the engine's battle-pic origin |
 | `quadPivots` | `{ [quad] = {x, y, scale} }`: a draw through one of these quads scales about its own quad-local point (and, with `scale`, at its own size; `1` = a slice already drawn at its final size). Read at draw time, so it may grow. Check `features.quadPivots` |
 | `filter` | `"nearest"` (default) or `"linear"` |
+| `top` | the first row of art in the frame (quad pixels), the highest over the animation: Battle Fit fits the art, not the frame's empty margin (default 0) |
 
 Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true }`) and `stats()` (`splits`, `composites`,
-`flattened`, `overCap`). Tags are weak: an image that is freed drops its tag. Keep the tagged
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true }`),
+`fitEnabled()`, `setFit("off" | "fit" | "tall")`, `sceneZoom()` (the battle scene's zoom this
+frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
+`zoomTarget`, `lift`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 
 ## Tests

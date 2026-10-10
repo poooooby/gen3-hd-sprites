@@ -17,6 +17,17 @@
 -- exactly, and a tagged sprite is drawn with the window's pixels instead of the canvas's.
 -- When a pass cannot be composited (the canvas is swapped out, the blit never comes), it
 -- is "flattened" back into the base canvas the low-res way, so nothing is ever lost.
+--
+-- Battle Fit. A battle pass can be cut into a SCENE (the wallpaper, pads, Pokemon and move
+-- effects) and the UI over it, by seam("ui") (the engine calls it after the last scene draw).
+-- The wallpaper is recorded with backdrop() instead of drawn. At composite time the scene's
+-- layers and sprites are zoomed out about `fit.focus` (the text box's top centre) just enough
+-- that the tallest tagged sprite fits under the top of the screen. Past the point where that
+-- would sink the enemy's feet line (`fit.feetY`) below `fit.feetMax` (into the player's HP
+-- box), the camera also rises, keeping the feet on that line. The wallpaper zooms less
+-- (parallax, drawn wrapped so no edge shows) and the UI is blitted as it always is. A draw
+-- that covers the whole scene (a move's background, a flash) gets a layer of its own that is
+-- not zoomed, so it still covers the view.
 
 local HD = {}
 
@@ -40,7 +51,19 @@ function HD.new(G, opts)
     cur = nil,          -- the pass being captured
     done = {},          -- finished passes waiting for their blit, by base canvas
     pool = {},          -- layer canvases by "w x h" -> list
-    stats = { splits = 0, composites = 0, flattened = 0, overCap = 0 },
+    stats = { splits = 0, composites = 0, flattened = 0, overCap = 0, zoom = 1, zoomTarget = 1, lift = 0 },
+    -- Battle Fit (see the header). z eases toward target: out fast, back in only after the
+    -- target has stayed larger for holdFrames, so a sprite's animation never pumps it.
+    fit = {
+      -- the farthest it may pull back, by the option's value
+      modes = { fit = 0.5, tall = 0.4 },
+      enabled = false, available = false, zMin = 0.5, focus = { 120, 112 }, margin = 2, parallax = 0.35,
+      -- the enemy's feet (its 64x64 pic box's bottom, ui.lua ENEMY_MON y 40 + 32) and the
+      -- lowest they may sink to: the top of the player's HP box is just below
+      feetY = 72, feetMax = 76,
+      outRate = 0.2, inRate = 0.05, holdFrames = 45,
+      z = 1, target = 1, hold = 0, idle = 99,
+    },
   }
   local real = {}
   self.real = real
@@ -91,28 +114,79 @@ function HD.new(G, opts)
     return cur ~= nil and c ~= nil and (c == cur.base or cur.layerSet[c] == true)
   end
 
-  -- a non-tagged draw is about to happen on the pass: open the layer a tagged draw left pending
-  local function openPending()
+  local function onPass()
+    return self.cur ~= nil and isPassCanvas(real.getCanvas())
+  end
+
+  -- start a fresh transparent layer; what the pass draws next goes into it.
+  -- screen: a layer of whole-scene draws, composited without Battle Fit's zoom
+  local function openLayer(screen)
     local cur = self.cur
-    if not (cur and cur.pending) then return end
+    local drawing = onPass()
     cur.pending = false
+    cur.screenOpen = screen and true or false
     cur.layerCount = cur.layerCount + 1
     local layer = getLayer(cur.w, cur.h, cur.layerCount)
     cur.layerSet[layer] = true
     cur.current = layer
-    cur.items[#cur.items + 1] = { kind = "layer", canvas = layer }
-    real.setCanvas(layer)
+    cur.items[#cur.items + 1] = { kind = "layer", canvas = layer, screen = screen }
     real.push("all")
+    real.setCanvas(layer)
     real.origin()
     real.setScissor()
     real.setShader()
     real.setBlendMode("alpha", "alphamultiply")
     real.clear(0, 0, 0, 0)
     real.pop()
+    if drawing then real.setCanvas(layer) end
   end
 
-  local function onPass()
-    return self.cur ~= nil and isPassCanvas(real.getCanvas())
+  -- a draw is about to happen on the pass: open the layer a tagged draw left pending, or
+  -- move between whole-scene draws and the rest
+  local function beforeDraw(screen)
+    local cur = self.cur
+    if screen then
+      if not cur.screenOpen then openLayer(true) end
+    elseif cur.pending or cur.screenOpen then
+      openLayer(false)
+    end
+  end
+
+  -- whole-scene draws are only told apart in a battle's scene, with Battle Fit on
+  local function sceneFit()
+    local cur = self.cur
+    return self.fit.enabled and cur.pass == "battle" and cur.segment == "scene" and not cur.stageDraw
+  end
+
+  -- does the rectangle (x, y, w, h), in the current transform, cover the scene?
+  local function coversScene(x, y, w, h)
+    if type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
+      return false
+    end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + h)
+    if x0 > x1 then x0, x1 = x1, x0 end
+    if y0 > y1 then y0, y1 = y1, y0 end
+    return x0 <= 0.5 and y0 <= 0.5 and x1 >= self.cur.w - 0.5 and y1 >= self.fit.focus[2] - 0.5
+  end
+
+  local function drawCoversScene(image, a, b, c, d, e, f, g, h)
+    -- a canvas drawn over the scene is an effect drawn in scene coordinates: it zooms
+    if type(image) == "userdata" and image.typeOf and image:typeOf("Canvas") then return false end
+    local w, hh, x, y, r, sx, sy, ox, oy
+    if isQuad(a) then
+      local _
+      _, _, w, hh = a:getViewport()
+      x, y, r, sx, sy, ox, oy = b, c, d, e, f, g, h
+    else
+      if not (image and image.getWidth) then return false end
+      w, hh = image:getWidth(), image:getHeight()
+      x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
+    end
+    if (r or 0) ~= 0 or type(x) ~= "number" then return false end
+    sx = sx or 1
+    sy = sy or sx
+    return coversScene(x - (ox or 0) * sx, (y or 0) - (oy or 0) * sy, w * sx, hh * sy)
   end
 
   local function record(image, spec, a, b, c, d, e, f, g, h, i)
@@ -147,20 +221,28 @@ function HD.new(G, opts)
           if not cur.pending then cur.splits = cur.splits + 1 end
           cur.items[#cur.items + 1] = { kind = "hd", rec = rec }
           cur.pending = true
+          cur.screenOpen = false
           self.stats.splits = self.stats.splits + 1
           return
         end
       elseif spec then
         self.stats.overCap = self.stats.overCap + 1
       end
-      openPending()
+      beforeDraw(sceneFit() and drawCoversScene(image, ...))
     end
     return real.draw(image, ...)
   end
 
   local function wrapPrimitive(name)
     return function(...)
-      if self.cur and onPass() then openPending() end
+      if self.cur and onPass() then
+        local screen = false
+        if name == "rectangle" and sceneFit() then
+          local mode, x, y, w, h = ...
+          screen = mode == "fill" and coversScene(x, y, w, h)
+        end
+        beforeDraw(screen)
+      end
       return real[name](...)
     end
   end
@@ -206,6 +288,8 @@ function HD.new(G, opts)
     for _, name in ipairs(PRIMITIVES) do
       if type(G[name]) == "function" then real[name] = G[name] end
     end
+    -- optional: the wallpaper is drawn wrapped through a quad of our own
+    if type(G.newQuad) == "function" then real.newQuad = G.newQuad end
     G.draw = wrappedDraw
     G.setCanvas = wrappedSetCanvas
     G.pop = wrappedPop
@@ -231,9 +315,43 @@ function HD.new(G, opts)
     self.cur = {
       pass = pass, base = base, current = base, layerSet = {}, items = {},
       w = base:getWidth(), h = base:getHeight(), layerCount = 0, splits = 0,
-      cap = self.caps[pass] or 8, pending = false,
+      cap = self.caps[pass] or 8, pending = false, screenOpen = false,
+      segment = "scene", hasUI = false,
     }
     return true
+  end
+
+  --- The scene of a battle ends here: what the pass draws next is the UI (Battle Fit).
+  function self.seam(name)
+    local cur = self.cur
+    if not cur then return end
+    cur.items[#cur.items + 1] = { kind = "seam", name = name }
+    if name == "ui" then
+      cur.segment = "ui"
+      cur.hasUI = true
+    end
+    openLayer(false)
+  end
+
+  --- Draw the battle's wallpaper: recorded, then drawn at window resolution, wrapped so the
+  --- zoomed-out scene never shows its edge. Outside a pass it is simply drawn.
+  function self.backdrop(image, x, y)
+    local cur = self.cur
+    if not (cur and onPass()) then return real.draw(image, x, y) end
+    local rec = record(image, {}, x, y)
+    if not rec then return real.draw(image, x, y) end
+    cur.items[#cur.items + 1] = { kind = "backdrop", rec = rec }
+    cur.pending = true
+    cur.screenOpen = false
+  end
+
+  --- Draw part of the battle's stage that is as big as the screen but is not a whole-scene
+  --- effect (a pad, drawn on a transparent screen-sized image): it zooms with the scene.
+  function self.drawStage(image, x, y)
+    local cur = self.cur
+    if cur then cur.stageDraw = true end
+    G.draw(image, x, y)
+    if cur then cur.stageDraw = false end
   end
 
   --- Stop capturing. The pass waits for its canvas's blit (or flatten).
@@ -254,7 +372,9 @@ function HD.new(G, opts)
 
   -- ------------------------------------------------------------- composite
 
-  local function hdDraw(rec, bx, by, bsx, bsy)
+  -- where a tagged draw stands: the point in pass-canvas pixels where its HD pivot goes
+  -- (X, Y), that pivot in the HD frame (hpx, hpy), its size k, the texture and quad
+  local function place(rec)
     local spec = rec.spec
     local tex = spec.texture or rec.image
     local quad = spec.texture and spec.quad or rec.quad
@@ -278,8 +398,18 @@ function HD.new(G, opts)
     local cs, sn = math.cos(rec.r), math.sin(rec.r)
     local px = rec.x + dx * cs - dy * sn
     local py = rec.y + dx * sn + dy * cs
-    local X = rec.tx + px * rec.tsx
-    local Y = rec.ty + py * rec.tsy
+    return rec.tx + px * rec.tsx, rec.ty + py * rec.tsy, hpx, hpy, k, tex, quad
+  end
+
+  -- the top of a tagged draw's art, in pass-canvas pixels (spec.top: its first row of art
+  -- in the frame, the highest over its animation; else the frame's top)
+  local function artTop(rec)
+    local _, Y, _, hpy, k = place(rec)
+    return Y - (hpy - (rec.spec.top or 0)) * math.abs(rec.sy * k * rec.tsy)
+  end
+
+  local function hdDraw(rec, bx, by, bsx, bsy)
+    local X, Y, hpx, hpy, k, tex, quad = place(rec)
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
     real.setShader(rec.shader)
     real.setBlendMode(rec.blend[1], rec.blend[2])
@@ -292,24 +422,144 @@ function HD.new(G, opts)
     end
   end
 
-  --- Replace a blit of a captured canvas. `blit(canvas)` performs the Renderer's own blit
-  --- of a canvas with the same arguments; bx/by/bsx/bsy map canvas pixels to the screen;
+  local wrapped = setmetatable({}, { __mode = "k" })
+  local backdropQuad
+
+  -- the wallpaper, mapped by (bx, by, bsx, bsy), drawn over the whole of the pass canvas's
+  -- view (which (fx, fy, fsx, fsy), the unzoomed mapping, puts on the screen): its own
+  -- horizontal wrap repeats it, the top row stretches up
+  local function drawBackdrop(rec, cw, ch, bx, by, bsx, bsy, fx, fy, fsx, fsy)
+    local img = rec.image
+    real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
+    real.setShader(rec.shader)
+    real.setBlendMode(rec.blend[1], rec.blend[2])
+    local iw, ih = img.getWidth and img:getWidth(), img.getHeight and img:getHeight()
+    if not (real.newQuad and iw and ih) then
+      real.draw(img, bx + (rec.tx + rec.x * rec.tsx) * bsx, by + (rec.ty + rec.y * rec.tsy) * bsy,
+        0, rec.tsx * bsx, rec.tsy * bsy)
+      return
+    end
+    if not wrapped[img] then
+      wrapped[img] = true
+      if img.setWrap then pcall(img.setWrap, img, "repeat", "clamp") end
+    end
+    -- the view in canvas pixels of this mapping, then in the image's pixels
+    local p0x, p1x = (fx - bx) / bsx, (fx + cw * fsx - bx) / bsx
+    local p0y, p1y = (fy - by) / bsy, (fy + ch * fsy - by) / bsy
+    local u0 = (p0x - rec.tx) / rec.tsx - rec.x
+    local v0 = (p0y - rec.ty) / rec.tsy - rec.y
+    local uw, vh = (p1x - p0x) / rec.tsx, (p1y - p0y) / rec.tsy
+    if backdropQuad and backdropQuad.setViewport then
+      backdropQuad:setViewport(u0, v0, uw, vh, iw, ih)
+    else
+      backdropQuad = real.newQuad(u0, v0, uw, vh, iw, ih)
+    end
+    real.draw(img, backdropQuad, bx + p0x * bsx, by + p0y * bsy, 0, rec.tsx * bsx, rec.tsy * bsy)
+  end
+
+  -- how far the camera rises at zoom z (canvas pixels): enough that the enemy's feet line,
+  -- zoomed about the focus, sinks no lower than feetMax
+  local function fitLift(z)
+    local fit = self.fit
+    local fy = fit.focus[2]
+    return math.max(0, fy + (fit.feetY - fy) * z - fit.feetMax)
+  end
+  self.fitLift = fitLift
+
+  -- the zoom that brings `top` to the margin: about the focus while the feet stay above
+  -- feetMax, else (the camera rising) with the feet held on feetMax
+  local function fitZoom(top)
+    local fit = self.fit
+    if top >= fit.margin then return 1 end
+    local fy = fit.focus[2]
+    local z = (fy - fit.margin) / (fy - top)
+    if fitLift(z) > 0 then z = (fit.feetMax - fit.margin) / (fit.feetY - top) end
+    return math.min(1, z)
+  end
+  self.fitZoom = fitZoom
+
+  -- the stage zoom for this frame: the zoom that fits the tallest tagged sprite, eased
+  local function fitStep(cur)
+    local fit = self.fit
+    local top = math.huge
+    for _, item in ipairs(cur.items) do
+      if item.kind == "seam" and item.name == "ui" then break end
+      if item.kind == "hd" then
+        local t = artTop(item.rec)
+        if t < top then top = t end
+      end
+    end
+    local zt = math.max(fit.zMin, fitZoom(top))
+    fit.target = zt
+    if fit.idle > 2 then
+      -- a new battle: start where it should be
+      fit.z, fit.hold = zt, 0
+    elseif zt < fit.z then
+      fit.z = math.max(zt, fit.z - math.max((fit.z - zt) * fit.outRate, 0.002))
+      fit.hold = 0
+    elseif zt > fit.z then
+      fit.hold = fit.hold + 1
+      if fit.hold >= fit.holdFrames then
+        fit.z = math.min(zt, fit.z + math.max((zt - fit.z) * fit.inRate, 0.001))
+      end
+    else
+      fit.hold = 0
+    end
+    fit.idle = 0
+    self.stats.zoom, self.stats.zoomTarget = fit.z, zt
+    return fit.z
+  end
+
+  --- Replace a blit of a captured canvas. `blit(canvas, bx, by, bsx, bsy)` performs the
+  --- Renderer's own blit of a canvas with the same arguments (the four optional ones replace
+  --- its origin and scale); bx/by/bsx/bsy map canvas pixels to the screen;
   --- box = {x, y, w, h} clip (or nil). Returns true when the blit was handled.
   function self.composite(canvas, blit, bx, by, bsx, bsy, box)
     local cur = self.done[canvas]
     if not cur then return false end
-    blit(cur.base)
+    local fit = self.fit
+    local z = 1
+    if cur.pass == "battle" and cur.hasUI and fit.enabled then z = fitStep(cur) end
+    local zb = 1 - (1 - z) * fit.parallax
+    local lift = fitLift(z)
+    -- canvas pixels -> screen, zoomed by k about the focus and raised by `up` canvas pixels
+    local function zoomed(k, up)
+      return bx + fit.focus[1] * bsx * (1 - k), by + (fit.focus[2] * (1 - k) - up) * bsy, bsx * k, bsy * k
+    end
+    local sx0, sy0, ssx, ssy = zoomed(z, lift)
+    -- the far wallpaper does not rise: its rows below the text box's top are not scenery
+    -- (the cart hides them), so the text box's line stays its bottom edge
+    local bkx, bky, bksx, bksy = zoomed(zb, 0)
+    self.stats.lift = lift
+    local inScene = true
+    if z == 1 then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy) end
     real.push("all")
     for _, item in ipairs(cur.items) do
-      if item.kind == "hd" then
+      if item.kind == "seam" then
+        if item.name == "ui" then inScene = false end
+      elseif item.kind == "hd" or item.kind == "backdrop" then
         if box then real.setScissor(box[1], box[2], box[3], box[4]) else real.setScissor() end
-        hdDraw(item.rec, bx, by, bsx, bsy)
+        if item.kind == "backdrop" then
+          if inScene then
+            drawBackdrop(item.rec, cur.w, cur.h, bkx, bky, bksx, bksy, bx, by, bsx, bsy)
+          else
+            drawBackdrop(item.rec, cur.w, cur.h, bx, by, bsx, bsy, bx, by, bsx, bsy)
+          end
+        elseif inScene then
+          hdDraw(item.rec, sx0, sy0, ssx, ssy)
+        else
+          hdDraw(item.rec, bx, by, bsx, bsy)
+        end
       else
         real.setScissor()
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        blit(item.canvas)
+        if inScene and not item.screen and z ~= 1 then
+          blit(item.canvas, sx0, sy0, ssx, ssy)
+        else
+          blit(item.canvas)
+        end
         real.setBlendMode("alpha", "alphamultiply")
       end
     end
@@ -335,7 +585,7 @@ function HD.new(G, opts)
     real.origin()
     real.setScissor()
     for _, item in ipairs(cur.items) do
-      if item.kind == "hd" then
+      if item.kind == "hd" or item.kind == "backdrop" then
         local rec = item.rec
         real.push()
         real.translate(rec.tx, rec.ty)
@@ -349,7 +599,7 @@ function HD.new(G, opts)
           real.draw(rec.image, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
         end
         real.pop()
-      else
+      elseif item.kind == "layer" then
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
@@ -367,6 +617,8 @@ function HD.new(G, opts)
   --- (it was flattened when that could be known in time).
   function self.endFrame()
     self.done = {}
+    -- frames since a battle was last fitted: a gap means the next battle starts afresh
+    self.fit.idle = self.fit.idle + 1
   end
 
   return self

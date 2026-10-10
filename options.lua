@@ -8,6 +8,18 @@ return {
     description = "Draw battle Pokemon that a sprite mod has tagged at your screen's full resolution, at any size. Off: the game's usual pixel grid.",
   },
   {
+    key = "battle_fit",
+    label = "Battle Fit",
+    type = "choice",
+    default = "fit",
+    choices = {
+      { "Off", "off" },
+      { "Fit Sprites", "fit" },
+      { "Fit Tall Too", "tall" },
+    },
+    description = "When a battle Pokemon is too tall for the screen, the camera pulls back so the whole Pokemon fits, its platform shrinking with it. The text box and HP bars never change. Fit Tall Too pulls back further for the very biggest (Lugia, Koraidon). Needs Battle HD.",
+  },
+  {
     key = "field_hd",
     label = "Field HD",
     type = "toggle",

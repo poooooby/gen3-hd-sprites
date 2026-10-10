@@ -35,6 +35,8 @@ return function(mod)
   local Engine = loadSibling(mod, "src/engine.lua")
   local Api = loadSibling(mod, "src/api.lua")
   if not (HD and Engine and Api) then return end
+  -- optional: without it the player's pad is the game's own (cut at the text box)
+  Engine.Pads = loadSibling(mod, "src/pads.lua")
 
   -- the engine does not register a mod's options from its manifest: define them here
   local schema = loadSibling(mod, "options.lua")
@@ -54,6 +56,9 @@ return function(mod)
     hd.enabled.battle = option("battle_hd", true) ~= false
     hd.enabled.field = option("field_hd", true) ~= false
     hd.enabled.dex = option("dex_hd", true) ~= false
+    local fit = option("battle_fit", "fit")
+    hd.fit.enabled = hd.fit.available and fit ~= "off" and fit ~= false
+    hd.fit.zMin = hd.fit.modes[fit] or hd.fit.modes.fit
   end
 
   local function install()
@@ -62,9 +67,10 @@ return function(mod)
     if ok then
       state.active = true
       applyOptions()
-      mod.log:info("drawing tagged sprites at window resolution (battle %s, field %s, Pokedex %s)",
+      mod.log:info("drawing tagged sprites at window resolution (battle %s, field %s, Pokedex %s, Battle Fit %s)",
         hd.enabled.battle and "on" or "off", hd.enabled.field and "on" or "off",
-        hd.enabled.dex and "on" or "off")
+        hd.enabled.dex and "on" or "off",
+        hd.fit.enabled and "on" or (hd.fit.available and "off" or "unavailable"))
     elseif not state.warned then
       state.warned = true
       mod.log:warn("not active: %s -- every sprite is drawn the game's usual way", tostring(why))

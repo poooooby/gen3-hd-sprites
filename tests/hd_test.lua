@@ -51,7 +51,15 @@ local function fakeGraphics()
     G.log[#G.log + 1] = { op = "draw", target = st.canvas, image = img, args = { ... },
                           blend = st.blend[2] }
   end
-  function G.rectangle() G.log[#G.log + 1] = { op = "rect", target = st.canvas } end
+  function G.rectangle(mode, x, y, w, h)
+    G.log[#G.log + 1] = { op = "rect", target = st.canvas, args = { mode, x, y, w, h } }
+  end
+  function G.newQuad(x, y, w, h, sw, sh)
+    local q = quad(x, y, w, h)
+    function q:setViewport(nx, ny, nw, nh) x, y, w, h = nx, ny, nw, nh end
+    q.getViewport = function() return x, y, w, h end
+    return q
+  end
   function G.print() G.log[#G.log + 1] = { op = "print", target = st.canvas } end
   G.state = st
   return G
@@ -324,6 +332,161 @@ do
   local b = draws[2] and draws[2].args or {}
   check(near(b[2], (40 + 0) * 4) and near(b[3], (104 + 16) * 4), "a scaled draw maps the same point")
   check(near(b[5], 0.5 * 4 * 64 / 96), "...and keeps the draw's own scale")
+end
+
+-- ------------------------------------------------------------------ Battle Fit
+-- one battle frame: wallpaper, a pad, a front sprite (tall or not), a move's flash,
+-- the seam, the text box; composited at scale 4 with the blits recorded
+local function fitFrame(G, hd, base, opts)
+  opts = opts or {}
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(opts.wall, 0, 0)
+  hd.drawStage(opts.pad, 0, 0)                        -- screen-sized, but part of the stage
+  G.draw(opts.pic, 176, 40, 0, 1, 1, 32, 32)
+  if opts.flash then G.rectangle("fill", 0, 0, 240, 160) end
+  G.rectangle("fill", 170, 30, 4, 4)                  -- a particle
+  if opts.seam ~= false then hd.seam("ui") end
+  G.rectangle("fill", 0, 112, 240, 48)                -- the text box
+  hd.endPass()
+  G.log = {}
+  local blits = {}
+  hd.composite(base, function(c, bx, by, sx, sy)
+    blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy }
+    G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4)
+  end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+  hd.endFrame()
+  return blits
+end
+
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.45
+  local base = canvas("ui", 240, 160)
+  local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
+  local pic, page = canvas("pic", 64, 64), canvas("atlas", 4096, 4096)
+  local tall, short = quad(0, 0, 100, 200), quad(0, 0, 100, 60)
+  local tallSpec = { texture = page, quad = tall, pivot = { 50, 200 }, lowPivot = { 32, 64 }, top = 52 }
+  local shortSpec = { texture = page, quad = short, pivot = { 50, 60 }, lowPivot = { 32, 64 } }
+  local frame = { wall = wall, pad = pad, pic = pic, flash = true }
+
+  -- feet at (176, 72), art 148 px tall: its top at y = -76. Zoomed about the text box's top
+  -- (y = 112) its feet would sink below feetMax (76), so the camera rises to hold them there:
+  -- the zoom that brings the top to y = 2 is (76 - 2) / (72 + 76) = 0.5, the rise 16
+  check(near(hd.fitZoom(-10), 110 / 122), "a little overflow: zoom about the text box, no rise")
+  check(near(hd.fitLift(110 / 122), 0), "...and its feet stay above the HP box")
+  hd.tag(pic, tallSpec)
+  local blits = fitFrame(G, hd, base, frame)
+  check(near(hd.stats.zoom, 0.5) and near(hd.stats.zoomTarget, 0.5),
+    "a tall sprite's first frame starts at the zoom that fits it (" .. tostring(hd.stats.zoom) .. ")")
+  check(near(hd.stats.lift, 16), "...with the camera raised 16 px (" .. tostring(hd.stats.lift) .. ")")
+  -- zoom 0.5 about (120, 112), raised 16, at scale 4: origin (240, 4 * (56 - 16)), scale 2
+  check(blits[1].canvas == base and near(blits[1].bx, 240) and near(blits[1].by, 160) and near(blits[1].sx, 2),
+    "the base canvas is blitted zoomed about the text box's top centre, raised")
+  local screens, zoomedLayers, plain = 0, 0, 0
+  for i = 2, #blits do
+    if blits[i].sx == nil then plain = plain + 1 else zoomedLayers = zoomedLayers + 1 end
+  end
+  check(zoomedLayers == 2, "the pad's and the particle's layers are zoomed, got " .. zoomedLayers)
+  check(plain == 2, "the flash's layer and the UI's layer are not, got " .. plain)
+  local d, w
+  for _, e in ipairs(G.log) do
+    if e.image == page then d = e end
+    if e.image == wall then w = e end
+  end
+  check(d and near(d.args[2], 4 * (120 + (176 - 120) * 0.5)) and near(d.args[3], 4 * 76),
+    "the sprite stands where its pad went, feet on y = 76 (" .. tostring(d and d.args[2]) .. ", "
+    .. tostring(d and d.args[3]) .. ")")
+  check(d and near(d.args[5], 2), "...at half its size")
+  -- the wallpaper zooms less (parallax) and still covers the whole view
+  local zb = 1 - 0.5 * hd.fit.parallax
+  check(w and near(w.args[6], 4 * zb), "the wallpaper zooms less: " .. tostring(w and w.args[6]))
+  local _, _, uw, vh = w.args[1]:getViewport()
+  check(w and w.args[2] <= 1e-9 and w.args[3] <= 1e-9 and near(w.args[2] + uw * w.args[5], 960)
+    and near(w.args[3] + vh * w.args[6], 640), "...and is drawn over the whole view, wrapped")
+  for _ = 1, 3 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 0.5), "it holds while the sprite stays")
+
+  -- the tall sprite leaves: no zoom back for holdFrames, then slowly
+  hd.tag(pic, shortSpec)
+  for _ = 1, hd.fit.holdFrames - 1 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoomTarget, 1) and near(hd.stats.zoom, 0.5), "a short sprite: the zoom waits first")
+  fitFrame(G, hd, base, frame)
+  local z1 = hd.stats.zoom
+  check(z1 > 0.5 and z1 < 0.6, "...then eases back in slowly (" .. tostring(z1) .. ")")
+  for _ = 1, 400 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 1), "...until it is back to 1")
+  blits = fitFrame(G, hd, base, frame)
+  check(blits[1].sx == nil, "at zoom 1 the base canvas is blitted as the Renderer asked")
+
+  -- the tall one comes back: out quickly, not in one jump
+  hd.tag(pic, tallSpec)
+  fitFrame(G, hd, base, frame)
+  local zOut = hd.stats.zoom
+  check(zOut < 1 and zOut > 0.5, "a tall sprite in mid-battle: the zoom eases out (" .. tostring(zOut) .. ")")
+  for _ = 1, 60 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 0.5), "...and reaches its fit within a second")
+
+  -- no UI seam (the post-catch Pokedex scene): nothing is zoomed
+  blits = fitFrame(G, hd, base, { wall = wall, pad = pad, pic = pic, seam = false })
+  local anyZoom = false
+  for _, b in ipairs(blits) do if b.sx then anyZoom = true end end
+  check(not anyZoom, "a frame with no UI seam is composited unzoomed")
+
+  -- the floor: Fit Sprites never pulls back past 60%
+  hd.fit.zMin = 0.6
+  for _ = 1, 200 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 0.6), "the zoom never goes below zMin")
+end
+
+-- Battle Fit off: a full-scene flash is drawn in the layer like anything else
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 240, 160)
+  local pic = canvas("pic", 64, 64)
+  hd.tag(pic, {})
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  G.draw(pic, 0, 0)
+  G.rectangle("fill", 10, 10, 2, 2)
+  G.rectangle("fill", 0, 0, 240, 160)
+  local cur = hd.endPass()
+  local layers = 0
+  for _, it in ipairs(cur.items) do if it.kind == "layer" then layers = layers + 1 end end
+  check(layers == 1, "with Battle Fit off a full-scene draw opens no layer of its own")
+end
+
+-- a fitted pass that cannot be composited is put back with its wallpaper
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled = true
+  local base = canvas("ui", 240, 160)
+  local wall = canvas("wall", 256, 160)
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  G.rectangle("fill", 10, 10, 2, 2)
+  hd.seam("ui")
+  G.rectangle("fill", 0, 112, 240, 48)
+  hd.flatten(hd.cur)
+  local sawWall = false
+  for _, e in ipairs(G.log) do if e.target == base and e.image == wall then sawWall = true end end
+  check(sawWall, "flatten draws the wallpaper into the base canvas")
+  local api = assert(loadfile("src/api.lua"))
+  local mod = {}
+  hd.fit.available = true
+  api()(mod, hd, { active = true })
+  check(mod.exports.features.battleFit == true and mod.exports.fitEnabled(), "fitEnabled() reports it")
+  mod.exports.setFit("tall")
+  check(hd.fit.zMin == 0.4, "setFit('tall') lets it pull back to 40%")
+  mod.exports.setFit("off")
+  check(not mod.exports.fitEnabled() and mod.exports.sceneZoom() == 1, "setFit('off') turns it off")
 end
 
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))

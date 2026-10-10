@@ -2,3 +2,4 @@
 tests/hd_test.lua
 DEVELOPMENT.md
 CLAUDE.md
+tests/pads_test.lua

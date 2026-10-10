@@ -25,6 +25,18 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
 - 🛟 **Never breaks a frame:** If a frame can't be drawn this way (a weather effect, a battle
   transition), it's drawn the usual way instead. Nothing goes missing.
 
+### Battle Fit 🎥
+
+- 📐 **Big Pokémon fit on screen:** When a Pokémon is too tall for the battle screen (a Lugia, a
+  Koraidon), the camera pulls back just enough to show all of it. Its platform, your Pokémon and
+  the move effects shrink with it, so the scene keeps its perspective. The camera also rises,
+  so the opponent never sinks behind your HP bar, and your own platform shows whole instead of
+  cut off at the text box.
+- 🧭 **The UI stays put:** The text box, menus and HP bars never move or shrink, and stay crisp.
+- 🌄 **Depth:** The far background pulls back less than the platforms, like a real camera.
+- 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment
+  after it leaves. It doesn't bob with a Pokémon's animation.
+
 ## ⚙️ Options
 
 Open **OPTIONS → MODS → Gen 3 HD Sprites**.
@@ -32,6 +44,7 @@ Open **OPTIONS → MODS → Gen 3 HD Sprites**.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
+| **Battle Fit** | Off / Fit Sprites / Fit Tall Too | Fit Sprites | Pull the battle camera back so tall Pokémon fit. **Fit Tall Too** pulls back further for the very biggest. Needs Battle HD. |
 | **Pokedex HD** | On / Off | On | Pokédex Pokémon at full resolution, fitted to the Pokédex. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
@@ -48,6 +61,12 @@ Open **OPTIONS → MODS → Gen 3 HD Sprites**.
   and Pokédex sprites, each Pokémon sized to match its original sprite.
 - [Wilds of Hoenn](https://github.com/poooooby/wilds-of-hoenn): wild Pokémon and your partner at
   their true relative sizes, with its **Species Sizes** and **Overworld Size** options.
+
+## 📌 Good to Know
+
+- Battle Fit only reacts to Pokémon drawn by a sprite mod that uses this one. With the game's
+  own sprites, battles look exactly as they always have.
+- **Fit Sprites** pulls back to 50% at most; **Fit Tall Too** to 40%.
 
 ---
 

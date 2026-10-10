@@ -17,6 +17,14 @@
 --
 -- Field capture is skipped in tilt mode and during a battle transition, which draw the
 -- field through canvases of their own.
+--
+-- Battle Fit (optional: without them the HD sprites still work, only the fit is off):
+--   BattleChrome.drawTerrain   the battle's wallpaper is handed to hd.backdrop and the two
+--                          pads drawn on their own (src/ui/game3/battle_chrome.lua; the same
+--                          split art the intro slide draws), the player's whole (Engine.Pads,
+--                          src/pads.lua)
+--   BallOpen.draw          the last draw of the battle scene (src/core/game3/battle/ui.lua
+--                          Ui.draw): the UI seam goes after it
 
 local Engine = {}
 
@@ -67,6 +75,52 @@ function Engine.wrapDex(hd)
   end
 end
 
+--- Wrap the Battle Fit seams. Returns true when both are in place.
+function Engine.wrapFit(hd)
+  local okC, Chrome = pcall(require, "src.ui.game3.battle_chrome")
+  local okB, BallOpen = pcall(require, "src.core.game3.battle.ball_open")
+  if not (okC and type(Chrome) == "table" and type(Chrome.drawTerrain) == "function"
+          and type(Chrome.terrain) == "function"
+          and okB and type(BallOpen) == "table" and type(BallOpen.draw) == "function") then
+    return false
+  end
+  local function fitting() return hd.fit.enabled and hd.capturing("battle") end
+
+  local drawTerrain = Chrome.drawTerrain
+  if not ours[drawTerrain] then
+    Chrome.drawTerrain = function(key, enemyOx, playerOx, bgOx, ...)
+      if fitting() then
+        key = key or "building"
+        local entry = Chrome.terrain(key) or Chrome.terrain("building") or Chrome.terrain("grass")
+        if entry and entry.bgImage and entry.enemyPlat and entry.playerPlat then
+          local G = love.graphics
+          G.setColor(1, 1, 1, 1)
+          hd.backdrop(entry.bgImage, -((tonumber(bgOx) or 0) % 256), 0)
+          hd.drawStage(entry.enemyPlat, tonumber(enemyOx) or 0, 0)
+          -- the player's pad whole (src/pads.lua): the camera may rise past its cut
+          local pad = Engine.Pads and Engine.Pads.playerPad(entry, hd.real,
+            love.graphics.newImage, love.image and love.image.newImageData)
+          hd.drawStage(pad or entry.playerPlat, tonumber(playerOx) or 0, 0)
+          return true
+        end
+      end
+      return drawTerrain(key, enemyOx, playerOx, bgOx, ...)
+    end
+    ours[Chrome.drawTerrain] = true
+  end
+
+  local ballDraw = BallOpen.draw
+  if not ours[ballDraw] then
+    BallOpen.draw = function(...)
+      local results = { ballDraw(...) }
+      if fitting() then hd.seam("ui") end
+      return unpack(results)
+    end
+    ours[BallOpen.draw] = true
+  end
+  return true
+end
+
 function Engine.install(hd)
   local ok, err = pcall(function()
     local Renderer = require("src.render.Renderer")
@@ -88,8 +142,9 @@ function Engine.install(hd)
       Renderer.blitCanvas = function(self, canvas, sx, sy, zoneList, zsx, zsy, bx, by,
                                      boxX, boxY, boxW, boxH, dpiX, dpiY)
         if hd.done[canvas] then
-          local function blit(c)
-            return blitCanvas(self, c, sx, sy, zoneList, zsx, zsy, bx, by,
+          -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
+          local function blit(c, obx, oby, osx, osy)
+            return blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx, zsy, obx or bx, oby or by,
                               boxX, boxY, boxW, boxH, dpiX, dpiY)
           end
           local box = boxX and { boxX, boxY, boxW, boxH } or nil
@@ -154,6 +209,8 @@ function Engine.install(hd)
       ours[Battle.draw] = true
     end
     Engine.wrapDex(hd)
+    local okFit, fitOk = pcall(Engine.wrapFit, hd)
+    hd.fit.available = okFit and fitOk == true
   end)
   if not ok then return false, err end
   return true
