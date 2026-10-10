@@ -34,9 +34,9 @@ function HD.new(G, opts)
     G = G,
     log = opts.log,
     tags = setmetatable({}, { __mode = "k" }),
-    enabled = { battle = true, field = true },
+    enabled = { battle = true, field = true, dex = true },
     -- most splits (window-sized layers) a pass may use; a tagged draw past it is drawn low-res
-    caps = { battle = 8, field = 12 },
+    caps = { battle = 8, field = 12, dex = 8 },
     cur = nil,          -- the pass being captured
     done = {},          -- finished passes waiting for their blit, by base canvas
     pool = {},          -- layer canvases by "w x h" -> list

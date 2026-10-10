@@ -21,18 +21,19 @@
 --                           filter   = "nearest" (default) or "linear"
 --   untag(image)
 --   isActive()            the engine seams were found and wrapped
---   enabled(pass)         "battle" or "field": is it on (the player's options)
+--   enabled(pass)         "battle", "field" or "dex" (the Pokedex screens): is it on (the
+--                         player's options)
 --   setEnabled(pass, on)
 --   cap(pass)             most tagged draws (layers) a pass may use before the rest are drawn
---                         low-res: battle 8, field 12. Each layer is one window-sized canvas.
+--                         low-res: battle 8, field 12, dex 8. Each layer is one window-sized canvas.
 --   setCap(pass, n)       change it (1..32)
 --   stats()               counters for debugging: splits, composites, flattened, overCap
---   features              { quadPivots = true }: what this version supports
+--   features              { quadPivots = true, dex = true }: what this version supports
 
 return function(mod, hd, state)
   local exports = {}
   exports.version = 1
-  exports.features = { quadPivots = true }
+  exports.features = { quadPivots = true, dex = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.isActive = function() return state.active == true end

@@ -9,6 +9,11 @@
 --                          world canvas: the field pass is flattened before it, so it reads
 --                          everything, and that frame's field is drawn the usual way
 --   Battle.draw            the battle pass starts here (src/core/game3/battle/init.lua)
+--   Pokedex.draw           the Pokedex pass starts here: Ruby/Sapphire/Emerald's
+--                          (src/ui/game3/rse/pokedex.lua) and FireRed/LeafGreen's
+--                          (src/ui/game3/pokedex.lua), wrapped once each is loaded; like the
+--                          battle pass it ends at Renderer:endFrame. Inside a battle (a caught
+--                          Pokemon's entry) the battle pass is already capturing it.
 --
 -- Field capture is skipped in tilt mode and during a battle transition, which draw the
 -- field through canvases of their own.
@@ -24,6 +29,43 @@ end
 
 -- our own wrappers, so a reload does not wrap them twice
 local ours = setmetatable({}, { __mode = "k" })
+
+-- the Pokedex screens, by module name; each is wrapped when it is first seen loaded
+local DEX_MODULES = { "src.ui.game3.rse.pokedex", "src.ui.game3.pokedex" }
+
+local dexMissing = {}       -- module names that could not be required (not asked again)
+
+--- Wrap the draw of every Pokedex screen not wrapped yet. Called at install and each frame
+--- from the endFrame wrapper (require is cached, so that is cheap), in case a screen's module
+--- replaces its draw. Through require: a mod's `package.loaded` is not the engine's.
+--- Both the module's draw and its stack Host's draw are wrapped: national_dex_gen3 swaps in a
+--- patched copy of the RSE screen whose Host.draw calls the copy's own draw, not the module's.
+function Engine.wrapDex(hd)
+  local function wrap(t)
+    local draw = type(t) == "table" and t.draw
+    if type(draw) ~= "function" or ours[draw] then return end
+    t.draw = function(...)
+      if hd.capturing() then
+        hd.stats.dexInPass = (hd.stats.dexInPass or 0) + 1
+      elseif hd.beginPass("dex", love.graphics.getCanvas()) then
+        hd.stats.dexPasses = (hd.stats.dexPasses or 0) + 1
+      end
+      return draw(...)
+    end
+    ours[t.draw] = true
+  end
+  for _, name in ipairs(DEX_MODULES) do
+    local M
+    if not dexMissing[name] then
+      local ok, m = pcall(require, name)
+      if ok then M = m else dexMissing[name] = true end
+    end
+    if type(M) == "table" then
+      wrap(M)
+      wrap(M.Host)
+    end
+  end
+end
 
 function Engine.install(hd)
   local ok, err = pcall(function()
@@ -61,7 +103,7 @@ function Engine.install(hd)
 
     if not ours[endFrame] then
       Renderer.endFrame = function(self, ...)
-        if hd.capturing("battle") then hd.endPass() end
+        if hd.capturing("battle") or hd.capturing("dex") then hd.endPass() end
         for base, cur in pairs(hd.done) do
           local willBlit = base == self.canvas
             or (base == self.worldCanvas and self.worldActive and not self.worldOverride
@@ -70,6 +112,7 @@ function Engine.install(hd)
         end
         local results = { endFrame(self, ...) }
         hd.endFrame()
+        Engine.wrapDex(hd)
         return unpack(results)
       end
       ours[Renderer.endFrame] = true
@@ -110,6 +153,7 @@ function Engine.install(hd)
       end
       ours[Battle.draw] = true
     end
+    Engine.wrapDex(hd)
   end)
   if not ok then return false, err end
   return true

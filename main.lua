@@ -53,6 +53,7 @@ return function(mod)
   local function applyOptions()
     hd.enabled.battle = option("battle_hd", true) ~= false
     hd.enabled.field = option("field_hd", true) ~= false
+    hd.enabled.dex = option("dex_hd", true) ~= false
   end
 
   local function install()
@@ -61,8 +62,9 @@ return function(mod)
     if ok then
       state.active = true
       applyOptions()
-      mod.log:info("drawing tagged sprites at window resolution (battle %s, field %s)",
-        hd.enabled.battle and "on" or "off", hd.enabled.field and "on" or "off")
+      mod.log:info("drawing tagged sprites at window resolution (battle %s, field %s, Pokedex %s)",
+        hd.enabled.battle and "on" or "off", hd.enabled.field and "on" or "off",
+        hd.enabled.dex and "on" or "off")
     elseif not state.warned then
       state.warned = true
       mod.log:warn("not active: %s -- every sprite is drawn the game's usual way", tostring(why))

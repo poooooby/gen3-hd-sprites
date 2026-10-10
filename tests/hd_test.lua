@@ -294,5 +294,37 @@ do
   check(ex.setCap("field", "x") == 1, "a non-number changes nothing")
 end
 
+-- ----------------------------------- a Pokedex frame: top-left and scaled draws
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  check(hd.enabled.dex == true and hd.caps.dex == 8, "the dex pass is on by default, cap 8")
+  local base = canvas("ui", 240, 160)
+  local pic, page = canvas("pic", 64, 64), canvas("atlas", 4096, 4096)
+  local frame = quad(0, 0, 96, 96)
+  -- a 96 px frame fitted into the 64 px box: its bottom-centre on the box's bottom-centre
+  hd.tag(pic, { texture = page, quad = frame, pivot = { 48, 96 }, lowPivot = { 32, 64 }, scale = 64 / 96 })
+  G.setCanvas(base)
+  check(hd.beginPass("dex", base), "a dex pass starts")
+  G.draw(pic, 152, 24)                                  -- FR/LG entry page: top-left, no origin
+  G.rectangle()
+  G.setColor(0, 0, 0, 1)
+  G.draw(pic, 40, 104, 0, 0.5, 0.5, 32, 32)             -- a size page: scaled, black
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function(c) G.draw(c, 0, 0, 0, 4, 4) end, 0, 0, 4, 4)
+  local draws = {}
+  for _, e in ipairs(G.log) do if e.image == page then draws[#draws + 1] = e end end
+  check(#draws == 2, "both Pokedex draws are drawn from the atlas page")
+  local a = draws[1] and draws[1].args or {}
+  check(near(a[2], (152 + 32) * 4) and near(a[3], (24 + 64) * 4),
+    "a top-left draw: the frame's feet on the box's bottom-centre (" .. tostring(a[2]) .. ", " .. tostring(a[3]) .. ")")
+  check(near(a[5], 4 * 64 / 96), "...fitted to the box at window resolution")
+  local b = draws[2] and draws[2].args or {}
+  check(near(b[2], (40 + 0) * 4) and near(b[3], (104 + 16) * 4), "a scaled draw maps the same point")
+  check(near(b[5], 0.5 * 4 * 64 / 96), "...and keeps the draw's own scale")
+end
+
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

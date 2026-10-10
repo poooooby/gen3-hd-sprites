@@ -13,19 +13,23 @@ any size (62%, 75%…), and walkers move smoothly between pixels.
 ## Used by
 
 - **g9-battle-sprites-gen3**: battle pics are drawn from its atlas at window resolution; a
-  per-species size (Noivern at 60%) only applies with this mod.
+  per-species size (Noivern at 60%) only applies with this mod. Pokédex pics (both the
+  Ruby/Sapphire/Emerald and the FireRed/LeafGreen Pokédex) are drawn whole at window
+  resolution, fitted to the Pokédex's 64×64 picture.
 - **Wilds of Hoenn**: wild Pokémon and the follower; its *Overworld Size* option needs this mod.
 
 ## Options
 
 - **Battle HD** (on): tagged battle Pokémon.
+- **Pokédex HD** (on): tagged Pokémon on the Pokédex screens.
 - **Field HD** (on): tagged overworld Pokémon. It adds a few window-sized layers to each frame;
   turn it off on a slow device.
 
 ## How it works
 
-A "pass" is the drawing of one canvas: the battle (from `Battle.draw` to the frame's end) or the
-field (`Renderer:beginWorldPass` … `endWorldPass`). While a pass runs, a draw of a tagged image is
+A "pass" is the drawing of one canvas: the battle (from `Battle.draw` to the frame's end), a Pokédex
+screen (from its `Pokedex.draw` to the frame's end; inside a battle the battle pass covers it) or
+the field (`Renderer:beginWorldPass` … `endWorldPass`). While a pass runs, a draw of a tagged image is
 not drawn but recorded, and everything drawn after it goes to a fresh transparent layer. When the
 Renderer blits that canvas to the window (`Renderer:blitCanvas`), the blit becomes: the canvas, each
 recorded sprite at window resolution, the next layer, and so on, with the Renderer's own arguments.
@@ -35,7 +39,7 @@ against tagged Pokémon.
 
 When a frame cannot be composited that way it is put back the usual low-res way, so nothing is
 ever lost: a canvas swapped out mid-pass (Ruby/Sapphire/Emerald weather that reads the field), tilt
-mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle, 12 in the
+mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle and the Pokédex, 12 in the
 field; `cap(pass)` / `setCap(pass, n)`). Each one past it is drawn at its low-res size,
 not dropped. A layer is one window-sized canvas, so a high cap costs memory only in
 scenes that use it.
