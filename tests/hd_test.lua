@@ -160,6 +160,59 @@ do
     and first.args[7] == 16 and first.args[8] == 32, "a feet-anchored sprite stands where it stood")
 end
 
+-- ---------------------- a quad of its own stands on its own pivot (quadPivots)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("world", 400, 240)
+  local sheet = canvas("sheet", 64, 64)
+  local full, short = quad(0, 0, 32, 40), quad(0, 0, 32, 24)
+  local spec = { scale = 2, lowPivot = { 16, 30 }, quadPivots = {} }
+  hd.tag(sheet, spec)
+  spec.quadPivots[short] = { 16, 20 } -- added after tagging: read at draw time
+  G.setCanvas(base)
+  hd.beginPass("field", base)
+  G.draw(sheet, full, 10, 10)
+  G.draw(sheet, short, 50, 10)
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function(c) G.draw(c, 0, 0) end, 0, 0, 3, 3, nil)
+  local d = {}
+  for _, e in ipairs(G.log) do if e.image == sheet then d[#d + 1] = e end end
+  check(#d == 2, "both sprites drawn")
+  check(d[1] and near(d[1].args[2], 26 * 3) and near(d[1].args[3], 40 * 3)
+    and d[1].args[7] == 16 and d[1].args[8] == 30, "the full quad scales about lowPivot")
+  check(d[2] and near(d[2].args[2], 66 * 3) and near(d[2].args[3], 30 * 3)
+    and d[2].args[7] == 16 and d[2].args[8] == 20, "the short quad scales about its own pivot")
+  check(d[1] and near(d[1].args[5], 2 * 3), "...both at the spec's scale")
+end
+
+-- ------- a quad with its own scale (a slice already drawn at its final size)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("world", 400, 240)
+  local feet = canvas("feet", 64, 64)
+  local slice = quad(4, 8, 10, 6)
+  hd.tag(feet, { scale = 1.5, anchor = "feet", quadPivots = { [slice] = { 0, 0, 1 } } })
+  G.setCanvas(base)
+  hd.beginPass("field", base)
+  G.draw(feet, slice, 20, 30, 0, 2, -2)
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function(c) G.draw(c, 0, 0) end, 0, 0, 3, 3, nil)
+  local e
+  for _, x in ipairs(G.log) do if x.image == feet then e = x end end
+  check(e and near(e.args[2], 20 * 3) and near(e.args[3], 30 * 3), "a scale-1 slice lands exactly where it was drawn")
+  check(e and near(e.args[5], 2 * 3) and near(e.args[6], -2 * 3), "...at its own size, flip kept (not the spec's 1.5)")
+  local api = assert(loadfile("src/api.lua"))
+  local mod = {}
+  api()(mod, hd, { active = true })
+  check(mod.exports.features and mod.exports.features.quadPivots == true, "features.quadPivots is advertised")
+end
+
 -- -------------------------------- setCanvas and pop go to the current layer
 do
   local G = fakeGraphics()
@@ -221,6 +274,24 @@ do
   check(hd.beginPass("field", canvas("w", 10, 10)) == false, "a disabled pass does not start")
   hd.uninstall()
   check(hd.installed == false, "uninstall restores the graphics functions")
+end
+
+-- ------------------------------------------------- the cap: defaults and the API
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  check(hd.caps.field == 12 and hd.caps.battle == 8, "default caps: 12 layers in the field, 8 in battle")
+  local mod = {}
+  local state = { active = true }
+  local chunk = assert(loadfile("src/api.lua"))
+  chunk()(mod, hd, state)
+  local ex = mod.exports
+  check(ex.cap("field") == 12, "cap(pass) reads it")
+  check(ex.setCap("field", 16) == 16 and hd.caps.field == 16, "setCap changes it")
+  check(ex.setCap("field", 500) == 32, "...up to 32")
+  check(ex.setCap("field", 0) == 1, "...and at least 1")
+  check(ex.setCap("nonsense", 5) == nil and hd.caps.nonsense == nil, "an unknown pass is ignored")
+  check(ex.setCap("field", "x") == 1, "a non-number changes nothing")
 end
 
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))

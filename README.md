@@ -35,8 +35,10 @@ against tagged Pokémon.
 
 When a frame cannot be composited that way it is put back the usual low-res way, so nothing is
 ever lost: a canvas swapped out mid-pass (Ruby/Sapphire/Emerald weather that reads the field), tilt
-mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle, 6 in the
-field).
+mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle, 12 in the
+field; `cap(pass)` / `setCap(pass, n)`). Each one past it is drawn at its low-res size,
+not dropped. A layer is one window-sized canvas, so a high cap costs memory only in
+scenes that use it.
 
 ## API (`mod.exports`)
 
@@ -58,9 +60,10 @@ end
 | `texture`, `quad` | draw this full-resolution frame in place of the tagged image |
 | `pivot` | the point of `texture`/`quad` that stands where the tagged image's `lowPivot` was drawn |
 | `lowPivot` | default `{32, 32}`, the engine's battle-pic origin |
+| `quadPivots` | `{ [quad] = {x, y, scale} }`: a draw through one of these quads scales about its own quad-local point (and, with `scale`, its own size; `1` = a slice already drawn at its final size). Read at draw time, so it may grow. Check `features.quadPivots` |
 | `filter` | `"nearest"` (default) or `"linear"` |
 
-Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)` and `stats()`
+Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`, `setCap(pass, n)`, `features` and `stats()`
 (`splits`, `composites`, `flattened`, `overCap`). Tags are weak: an image that is freed drops its tag.
 Keep the tagged image itself a real low-res picture: it is what shows whenever a frame falls back.
 

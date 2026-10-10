@@ -35,7 +35,8 @@ function HD.new(G, opts)
     log = opts.log,
     tags = setmetatable({}, { __mode = "k" }),
     enabled = { battle = true, field = true },
-    caps = { battle = 8, field = 6 },
+    -- most splits (window-sized layers) a pass may use; a tagged draw past it is drawn low-res
+    caps = { battle = 8, field = 12 },
     cur = nil,          -- the pass being captured
     done = {},          -- finished passes waiting for their blit, by base canvas
     pool = {},          -- layer canvases by "w x h" -> list
@@ -48,7 +49,8 @@ function HD.new(G, opts)
 
   --- Tag an image: draws of it inside a pass are drawn at window resolution.
   --- spec: { texture = img|nil, quad = q|nil, pivot = {x, y}|nil, lowPivot = {x, y}|nil,
-  ---         scale = k (default 1), anchor = "feet"|nil, filter = "nearest"|"linear"|nil }
+  ---         scale = k (default 1), anchor = "feet"|nil, filter = "nearest"|"linear"|nil,
+  ---         quadPivots = { [quad] = {x, y, scale?} }|nil }  (read at draw time, so it can grow)
   function self.tag(image, spec)
     if image == nil then return end
     spec = spec or {}
@@ -256,18 +258,21 @@ function HD.new(G, opts)
     local spec = rec.spec
     local tex = spec.texture or rec.image
     local quad = spec.texture and spec.quad or rec.quad
+    -- a quad of its own may stand on another point (a sprite drawn cut short) and
+    -- carry its own size (a slice already drawn at its final size: 1)
+    local qp = spec.quadPivots and rec.quad and spec.quadPivots[rec.quad]
     -- the low-res point that the HD pivot stands on, and the pivot in the HD texture
     local lpx, lpy, hpx, hpy
-    if spec.anchor == "feet" and rec.quad then
+    if spec.anchor == "feet" and rec.quad and not qp then
       local _, _, qw, qh = rec.quad:getViewport()
       lpx, lpy = qw / 2, qh
       hpx, hpy = lpx, lpy
     else
-      local lp = spec.lowPivot or { 32, 32 }
-      local hp = spec.pivot or lp
+      local lp = qp or spec.lowPivot or { 32, 32 }
+      local hp = (not qp and spec.pivot) or lp
       lpx, lpy, hpx, hpy = lp[1], lp[2], hp[1], hp[2]
     end
-    local k = spec.scale or 1
+    local k = (qp and qp[3]) or spec.scale or 1
     -- where the low-res draw put that point, in the pass canvas's pixels
     local dx, dy = (lpx - rec.ox) * rec.sx, (lpy - rec.oy) * rec.sy
     local cs, sn = math.cos(rec.r), math.sin(rec.r)
