@@ -7,6 +7,8 @@ local function check(cond, msg)
   if cond then passed = passed + 1 else failed = failed + 1; print("FAIL: " .. msg) end
 end
 local function near(a, b) return type(a) == "number" and math.abs(a - b) < 1e-9 end
+-- layout values are rounded to two decimals
+local function approx(a, b) return type(a) == "number" and math.abs(a - b) < 0.05 end
 
 -- ------------------------------------------------------------- fake graphics
 local function canvas(name, w, h)
@@ -797,6 +799,157 @@ do
     "the wallpaper spans the whole view")
 end
 
+-- Fill Screen on a tall screen: stacked. The UI spans the width; its rows below the split
+-- (the player's HP box, the text box) dock above the touch controls, its top band (the
+-- enemy's HP box) moves to the top; the scene is at the UI's scale, its line on the text box
+local function stackedFrame(opts)
+  opts = opts or {}
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
+  local hpIcon = canvas("hpicon", 8, 8)
+  hd.tag(hpIcon, { scale = 1 })
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  hd.drawStage(pad, 0, 0)
+  hd.seam("ui")
+  G.rectangle("fill", 14, 16, 99, 28)                -- the enemy's HP box
+  G.draw(hpIcon, 20, 20)                              -- a tagged draw in the top band
+  G.rectangle("fill", 0, 112, 240, 48)                -- the text box
+  if opts.straddle then G.rectangle("fill", 150, 8, 90, 96) end   -- a level-up window
+  hd.endPass()
+  local blits = {}
+  G.log = {}
+  hd.composite(base, function(c, bx, by, sx, sy, box, zk)
+    blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box, zk = zk }
+  end, 60, 100, 4, 4, { 60, 100, 960, 640 }, opts.view)
+  return hd, G, blits, base, wall, hpIcon
+end
+
+do
+  -- a 1080x2400 phone, touch controls from y 1500 down, a notch to y 40
+  local view = { 0, 0, 1080, 2400, top = 40, bottom = 1500 }
+  local hd, G, blits, _, wall, hpIcon = stackedFrame({ view = view })
+  local U = 4.5
+  check(near(hd.stats.uiScale, U), "stacked: the UI spans the width (" .. tostring(hd.stats.uiScale) .. ")")
+  -- non-whole: each UI layer is drawn at 5x into a canvas of its own, blitted at 4.5/5
+  local ui = {}
+  for _, e in ipairs(blits) do if e.zk then ui[#ui + 1] = e end end
+  -- (two UI layers: the tagged draw splits them; each blitted as two bands)
+  check(#ui == 4 and ui[1].zk == 5 and near(ui[1].sx, U / 5) and ui[1].canvas:getWidth() == 1200,
+    "...sharp: drawn at the next whole scale and scaled down")
+  local low, high = ui[4], ui[3]
+  check(low and near(low.by, 1500 - 160 * U) and near(low.bx, 0), "...its lower rows docked above the controls")
+  check(low and low.box and near(low.box[2], 1500 - 94 * U) and near(low.box[4], 94 * U),
+    "...clipped to the rows below the split")
+  check(high and approx(high.by, 40) and high.box and approx(high.box[2], 40) and near(high.box[4], 66 * U),
+    "...the top band (the enemy's HP box) at the top, below the notch")
+  check(approx(hd.fit.uiTopDy, (40 - (1500 - 160 * U)) / U), "the fit sees the HP box moved up by " .. tostring(hd.fit.uiTopDy))
+  -- the scene grows into the space above until both sides' art (the cart's pic boxes, x 40
+  -- to 208, until seen; 4 px clear of the edges) spans the width: 1080 / (4.5 * 176)
+  local g = math.floor(1080 / (U * 176) * 100 + 0.5) / 100
+  check(approx(hd.stats.fill, U * g / 4), "the scene grows past the UI's scale (" .. tostring(hd.stats.fill) .. ")")
+  local b = blits[1]
+  check(b and near(b.by + 112 * b.sy, 1500 - 48 * U) and near(b.sx, U * g),
+    "...about its line, on the text box")
+  local left, right = b and b.bx + 36 * b.sx, b and b.bx + 212 * b.sx
+  check(b and left >= -0.05 and right <= 1080.05 and (approx(left, 0) or approx(right, 1080)),
+    "...its sides cropped, both sides' art kept on the screen")
+  check(hd.fit.topY < -50 and approx(hd.fit.topY, 112 - (1500 - 48 * U - 40) / (U * g)),
+    "the screen's top, above the canvas, is the art's limit (" .. tostring(hd.fit.topY) .. ")")
+  local icon
+  for _, e in ipairs(G.log) do if e.image == hpIcon then icon = e end end
+  -- (placed about its default 32, 32 pivot)
+  check(icon and approx(icon.args[2], 40 + (20 + 32) * U), "a tagged UI draw in the top band moves with it")
+  local w
+  for _, e in ipairs(G.log) do if e.image == wall then w = w or e end end
+  check(w and w.args[3] <= 1e-6, "the wallpaper's sky covers the top of the screen")
+end
+
+do
+  -- a draw across the split: that frame's UI stays in one piece, docked
+  local hd, _, blits = stackedFrame({ view = { 0, 0, 1080, 2400, bottom = 1500 }, straddle = true })
+  local ui = {}
+  for _, e in ipairs(blits) do if e.zk then ui[#ui + 1] = e end end
+  check(#ui == 2 and near(ui[1].by, 1500 - 160 * 4.5) and near(ui[2].by, 1500 - 160 * 4.5)
+    and hd.stats.uiTopDy == 0,
+    "a level-up window across the split: the UI unsplit for that frame")
+  check(hd.fit.uiTopDy < 0, "...while the camera keeps the stacked fit (no bob)")
+end
+
+do
+  -- a whole-number width: no sharpening canvas; controls too tall to dock to: the view's bottom
+  local hd, _, blits = stackedFrame({ view = { 0, 0, 960, 2000, bottom = 300 } })
+  local last = blits[#blits]
+  check(near(hd.stats.uiScale, 4) and last.zk == 1 and last.canvas:getWidth() == 240
+    and near(last.by, 2000 - 160 * 4), "4x: blitted straight; no room above the controls: docked to the bottom")
+end
+
+do
+  -- the solver: a foe's art 30 px above the canvas needs 0.8 framed, none with the sky above
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.fit.zMin = 0.4
+  hd.fit.topY, hd.fit.uiTopDy = 0, 0
+  local framed = hd.fitSolve(-30, {})
+  hd.fit.topY, hd.fit.uiTopDy = -150, -100
+  local stackedZ = hd.fitSolve(-30, {})
+  check(framed < 0.85 and stackedZ == 1, "stacked: a tall foe rises into the sky instead of shrinking ("
+    .. tostring(framed) .. " -> " .. tostring(stackedZ) .. ")")
+end
+
+-- stacked, the width short of the top: the sides slide toward each other so the scene grows
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill, hd.fit.zMin = true, true, 0.4
+  local fit = hd.fit
+  local base = canvas("ui", 240, 160)
+  local foe, mine, page = canvas("foe", 64, 64), canvas("mine", 64, 64), canvas("atlas", 4096, 4096)
+  -- a foe that fits unzoomed, its feet on y 72; a small back whose body's top (y 72) is no
+  -- higher than the foe's feet
+  hd.tag(foe, { texture = page, quad = quad(0, 0, 64, 64), pivot = { 32, 64 }, lowPivot = { 32, 64 },
+                top = 10, side = "enemy" })
+  hd.tag(mine, { texture = page, quad = quad(0, 0, 40, 40), pivot = { 20, 40 }, lowPivot = { 32, 64 },
+                 side = "player", body = { 0, 0, 40, 40 } })
+  local function frame(view)
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(canvas("wall", 256, 160), 0, 0)
+    G.draw(foe, 176, 40, 0, 1, 1, 32, 32)
+    G.draw(mine, 72, 80, 0, 1, 1, 32, 32)
+    hd.seam("ui")
+    G.setColor(0, 0, 0, 0.3)
+    G.rectangle("fill", 0, 0, 240, 160)               -- a fade: not a window across the split
+    G.setColor(0, 0, 0, 0)
+    G.rectangle("fill", 150, 8, 90, 96)                -- an invisible one: neither
+    G.setColor(1, 1, 1, 1)
+    G.rectangle("fill", 0, 112, 240, 48)
+    hd.endPass()
+    hd.composite(base, function() end, 60, 100, 4, 4, { 60, 100, 960, 640 }, view)
+    hd.endFrame()
+  end
+  local tall = { 0, 0, 1080, 2400, bottom = 1500 }
+  frame(tall)
+  local g1 = hd.stats.grow
+  frame(tall)
+  check(fit.shift.enemy < 0 and fit.shift.player > 0 and near(fit.shift.enemy, -fit.shift.player),
+    "the sides slide toward each other, evenly (" .. fit.shift.enemy .. ", " .. fit.shift.player .. ")")
+  -- the foe's frame spans 144..208 and the back's 52..92: centres at most aligned (104 apart)
+  check(hd.stats.inward > 0 and hd.stats.inward <= 104 + 1e-6, "...no further than lines their centres up")
+  for _ = 1, 200 do frame(tall) end
+  check(hd.stats.grow > g1, "...so the scene grows on (" .. tostring(g1) .. " -> " .. tostring(hd.stats.grow) .. ")")
+  check(hd.stats.uiTopDy < 0, "a fade or an invisible draw across the split keeps the bands")
+  frame({ 0, 0, 1920, 1080 })
+  check(hd.stats.inward == 0 and fit.shift.enemy >= 0 and fit.shift.player <= 0,
+    "wide: no slide (only the zoom's usual spread)")
+end
+
 -- Fill Screen sits out a frame whose UI covers the whole canvas (a menu over the battle)
 do
   local G = fakeGraphics()
@@ -822,7 +975,9 @@ do
   local ui = frame(1)
   check(hd.stats.fill == 1 and ui and (ui.by or 60) == 60, "an opaque full-canvas menu: the frame is framed as usual")
   ui = frame(0.5)
-  check(hd.stats.fill > 1 and ui and near(ui.by, 120), "a half-faded cover keeps the fill")
+  -- (it covers the whole screen: 1920x1080 by the 240x160 canvas at 8x, centred)
+  check(hd.stats.fill > 1 and ui and near(ui.sx, 8) and near(ui.by, (1080 - 160 * 8) / 2) and near(ui.bx, 0),
+    "a half-faded cover keeps the fill, and covers the whole screen")
 end
 
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else

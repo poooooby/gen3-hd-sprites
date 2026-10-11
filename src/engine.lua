@@ -294,6 +294,36 @@ function Engine.wrapFit(hd)
   return true
 end
 
+-- The rows of a full-window view (no cutout) the battle may use: from below the safe
+-- area's top (a notch) down to above the on-screen touch controls when they overlay a tall
+-- screen. Either may be nil (use the view's edge).
+function Engine.usableRows(vy, vh, vw)
+  local top, bottom
+  local okS, SafeArea = pcall(require, "src.core.SafeArea")
+  if okS and type(SafeArea) == "table" and SafeArea.rect then
+    local ok, _, y = pcall(SafeArea.rect)
+    if ok and type(y) == "number" and y > vy then top = y end
+  end
+  if vh > vw then
+    local okT, TC = pcall(require, "src.core.TouchControls")
+    if okT and type(TC) == "table" and TC.visible and TC.layout then
+      local okV, shown = pcall(TC.visible, TC)
+      local okL, L = false, nil
+      if okV and shown then okL, L = pcall(TC.layout, TC) end
+      if okL and type(L) == "table" then
+        for name, z in pairs(L) do
+          -- the hotbar button sits in a top corner, over the game: not part of the deck
+          if name ~= "hotbar" and type(z) == "table" and z.cy and z.w then
+            local zt = z.cy - (z.h or z.w) / 2
+            if zt > vy + vh * 0.25 and (not bottom or zt < bottom) then bottom = zt end
+          end
+        end
+      end
+    end
+  end
+  return top, bottom
+end
+
 function Engine.install(hd)
   local ok, err = pcall(function()
     local Renderer = require("src.render.Renderer")
@@ -324,19 +354,25 @@ function Engine.install(hd)
                                      boxX, boxY, boxW, boxH, dpiX, dpiY)
         if hd.done[canvas] then
           -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
-          -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels)
-          local function blit(c, obx, oby, osx, osy, obox)
-            local kx, ky = (osx or sx) / sx, (osy or sy) / sy
+          -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels; zk:
+          -- the canvas's pixels per game pixel, for the UI drawn larger to scale it sharply)
+          local function blit(c, obx, oby, osx, osy, obox, zk)
+            local kx, ky = (osx or sx) / sx * (zk or 1), (osy or sy) / sy * (zk or 1)
             local b = obox or { boxX, boxY, boxW, boxH }
             return blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx and zsx * kx, zsy and zsy * ky,
                               obx or bx, oby or by, b[1], b[2], b[3], b[4], dpiX, dpiY)
           end
           local box = boxX and { boxX, boxY, boxW, boxH } or nil
-          -- the whole screen area (Battle Fit's fill): the Renderer's view rect
+          -- the whole screen area (Battle Fit's fill): the Renderer's view rect (inside a
+          -- cutout, a touch skin's or a layout mod's game area, that rectangle), with the rows
+          -- the battle may use: below the notch, above on-screen touch controls
           local view
           if hd.fit.fill and canvas == self.canvas and self.frameRects then
             local okR, R = pcall(self.frameRects, self)
-            if okR and type(R) == "table" and R.vuw then view = { R.vux, R.vuy, R.vuw, R.vuh } end
+            if okR and type(R) == "table" and R.vuw then
+              view = { R.vux, R.vuy, R.vuw, R.vuh }
+              if not R.cut then view.top, view.bottom = Engine.usableRows(R.vuy, R.vuh, R.vuw) end
+            end
           end
           local cur = hd.done[canvas]
           local ok, handled = pcall(hd.composite, canvas, blit, bx, by, sx, sy, box, view)

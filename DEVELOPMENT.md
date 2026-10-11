@@ -163,19 +163,58 @@ already covers the view.
 **Fill Screen** (`fit.fill`, option `fill_screen`). The Renderer is asked for the whole view
 (`Renderer:frameRects()`, passed to `hd.composite` as `view`):
 
-- **The UI** keeps its whole-number scale and is docked to the view's bottom, centred:
-  `uby = view bottom - 160 * scale`.
-- **The scene** is scaled by `f = (text box line - view top) / (112 * scale)`, about the text
-  box's line, so it runs from the view's top down to that line. The wallpaper, ground band and
-  intro grass cover the view's full width.
+- **The rows it may use:** `src/engine.lua` (`Engine.usableRows`) passes `view.top` (below the
+  safe area's top, a notch) and, on a tall screen with on-screen touch controls and no cutout,
+  `view.bottom`: the top of the controls (the highest `TouchControls:layout()` zone except the
+  corner hotbar button).
+- **Wide** (that area no taller than the canvas's 3:2): the UI keeps the Renderer's
+  whole-number scale, docked to the bottom, centred. The scene is scaled about the text box's
+  line by the smaller of the height fit `(text box line - top) / (112 * scale)` and the width
+  fit, never below 1.
+- **Tall ("stacked"):**
+  - **The UI** spans the width: `U = width / 240`, rounded to two decimals. A non-whole `U`
+    draws each UI layer pixel for pixel at `ceil(U)` into a canvas of its own (`sharpen`),
+    which is blitted down smoothly. Every UI pixel is the same width, with edges at most one
+    screen pixel soft. The `blit` closure's `zk` keeps a zone list on its pixels.
+  - **Two bands:** rows from `fit.split` (66) down (the player's HP box, the text box, the
+    menus) dock to `view.bottom`. The rows above (the enemy's HP box, the party balls) are
+    blitted, clipped, `dyTop` UI px higher.
+    - The fit sees that band at the top of the screen (`fit.uiTopDy`): its HP-box rect and the
+      back headroom (`backTopMin`) move up with it.
+    - It is drawn lower when the scene stops short of the top, `fit.hugGap` above the highest
+      art (`fit.artTop`, from `fitStep`).
+    - **The straddle guard:** a visible UI draw that crosses the split but does not cover the
+      whole canvas (the level-up window, the intro's closing wipe) sets `cur.uiStraddle`. That
+      frame's UI is drawn in one piece.
+  - **The scene** grows by `fit.grow` about the line into the space above, up to the top, its
+    sides cropped. It grows only as far as both sides' art (`fit.span`: each side's frame
+    across, zoomed, shifted) stays `cropMargin` clear of the edges. It is centred and moved
+    sideways only as far as that needs. `grow` eases like the zoom.
+  - **The sides slide in** when the width stops it short of the top: `fitStep` gets the art
+    width the growth needs (`fit.wantW`) and moves the enemy left and the player right
+    (`shift.enemy` / `shift.player`, so attacks follow).
+    - A back whose body's top is below the enemy's feet (`feetY`) may slide until the
+      centres line up.
+    - One level with the enemy may stand in front of its platform, over up to `overlapFoe`
+      (30%) of the enemy's frame.
+    - The player's share stops at its own HP box's left edge; the enemy takes the rest.
+  - **`fit.topY`,** the canvas y of the area's top in scene pixels (negative with sky above),
+    is the highest art may rise, in `fitZoom` and the solver. So a tall foe rises into the
+    sky instead of the camera pulling back.
+  - **No controls below** (`view.bottom` nil): the whole block is raised by `fit.raise`,
+    settling over a few frames, until the sky over the HP box equals the ground under the text
+    box.
+- The wallpaper, ground band and intro grass cover the view's full width and height either way.
 - **The fit sees a smaller UI.** Over the bigger scene the UI covers less of it, so its rects,
   `feetMax` and `backTopMin` are shrunk by `fit.uiK = 1/f` about the focus before the search.
   That is why a filled widescreen battle pulls back less.
-- **Whole-scene layers** (a move's background, a flash) are cover-scaled to the view.
+- **Whole-scene layers** (a move's background, a flash), and UI draws over the whole canvas (a
+  fade), get a layer of their own, cover-scaled to the view.
 - **Sitting out:** an opaque draw over the whole 240×160 canvas after the UI seam (a summary or
   care screen opened in the battle, a fade at full black) sets `cur.uiCovers`, and that frame is
   composited framed, as without fill. A half-faded cover keeps the fill, so a fade doesn't jump.
-- The side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px canvas.
+- The outward side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px
+  canvas. The stacked layout's inward slide needs no cap.
 
 **Safety.** Every engine hook calls into this mod under `pcall`. The first error goes to
 `hd.fail(err)`: it is logged once, any pass in flight is flattened back into its canvas, and
@@ -216,7 +255,7 @@ Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
-`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's fill scale, 1 = none),
+`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `grow`, `inward`, `topY`, `uiK`,
 `failed`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 

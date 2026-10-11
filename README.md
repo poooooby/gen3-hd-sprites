@@ -40,10 +40,17 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
   trainers spread back out toward the sides from the first moment of the battle, and the
   attacks follow them. In trainer battles the camera is set for the Pokémon before they're sent
   out, so nothing jumps when they appear. Your trainer stays planted on the text box, just like the original.
-- 🖥️ **Fills your screen:** With **Fill Screen**, the battle stretches from the top of your
-  screen to the bottom and out to both sides, on a widescreen phone or monitor too. No black
-  bars. The text box, menus and HP bars sit along the bottom at their usual sharp size.
-- 🧭 **The UI stays put:** The text box, menus and HP bars never move or shrink, and stay crisp.
+- 🖥️ **Fills your screen:** With **Fill Screen**, the battle fills your screen in any shape,
+  with no black bars. On a widescreen monitor or a phone held sideways it reaches from the top
+  of the screen out to both sides.
+- 📱 **Made for phones held upright:** The text box and menus stretch the full width, sharp and
+  even, right above the touch controls. The battle grows to fill the space above them, and the
+  two Pokémon slide toward each other so they can be as big as the screen allows, without
+  overlapping or being cut off. Your Pokémon may stand in front of the foe's platform. The
+  foe's HP box moves up out of the way, to just above the battle. With no controls on screen,
+  the battle sits centred, with sky above and ground below.
+- 🧭 **The UI stays sharp:** The text box, menus and HP bars never shrink with the camera, and
+  stay crisp.
 - 🌄 **Depth:** The far background pulls back less than the platforms, like a real camera.
 - 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment
   after it leaves. It doesn't bob with a Pokémon's animation.
@@ -56,7 +63,7 @@ Open **OPTIONS → MODS → Gen 3 HD Sprites**.
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
 | **Battle Fit** | On / Off | On | Pull the battle camera back so tall Pokémon fit. Needs Battle HD. |
-| **Fill Screen** | On / Off | On | The battle fills your whole screen, with the text box and HP bars along the bottom. Off: the usual framed battle screen. Needs Battle Fit. |
+| **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex HD** | On / Off | On | Pokédex Pokémon at full resolution, fitted to the Pokédex. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 

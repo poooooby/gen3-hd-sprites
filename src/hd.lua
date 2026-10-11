@@ -63,6 +63,32 @@ function HD.new(G, opts)
       -- fill: the battle's scene fills the screen (from its top down to the text box's line,
       -- out to its sides), its UI keeping its own whole-pixel scale, docked to the bottom
       fill = false, uiK = 1,
+      -- stacked (a screen taller than the canvas's 3:2): the UI spans the screen's width, its
+      -- rows above `split` (the enemy's HP box) moved up by uiTopDy UI px to the top of the
+      -- screen, its rows below (the player's HP box, the text box, the menus) docked to the
+      -- bottom. topY: the canvas y of the screen's top in the scene's pixels (0 when the
+      -- scene reaches it; negative with sky above), the highest art may rise
+      split = 66, uiTopDy = 0, topY = 0,
+      -- ... and the scene grows (grow, eased like the zoom) into the space above it, up to the
+      -- screen's top, its sides cropped: only as far as both sides' art (span, canvas x where
+      -- it rests, zoomed; the cart's pic boxes until seen) stays on the screen, cropMargin
+      -- canvas px clear of its edges
+      grow = nil, span = nil, spanDefault = { 40, 208 }, cropMargin = 4,
+      -- ... and when the width stops it short of the top, the two sides slide toward each other
+      -- (the enemy left, the player right) so it can grow further: a back whose top is below
+      -- the enemy's feet may come under the enemy (centres at most aligned); one level with
+      -- the enemy keeps sideGap canvas px clear of it. wantW: the art width (zoomed canvas px)
+      -- the growth to the top needs, from the composite; nil when not stacked
+      sideGap = 4, wantW = nil,
+      -- ... a back level with the enemy may still slide in front of the enemy's platform, over
+      -- up to overlapFoe of the enemy's frame width (its margin and feet, not its body)
+      overlapFoe = 0.3,
+      -- ... and when the scene still stops short of the top, the enemy's HP box comes down to
+      -- sit hugGap canvas px above the highest art (artTop: zoomed canvas y, from the fit)
+      hugGap = 4, artTop = nil,
+      -- ... and with nothing below to dock to (no touch controls), the whole block is raised
+      -- (raise, screen px, settling from frame to frame) to sit centred: sky above, ground below
+      raise = 0,
       -- the battle UI over the scene, in canvas pixels (singles, both cart layouts): the
       -- enemy's HP box, the player's HP box, the text box (and everything below it, off the
       -- screen too). The player's own Pokemon (a tag with side = "player" and its body box)
@@ -211,23 +237,51 @@ function HD.new(G, opts)
     return x0 <= 0.5 and y0 <= 0.5 and x1 >= self.cur.w - 0.5 and y1 >= (bottom or self.fit.focus[2]) - 0.5
   end
 
-  local function drawCoversScene(image, a, b, c, d, e, f, g, h, bottom)
-    -- a canvas drawn over the scene is an effect drawn in scene coordinates: it zooms
-    if type(image) == "userdata" and image.typeOf and image:typeOf("Canvas") then return false end
+  -- the rectangle (x, y, w, h) an image draw covers, before the current transform; nil when
+  -- it cannot tell (rotated, no size)
+  local function drawRect(image, a, b, c, d, e, f, g, h)
     local w, hh, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
       local _
       _, _, w, hh = a:getViewport()
       x, y, r, sx, sy, ox, oy = b, c, d, e, f, g, h
     else
-      if not (image and image.getWidth) then return false end
+      if not (image and image.getWidth) then return nil end
       w, hh = image:getWidth(), image:getHeight()
       x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
     end
-    if (r or 0) ~= 0 or type(x) ~= "number" then return false end
+    if (r or 0) ~= 0 or type(x) ~= "number" then return nil end
     sx = sx or 1
     sy = sy or sx
-    return coversScene(x - (ox or 0) * sx, (y or 0) - (oy or 0) * sy, w * sx, hh * sy, bottom)
+    return x - (ox or 0) * sx, (y or 0) - (oy or 0) * sy, w * sx, hh * sy
+  end
+
+  local function drawCoversScene(image, a, b, c, d, e, f, g, h, bottom)
+    -- a canvas drawn over the scene is an effect drawn in scene coordinates: it zooms
+    if type(image) == "userdata" and image.typeOf and image:typeOf("Canvas") then return false end
+    local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
+    if not x then return false end
+    return coversScene(x, y, w, hh, bottom)
+  end
+
+  -- a UI draw across the row the stacked layout splits the UI at (a level-up window, the
+  -- intro's closing wipe): that frame's UI is drawn in one piece, so nothing is torn. An
+  -- invisible draw, or one over the whole canvas (a fade), is not a window: it splits fine
+  local function noteStraddle(x, y, w, h)
+    if type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
+      return
+    end
+    local split = self.fit.split
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + h)
+    if y0 > y1 then y0, y1 = y1, y0 end
+    if x0 > x1 then x0, x1 = x1, x0 end
+    if not (y0 < split - 0.5 and y1 > split + 0.5) then return end
+    local cur = self.cur
+    if x0 <= 0.5 and y0 <= 0.5 and x1 >= cur.w - 0.5 and y1 >= cur.h - 0.5 then return end
+    local _, _, _, a = real.getColor()
+    if a < 0.01 then return end
+    cur.uiStraddle = true
   end
 
   -- an opaque draw over the battle's whole canvas after the UI seam (a menu or summary
@@ -288,11 +342,16 @@ function HD.new(G, opts)
       -- the wallpaper drawn again in the scene (a ground fill continued under a text box moved
       -- off the screen, Kanto Gear): the recorded wallpaper already covers the whole view
       if image == cur.backdropImage and sceneFit() then return end
+      local uiScreen = false
       if uiFill() then
         local a, b, c, d, e, f, g, h = ...
-        noteUICover(drawCoversScene(image, a, b, c, d, e, f, g, h, cur.h))
+        uiScreen = drawCoversScene(image, a, b, c, d, e, f, g, h, cur.h)
+        noteUICover(uiScreen)
+        if not cur.uiStraddle then noteStraddle(drawRect(image, a, b, c, d, e, f, g, h)) end
       end
-      beforeDraw(sceneFit() and drawCoversScene(image, ...))
+      -- a draw over the whole scene, or with fill over the whole UI (a fade), gets a layer of
+      -- its own that covers the whole screen
+      beforeDraw(uiScreen or (sceneFit() and drawCoversScene(image, ...)))
     end
     return real.draw(image, ...)
   end
@@ -307,7 +366,9 @@ function HD.new(G, opts)
         end
         if name == "rectangle" and uiFill() then
           local mode, x, y, w, h = ...
-          noteUICover(mode == "fill" and coversScene(x, y, w, h, self.cur.h))
+          screen = mode == "fill" and coversScene(x, y, w, h, self.cur.h)
+          noteUICover(screen)
+          if not self.cur.uiStraddle then noteStraddle(x, y, w, h) end
         end
         beforeDraw(screen)
       end
@@ -537,6 +598,25 @@ function HD.new(G, opts)
     return Y - (hpy - (rec.spec.top or 0)) * math.abs(rec.sy * k * rec.tsy)
   end
 
+  -- layout values (scales, offsets) are kept to two decimals
+  local function round2(v) return math.floor(v * 100 + 0.5) / 100 end
+
+  -- the left and right of a tagged draw's frame, in pass-canvas pixels
+  local function artSpan(rec)
+    local X, _, hpx, _, k, tex, quad = place(rec)
+    local fw
+    if quad then
+      local _
+      _, _, fw = quad:getViewport()
+    elseif tex and tex.getWidth then
+      fw = tex:getWidth()
+    else
+      fw = 64
+    end
+    local s = math.abs(rec.sx * k * rec.tsx)
+    return X - hpx * s, X + (fw - hpx) * s
+  end
+
   -- pinTo (screen y, optional): the frame's bottom is put exactly there (a trainer cut off by
   -- the text box stands on it, so it still reads as a whole sprite behind the box)
   local function hdDraw(rec, bx, by, bsx, bsy, pinTo)
@@ -657,6 +737,26 @@ function HD.new(G, opts)
     return { fx + (r[1] - fx) * k, fy + (r[2] - fy) * k, fx + (r[3] - fx) * k, fy + (r[4] - fy) * k }
   end
 
+  -- the enemy's HP box over the scene, in the scene's canvas pixels: moved up with the
+  -- stacked layout's top band, then as uiRect (remembered: the solver asks for it a lot)
+  local enemyUI, enemyUIKey = nil, nil
+  local function uiEnemy()
+    local fit = self.fit
+    local d = fit.uiTopDy or 0
+    local key = (fit.uiK or 1) * 1e6 + d
+    if enemyUIKey ~= key then
+      local e = fit.ui.enemy
+      enemyUI = uiRect({ e[1], e[2] + d, e[3], e[4] + d })
+      enemyUIKey = key
+    end
+    return enemyUI
+  end
+
+  -- the highest canvas row art may reach: the screen's top, less the margin
+  local function topLimit()
+    return (self.fit.topY or 0) + self.fit.margin
+  end
+
   local function fitLift(z)
     local fit = self.fit
     local fy = fit.focus[2]
@@ -668,10 +768,11 @@ function HD.new(G, opts)
   -- feetMax, else (the camera rising) with the feet held on feetMax
   local function fitZoom(top)
     local fit = self.fit
-    if top >= fit.margin then return 1 end
+    local limit = topLimit()
+    if top >= limit then return 1 end
     local fy = fit.focus[2]
-    local z = (fy - fit.margin) / (fy - top)
-    if fitLift(z) > 0 then z = (uiY(fit.feetMax) - fit.margin) / (fit.feetY - top) end
+    local z = (fy - limit) / (fy - top)
+    if fitLift(z) > 0 then z = (uiY(fit.feetMax) - limit) / (fit.feetY - top) end
     return math.min(1, z)
   end
   self.fitZoom = fitZoom
@@ -727,7 +828,7 @@ function HD.new(G, opts)
     local y0, y1 = fy + (r[2] - fy) * z - lift, fy + (r[4] - fy) * z - lift
     local area = math.max(1e-6, (x1 - x0) * (y1 - y0))
     local function under(u) return overlap(x0, x1, u[1], u[3]) * overlap(y0, y1, u[2], u[4]) end
-    return under(uiRect(fit.ui.enemy)) / area, (under(uiRect(fit.ui.player)) + under(fit.ui.text)) / area, y0
+    return under(uiEnemy()) / area, (under(uiRect(fit.ui.player)) + under(fit.ui.text)) / area, y0
   end
   self.fitHidden = hidden
 
@@ -746,6 +847,9 @@ function HD.new(G, opts)
     local fy = fit.focus[2]
     local zFront = math.max(fit.zMin, fitZoom(top))
     if #backs == 0 then return zFront, 0 end
+    local limit = topLimit()
+    -- headroom: the cart's gap under the enemy's HP box, moved up with the box
+    local headroom = uiY(fit.backTopMin + (fit.uiTopDy or 0))
     -- levels, strictest first: { headroom, own side mostly in view }
     local levels = { { true, true }, { true, false }, { false, true }, { false, false } }
     local function fits(z, lift, level)
@@ -755,9 +859,9 @@ function HD.new(G, opts)
         v = v - backRaise(r, z, lift, v)
         local underEnemy, underOwn, y0 = hidden({ r[1], r[2] + v, r[3], r[4] + v }, z, lift)
         local t = r.top and (fy + (r.top + v - fy) * z - lift) or y0
-        if y0 < fit.margin or t < fit.margin then return false end
+        if y0 < limit or t < limit then return false end
         if level[1] then
-          if y0 < uiY(fit.backTopMin) then return false end
+          if y0 < headroom then return false end
         elseif underEnemy > fit.maxHidden then
           return false
         end
@@ -773,7 +877,7 @@ function HD.new(G, opts)
         local base = fitLift(z)
         local most = base + fit.extraMax
         -- rising lifts the enemy too: its art's top must stay under the screen's
-        if top < math.huge then most = math.min(most, fy + (top - fy) * z - fit.margin) end
+        if top < math.huge then most = math.min(most, fy + (top - fy) * z - limit) end
         local lift = base
         while lift <= most + 1e-9 do
           if fits(z, lift, level) then return z, lift - base end
@@ -790,7 +894,8 @@ function HD.new(G, opts)
   -- the same, remembered: an animation repeats its frames, so a frame's inputs recur
   local function fitSolve(top, backs)
     local fit = self.fit
-    local parts = { string.format("%.2f|%.3f|%.4f", top, fit.zMin, fit.uiK or 1) }
+    local parts = { string.format("%.2f|%.3f|%.4f|%.2f|%.2f", top, fit.zMin, fit.uiK or 1,
+      fit.topY or 0, fit.uiTopDy or 0) }
     for _, r in ipairs(backs) do
       parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f", r[1], r[2], r[3], r[4], r.top or 0)
     end
@@ -811,20 +916,33 @@ function HD.new(G, opts)
     local fit = self.fit
     local top, backs = math.huge, {}
     local seen = {}
+    -- each side's art where it rests (canvas px, unshifted, unzoomed): its frame across, the
+    -- enemy's feet (its pic box's bottom), the top of the player's body (else of its art)
+    local eL, eR, eB = math.huge, -math.huge, -math.huge
+    local pL, pR, pT = math.huge, -math.huge, math.huge
     local function take(rec)
       local spec = rec.spec
       if spec.side then seen[spec.side] = true end
+      local d = (not rec.inAnim and cur.shift[spec.side == "player" and "player" or "enemy"]) or 0
+      local a, b = artSpan(rec)
       if spec.side == "player" then
+        if not rec.inAnim then a, b = a + d - cur.shift.player, b + d - cur.shift.player end
+        pL, pR = math.min(pL, a), math.max(pR, b)
         if spec.body then
           local r = { bodyRect(rec) }
+          pT = math.min(pT, r[2])
           -- where the side shift puts it (only its x: which UI it is under)
-          if not rec.inAnim then
-            r[1], r[3] = r[1] + cur.shift.player, r[3] + cur.shift.player
-          end
+          r[1], r[3] = r[1] + d, r[3] + d
           if spec.top then r.top = artTop(rec) end
           backs[#backs + 1] = r
+        else
+          pT = math.min(pT, artTop(rec))
         end
       else
+        if not rec.inAnim then a, b = a + d - cur.shift.enemy, b + d - cur.shift.enemy end
+        eL, eR = math.min(eL, a), math.max(eR, b)
+        -- its feet: where the cart's pic box ends (a frame's own bottom may be empty margin)
+        eB = fit.feetY
         local t = artTop(rec)
         if t < top then top = t end
       end
@@ -869,11 +987,56 @@ function HD.new(G, opts)
       wantE = math.min(fit.shiftMax, (fit.enemyX - fx) * k)
       wantP = -math.min(fit.shiftMax, (fx - fit.playerX) * k)
     end
-    fit.shift.enemy, fit.shift.player = wantE, wantP
     fit.shift.playerY = (fit.z < 1 and (seen.enemy or seen.player))
       and playerDrop(fit.z, fitLift(fit.z) + fit.extra) or 0
     fit.shift.playerRaise = backs[1]
       and backRaise(backs[1], fit.z, fitLift(fit.z) + fit.extra, fit.shift.playerY) or 0
+    -- stacked, the width short of what growing to the top needs: the sides slide inward, as far
+    -- as they may without the Pokemon overlapping (canvas px before the zoom, split evenly)
+    local inward = 0
+    if fit.wantW and eL < eR and pL < pR then
+      local z = fit.z
+      local L, R = math.min(eL + wantE, pL + wantP), math.max(eR + wantE, pR + wantP)
+      local need = ((R - L) * z - fit.wantW) / z
+      if need > 0 then
+        local most
+        if pT + fit.shift.playerY - fit.shift.playerRaise >= eB then
+          most = ((eL + eR) - (pL + pR)) / 2 + wantE - wantP        -- centres aligned
+        else
+          -- side by side, the back in front of the enemy's platform
+          most = (eL + wantE) + fit.overlapFoe * (eR - eL) - (pR + wantP)
+        end
+        inward = math.max(0, math.min(need, most))
+      end
+    end
+    -- split evenly, but the player's Pokemon stops short of its own HP box (its body, else its
+    -- art, no further right than the box's left edge); the enemy takes the rest
+    local toP = inward / 2
+    if inward > 0 then
+      local box = uiRect(fit.ui.player)
+      local right = (backs[1] and (backs[1][3] - cur.shift.player)) or pR
+      local room = (box[1] - fx) / fit.z + fx - (right + wantP)
+      toP = math.max(0, math.min(toP, room))
+    end
+    fit.shift.enemy, fit.shift.player = round2(wantE - (inward - toP)), round2(wantP + toP)
+    -- the art's extent as the stage's zoom shows it, for the next frame's growth
+    if eL < eR or pL < pR then
+      local z = fit.z
+      local L = math.min(eL + fit.shift.enemy, pL + fit.shift.player)
+      local R = math.max(eR + fit.shift.enemy, pR + fit.shift.player)
+      fit.span = { fx + (L - fx) * z, fx + (R - fx) * z }
+    end
+    self.stats.inward = inward
+    -- the highest art as the camera shows it (zoomed, raised), for the HP box to sit above
+    local lift = fitLift(fit.z) + fit.extra
+    local at = math.huge
+    if top < math.huge then at = fit.focus[2] + (top - fit.focus[2]) * fit.z - lift end
+    for _, r in ipairs(backs) do
+      local v = fit.shift.playerY - fit.shift.playerRaise
+      local y = (r.top or r[2]) + v
+      at = math.min(at, fit.focus[2] + (y - fit.focus[2]) * fit.z - lift)
+    end
+    fit.artTop = at < math.huge and at or nil
     fit.idle = 0
     self.stats.zoom, self.stats.zoomTarget, self.stats.extraLift = fit.z, zt, fit.extra
     self.stats.shiftEnemy, self.stats.shiftPlayer = fit.shift.enemy, fit.shift.player
@@ -894,12 +1057,45 @@ function HD.new(G, opts)
     return fit.z
   end
 
-  --- Replace a blit of a captured canvas. `blit(canvas, bx, by, bsx, bsy, box)` performs the
-  --- Renderer's own blit of a canvas with the same arguments (the optional ones replace its
-  --- origin, scale and clip); bx/by/bsx/bsy map canvas pixels to the screen; box = {x, y, w, h}
-  --- clip (or nil). view = {x, y, w, h}, the whole screen area (or nil): with fit.fill the
-  --- battle's scene fills it and its UI docks to its bottom (see fit.fill). Returns true when
-  --- the blit was handled.
+  -- a rect {x, y, w, h} clipped to another
+  local function clipRect(x, y, w, h, v)
+    local x0, y0 = math.max(x, v[1]), math.max(y, v[2])
+    local x1, y1 = math.min(x + w, v[1] + v[3]), math.min(y + h, v[2] + v[4])
+    return { x0, y0, math.max(0, x1 - x0), math.max(0, y1 - y0) }
+  end
+
+  -- the UI at a scale that is not a whole number, kept sharp and even: drawn pixel for pixel
+  -- at the next whole scale k into a canvas of its own, which is then scaled down smoothly
+  -- (every UI pixel the same width, its edges at most one screen pixel soft)
+  local sharp, sharpW, sharpH = nil, 0, 0
+  local function sharpen(c, w, h, k)
+    if not (real.newCanvas and real.setCanvas) then return c, 1 end
+    if not sharp or sharpW ~= w * k or sharpH ~= h * k then
+      if sharp and sharp.release then pcall(sharp.release, sharp) end
+      sharp = real.newCanvas(w * k, h * k, { dpiscale = 1 })
+      if sharp.setFilter then sharp:setFilter("linear", "linear") end
+      sharpW, sharpH = w * k, h * k
+    end
+    real.push("all")
+    real.setCanvas(sharp)
+    real.origin()
+    real.setScissor()
+    real.setShader()
+    real.clear(0, 0, 0, 0)
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("alpha", "premultiplied")
+    real.draw(c, 0, 0, 0, k, k)
+    real.pop()
+    return sharp, k
+  end
+
+  --- Replace a blit of a captured canvas. `blit(canvas, bx, by, bsx, bsy, box, zk)` performs
+  --- the Renderer's own blit of a canvas with the same arguments (the optional ones replace
+  --- its origin, scale and clip; zk: the canvas's pixels per game pixel, for one drawn larger);
+  --- bx/by/bsx/bsy map canvas pixels to the screen; box = {x, y, w, h} clip (or nil).
+  --- view = {x, y, w, h, top =, bottom =}, the whole screen area (or nil), its usable rows
+  --- from top (below a notch) to bottom (above touch controls): with fit.fill the battle
+  --- fills it (see fit.fill and fit.split). Returns true when the blit was handled.
   function self.composite(canvas, blit, bx, by, bsx, bsy, box, view)
     local cur = self.done[canvas]
     if not cur then return false end
@@ -907,27 +1103,81 @@ function HD.new(G, opts)
     local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled
     local fx, fy = fit.focus[1], fit.focus[2]
     -- the scene's frame on screen: where canvas (fx, fy) lands and how big a canvas pixel is;
-    -- the UI's origin. Without fill both are the Renderer's letterbox.
+    -- the UI's origin and scale. Without fill both are the Renderer's letterbox.
     local cx, cy, S, Sy = bx + fx * bsx, by + fy * bsy, bsx, bsy
-    local ubx, uby = bx, by
+    local ubx, uby, U, Uy = bx, by, bsx, bsy
     local sceneBox, uiBox = box, box
     local filling = fitted and fit.fill and view ~= nil and not cur.uiCovers
-    local f = 1
+    local stacked, dyTop, top = false, 0, nil
+    fit.wantW = nil
     if filling then
       local vx, vy, vw, vh = view[1], view[2], view[3], view[4]
-      -- the UI docks to the bottom of the screen, its scale untouched
-      uby = vy + vh - cur.h * bsy
-      cy = uby + fy * bsy
-      -- the scene runs from the screen's top down to the text box's line
-      f = math.max(1, (cy - vy) / (fy * bsy))
-      S, Sy = bsx * f, bsy * f
+      top = math.max(vy, view.top or vy)
+      local bottom = math.min(vy + vh, view.bottom or (vy + vh))
+      -- controls that leave no room for the UI are not docked to
+      if bottom - top < cur.h * bsy then top, bottom = vy, vy + vh end
+      local free = view.bottom == nil
+      if (bottom - top) * cur.w > vw * cur.h + 0.5 then
+        if free then bottom = bottom - (fit.raise or 0) end
+        -- taller than the canvas: the UI spans the width, its lower rows docked to the bottom
+        -- and its top band (the enemy's HP box) moved up to the top; the scene at the UI's
+        -- scale, the wallpaper's sky above it
+        stacked = true
+        U = round2(vw / cur.w)
+        Uy = round2(U * bsy / bsx)
+        ubx = round2(vx + (vw - cur.w * U) / 2)
+        uby = round2(bottom - cur.h * Uy)
+        dyTop = math.min(0, round2((top - uby) / Uy))
+        cy = uby + fy * Uy
+        -- the scene grows about the text box's line into the space above, up to the screen's
+        -- top, or until both sides' art spans the width, whichever comes first
+        local span = fit.span or fit.spanDefault
+        local m = fit.cropMargin
+        local gH = (cy - top) / (fy * Uy)
+        local gW = vw / (U * (span[2] - span[1] + 2 * m))
+        fit.wantW = vw / (U * gH) - 2 * m
+        local gt = math.max(1, math.min(gH, gW))
+        local g = fit.grow
+        if not g or fit.idle > 2 then
+          g = gt
+        elseif gt < g then
+          g = math.max(gt, g - math.max((g - gt) * fit.outRate, 0.002))
+        elseif gt > g then
+          g = math.min(gt, g + math.max((gt - g) * fit.inRate, 0.001))
+        end
+        fit.grow = g
+        g = round2(g)
+        self.stats.grow = g
+        S, Sy = U * g, Uy * g
+        -- centred, and moved sideways only as far as keeps both sides' art on the screen
+        cx = vx + vw / 2
+        local l, r = cx + (span[1] - m - fx) * S, cx + (span[2] + m - fx) * S
+        if l < vx then
+          cx = cx + (vx - l)
+        elseif r > vx + vw then
+          cx = cx - (r - vx - vw)
+        end
+        cx = round2(cx)
+      else
+        -- wider: the UI keeps the Renderer's scale, docked to the bottom; the scene grows about
+        -- the text box's line up to the top, or out to the sides, whichever it reaches first
+        fit.grow = nil
+        uby = bottom - cur.h * bsy
+        cy = uby + fy * bsy
+        local fH = (cy - top) / (fy * bsy)
+        local fW = vw / (cur.w * bsx)
+        local f = math.max(1, math.min(fH, fW))
+        S, Sy = bsx * f, bsy * f
+      end
       sceneBox = { vx, vy, vw, vh }
-      local x0, y0 = math.max(vx, ubx), math.max(vy, uby)
-      local x1, y1 = math.min(vx + vw, ubx + cur.w * bsx), math.min(vy + vh, uby + cur.h * bsy)
-      uiBox = { x0, y0, math.max(0, x1 - x0), math.max(0, y1 - y0) }
+      uiBox = clipRect(ubx, uby, cur.w * U, cur.h * Uy, sceneBox)
     end
-    -- the UI over the scene, in the scene's canvas pixels: shrunk by 1/f about the line
-    fit.uiK = 1 / f
+    -- the UI over the scene, in the scene's canvas pixels: shrunk about the line by the
+    -- ratio of their scales; the enemy's HP box moved with the top band; the screen's top
+    fit.uiK = U / S
+    fit.uiTopDy = dyTop
+    fit.topY = filling and math.min(0, round2(fy - (cy - top) / Sy)) or 0
+    self.stats.topY, self.stats.uiK = fit.topY, fit.uiK
     local z, lift = 1, 0
     if fitted then
       z = fitStep(cur)
@@ -945,8 +1195,37 @@ function HD.new(G, opts)
     local bkx, bky, bksx, bksy = zoomed(zb, 0)
     -- the screen rect a wallpaper covers (canvas size at scale 1)
     local cover = filling and sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
+    -- the stacked UI in two bands (one when a draw crosses the split this frame)
+    local split = fit.split
+    -- the HP box drawn just above the highest art when the scene stops short of the top (the
+    -- fit still sees it at the top: nothing it places comes up under it)
+    local dyDraw = dyTop
+    if stacked and fit.artTop then
+      local artY = cy + (fit.artTop - fy) * Sy
+      local boxBottom = fit.ui.enemy[4] + 4
+      local want = (artY - (fit.hugGap * Sy) - boxBottom * Uy - uby) / Uy
+      dyDraw = math.max(dyTop, math.min(0, round2(want)))
+    end
+    -- centred when nothing is below: the sky over the HP box and the ground under the text
+    -- box made equal (halving the difference each frame)
+    if stacked and view.bottom == nil then
+      local gapTop = uby + dyDraw * Uy - top
+      fit.raise = round2(math.max(0, (gapTop + (fit.raise or 0)) / 2))
+    else
+      fit.raise = 0
+    end
+    local banded = stacked and dyDraw < 0 and not cur.uiStraddle
+    local topBy = uby + dyDraw * Uy
+    local topBox, lowBox
+    if banded then
+      topBox = clipRect(ubx, topBy, cur.w * U, split * Uy, sceneBox)
+      lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, sceneBox)
+    end
+    local k = filling and U ~= math.floor(U) and math.ceil(U) or 1
     self.stats.lift = lift
-    self.stats.fill = f
+    self.stats.fill = S / bsx
+    self.stats.uiScale = U
+    self.stats.uiTopDy = banded and dyDraw or 0
     local function scissor(b)
       if b then real.setScissor(b[1], b[2], b[3], b[4]) else real.setScissor() end
     end
@@ -962,7 +1241,7 @@ function HD.new(G, opts)
           if inScene then
             drawBackdrop(item.rec, cover[3], cover[4], bkx, bky, bksx, bksy, cover[1], cover[2], 1, 1)
           else
-            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, bsx, bsy, ubx, uby, bsx, bsy)
+            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy)
           end
         elseif item.kind == "band" then
           if inScene then
@@ -971,7 +1250,7 @@ function HD.new(G, opts)
             local gx, gy = zoomed(z, 0)
             drawBackdrop(item.rec, cover[3], cover[4], gx, gy, ssx, ssy, cover[1], cover[2], 1, 1, "clampzero")
           else
-            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, bsx, bsy, ubx, uby, bsx, bsy, "clampzero")
+            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy, "clampzero")
           end
         elseif item.kind == "stage" then
           local d = (fitted and cur.shift[item.side]) or 0
@@ -993,23 +1272,35 @@ function HD.new(G, opts)
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
           local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy) or nil
           hdDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, pin)
+        elseif banded and item.rec.ty + item.rec.y * item.rec.tsy < split then
+          scissor(topBox)
+          hdDraw(item.rec, ubx, topBy, U, Uy)
         else
-          hdDraw(item.rec, ubx, uby, bsx, bsy)
+          if banded then scissor(lowBox) end
+          hdDraw(item.rec, ubx, uby, U, Uy)
         end
       else
         real.setScissor()
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        if inScene and item.screen and filling then
-          -- a whole-scene draw (a move's background, a flash) covers the whole screen
+        if item.screen and filling then
+          -- a whole-scene draw (a move's background, a flash) or a whole-UI one (a fade) covers
+          -- the whole screen
           local v = sceneBox
           local sc = math.max(v[3] / cur.w, v[4] / cur.h)
           blit(item.canvas, v[1] + (v[3] - cur.w * sc) / 2, v[2] + (v[4] - cur.h * sc) / 2, sc, sc, sceneBox)
         elseif inScene and not item.screen and moved then
           blit(item.canvas, sx0, sy0, ssx, ssy, sceneBox)
         elseif not inScene and filling then
-          blit(item.canvas, ubx, uby, bsx, bsy, uiBox)
+          local c, kk = item.canvas, 1
+          if k > 1 then c, kk = sharpen(item.canvas, cur.w, cur.h, k) end
+          if banded then
+            blit(c, ubx, topBy, U / kk, Uy / kk, topBox, kk)
+            blit(c, ubx, uby, U / kk, Uy / kk, lowBox, kk)
+          else
+            blit(c, ubx, uby, U / kk, Uy / kk, uiBox, kk)
+          end
         else
           blit(item.canvas)
         end
