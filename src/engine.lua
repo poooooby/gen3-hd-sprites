@@ -64,7 +64,7 @@ function Engine.wrapDex(hd)
     t.draw = function(...)
       if hd.capturing() then
         hd.stats.dexInPass = (hd.stats.dexInPass or 0) + 1
-      elseif hd.beginPass("dex", love.graphics.getCanvas()) then
+      elseif select(2, pcall(hd.beginPass, "dex", love.graphics.getCanvas())) == true then
         hd.stats.dexPasses = (hd.stats.dexPasses or 0) + 1
       end
       return draw(...)
@@ -97,25 +97,30 @@ function Engine.wrapFit(hd)
 
   local drawTerrain = Chrome.drawTerrain
   if not ours[drawTerrain] then
+    local function fitTerrain(key, enemyOx, playerOx, bgOx)
+      key = key or "building"
+      local entry = Chrome.terrain(key) or Chrome.terrain("building") or Chrome.terrain("grass")
+      if entry and entry.bgImage and entry.enemyPlat and entry.playerPlat then
+        local G = love.graphics
+        G.setColor(1, 1, 1, 1)
+        hd.backdrop(entry.bgImage, -((tonumber(bgOx) or 0) % 256), 0)
+        hd.drawStage(entry.enemyPlat, tonumber(enemyOx) or 0, 0, "enemy")
+        -- the player's pad whole (src/pads.lua): the camera may rise past its cut
+        local pad = Engine.Pads and Engine.Pads.playerPad(entry, hd.real,
+          love.graphics.newImage, love.image and love.image.newImageData)
+        hd.drawStage(pad or entry.playerPlat, tonumber(playerOx) or 0, 0, "player")
+        if Engine.prefit then
+          local okP, errP = pcall(Engine.prefit)
+          if not okP then hd.stats.prefitError = tostring(errP) end   -- for stats(), never fatal
+        end
+        return true
+      end
+    end
     Chrome.drawTerrain = function(key, enemyOx, playerOx, bgOx, ...)
       if fitting() then
-        key = key or "building"
-        local entry = Chrome.terrain(key) or Chrome.terrain("building") or Chrome.terrain("grass")
-        if entry and entry.bgImage and entry.enemyPlat and entry.playerPlat then
-          local G = love.graphics
-          G.setColor(1, 1, 1, 1)
-          hd.backdrop(entry.bgImage, -((tonumber(bgOx) or 0) % 256), 0)
-          hd.drawStage(entry.enemyPlat, tonumber(enemyOx) or 0, 0, "enemy")
-          -- the player's pad whole (src/pads.lua): the camera may rise past its cut
-          local pad = Engine.Pads and Engine.Pads.playerPad(entry, hd.real,
-            love.graphics.newImage, love.image and love.image.newImageData)
-          hd.drawStage(pad or entry.playerPlat, tonumber(playerOx) or 0, 0, "player")
-          if Engine.prefit then
-            local okP, errP = pcall(Engine.prefit)
-            if not okP then hd.stats.prefitError = tostring(errP) end   -- for stats(), never fatal
-          end
-          return true
-        end
+        local ok, drawn = pcall(fitTerrain, key, enemyOx, playerOx, bgOx)
+        if not ok then hd.fail("drawTerrain: " .. tostring(drawn))
+        elseif drawn then return true end
       end
       return drawTerrain(key, enemyOx, playerOx, bgOx, ...)
     end
@@ -128,15 +133,17 @@ function Engine.wrapFit(hd)
   if type(drawEntry) == "function" and type(Chrome.entry) == "function" and not ours[drawEntry] then
     Chrome.drawEntry = function(key, scrollX, scrollY, alpha, ...)
       if fitting() then
+        -- (an entry missing from the cache errors exactly as the game's own draw would)
         local e = Chrome.entry(key)
         if not e then return false end
         alpha = alpha or 1
         if alpha <= 0 then return true end
         local G = love.graphics
         G.setColor(1, 1, 1, alpha)
-        hd.band(e.image, -((math.floor(scrollX or 0)) % 256), -(math.floor(scrollY or 0)))
+        local ok, err = pcall(hd.band, e.image, -((math.floor(scrollX or 0)) % 256), -(math.floor(scrollY or 0)))
         G.setColor(1, 1, 1, 1)
-        return true
+        if ok then return true end
+        hd.fail("drawEntry: " .. tostring(err))
       end
       return drawEntry(key, scrollX, scrollY, alpha, ...)
     end
@@ -147,7 +154,10 @@ function Engine.wrapFit(hd)
   if not ours[ballDraw] then
     BallOpen.draw = function(...)
       local results = { ballDraw(...) }
-      if fitting() then hd.seam("ui") end
+      if fitting() then
+        local ok, err = pcall(hd.seam, "ui")
+        if not ok then hd.fail("seam: " .. tostring(err)) end
+      end
       return unpack(results)
     end
     ours[BallOpen.draw] = true
@@ -271,7 +281,7 @@ function Engine.wrapFit(hd)
         TrainerPic[name] = function(...)
           local entry = fn(...)
           if type(entry) == "table" and entry.image and not hd.tagOf(entry.image) then
-            hd.tag(entry.image, spec)
+            pcall(hd.tag, entry.image, spec)
           end
           return entry
         end
@@ -298,6 +308,14 @@ function Engine.install(hd)
     local exchange = need(Renderer, "exchangeWorldCanvas")
     local battleDraw = need(Battle, "draw")
 
+    -- the Gen 3 display falls back to presenting without the Renderer when anything in its
+    -- plane path errors (Display.planesBroken, for the session): a pass could then never be
+    -- composited, so nothing is captured and every frame is drawn the game's own way
+    local okD, Display = pcall(require, "src.core.game3.display")
+    hd.canCapture = function()
+      return not (okD and type(Display) == "table" and Display.planesBroken)
+    end
+
     local okG, missing = hd.install()
     if not okG then error("love.graphics has no " .. tostring(missing), 0) end
 
@@ -306,12 +324,28 @@ function Engine.install(hd)
                                      boxX, boxY, boxW, boxH, dpiX, dpiY)
         if hd.done[canvas] then
           -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
-          local function blit(c, obx, oby, osx, osy)
-            return blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx, zsy, obx or bx, oby or by,
-                              boxX, boxY, boxW, boxH, dpiX, dpiY)
+          -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels)
+          local function blit(c, obx, oby, osx, osy, obox)
+            local kx, ky = (osx or sx) / sx, (osy or sy) / sy
+            local b = obox or { boxX, boxY, boxW, boxH }
+            return blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx and zsx * kx, zsy and zsy * ky,
+                              obx or bx, oby or by, b[1], b[2], b[3], b[4], dpiX, dpiY)
           end
           local box = boxX and { boxX, boxY, boxW, boxH } or nil
-          if hd.composite(canvas, blit, bx, by, sx, sy, box) then return end
+          -- the whole screen area (Battle Fit's fill): the Renderer's view rect
+          local view
+          if hd.fit.fill and canvas == self.canvas and self.frameRects then
+            local okR, R = pcall(self.frameRects, self)
+            if okR and type(R) == "table" and R.vuw then view = { R.vux, R.vuy, R.vuw, R.vuh } end
+          end
+          local cur = hd.done[canvas]
+          local ok, handled = pcall(hd.composite, canvas, blit, bx, by, sx, sy, box, view)
+          if ok and handled then return end
+          if not ok then
+            -- put the frame back into its canvas the usual way, then blit that
+            hd.fail("composite: " .. tostring(handled))
+            pcall(hd.flatten, cur)
+          end
         end
         return blitCanvas(self, canvas, sx, sy, zoneList, zsx, zsy, bx, by,
                           boxX, boxY, boxW, boxH, dpiX, dpiY)
@@ -342,7 +376,10 @@ function Engine.install(hd)
         local BattleTransition = package.loaded["src.core.game3.battle_transition"]
         local busy = (Tilt.active and Tilt.active())
           or (BattleTransition and BattleTransition.isActive and BattleTransition.isActive())
-        if not busy then hd.beginPass("field", self.worldCanvas) end
+        if not busy then
+          local ok, err = pcall(hd.beginPass, "field", self.worldCanvas)
+          if not ok then hd.fail("field pass: " .. tostring(err)) end
+        end
         return unpack(results)
       end
       ours[Renderer.beginWorldPass] = true
@@ -367,7 +404,8 @@ function Engine.install(hd)
     if not ours[battleDraw] then
       Battle.draw = function(...)
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
-        hd.beginPass("battle", love.graphics.getCanvas())
+        local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
+        if not ok then hd.fail("battle pass: " .. tostring(err)) end
         return battleDraw(...)
       end
       ours[Battle.draw] = true

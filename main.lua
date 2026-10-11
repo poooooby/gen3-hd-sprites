@@ -56,9 +56,10 @@ return function(mod)
     hd.enabled.battle = option("battle_hd", true) ~= false
     hd.enabled.field = option("field_hd", true) ~= false
     hd.enabled.dex = option("dex_hd", true) ~= false
-    local fit = option("battle_fit", "fit")
+    -- (a value saved by the old Off / Fit Sprites / Fit Tall Too choice reads as off or on)
+    local fit = option("battle_fit", true)
     hd.fit.enabled = hd.fit.available and fit ~= "off" and fit ~= false
-    hd.fit.zMin = hd.fit.modes[fit] or hd.fit.modes.fit
+    hd.fit.fill = option("fill_screen", true) ~= false
   end
 
   local function install()

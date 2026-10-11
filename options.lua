@@ -10,14 +10,16 @@ return {
   {
     key = "battle_fit",
     label = "Battle Fit",
-    type = "choice",
-    default = "fit",
-    choices = {
-      { "Off", "off" },
-      { "Fit Sprites", "fit" },
-      { "Fit Tall Too", "tall" },
-    },
-    description = "When a battle Pokemon is too tall for the screen, the camera pulls back so the whole Pokemon fits, its platform shrinking with it. The text box and HP bars never change. Fit Tall Too pulls back further for the very biggest (Lugia, Koraidon). Needs Battle HD.",
+    type = "toggle",
+    default = true,
+    description = "When a battle Pokemon is too tall for the screen, the camera pulls back so the whole Pokemon fits, its platform shrinking with it. The text box and HP bars never change. Needs Battle HD.",
+  },
+  {
+    key = "fill_screen",
+    label = "Fill Screen",
+    type = "toggle",
+    default = true,
+    description = "With Battle Fit, the battle scene fills your whole screen, top to bottom and out to the sides, while the text box, HP bars and menus keep their sharp size, docked to the bottom. Off: the usual framed battle screen.",
   },
   {
     key = "field_hd",

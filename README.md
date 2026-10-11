@@ -36,10 +36,13 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
   of it shows above the text box. A big one never stands taller than the biggest original back
   sprites, so its head keeps clear of the opponent's HP bar, and its whole animation stays on
   screen.
-- ↔️ **Fills the screen:** When the camera pulls back, the two Pokémon, their platforms and the
+- ↔️ **Spreads out:** When the camera pulls back, the two Pokémon, their platforms and the
   trainers spread back out toward the sides from the first moment of the battle, and the
   attacks follow them. In trainer battles the camera is set for the Pokémon before they're sent
   out, so nothing jumps when they appear. Your trainer stays planted on the text box, just like the original.
+- 🖥️ **Fills your screen:** With **Fill Screen**, the battle stretches from the top of your
+  screen to the bottom and out to both sides, on a widescreen phone or monitor too. No black
+  bars. The text box, menus and HP bars sit along the bottom at their usual sharp size.
 - 🧭 **The UI stays put:** The text box, menus and HP bars never move or shrink, and stay crisp.
 - 🌄 **Depth:** The far background pulls back less than the platforms, like a real camera.
 - 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment
@@ -52,7 +55,8 @@ Open **OPTIONS → MODS → Gen 3 HD Sprites**.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | Off / Fit Sprites / Fit Tall Too | Fit Sprites | Pull the battle camera back so tall Pokémon fit. **Fit Tall Too** pulls back further for the very biggest. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | Pull the battle camera back so tall Pokémon fit. Needs Battle HD. |
+| **Fill Screen** | On / Off | On | The battle fills your whole screen, with the text box and HP bars along the bottom. Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex HD** | On / Off | On | Pokédex Pokémon at full resolution, fitted to the Pokédex. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
@@ -74,7 +78,11 @@ Open **OPTIONS → MODS → Gen 3 HD Sprites**.
 
 - Battle Fit only reacts to Pokémon drawn by a sprite mod that uses this one. With the game's
   own sprites, battles look exactly as they always have.
-- **Fit Sprites** pulls back to 50% at most; **Fit Tall Too** to 40%.
+- The camera pulls back to 40% at most, enough for the very biggest (Lugia, Koraidon).
+- A full-screen menu opened in a battle (a summary or a care screen) shows framed, like the
+  original, while Fill Screen is on.
+- If your device can't draw battles this way, the mod steps aside for that session and the
+  game draws everything as usual.
 
 ---
 

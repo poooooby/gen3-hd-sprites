@@ -55,8 +55,8 @@ The target zoom:
   would sink into the player's HP box. Past the point where it would go below
   `fit.feetMax = 76`, the stage also rises by `lift = 112 + (72 - 112) * z - 76`, which holds the
   feet on 76. The target is then `(76 - margin) / (72 - T)`.
-- Either target is clamped to `[zMin, 1]`. `zMin` is 0.5 for Fit Sprites and 0.4 for Fit Tall
-  Too. The wallpaper does not rise: its rows below y = 112 are hidden by the text box on the cart, so its bottom edge stays on the text box line.
+- Either target is clamped to `[zMin, 1]`. `zMin` is 0.4, enough for the very biggest (Lugia,
+  Koraidon). The wallpaper does not rise: its rows below y = 112 are hidden by the text box on the cart, so its bottom edge stays on the text box line.
 - **The player's own Pokémon** is a tag with `side = "player"` and a `body` box (its resting
   pose). With one in the scene, the camera is the largest zoom, with the least extra rise (up
   to `fit.extraMax`, 48 px), that keeps:
@@ -133,7 +133,7 @@ The target zoom:
   The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
   frames.
-- A frame with no UI seam (the post-catch Pokédex scene) is not zoomed.
+- A frame with no UI seam (the post-catch Pokédex scene) is neither zoomed nor filled.
 
 With no `top`, the frame's own top row counts, empty margin included. Pass `top` (the first
 row of art, the highest over the animation) so the camera fits the art and not the frame.
@@ -152,6 +152,36 @@ enemy's, 112 px left and 53 px down. So the enemy pad is copied there, once per 
 The art is read back from the images the game imported from the player's ROM, so nothing is
 shipped. A terrain whose enemy pad does not fill the oval, or is mostly ground, keeps the
 game's own pad.
+
+**The ground below the text box.** The wallpaper's own rows end at y 112 (the cart's rows
+past it are black, hidden by the text box). Below that line, its ground band, rows `fit.ground`
+104-112, repeats down to the view's bottom. So a zoomed-out scene, a filled screen or a text
+box moved off the screen (Kanto Gear's "gear" battle view) shows ground, not a black band. A
+redraw of the recorded wallpaper image inside the scene is skipped, because the recorded one
+already covers the view.
+
+**Fill Screen** (`fit.fill`, option `fill_screen`). The Renderer is asked for the whole view
+(`Renderer:frameRects()`, passed to `hd.composite` as `view`):
+
+- **The UI** keeps its whole-number scale and is docked to the view's bottom, centred:
+  `uby = view bottom - 160 * scale`.
+- **The scene** is scaled by `f = (text box line - view top) / (112 * scale)`, about the text
+  box's line, so it runs from the view's top down to that line. The wallpaper, ground band and
+  intro grass cover the view's full width.
+- **The fit sees a smaller UI.** Over the bigger scene the UI covers less of it, so its rects,
+  `feetMax` and `backTopMin` are shrunk by `fit.uiK = 1/f` about the focus before the search.
+  That is why a filled widescreen battle pulls back less.
+- **Whole-scene layers** (a move's background, a flash) are cover-scaled to the view.
+- **Sitting out:** an opaque draw over the whole 240×160 canvas after the UI seam (a summary or
+  care screen opened in the battle, a fade at full black) sets `cur.uiCovers`, and that frame is
+  composited framed, as without fill. A half-faded cover keeps the fill, so a fade doesn't jump.
+- The side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px canvas.
+
+**Safety.** Every engine hook calls into this mod under `pcall`. The first error goes to
+`hd.fail(err)`: it is logged once, any pass in flight is flattened back into its canvas, and
+nothing more is captured that session (`stats().failed`). `hd.canCapture()` is false when the
+engine presents without the Renderer (`Display.planesBroken`, its Android fallback), since a
+captured pass would never be composited there.
 
 If `BattleChrome.drawTerrain`, `BattleChrome.terrain` or `BallOpen.draw` is missing,
 `fit.available` is false and the option does nothing. The HD sprites are unaffected.
@@ -184,9 +214,10 @@ end
 
 Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true }`),
-`fitEnabled()`, `setFit("off" | "fit" | "tall")`, `sceneZoom()` (the battle scene's zoom this
+`fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
-`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
+`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's fill scale, 1 = none),
+`failed`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 
 ## Tests

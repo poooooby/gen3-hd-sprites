@@ -55,12 +55,14 @@ function HD.new(G, opts)
     -- Battle Fit (see the header). z eases toward target: out fast, back in only after the
     -- target has stayed larger for holdFrames, so a sprite's animation never pumps it.
     fit = {
-      -- the farthest it may pull back, by the option's value
-      modes = { fit = 0.5, tall = 0.4 },
-      enabled = false, available = false, zMin = 0.5, focus = { 120, 112 }, margin = 2, parallax = 0.35,
+      -- zMin: the farthest it may pull back (40% fits the very biggest, Lugia and Koraidon)
+      enabled = false, available = false, zMin = 0.4, focus = { 120, 112 }, margin = 2, parallax = 0.35,
       -- the enemy's feet (its 64x64 pic box's bottom, ui.lua ENEMY_MON y 40 + 32) and the
       -- lowest they may sink to: the top of the player's HP box is just below
       feetY = 72, feetMax = 76,
+      -- fill: the battle's scene fills the screen (from its top down to the text box's line,
+      -- out to its sides), its UI keeping its own whole-pixel scale, docked to the bottom
+      fill = false, uiK = 1,
       -- the battle UI over the scene, in canvas pixels (singles, both cart layouts): the
       -- enemy's HP box, the player's HP box, the text box (and everything below it, off the
       -- screen too). The player's own Pokemon (a tag with side = "player" and its body box)
@@ -82,6 +84,9 @@ function HD.new(G, opts)
       -- stays inside the canvas. It follows the zoom from a battle's first frame; the
       -- trainers (tags with trainer = true) move with their side too.
       enemyX = 176, playerX = 72, shiftMax = 40,
+      -- the wallpaper's rows that are ground just above the text box's line, repeated below
+      -- that line (image rows; the cart's rows past 112 are black)
+      ground = { 104, 112 },
       shift = { enemy = 0, player = 0, playerY = 0, playerRaise = 0 },
       -- the player's pad stays tucked under the text box for scale: on the cart its top 11
       -- of 32 rows show (padTop 101, padRows 32); pulled back, the player's side is lowered
@@ -193,8 +198,9 @@ function HD.new(G, opts)
     return self.fit.enabled and cur.pass == "battle" and cur.segment == "scene" and not cur.stageDraw
   end
 
-  -- does the rectangle (x, y, w, h), in the current transform, cover the scene?
-  local function coversScene(x, y, w, h)
+  -- does the rectangle (x, y, w, h), in the current transform, cover the scene (down to the
+  -- text box's line), or with `bottom` the canvas down to that row?
+  local function coversScene(x, y, w, h, bottom)
     if type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
       return false
     end
@@ -202,10 +208,10 @@ function HD.new(G, opts)
     local x1, y1 = real.transformPoint(x + w, y + h)
     if x0 > x1 then x0, x1 = x1, x0 end
     if y0 > y1 then y0, y1 = y1, y0 end
-    return x0 <= 0.5 and y0 <= 0.5 and x1 >= self.cur.w - 0.5 and y1 >= self.fit.focus[2] - 0.5
+    return x0 <= 0.5 and y0 <= 0.5 and x1 >= self.cur.w - 0.5 and y1 >= (bottom or self.fit.focus[2]) - 0.5
   end
 
-  local function drawCoversScene(image, a, b, c, d, e, f, g, h)
+  local function drawCoversScene(image, a, b, c, d, e, f, g, h, bottom)
     -- a canvas drawn over the scene is an effect drawn in scene coordinates: it zooms
     if type(image) == "userdata" and image.typeOf and image:typeOf("Canvas") then return false end
     local w, hh, x, y, r, sx, sy, ox, oy
@@ -221,7 +227,21 @@ function HD.new(G, opts)
     if (r or 0) ~= 0 or type(x) ~= "number" then return false end
     sx = sx or 1
     sy = sy or sx
-    return coversScene(x - (ox or 0) * sx, (y or 0) - (oy or 0) * sy, w * sx, hh * sy)
+    return coversScene(x - (ox or 0) * sx, (y or 0) - (oy or 0) * sy, w * sx, hh * sy, bottom)
+  end
+
+  -- an opaque draw over the battle's whole canvas after the UI seam (a menu or summary
+  -- screen opened over the battle, a fade at full black): fill sits that frame out, so the
+  -- screen shows framed like the game's own rather than docked over the scene
+  local function noteUICover(covers)
+    local cur = self.cur
+    if not (covers and self.fit.fill and cur.pass == "battle" and cur.segment == "ui") then return end
+    local _, _, _, a = real.getColor()
+    if a >= 0.99 then cur.uiCovers = true end
+  end
+  local function uiFill()
+    local cur = self.cur
+    return self.fit.fill and cur.pass == "battle" and cur.segment == "ui" and not cur.uiCovers
   end
 
   local function record(image, spec, a, b, c, d, e, f, g, h, i)
@@ -265,6 +285,13 @@ function HD.new(G, opts)
       elseif spec then
         self.stats.overCap = self.stats.overCap + 1
       end
+      -- the wallpaper drawn again in the scene (a ground fill continued under a text box moved
+      -- off the screen, Kanto Gear): the recorded wallpaper already covers the whole view
+      if image == cur.backdropImage and sceneFit() then return end
+      if uiFill() then
+        local a, b, c, d, e, f, g, h = ...
+        noteUICover(drawCoversScene(image, a, b, c, d, e, f, g, h, cur.h))
+      end
       beforeDraw(sceneFit() and drawCoversScene(image, ...))
     end
     return real.draw(image, ...)
@@ -277,6 +304,10 @@ function HD.new(G, opts)
         if name == "rectangle" and sceneFit() then
           local mode, x, y, w, h = ...
           screen = mode == "fill" and coversScene(x, y, w, h)
+        end
+        if name == "rectangle" and uiFill() then
+          local mode, x, y, w, h = ...
+          noteUICover(mode == "fill" and coversScene(x, y, w, h, self.cur.h))
         end
         beforeDraw(screen)
       end
@@ -344,11 +375,28 @@ function HD.new(G, opts)
     self.installed = false
   end
 
+  --- Something of ours failed on this device: say so once, put back any pass in flight, and
+  --- capture nothing more this session, so every frame is drawn the game's own way.
+  function self.fail(err)
+    if self.failed then return end
+    self.failed = tostring(err)
+    self.stats.failed = self.failed
+    if self.log and self.log.error then
+      pcall(self.log.error, self.log, "turned off for this session, frames are drawn the game's usual way: %s",
+        self.failed)
+    end
+    if self.cur then pcall(self.flatten, self.cur) end
+  end
+
   --- Start capturing a pass on `base` (the canvas currently drawn into).
   function self.beginPass(pass, base)
     -- a pass that was never ended (its frame was not presented the usual way): put it back
     if self.cur then self.flatten(self.cur) end
     self.inAnim = false
+    if self.failed then return false end
+    -- the engine no longer presents through the Renderer (canCapture: src/engine.lua): a pass
+    -- could never be composited, so the game draws its own way
+    if self.canCapture and not self.canCapture() then return false end
     if not (self.installed and self.enabled[pass] and base and base.getWidth) then return false end
     self.cur = {
       pass = pass, base = base, current = base, layerSet = {}, items = {},
@@ -383,6 +431,7 @@ function HD.new(G, opts)
     local rec = record(image, {}, x, y)
     if not rec then return real.draw(image, x, y) end
     cur.items[#cur.items + 1] = { kind = "backdrop", rec = rec }
+    cur.backdropImage = image
     cur.pending = true
     cur.screenOpen = false
   end
@@ -532,7 +581,7 @@ function HD.new(G, opts)
   end
 
   local wrapped = setmetatable({}, { __mode = "k" })
-  local backdropQuad
+  local backdropQuad, groundQuad
 
   -- the wallpaper, mapped by (bx, by, bsx, bsy), drawn over the whole of the pass canvas's
   -- view (which (fx, fy, fsx, fsy), the unzoomed mapping, puts on the screen): its own
@@ -563,20 +612,55 @@ function HD.new(G, opts)
     local u0 = (p0x - rec.tx) / rec.tsx - rec.x
     local v0 = (p0y - rec.ty) / rec.tsy - rec.y
     local uw, vh = (p1x - p0x) / rec.tsx, (p1y - p0y) / rec.tsy
-    if backdropQuad and backdropQuad.setViewport then
-      backdropQuad:setViewport(u0, v0, uw, vh, iw, ih)
-    else
-      backdropQuad = real.newQuad(u0, v0, uw, vh, iw, ih)
+    local function quad(q, u, v, w, h)
+      if q and q.setViewport then
+        q:setViewport(u, v, w, h, iw, ih)
+        return q
+      end
+      return real.newQuad(u, v, w, h, iw, ih)
     end
-    real.draw(img, backdropQuad, bx + p0x * bsx, by + p0y * bsy, 0, rec.tsx * bsx, rec.tsy * bsy)
+    local sx, sy = rec.tsx * bsx, rec.tsy * bsy
+    -- the wallpaper's own rows end at the text box's line (the cart's rows below it are black,
+    -- hidden by the text box): past it, its last ground band repeats down to the view's bottom,
+    -- so a zoomed-out scene, or a text box moved off the screen (Kanto Gear), shows ground
+    local g = self.fit.ground
+    local stop = (wrapV == "clamp" and g) and math.min(v0 + vh, g[2]) or v0 + vh
+    if stop > v0 then
+      backdropQuad = quad(backdropQuad, u0, v0, uw, stop - v0)
+      real.draw(img, backdropQuad, bx + p0x * bsx, by + p0y * bsy, 0, sx, sy)
+    end
+    if stop < v0 + vh then
+      local bandH = g[2] - g[1]
+      groundQuad = quad(groundQuad, u0, g[1], uw, bandH)
+      local row = math.max(g[2], v0)
+      row = g[2] + math.floor((row - g[2]) / bandH) * bandH
+      while row < v0 + vh do
+        real.draw(img, groundQuad, bx + p0x * bsx, by + (p0y + (row - v0) * rec.tsy) * bsy, 0, sx, sy)
+        row = row + bandH
+      end
+    end
   end
 
   -- how far the camera rises at zoom z (canvas pixels): enough that the enemy's feet line,
   -- zoomed about the focus, sinks no lower than feetMax
+  -- a UI row (canvas px of the UI) in the scene's canvas pixels: the same with the scene and UI
+  -- at one scale; with fill the scene is bigger, so the UI shrinks about the text box's line
+  local function uiY(y)
+    local fy = self.fit.focus[2]
+    return fy + (y - fy) * (self.fit.uiK or 1)
+  end
+  local function uiRect(r)
+    local fit = self.fit
+    local k = fit.uiK or 1
+    if k == 1 then return r end
+    local fx, fy = fit.focus[1], fit.focus[2]
+    return { fx + (r[1] - fx) * k, fy + (r[2] - fy) * k, fx + (r[3] - fx) * k, fy + (r[4] - fy) * k }
+  end
+
   local function fitLift(z)
     local fit = self.fit
     local fy = fit.focus[2]
-    return math.max(0, fy + (fit.feetY - fy) * z - fit.feetMax)
+    return math.max(0, fy + (fit.feetY - fy) * z - uiY(fit.feetMax))
   end
   self.fitLift = fitLift
 
@@ -587,7 +671,7 @@ function HD.new(G, opts)
     if top >= fit.margin then return 1 end
     local fy = fit.focus[2]
     local z = (fy - fit.margin) / (fy - top)
-    if fitLift(z) > 0 then z = (fit.feetMax - fit.margin) / (fit.feetY - top) end
+    if fitLift(z) > 0 then z = (uiY(fit.feetMax) - fit.margin) / (fit.feetY - top) end
     return math.min(1, z)
   end
   self.fitZoom = fitZoom
@@ -643,7 +727,7 @@ function HD.new(G, opts)
     local y0, y1 = fy + (r[2] - fy) * z - lift, fy + (r[4] - fy) * z - lift
     local area = math.max(1e-6, (x1 - x0) * (y1 - y0))
     local function under(u) return overlap(x0, x1, u[1], u[3]) * overlap(y0, y1, u[2], u[4]) end
-    return under(fit.ui.enemy) / area, (under(fit.ui.player) + under(fit.ui.text)) / area, y0
+    return under(uiRect(fit.ui.enemy)) / area, (under(uiRect(fit.ui.player)) + under(fit.ui.text)) / area, y0
   end
   self.fitHidden = hidden
 
@@ -673,7 +757,7 @@ function HD.new(G, opts)
         local t = r.top and (fy + (r.top + v - fy) * z - lift) or y0
         if y0 < fit.margin or t < fit.margin then return false end
         if level[1] then
-          if y0 < fit.backTopMin then return false end
+          if y0 < uiY(fit.backTopMin) then return false end
         elseif underEnemy > fit.maxHidden then
           return false
         end
@@ -706,7 +790,7 @@ function HD.new(G, opts)
   -- the same, remembered: an animation repeats its frames, so a frame's inputs recur
   local function fitSolve(top, backs)
     local fit = self.fit
-    local parts = { string.format("%.2f|%.3f", top, fit.zMin) }
+    local parts = { string.format("%.2f|%.3f|%.4f", top, fit.zMin, fit.uiK or 1) }
     for _, r in ipairs(backs) do
       parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f", r[1], r[2], r[3], r[4], r.top or 0)
     end
@@ -810,53 +894,84 @@ function HD.new(G, opts)
     return fit.z
   end
 
-  --- Replace a blit of a captured canvas. `blit(canvas, bx, by, bsx, bsy)` performs the
-  --- Renderer's own blit of a canvas with the same arguments (the four optional ones replace
-  --- its origin and scale); bx/by/bsx/bsy map canvas pixels to the screen;
-  --- box = {x, y, w, h} clip (or nil). Returns true when the blit was handled.
-  function self.composite(canvas, blit, bx, by, bsx, bsy, box)
+  --- Replace a blit of a captured canvas. `blit(canvas, bx, by, bsx, bsy, box)` performs the
+  --- Renderer's own blit of a canvas with the same arguments (the optional ones replace its
+  --- origin, scale and clip); bx/by/bsx/bsy map canvas pixels to the screen; box = {x, y, w, h}
+  --- clip (or nil). view = {x, y, w, h}, the whole screen area (or nil): with fit.fill the
+  --- battle's scene fills it and its UI docks to its bottom (see fit.fill). Returns true when
+  --- the blit was handled.
+  function self.composite(canvas, blit, bx, by, bsx, bsy, box, view)
     local cur = self.done[canvas]
     if not cur then return false end
     local fit = self.fit
-    local z, lift = 1, 0
     local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled
+    local fx, fy = fit.focus[1], fit.focus[2]
+    -- the scene's frame on screen: where canvas (fx, fy) lands and how big a canvas pixel is;
+    -- the UI's origin. Without fill both are the Renderer's letterbox.
+    local cx, cy, S, Sy = bx + fx * bsx, by + fy * bsy, bsx, bsy
+    local ubx, uby = bx, by
+    local sceneBox, uiBox = box, box
+    local filling = fitted and fit.fill and view ~= nil and not cur.uiCovers
+    local f = 1
+    if filling then
+      local vx, vy, vw, vh = view[1], view[2], view[3], view[4]
+      -- the UI docks to the bottom of the screen, its scale untouched
+      uby = vy + vh - cur.h * bsy
+      cy = uby + fy * bsy
+      -- the scene runs from the screen's top down to the text box's line
+      f = math.max(1, (cy - vy) / (fy * bsy))
+      S, Sy = bsx * f, bsy * f
+      sceneBox = { vx, vy, vw, vh }
+      local x0, y0 = math.max(vx, ubx), math.max(vy, uby)
+      local x1, y1 = math.min(vx + vw, ubx + cur.w * bsx), math.min(vy + vh, uby + cur.h * bsy)
+      uiBox = { x0, y0, math.max(0, x1 - x0), math.max(0, y1 - y0) }
+    end
+    -- the UI over the scene, in the scene's canvas pixels: shrunk by 1/f about the line
+    fit.uiK = 1 / f
+    local z, lift = 1, 0
     if fitted then
       z = fitStep(cur)
       lift = fitLift(z) + fit.extra
     end
-    local moved = z ~= 1 or lift ~= 0
+    local moved = z ~= 1 or lift ~= 0 or filling
     local zb = 1 - (1 - z) * fit.parallax
     -- canvas pixels -> screen, zoomed by k about the focus and raised by `up` canvas pixels
     local function zoomed(k, up)
-      return bx + fit.focus[1] * bsx * (1 - k), by + (fit.focus[2] * (1 - k) - up) * bsy, bsx * k, bsy * k
+      return cx - fx * k * S, cy - (fy * k + up) * Sy, S * k, Sy * k
     end
     local sx0, sy0, ssx, ssy = zoomed(z, lift)
     -- the far wallpaper does not rise: its rows below the text box's top are not scenery
     -- (the cart hides them), so the text box's line stays its bottom edge
     local bkx, bky, bksx, bksy = zoomed(zb, 0)
+    -- the screen rect a wallpaper covers (canvas size at scale 1)
+    local cover = filling and sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
     self.stats.lift = lift
+    self.stats.fill = f
+    local function scissor(b)
+      if b then real.setScissor(b[1], b[2], b[3], b[4]) else real.setScissor() end
+    end
     local inScene = true
-    if not moved then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy) end
+    if not moved then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy, sceneBox) end
     real.push("all")
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" then
         if item.name == "ui" then inScene = false end
       elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
-        if box then real.setScissor(box[1], box[2], box[3], box[4]) else real.setScissor() end
+        scissor(inScene and sceneBox or uiBox)
         if item.kind == "backdrop" then
           if inScene then
-            drawBackdrop(item.rec, cur.w, cur.h, bkx, bky, bksx, bksy, bx, by, bsx, bsy)
+            drawBackdrop(item.rec, cover[3], cover[4], bkx, bky, bksx, bksy, cover[1], cover[2], 1, 1)
           else
-            drawBackdrop(item.rec, cur.w, cur.h, bx, by, bsx, bsy, bx, by, bsx, bsy)
+            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, bsx, bsy, ubx, uby, bsx, bsy)
           end
         elseif item.kind == "band" then
           if inScene then
             -- zoomed with the scene but not raised: its bottom stays on the text box's line,
             -- where the cart puts it
             local gx, gy = zoomed(z, 0)
-            drawBackdrop(item.rec, cur.w, cur.h, gx, gy, ssx, ssy, bx, by, bsx, bsy, "clampzero")
+            drawBackdrop(item.rec, cover[3], cover[4], gx, gy, ssx, ssy, cover[1], cover[2], 1, 1, "clampzero")
           else
-            drawBackdrop(item.rec, cur.w, cur.h, bx, by, bsx, bsy, bx, by, bsx, bsy, "clampzero")
+            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, bsx, bsy, ubx, uby, bsx, bsy, "clampzero")
           end
         elseif item.kind == "stage" then
           local d = (fitted and cur.shift[item.side]) or 0
@@ -876,18 +991,25 @@ function HD.new(G, opts)
             dy = dy - (cur.shift.playerRaise or 0)
           end
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
-          local pin = fitted and spec.pinBottom and (by + spec.pinBottom * bsy) or nil
+          local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy) or nil
           hdDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, pin)
         else
-          hdDraw(item.rec, bx, by, bsx, bsy)
+          hdDraw(item.rec, ubx, uby, bsx, bsy)
         end
       else
         real.setScissor()
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        if inScene and not item.screen and moved then
-          blit(item.canvas, sx0, sy0, ssx, ssy)
+        if inScene and item.screen and filling then
+          -- a whole-scene draw (a move's background, a flash) covers the whole screen
+          local v = sceneBox
+          local sc = math.max(v[3] / cur.w, v[4] / cur.h)
+          blit(item.canvas, v[1] + (v[3] - cur.w * sc) / 2, v[2] + (v[4] - cur.h * sc) / 2, sc, sc, sceneBox)
+        elseif inScene and not item.screen and moved then
+          blit(item.canvas, sx0, sy0, ssx, ssy, sceneBox)
+        elseif not inScene and filling then
+          blit(item.canvas, ubx, uby, bsx, bsy, uiBox)
         else
           blit(item.canvas)
         end

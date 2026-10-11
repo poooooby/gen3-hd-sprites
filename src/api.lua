@@ -41,8 +41,11 @@
 --                         version supports
 --   fitEnabled()          Battle Fit is on: the battle scene zooms out so tall sprites fit
 --                         under the top of the screen (the UI is never zoomed)
---   setFit(mode)          "off", "fit" (zoom out to 50% at most) or "tall" (40%)
+--   setFit(on)            turn Battle Fit on or off (it pulls back to 40% at most); the old
+--                         "off" / "fit" / "tall" still work, "fit" and "tall" meaning on
 --   sceneZoom()           the battle scene's zoom this frame (1 = none)
+--   fillEnabled() / setFill(on)   Fill Screen: the battle scene fills the screen, its UI
+--                         docked to the bottom at its own scale (needs Battle Fit)
 
 return function(mod, hd, state)
   local exports = {}
@@ -64,14 +67,13 @@ return function(mod, hd, state)
   exports.fitEnabled = function()
     return state.active == true and hd.enabled.battle == true and hd.fit.enabled == true
   end
-  exports.setFit = function(mode)
-    if mode == "off" then
-      hd.fit.enabled = false
-    elseif hd.fit.modes[mode] then
-      hd.fit.enabled = hd.fit.available == true
-      hd.fit.zMin = hd.fit.modes[mode]
-    end
+  exports.setFit = function(on)
+    hd.fit.enabled = hd.fit.available == true and on ~= nil and on ~= false and on ~= "off"
   end
+  exports.fillEnabled = function()
+    return exports.fitEnabled() and hd.fit.fill == true
+  end
+  exports.setFill = function(on) hd.fit.fill = on and true or false end
   exports.sceneZoom = function()
     if not exports.fitEnabled() then return 1 end
     return hd.fit.z

@@ -392,9 +392,13 @@ do
   check(zoomedLayers == 2, "the pad's and the particle's layers are zoomed, got " .. zoomedLayers)
   check(plain == 2, "the flash's layer and the UI's layer are not, got " .. plain)
   local d, w
+  local walls = {}
   for _, e in ipairs(G.log) do
     if e.image == page then d = e end
-    if e.image == wall then w = e end
+    if e.image == wall then
+      w = w or e
+      walls[#walls + 1] = e
+    end
   end
   check(d and near(d.args[2], 4 * (120 + (176 - 120) * 0.5)) and near(d.args[3], 4 * 76),
     "the sprite stands where its pad went, feet on y = 76 (" .. tostring(d and d.args[2]) .. ", "
@@ -403,9 +407,15 @@ do
   -- the wallpaper zooms less (parallax) and still covers the whole view
   local zb = 1 - 0.5 * hd.fit.parallax
   check(w and near(w.args[6], 4 * zb), "the wallpaper zooms less: " .. tostring(w and w.args[6]))
-  local _, _, uw, vh = w.args[1]:getViewport()
+  -- its own rows down to the text box's line, then its ground band (rows 104-112) repeated
+  -- to the view's bottom: no black cart rows, whatever the zoom
+  local _, v0, uw, vh = w.args[1]:getViewport()
   check(w and w.args[2] <= 1e-9 and w.args[3] <= 1e-9 and near(w.args[2] + uw * w.args[5], 960)
-    and near(w.args[3] + vh * w.args[6], 640), "...and is drawn over the whole view, wrapped")
+    and near(v0 + vh, hd.fit.ground[2]), "...and is drawn across the whole view down to the line, wrapped")
+  local last = walls[#walls]
+  local _, lv, _, lh = last.args[1]:getViewport()
+  check(#walls > 1 and lv == hd.fit.ground[1] and lh == hd.fit.ground[2] - hd.fit.ground[1]
+    and last.args[3] + lh * last.args[6] >= 640 - 1e-6, "...then its ground band repeated to the view's bottom")
   for _ = 1, 3 do fitFrame(G, hd, base, frame) end
   check(near(hd.stats.zoom, 0.5), "it holds while the sprite stays")
 
@@ -435,7 +445,7 @@ do
   for _, b in ipairs(blits) do if b.sx then anyZoom = true end end
   check(not anyZoom, "a frame with no UI seam is composited unzoomed")
 
-  -- the floor: Fit Sprites never pulls back past 60%
+  -- the floor: it never pulls back past zMin
   hd.fit.zMin = 0.6
   for _ = 1, 200 do fitFrame(G, hd, base, frame) end
   check(near(hd.stats.zoom, 0.6), "the zoom never goes below zMin")
@@ -693,6 +703,128 @@ do
     "...and is not raised with the camera (bottom " .. tostring(bottomY and bottomY / 4) .. ")")
 end
 
+-- when the game presents without the Renderer (its fallback), or something of ours failed,
+-- nothing is captured: every frame is drawn the game's own way
+do
+  local G = fakeGraphics()
+  local logged = {}
+  local hd = HD.new(G, { log = { error = function(_, fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end } })
+  hd.install()
+  local base = canvas("ui", 240, 160)
+  local pic = canvas("pic", 64, 64)
+  hd.tag(pic, {})
+  local broken = true
+  hd.canCapture = function() return not broken end
+  G.setCanvas(base)
+  check(hd.beginPass("battle", base) == false, "no pass while the game presents without the Renderer")
+  G.log = {}
+  G.draw(pic, 10, 10)
+  check(G.log[1] and G.log[1].image == pic and G.log[1].target == base, "...a tagged image is drawn as usual")
+  broken = false
+  check(hd.beginPass("battle", base) == true, "...and passes resume once it presents through the Renderer")
+  G.draw(pic, 10, 10)
+  hd.fail("boom")
+  check(hd.failed == "boom" and #logged == 1 and logged[1]:find("boom", 1, true), "a failure is logged once")
+  check(not hd.capturing(), "...the pass in flight is put back")
+  local sawPic = false
+  for _, e in ipairs(G.log) do if e.image == pic and e.target == base then sawPic = true end end
+  check(sawPic, "...its sprite drawn into the canvas the usual way")
+  check(hd.beginPass("battle", base) == false, "...and nothing more is captured this session")
+  hd.fail("again")
+  check(#logged == 1 and hd.failed == "boom", "...a second failure is not logged again")
+end
+
+-- the wallpaper drawn again in the scene (Kanto Gear continuing the ground under a text box it
+-- moved off the screen) is left to the recorded wallpaper, which already covers the view
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled = true
+  local base = canvas("ui", 240, 160)
+  local wall = canvas("wall", 256, 160)
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  G.draw(wall, quad(0, 104, 240, 8), 0, 112)
+  local drew = false
+  for _, e in ipairs(G.log) do if e.image == wall then drew = true end end
+  check(not drew, "a second draw of the wallpaper in the scene is skipped")
+  hd.seam("ui")
+  G.draw(wall, 0, 0)
+  drew = false
+  for _, e in ipairs(G.log) do if e.image == wall then drew = true end end
+  check(drew, "...but not in the UI")
+  hd.endPass()
+end
+
+-- Fill Screen: the scene fills the view (top down to the text box's line, out to the sides);
+-- the UI keeps its scale, docked to the view's bottom
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  hd.drawStage(pad, 0, 0)
+  hd.seam("ui")
+  G.rectangle("fill", 0, 112, 240, 48)                -- the text box
+  hd.endPass()
+  -- a 1920x1080 view; the Renderer letterboxes the 240x160 UI at 6x: origin (240, 60)
+  local blits = {}
+  G.log = {}
+  hd.composite(base, function(c, bx, by, sx, sy, box)
+    blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box }
+  end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 })
+  local ui = blits[#blits]
+  check(ui and ui.sx == 6 and ui.bx == 240 and near(ui.by, 1080 - 960), "the UI keeps its 6x, docked to the bottom")
+  -- the text box's line at y = 120 + 112 * 6 = 792; the scene from y 0 down to it: f = 792 / 672
+  local f = 792 / 672
+  check(near(hd.stats.fill, f), "the scene is scaled to fill the height (" .. tostring(hd.stats.fill) .. ")")
+  local b = blits[1]
+  check(b and b.canvas == base and near(b.sx, 6 * f) and near(b.by + 112 * b.sy, 792)
+    and near(b.bx + 120 * b.sx, 960), "...about the text box's line, centred")
+  check(b and b.box and b.box[3] == 1920 and b.box[4] == 1080, "...clipped to the whole view, not the letterbox")
+  local w
+  for _, e in ipairs(G.log) do if e.image == wall then w = w or e end end
+  local uw = 0
+  if w then uw = select(3, w.args[1]:getViewport()) end
+  check(w and w.args[2] <= 1e-6 and w.args[3] <= 1e-6 and near(w.args[2] + uw * w.args[5], 1920),
+    "the wallpaper spans the whole view")
+end
+
+-- Fill Screen sits out a frame whose UI covers the whole canvas (a menu over the battle)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local function frame(menuAlpha)
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(canvas("wall", 256, 160), 0, 0)
+    hd.seam("ui")
+    G.setColor(1, 1, 1, menuAlpha)
+    G.rectangle("fill", 0, 0, 240, 160)
+    G.setColor(1, 1, 1, 1)
+    hd.endPass()
+    local blits = {}
+    hd.composite(base, function(c, bx, by, sx, sy, box)
+      blits[#blits + 1] = { bx = bx, by = by, sx = sx }
+    end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 })
+    return blits[#blits]
+  end
+  local ui = frame(1)
+  check(hd.stats.fill == 1 and ui and (ui.by or 60) == 60, "an opaque full-canvas menu: the frame is framed as usual")
+  ui = frame(0.5)
+  check(hd.stats.fill > 1 and ui and near(ui.by, 120), "a half-faded cover keeps the fill")
+end
+
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else
 do
   local G = fakeGraphics()
@@ -735,10 +867,13 @@ do
   hd.fit.available = true
   api()(mod, hd, { active = true })
   check(mod.exports.features.battleFit == true and mod.exports.fitEnabled(), "fitEnabled() reports it")
+  check(hd.fit.zMin == 0.4, "it pulls back to 40% at most")
+  mod.exports.setFit(false)
+  check(not mod.exports.fitEnabled() and mod.exports.sceneZoom() == 1, "setFit(false) turns it off")
   mod.exports.setFit("tall")
-  check(hd.fit.zMin == 0.4, "setFit('tall') lets it pull back to 40%")
+  check(mod.exports.fitEnabled(), "an old mode name still turns it on")
   mod.exports.setFit("off")
-  check(not mod.exports.fitEnabled() and mod.exports.sceneZoom() == 1, "setFit('off') turns it off")
+  check(not mod.exports.fitEnabled(), "...and 'off' off")
 end
 
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))
