@@ -617,6 +617,46 @@ do
     .. string.format("%.3f, then %.3f", before, after) .. ")")
 end
 
+-- the intro's scrolling grass: a band repeated across the whole zoomed-out view
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.4
+  local base = canvas("ui", 240, 160)
+  local wall, grass = canvas("wall", 256, 160), canvas("grass", 256, 64)
+  local foe, page = canvas("foe", 64, 64), canvas("atlas", 4096, 4096)
+  hd.tag(foe, { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
+                top = 52, side = "enemy" })
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  G.draw(foe, 176, 40, 0, 1, 1, 32, 32)
+  hd.band(grass, -30, 40)
+  hd.seam("ui")
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function() end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+  local g
+  for _, e in ipairs(G.log) do if e.image == grass then g = e end end
+  check(hd.fit.z < 1, "the scene is zoomed out")
+  local uw = 0
+  if g then
+    local _
+    _, _, uw = g.args[1]:getViewport()
+  end
+  check(g and g.args[2] <= 1e-9 and near(g.args[2] + uw * g.args[5], 960),
+    "the grass band reaches both edges of the view (" .. tostring(g and g.args[2]) .. ")")
+  check(g and near(g.args[5], 4 * hd.fit.z), "...at the scene's zoom")
+  -- drawn at canvas y 40 with 64 rows: its bottom (104) zoomed about the text box's line, not raised
+  local zb = hd.fit.z
+  local _, gv, _, gh = 0, 0, 0, 0
+  if g then _, gv, _, gh = g.args[1]:getViewport() end
+  local bottomY = g and (g.args[3] + (40 + 64 - 40 - gv) * g.args[6])
+  check(g and near(bottomY, 4 * (112 + (104 - 112) * zb)),
+    "...and is not raised with the camera (bottom " .. tostring(bottomY and bottomY / 4) .. ")")
+end
+
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else
 do
   local G = fakeGraphics()

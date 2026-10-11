@@ -23,6 +23,7 @@
 --                          pads drawn on their own (src/ui/game3/battle_chrome.lua; the same
 --                          split art the intro slide draws), the player's whole (Engine.Pads,
 --                          src/pads.lua)
+--   BattleChrome.drawEntry the intro's scrolling grass, drawn as a band across the whole view
 --   BallOpen.draw          the last draw of the battle scene (src/core/game3/battle/ui.lua
 --                          Ui.draw): the UI seam goes after it
 --   Anim.drawParticles     a Pokemon drawn by a move animation is flagged (hd.inAnim)
@@ -119,6 +120,27 @@ function Engine.wrapFit(hd)
       return drawTerrain(key, enemyOx, playerOx, bgOx, ...)
     end
     ours[Chrome.drawTerrain] = true
+  end
+
+  -- the intro's scrolling grass (a background layer that wraps on the cart): drawn as a band
+  -- across the whole zoomed-out view instead of one screen-wide image
+  local drawEntry = Chrome.drawEntry
+  if type(drawEntry) == "function" and type(Chrome.entry) == "function" and not ours[drawEntry] then
+    Chrome.drawEntry = function(key, scrollX, scrollY, alpha, ...)
+      if fitting() then
+        local e = Chrome.entry(key)
+        if not e then return false end
+        alpha = alpha or 1
+        if alpha <= 0 then return true end
+        local G = love.graphics
+        G.setColor(1, 1, 1, alpha)
+        hd.band(e.image, -((math.floor(scrollX or 0)) % 256), -(math.floor(scrollY or 0)))
+        G.setColor(1, 1, 1, 1)
+        return true
+      end
+      return drawEntry(key, scrollX, scrollY, alpha, ...)
+    end
+    ours[Chrome.drawEntry] = true
   end
 
   local ballDraw = BallOpen.draw

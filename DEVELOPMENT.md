@@ -91,6 +91,12 @@ The target zoom:
   - **Double-shift guard:** a Pokémon drawn inside `Anim.drawParticles` (an afterimage, a
     move's copy of it) is flagged `inAnim` and not shifted again.
   - **Not fitted:** trainers are left out of the fit itself.
+- **The intro's scrolling grass** (`BattleChrome.drawEntry`): on the cart it is a background
+  layer that wraps sideways, but the engine draws it as one screen-wide image. With Battle Fit
+  on it goes to `hd.band`, which draws it at the scene's zoom, repeated across the whole view
+  and transparent above and below, so the zoomed-out scene shows no ends. It zooms about the
+  text box's line but does not rise with the camera, so its bottom stays on that line, where
+  the cart puts it.
 - **Battlers as they rest:** before the UI seam, `src/engine.lua` (`Engine.prefit`, inside the
   battle's draw) asks `Pokemon.frontPic` / `backPic` for both leads, so a sprite mod hands over
   its battle pics. It hands each to `hd.prefit(side, image, x, y)` at the spot

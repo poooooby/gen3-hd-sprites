@@ -373,6 +373,19 @@ function HD.new(G, opts)
     cur.screenOpen = false
   end
 
+  --- Draw a band that wraps sideways (the intro's scrolling grass): recorded, then drawn at
+  --- window resolution with the scene's zoom, repeated across the whole view so the zoomed-out
+  --- scene never shows its ends. Outside a pass it is simply drawn.
+  function self.band(image, x, y)
+    local cur = self.cur
+    if not (cur and onPass()) then return real.draw(image, x, y) end
+    local rec = record(image, {}, x, y)
+    if not rec then return real.draw(image, x, y) end
+    cur.items[#cur.items + 1] = { kind = "band", rec = rec }
+    cur.pending = true
+    cur.screenOpen = false
+  end
+
   --- Draw part of the battle's stage that is as big as the screen but is not a whole-scene
   --- effect (a pad, drawn on a transparent screen-sized image): it zooms with the scene.
   --- side ("enemy" / "player", optional): the pad moves with that side's shift (Battle Fit),
@@ -510,7 +523,9 @@ function HD.new(G, opts)
   -- the wallpaper, mapped by (bx, by, bsx, bsy), drawn over the whole of the pass canvas's
   -- view (which (fx, fy, fsx, fsy), the unzoomed mapping, puts on the screen): its own
   -- horizontal wrap repeats it, the top row stretches up
-  local function drawBackdrop(rec, cw, ch, bx, by, bsx, bsy, fx, fy, fsx, fsy)
+  -- wrapV: how the image wraps vertically ("clamp": the wallpaper's top row stretches up;
+  -- "clampzero": nothing past its edge, a band such as the intro's grass)
+  local function drawBackdrop(rec, cw, ch, bx, by, bsx, bsy, fx, fy, fsx, fsy, wrapV)
     local img = rec.image
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
     real.setShader(rec.shader)
@@ -521,9 +536,12 @@ function HD.new(G, opts)
         0, rec.tsx * bsx, rec.tsy * bsy)
       return
     end
-    if not wrapped[img] then
-      wrapped[img] = true
-      if img.setWrap then pcall(img.setWrap, img, "repeat", "clamp") end
+    wrapV = wrapV or "clamp"
+    if wrapped[img] ~= wrapV then
+      wrapped[img] = wrapV
+      if img.setWrap and not pcall(img.setWrap, img, "repeat", wrapV) then
+        pcall(img.setWrap, img, "repeat", "clamp")
+      end
     end
     -- the view in canvas pixels of this mapping, then in the image's pixels
     local p0x, p1x = (fx - bx) / bsx, (fx + cw * fsx - bx) / bsx
@@ -763,13 +781,22 @@ function HD.new(G, opts)
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" then
         if item.name == "ui" then inScene = false end
-      elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" then
+      elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
         if box then real.setScissor(box[1], box[2], box[3], box[4]) else real.setScissor() end
         if item.kind == "backdrop" then
           if inScene then
             drawBackdrop(item.rec, cur.w, cur.h, bkx, bky, bksx, bksy, bx, by, bsx, bsy)
           else
             drawBackdrop(item.rec, cur.w, cur.h, bx, by, bsx, bsy, bx, by, bsx, bsy)
+          end
+        elseif item.kind == "band" then
+          if inScene then
+            -- zoomed with the scene but not raised: its bottom stays on the text box's line,
+            -- where the cart puts it
+            local gx, gy = zoomed(z, 0)
+            drawBackdrop(item.rec, cur.w, cur.h, gx, gy, ssx, ssy, bx, by, bsx, bsy, "clampzero")
+          else
+            drawBackdrop(item.rec, cur.w, cur.h, bx, by, bsx, bsy, bx, by, bsx, bsy, "clampzero")
           end
         elseif item.kind == "stage" then
           local d = (fitted and cur.shift[item.side]) or 0
@@ -821,7 +848,7 @@ function HD.new(G, opts)
     real.origin()
     real.setScissor()
     for _, item in ipairs(cur.items) do
-      if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" then
+      if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
         local rec = item.rec
         real.push()
         real.translate(rec.tx, rec.ty)
