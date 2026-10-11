@@ -849,17 +849,13 @@ do
   check(high and approx(high.by, 40) and high.box and approx(high.box[2], 40) and near(high.box[4], 66 * U),
     "...the top band (the enemy's HP box) at the top, below the notch")
   check(approx(hd.fit.uiTopDy, (40 - (1500 - 160 * U)) / U), "the fit sees the HP box moved up by " .. tostring(hd.fit.uiTopDy))
-  -- the scene grows into the space above until both sides' art (the cart's pic boxes, x 40
-  -- to 208, until seen; 4 px clear of the edges) spans the width: 1080 / (4.5 * 176)
-  local g = math.floor(1080 / (U * 176) * 100 + 0.5) / 100
-  check(approx(hd.stats.fill, U * g / 4), "the scene grows past the UI's scale (" .. tostring(hd.stats.fill) .. ")")
+  -- nothing seen yet: the platforms (x 0 to 240) already span the width, so the scene stays
+  -- at the UI's scale, its line on the text box
+  check(near(hd.stats.grow, 1) and approx(hd.stats.fill, U / 4), "the scene keeps both platforms whole (" .. tostring(hd.stats.fill) .. ")")
   local b = blits[1]
-  check(b and near(b.by + 112 * b.sy, 1500 - 48 * U) and near(b.sx, U * g),
-    "...about its line, on the text box")
-  local left, right = b and b.bx + 36 * b.sx, b and b.bx + 212 * b.sx
-  check(b and left >= -0.05 and right <= 1080.05 and (approx(left, 0) or approx(right, 1080)),
-    "...its sides cropped, both sides' art kept on the screen")
-  check(hd.fit.topY < -50 and approx(hd.fit.topY, 112 - (1500 - 48 * U - 40) / (U * g)),
+  check(b and near(b.by + 112 * b.sy, 1500 - 48 * U) and near(b.sx, U) and approx(b.bx, 0),
+    "...spanning the width, its line on the text box")
+  check(hd.fit.topY < -50 and approx(hd.fit.topY, 112 - (1500 - 48 * U - 40) / U),
     "the screen's top, above the canvas, is the art's limit (" .. tostring(hd.fit.topY) .. ")")
   local icon
   for _, e in ipairs(G.log) do if e.image == hpIcon then icon = e end end

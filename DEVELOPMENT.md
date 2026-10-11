@@ -189,7 +189,10 @@ already covers the view.
   - **The scene** grows by `fit.grow` about the line into the space above, up to the top, its
     sides cropped. It grows only as far as both sides' art (`fit.span`: each side's frame
     across, zoomed, shifted) stays `cropMargin` clear of the edges. It is centred and moved
-    sideways only as far as that needs. `grow` eases like the zoom.
+    sideways only as far as that needs (centred on the art when it is wider than the screen).
+    The platforms count as each side's art (`fit.pads`, their ovals across: the enemy's 112 to
+    240, the player's 0 to 128), so neither is ever cropped. Until the Pokemon are seen,
+    `spanDefault` is the two platforms. `grow` eases like the zoom.
   - **The sides slide in** when the width stops it short of the top: `fitStep` gets the art
     width the growth needs (`fit.wantW`) and moves the enemy left and the player right
     (`shift.enemy` / `shift.player`, so attacks follow).
@@ -198,6 +201,8 @@ already covers the view.
     - One level with the enemy may stand in front of its platform, over up to `overlapFoe`
       (30%) of the enemy's frame.
     - The player's share stops at its own HP box's left edge; the enemy takes the rest.
+    - The slide is at most `fit.inwardMax` (48) canvas px in all, so each side stays near
+      its own spot.
   - **`fit.topY`,** the canvas y of the area's top in scene pixels (negative with sky above),
     is the highest art may rise, in `fitZoom` and the solver. So a tall foe rises into the
     sky instead of the camera pulling back.

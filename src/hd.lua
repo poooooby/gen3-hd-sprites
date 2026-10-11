@@ -71,9 +71,9 @@ function HD.new(G, opts)
       split = 66, uiTopDy = 0, topY = 0,
       -- ... and the scene grows (grow, eased like the zoom) into the space above it, up to the
       -- screen's top, its sides cropped: only as far as both sides' art (span, canvas x where
-      -- it rests, zoomed; the cart's pic boxes until seen) stays on the screen, cropMargin
+      -- it rests, zoomed; the platforms until seen) stays on the screen, cropMargin
       -- canvas px clear of its edges
-      grow = nil, span = nil, spanDefault = { 40, 208 }, cropMargin = 4,
+      grow = nil, span = nil, spanDefault = { 0, 240 }, cropMargin = 4,
       -- ... and when the width stops it short of the top, the two sides slide toward each other
       -- (the enemy left, the player right) so it can grow further: a back whose top is below
       -- the enemy's feet may come under the enemy (centres at most aligned); one level with
@@ -83,6 +83,10 @@ function HD.new(G, opts)
       -- ... a back level with the enemy may still slide in front of the enemy's platform, over
       -- up to overlapFoe of the enemy's frame width (its margin and feet, not its body)
       overlapFoe = 0.3,
+      -- ... both platforms stay whole on the screen (their ovals across, canvas x where they
+      -- rest: the enemy's centred on 176, the player's rebuilt 112 px left of it), and the
+      -- slide is at most inwardMax canvas px in all, so neither side leaves its spot far
+      pads = { enemy = { 112, 240 }, player = { 0, 128 } }, inwardMax = 48,
       -- ... and when the scene still stops short of the top, the enemy's HP box comes down to
       -- sit hugGap canvas px above the highest art (artTop: zoomed canvas y, from the fit)
       hugGap = 4, artTop = nil,
@@ -950,6 +954,12 @@ function HD.new(G, opts)
     -- a battler the engine reported (hd.prefit) is fitted where it rests, drawn yet or not:
     -- its send-out jump, a lunge or a shake never moves the camera
     for _, rec in pairs(cur.prefit) do take(rec) end
+    -- the platforms count as each side's art: the scene never crops them
+    if fit.wantW then
+      local pe, pp = fit.pads.enemy, fit.pads.player
+      eL, eR = math.min(eL, pe[1]), math.max(eR, pe[2])
+      pL, pR = math.min(pL, pp[1]), math.max(pR, pp[2])
+    end
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" and item.name == "ui" then break end
       local spec = item.kind == "hd" and item.rec.spec
@@ -1006,7 +1016,7 @@ function HD.new(G, opts)
           -- side by side, the back in front of the enemy's platform
           most = (eL + wantE) + fit.overlapFoe * (eR - eL) - (pR + wantP)
         end
-        inward = math.max(0, math.min(need, most))
+        inward = math.max(0, math.min(need, most, fit.inwardMax))
       end
     end
     -- split evenly, but the player's Pokemon stops short of its own HP box (its body, else its
@@ -1152,7 +1162,9 @@ function HD.new(G, opts)
         -- centred, and moved sideways only as far as keeps both sides' art on the screen
         cx = vx + vw / 2
         local l, r = cx + (span[1] - m - fx) * S, cx + (span[2] + m - fx) * S
-        if l < vx then
+        if r - l >= vw then
+          cx = cx + (vx + vw / 2) - (l + r) / 2   -- wider than the screen: centred on the art
+        elseif l < vx then
           cx = cx + (vx - l)
         elseif r > vx + vw then
           cx = cx - (r - vx - vw)
