@@ -82,7 +82,20 @@ function HD.new(G, opts)
       -- stays inside the canvas. It follows the zoom from a battle's first frame; the
       -- trainers (tags with trainer = true) move with their side too.
       enemyX = 176, playerX = 72, shiftMax = 40,
-      shift = { enemy = 0, player = 0 },
+      shift = { enemy = 0, player = 0, playerY = 0, playerRaise = 0 },
+      -- the player's pad stays tucked under the text box for scale: on the cart its top 11
+      -- of 32 rows show (padTop 101, padRows 32); pulled back, the player's side is lowered
+      -- (playerY) so that only padRows * (1 - padTuck) show at zMin, blending from the cart's
+      -- 11 at zoom 1. Its Pokemon, trainer and the engine's coordinates go down with it.
+      padTop = 101, padRows = 32, padTuck = 0.75,
+      -- a small back stands a little behind its pad: when less than minVisible of its resting
+      -- body shows above the text box, the Pokemon alone (not its pad or trainer) is raised
+      -- (playerRaise) until that much shows; a larger back is left where it is
+      minVisible = 0.65,
+      -- ... and a back whose resting body is no taller than wholeBelow (canvas px, before the
+      -- zoom) shows WHOLE: its feet just above the text box (Pikachu, Joltik, Natu). Taller than
+      -- cutAbove it keeps minVisible (the over-the-shoulder cut); in between the share blends.
+      wholeBelow = 36, cutAbove = 56,
       outRate = 0.2, inRate = 0.05, holdFrames = 45,
       z = 1, target = 1, extra = 0, extraTarget = 0, hold = 0, idle = 99,
     },
@@ -344,7 +357,8 @@ function HD.new(G, opts)
       segment = "scene", hasUI = false,
       prefit = {},
       -- the side shift this frame is drawn with (the engine's move coordinates use the same)
-      shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player },
+      shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player,
+                playerY = self.fit.shift.playerY, playerRaise = self.fit.shift.playerRaise },
     }
     return true
   end
@@ -474,8 +488,8 @@ function HD.new(G, opts)
     return Y - (hpy - (rec.spec.top or 0)) * math.abs(rec.sy * k * rec.tsy)
   end
 
-  -- pinTo (screen y, optional): the frame's bottom is kept at least that low (a trainer cut
-  -- off by the text box stays cut there)
+  -- pinTo (screen y, optional): the frame's bottom is put exactly there (a trainer cut off by
+  -- the text box stands on it, so it still reads as a whole sprite behind the box)
   local function hdDraw(rec, bx, by, bsx, bsy, pinTo)
     local X, Y, hpx, hpy, k, tex, quad = place(rec)
     if pinTo then
@@ -488,7 +502,7 @@ function HD.new(G, opts)
       end
       if fh then
         local bottom = by + (Y + (fh - hpy) * rec.sy * k * rec.tsy) * bsy
-        if bottom < pinTo then by = by + (pinTo - bottom) end
+        by = by + (pinTo - bottom)
       end
     end
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
@@ -592,6 +606,36 @@ function HD.new(G, opts)
 
   -- how much of the rectangle (canvas px, unzoomed), seen at zoom z raised by lift, is under
   -- the enemy's HP box, and under the player's side (its HP box and the text box); and its top
+  --- How far the player's side is lowered (canvas px before the zoom) at zoom z raised by
+  --- lift, so its pad stays tucked under the text box (fit.padTuck).
+  local function playerDrop(z, lift)
+    local fit = self.fit
+    if z >= 1 and lift <= 0 then return 0 end
+    local cart = fit.focus[2] - fit.padTop                 -- rows the cart shows (11)
+    local tucked = fit.padRows * (1 - fit.padTuck)         -- rows shown at zMin (8)
+    local u = math.max(0, math.min(1, (z - fit.zMin) / math.max(1e-6, 1 - fit.zMin)))
+    local visible = tucked + (cart - tucked) * u
+    return (lift + (cart - visible) * z) / z
+  end
+  self.fitPlayerDrop = playerDrop
+
+  --- How far a back (r, its resting body, canvas px) is raised above its side (canvas px
+  --- before the zoom) at zoom z raised by lift, its side lowered by v: enough that its body
+  --- shows above the text box's line, all of it for a small back (wholeBelow), minVisible of it
+  --- for a big one (cutAbove), blended between; 0 for a back already showing that much.
+  local function backRaise(r, z, lift, v)
+    local fit = self.fit
+    local line = fit.focus[2]
+    local top = line + (r[2] + v - line) * z - lift
+    local h = r[4] - r[2]
+    local u = math.max(0, math.min(1, (h - fit.wholeBelow) / math.max(1e-6, fit.cutAbove - fit.wholeBelow)))
+    local share = 1 + (fit.minVisible - 1) * u          -- 1 (whole) for a small back
+    local want = line - share * h * z
+    if top <= want then return 0 end
+    return (top - want) / z
+  end
+  self.fitBackRaise = backRaise
+
   local function hidden(r, z, lift)
     local fit = self.fit
     local fx, fy = fit.focus[1], fit.focus[2]
@@ -622,8 +666,11 @@ function HD.new(G, opts)
     local levels = { { true, true }, { true, false }, { false, true }, { false, false } }
     local function fits(z, lift, level)
       for _, r in ipairs(backs) do
-        local underEnemy, underOwn, y0 = hidden(r, z, lift)
-        local t = r.top and (fy + (r.top - fy) * z - lift) or y0
+        -- the back where the player side's drop puts it
+        local v = playerDrop(z, lift)
+        v = v - backRaise(r, z, lift, v)
+        local underEnemy, underOwn, y0 = hidden({ r[1], r[2] + v, r[3], r[4] + v }, z, lift)
+        local t = r.top and (fy + (r.top + v - fy) * z - lift) or y0
         if y0 < fit.margin or t < fit.margin then return false end
         if level[1] then
           if y0 < fit.backTopMin then return false end
@@ -635,7 +682,9 @@ function HD.new(G, opts)
       return true
     end
     for _, level in ipairs(levels) do
-      local z = zFront
+      -- headroom out of reach at every allowed zoom: the limit is still the nearest to it,
+      -- so the looser levels only choose the rise there (never a closer camera)
+      local z = level[1] and zFront or fit.zMin
       while z >= fit.zMin - 1e-9 do
         local base = fitLift(z)
         local most = base + fit.extraMax
@@ -737,14 +786,23 @@ function HD.new(G, opts)
       wantP = -math.min(fit.shiftMax, (fx - fit.playerX) * k)
     end
     fit.shift.enemy, fit.shift.player = wantE, wantP
+    fit.shift.playerY = (fit.z < 1 and (seen.enemy or seen.player))
+      and playerDrop(fit.z, fitLift(fit.z) + fit.extra) or 0
+    fit.shift.playerRaise = backs[1]
+      and backRaise(backs[1], fit.z, fitLift(fit.z) + fit.extra, fit.shift.playerY) or 0
     fit.idle = 0
     self.stats.zoom, self.stats.zoomTarget, self.stats.extraLift = fit.z, zt, fit.extra
     self.stats.shiftEnemy, self.stats.shiftPlayer = fit.shift.enemy, fit.shift.player
+    self.stats.dropPlayer = fit.shift.playerY
+    self.stats.raisePlayer = fit.shift.playerRaise
     -- the most of any player's Pokemon's body hidden under each UI, as drawn this frame
     -- and the highest body top (canvas px; headroom asks for backTopMin or lower)
     local he, ho, bt = 0, 0, math.huge
     for _, r in ipairs(backs) do
-      local e, o, y0 = hidden(r, fit.z, fitLift(fit.z) + fit.extra)
+      local lift = fitLift(fit.z) + fit.extra
+      local v = playerDrop(fit.z, lift)
+      v = v - backRaise(r, fit.z, lift, v)
+      local e, o, y0 = hidden({ r[1], r[2] + v, r[3], r[4] + v }, fit.z, lift)
       he, ho, bt = math.max(he, e), math.max(ho, o), math.min(bt, y0)
     end
     self.stats.hiddenEnemyUI, self.stats.hiddenOwnUI = he, ho
@@ -802,16 +860,24 @@ function HD.new(G, opts)
           end
         elseif item.kind == "stage" then
           local d = (fitted and cur.shift[item.side]) or 0
-          imageDraw(item.rec, sx0 + d * ssx, sy0, ssx, ssy)
+          local dy = (fitted and item.side == "player" and cur.shift.playerY) or 0
+          imageDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy)
         elseif inScene then
           -- a battler drawn by the battle itself moves with its side's shift; one drawn by a
           -- move animation is already where the shifted coordinates put it
           local spec = item.rec.spec
           local side = spec.side
           local d = (fitted and side and not item.rec.inAnim and cur.shift[side]) or 0
+          -- (a trainer is anchored to the text box instead: pinBottom below)
+          local dy = (fitted and side == "player" and not item.rec.inAnim and not spec.trainer
+            and cur.shift.playerY) or 0
+          -- the Pokemon itself, not its trainer, stands raised above a small back's pad
+          if fitted and side == "player" and not item.rec.inAnim and not spec.trainer then
+            dy = dy - (cur.shift.playerRaise or 0)
+          end
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
           local pin = fitted and spec.pinBottom and (by + spec.pinBottom * bsy) or nil
-          hdDraw(item.rec, sx0 + d * ssx, sy0, ssx, ssy, pin)
+          hdDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, pin)
         else
           hdDraw(item.rec, bx, by, bsx, bsy)
         end

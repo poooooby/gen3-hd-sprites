@@ -69,8 +69,10 @@ The target zoom:
   - **The player's own side:** at most `fit.maxHiddenOwn` (30%) of the body under the
     player's HP box plus the text box and everything below it (`fit.ui.player`, `fit.ui.text`).
 
-  Levels are relaxed in order: own side first, then headroom. If even the loosest level fits
-  no camera, the zoom clamps to `zMin`: as far back as allowed is still the nearest fit. Without headroom, at most
+  Levels are relaxed in order: own side first, then headroom. When no allowed zoom gives the
+  headroom, the looser levels only choose the rise at `zMin`, never a closer camera, since the
+  limit is still the nearest to the headroom (Eternatus would need about 0.35). If even the
+  loosest level fits nothing there, the zoom is `zMin` with no extra rise. Without headroom, at most
   `fit.maxHidden` (half) of the body may sit under the enemy's box. The search steps the zoom
   down from the enemy's own fit in `fit.zStep` (0.005) steps, and the rise in 1 px steps.
   Below about 90% zoom the enemy's feet rise also lifts the player's Pokémon, and the search
@@ -83,8 +85,10 @@ The target zoom:
   so nothing moves when a turn starts. Singles only.
   - **The library moves** the Pokémon, the pads (`hd.drawStage(image, x, y, side)`) and the
     trainers. `src/engine.lua` tags the `TrainerPic.front` / `back` images with
-    `side, trainer = true`. The player's back pic also gets `pinBottom = 112`: its frame's
-    bottom is kept on the text box's line however the camera rises, so its cut stays hidden.
+    `side, trainer = true`. The player's back pic also gets `pinBottom = 112`. Its frame's
+    bottom is put exactly on the text box's line, however the camera moves or its side drops,
+    so it still reads as a whole sprite standing behind the box. It moves only side to side,
+    and so does the send-out origin (its hand).
   - **The engine's coordinates move too,** before each battle frame:
     - `AnimCoords.SINGLES`, which move animations aim at;
     - `Anim.ENEMY_MON` / `PLAYER_MON` (ball targets, the catch, a switch);
@@ -98,6 +102,26 @@ The target zoom:
   and transparent above and below, so the zoomed-out scene shows no ends. It zooms about the
   text box's line but does not rise with the camera, so its bottom stays on that line, where
   the cart puts it.
+- **The player's pad stays tucked** under the text box for scale: on the cart its top 11 of
+  32 rows show (`fit.padTop` 101, `fit.padRows` 32).
+  - **How:** pulled back, the player's side is lowered by `shift.playerY` (canvas px before the
+    zoom) so that only `padRows * (1 - fit.padTuck)` (8 of 32, `padTuck` 0.75) show at `zMin`.
+    This blends from the cart's 11 at zoom 1, so nothing jumps, and it cancels the camera's
+    rise for that side.
+  - **What moves:** the player's pad and Pokémon; the trainer stays anchored to the text box.
+    The engine's coordinates go down
+    with them: `AnimCoords.SINGLES[0].y` and `Anim.PLAYER_MON.y`.
+- **A small back stands behind its pad:** when too little of a back's resting body shows
+  above the text box, the Pokémon alone is raised (`shift.playerRaise`) until enough shows.
+  A back whose body is at most `fit.wholeBelow` (36 px, before the zoom) tall shows **whole**,
+  feet just above the text box (Pikachu, Joltik, Natu). One taller than `fit.cutAbove` (56 px)
+  needs only `fit.minVisible` (65%), keeping the over-the-shoulder cut. In between, the share
+  blends.
+  - **What stays:** its pad and trainer. A back already showing that much is left where it is.
+  - **What follows:** the engine's battler coordinates (`AnimCoords.SINGLES[0].y`,
+    `Anim.PLAYER_MON.y`) take the raise too, so attacks and the ball land on the Pokémon. The
+    send-out origin (the trainer's hand) does not.
+  - **In the search:** the camera search places the back with both the drop and the raise.
 - **Battlers as they rest:** before the UI seam, `src/engine.lua` (`Engine.prefit`, inside the
   battle's draw) asks `Pokemon.frontPic` / `backPic` for both leads, so a sprite mod hands over
   its battle pics. It hands each to `hd.prefit(side, image, x, y)` at the spot
@@ -162,7 +186,7 @@ Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true }`),
 `fitEnabled()`, `setFit("off" | "fit" | "tall")`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
-`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
+`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 
 ## Tests

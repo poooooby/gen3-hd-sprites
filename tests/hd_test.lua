@@ -448,31 +448,52 @@ do
   hd.install()
   hd.fit.enabled, hd.fit.zMin = true, 0.4
   local fit = hd.fit
-  local function check2(z, e, rects, strict, label)
+  -- a back as drawn: its side lowered so its pad stays tucked, the Pokemon raised above a small
+  -- back's pad so minVisible of its body shows
+  local function placed(r, z, e)
     local lift = hd.fitLift(z) + e
+    local drop = hd.fitPlayerDrop(z, lift)
+    local raise = hd.fitBackRaise(r, z, lift, drop)
+    local v = drop - raise
+    local ue, uo, y0 = hd.fitHidden({ r[1], r[2] + v, r[3], r[4] + v }, z, lift)
+    local visible = (fit.focus[2] - y0) / ((r[4] - r[2]) * z)
+    local t = r.top and (fit.focus[2] + (r.top + v - fit.focus[2]) * z - lift)
+    return ue, uo, y0, t, visible, raise
+  end
+  local function check2(z, e, rects, label)
     local ok = true
     for _, r in ipairs(rects) do
-      local ue, uo, y0 = hd.fitHidden(r, z, lift)
+      local ue, _, y0, _, visible = placed(r, z, e)
       if ue > fit.maxHidden + 1e-9 or y0 < fit.backTopMin - 1e-9 then ok = false end
-      if strict and uo > fit.maxHiddenOwn + 1e-9 then ok = false end
+      if visible < fit.minVisible - 1e-6 then ok = false end
     end
     check(ok, label .. " (zoom " .. string.format("%.3f", z) .. ", rise +" .. e .. ")")
   end
 
-  -- no overflow anywhere: nothing moves
-  local z, e = hd.fitSolve(math.huge, { { 20, 60, 100, 130 } })
-  check(z == 1 and e == 0, "a back mostly in view: no zoom, no rise")
+  -- a small back (30 px body, feet 7 px under the text box's top) is raised to show whole; a big
+  -- one (79 px) already shows minVisible and keeps the over-the-shoulder cut
+  check(math.abs(hd.fitBackRaise({ 20, 89, 50, 119 }, 1, 0, 0) - 7) < 1e-9,
+    "a small back is raised until its whole body shows")
+  check(hd.fitBackRaise({ 10, 40, 100, 119 }, 1, 0, 0) == 0, "a big back keeps its cut")
 
-  -- a back 63% under the text box: the camera rises (and zooms) until most of it shows
+  -- a back that shows most of itself already: nothing moves, nothing raised
+  local small = { 20, 60, 100, 130 }
+  local z, e = hd.fitSolve(math.huge, { small })
+  local _, _, _, _, _, raise = placed(small, z, e)
+  check(z == 1 and e == 0 and raise == 0, "a back mostly in view: no zoom, no rise, not raised")
+
+  -- a back mostly under the text box (37% shows): raised until 65% shows, standing behind its
+  -- pad; raised that high it needs the camera back for its headroom (112 - 0.65 * 140 * z >= 52)
   local deep = { 20, 60, 100, 200 }
   z, e = hd.fitSolve(math.huge, { deep })
-  check(z < 1 or e > 0, "a back mostly under the text box moves the camera")
-  check2(z, e, { deep }, true, "...until at most 30% of it is hidden")
+  _, _, _, _, _, raise = placed(deep, z, e)
+  check(raise > 0, "a back mostly under the text box is raised")
+  check2(z, e, { deep }, "...until 65% of it shows, its headroom kept")
 
-  -- a back reaching up under the enemy's HP box: kept mostly out from under it
+  -- a back reaching up under the enemy's HP box: brought down to the cart's headroom
   local high = { 20, 14, 100, 50 }
   z, e = hd.fitSolve(math.huge, { high })
-  check2(z, e, { high }, false, "a back up under the enemy's HP box is brought down to the cart's headroom")
+  check2(z, e, { high }, "a back up under the enemy's HP box is brought down to the cart's headroom")
 
   -- with a tall enemy too: the enemy still fits (its top under the screen's)
   local top = -40
@@ -480,24 +501,24 @@ do
   local lift = hd.fitLift(z) + e
   local enemyTop = fit.focus[2] + (top - fit.focus[2]) * z - lift
   check(enemyTop >= fit.margin - 1e-6, "...and a tall enemy still fits under the top (" .. string.format("%.2f", enemyTop) .. ")")
-  check2(z, e, { deep }, true, "...with the back mostly in view")
+  check2(z, e, { deep }, "...with the back's headroom and 65% kept")
 
-  -- headroom: a body that starts above the tallest cart back (row 52) is brought down to it,
-  -- which keeps its head out from under the enemy's HP box (rows 16-44) too
+  -- headroom: a large body that starts above the tallest cart back (row 52) is brought down to
+  -- it, and not raised (it shows all of itself)
   local horned = { 20, 30, 140, 112 }
   z, e = hd.fitSolve(math.huge, { horned })
-  local _, _, y0 = hd.fitHidden(horned, z, hd.fitLift(z) + e)
-  check(y0 >= fit.backTopMin - 1e-9, "a tall back gets the cart's headroom (top "
+  local _, _, y0, _, _, hraise = placed(horned, z, e)
+  check(y0 >= fit.backTopMin - 1e-9 and hraise == 0, "a large back gets the cart's headroom, unraised (top "
     .. string.format("%.2f, zoom %.3f", y0, z) .. ")")
-  -- top 30 -> 52 with the enemy's feet rise (112 - 40z - 76) included: z = 24 / 42 = 0.571
-  check(z <= 24 / 42 + 1e-9 and z > 24 / 42 - fit.zStep, "...and no further than that ("
+  local _, _, y1 = placed(horned, z + fit.zStep, 0)
+  check(z > fit.zMin and y1 < fit.backTopMin, "...and no further back than that ("
     .. string.format("%.3f", z) .. ")")
 
   -- the whole animation must stay on the screen, but only the resting body needs headroom: a
   -- head flung high in the animation (Blacephalon) pulls back only as far as the screen's top
   local flung = { 20, 60, 100, 112, top = -40 }
   z, e = hd.fitSolve(math.huge, { flung })
-  local t = fit.focus[2] + (flung.top - fit.focus[2]) * z - (hd.fitLift(z) + e)
+  local _, _, _, t = placed(flung, z, e)
   check(t >= fit.margin - 1e-9, "a flung head stays on the screen (" .. string.format("%.2f", t) .. ")")
 
   -- a back that needs more than the limit: clamped to the limit, not left at the enemy's 1.00
@@ -506,6 +527,13 @@ do
   check(near(z, fit.zMin) and e == 0, "a back past the limit clamps to zMin (" .. tostring(z) .. "), not 1")
   z = hd.fitSolve(-300, {})
   check(near(z, fit.zMin), "...as an enemy past the limit does")
+
+  -- a back whose headroom is out of reach (its body's top on row -40: even zoom 0.4 with its
+  -- side lowered leaves it above 52), with a small enemy: the limit, not 1.00 -- the looser
+  -- rules would be met at 1.00, but the limit is still the nearest to the headroom
+  local eternatus = { 10, -40, 130, 112 }
+  z, e = hd.fitSolve(math.huge, { eternatus })
+  check(near(z, fit.zMin), "headroom out of reach clamps to zMin (" .. tostring(z) .. "), not 1")
 
   -- without backs the solve is the enemy's own fit
   z, e = hd.fitSolve(-76, {})
@@ -590,7 +618,8 @@ do
   -- drawn about the frame's centre (32, 32): its left edge and its bottom
   check(t and near(t.args[2] - 32 * s, 4 * (120 * (1 - zz) + (48 + fit.shift.player) * zz)),
     "the trainer moves with the player's side")
-  check(t and near(t.args[3] + 32 * s, 4 * 112), "...its cut bottom stays on the text box's line ("
+  -- (anchored there exactly, whatever the camera or its side's drop does)
+  check(t and near(t.args[3] + 32 * s, 4 * 112), "...its cut bottom stands on the text box's line ("
     .. tostring(t and (t.args[3] + 32 * s) / 4) .. ")")
   check(near(fit.z, zz) and fit.target == fit.z, "...and a trainer does not change the fit")
 end

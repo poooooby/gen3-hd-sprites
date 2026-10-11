@@ -173,7 +173,7 @@ function Engine.wrapFit(hd)
       ours[Anim.drawParticles] = true
     end
     local S = AnimCoords.SINGLES
-    local home = Engine.shiftHome or { player = S[0].x, enemy = S[1].x }
+    local home = Engine.shiftHome or { player = S[0].x, enemy = S[1].x, playerY = S[0].y }
     Engine.shiftHome = home
     local function place(t, x)
       t.x = x
@@ -183,6 +183,7 @@ function Engine.wrapFit(hd)
     local EM, PM = type(Anim.ENEMY_MON) == "table" and Anim.ENEMY_MON, type(Anim.PLAYER_MON) == "table" and Anim.PLAYER_MON
     home.enemyMon = home.enemyMon or (EM and EM.x)
     home.playerMon = home.playerMon or (PM and PM.x)
+    home.playerMonY = home.playerMonY or (PM and PM.y)
     local function on(Battle)
       local st = Battle._st
       return hd.fit.enabled and st ~= nil and not st.double
@@ -194,11 +195,16 @@ function Engine.wrapFit(hd)
       local fit = hd.fit
       local e = on(Battle) and fit.shift.enemy or 0
       local p = on(Battle) and fit.shift.player or 0
+      local py = on(Battle) and fit.shift.playerY or 0
+      -- the Pokemon's own spot: a small back stands raised above its pad
+      local pm = py - (on(Battle) and fit.shift.playerRaise or 0)
       place(S[1], home.enemy + e)
       place(S[0], home.player + p)
+      if home.playerY then S[0].y, S[0][2] = home.playerY + pm, home.playerY + pm end
       if EM and home.enemyMon then EM.x = home.enemyMon + e end
       if PM and home.playerMon then PM.x = home.playerMon + p end
-      Engine.shiftNow = { enemy = e, player = p }
+      if PM and home.playerMonY then PM.y = home.playerMonY + pm end
+      Engine.shiftNow = { enemy = e, player = p, playerY = py }
     end
 
     --- Both leads, before they are sent out: their pics as the battle will draw them (asked for
@@ -247,8 +253,9 @@ function Engine.wrapFit(hd)
       if not ours[origin] then
         Pokedude.sendOutOrigin = function(...)
           local x, y = origin(...)
-          local d = Engine.shiftNow and Engine.shiftNow.player or 0
-          if type(x) == "number" then x = x + d end
+          -- (only side to side: the trainer stays anchored to the text box)
+          local now = Engine.shiftNow or {}
+          if type(x) == "number" then x = x + (now.player or 0) end
           return x, y
         end
         ours[Pokedude.sendOutOrigin] = true

@@ -30,11 +30,12 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
 - 📐 **Big Pokémon fit on screen:** When a Pokémon is too tall for the battle screen (a Lugia, a
   Koraidon), the camera pulls back just enough to show all of it. Its platform, your Pokémon and
   the move effects shrink with it, so the scene keeps its perspective. The camera also rises,
-  so the opponent never sinks behind your HP bar, and your own platform shows whole instead of
-  cut off at the text box.
-- 🐋 **Your Pokémon too:** A big Pokémon of yours stays in view. It never stands taller than the
-  biggest original back sprites, so its head keeps clear of the opponent's HP bar. At least 70%
-  of it stays clear of your HP bar and the text box, and its whole animation stays on screen.
+  so the opponent never sinks behind your HP bar, while your own platform stays tucked under
+  the text box like on the original, for a true sense of scale.
+- 🐋 **Your Pokémon too:** A small Pokémon of yours stands a little behind its platform so most
+  of it shows above the text box. A big one never stands taller than the biggest original back
+  sprites, so its head keeps clear of the opponent's HP bar, and its whole animation stays on
+  screen.
 - ↔️ **Fills the screen:** When the camera pulls back, the two Pokémon, their platforms and the
   trainers spread back out toward the sides from the first moment of the battle, and the
   attacks follow them. In trainer battles the camera is set for the Pokémon before they're sent
