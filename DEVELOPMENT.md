@@ -69,7 +69,8 @@ The target zoom:
   - **The player's own side:** at most `fit.maxHiddenOwn` (30%) of the body under the
     player's HP box plus the text box and everything below it (`fit.ui.player`, `fit.ui.text`).
 
-  Levels are relaxed in order: own side first, then headroom. Without headroom, at most
+  Levels are relaxed in order: own side first, then headroom. If even the loosest level fits
+  no camera, the zoom clamps to `zMin`: as far back as allowed is still the nearest fit. Without headroom, at most
   `fit.maxHidden` (half) of the body may sit under the enemy's box. The search steps the zoom
   down from the enemy's own fit in `fit.zStep` (0.005) steps, and the rise in 1 px steps.
   Below about 90% zoom the enemy's feet rise also lifts the player's Pokémon, and the search

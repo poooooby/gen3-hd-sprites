@@ -649,7 +649,9 @@ function HD.new(G, opts)
         z = z - fit.zStep
       end
     end
-    return zFront, 0
+    -- nothing fits even pulled all the way back: pulled all the way back is still the
+    -- nearest, so clamp to the limit (never fall back to the enemy's own zoom)
+    return fit.zMin, 0
   end
 
   -- the same, remembered: an animation repeats its frames, so a frame's inputs recur

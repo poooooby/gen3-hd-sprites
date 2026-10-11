@@ -500,6 +500,13 @@ do
   local t = fit.focus[2] + (flung.top - fit.focus[2]) * z - (hd.fitLift(z) + e)
   check(t >= fit.margin - 1e-9, "a flung head stays on the screen (" .. string.format("%.2f", t) .. ")")
 
+  -- a back that needs more than the limit: clamped to the limit, not left at the enemy's 1.00
+  local huge = { 10, -150, 130, 112, top = -200 }
+  z, e = hd.fitSolve(math.huge, { huge })
+  check(near(z, fit.zMin) and e == 0, "a back past the limit clamps to zMin (" .. tostring(z) .. "), not 1")
+  z = hd.fitSolve(-300, {})
+  check(near(z, fit.zMin), "...as an enemy past the limit does")
+
   -- without backs the solve is the enemy's own fit
   z, e = hd.fitSolve(-76, {})
   check(near(z, 0.5) and e == 0, "no back: the enemy's fit, unchanged")
