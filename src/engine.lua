@@ -31,6 +31,8 @@
 --                          each battle frame (Engine.shiftCoords)
 --   Pokedude.sendOutOrigin where the player's ball is thrown from: moved with the trainer
 --   TrainerPic.front / back   the trainers' pics, tagged so they move with their side
+--   Pokemon.frontPic / backPic   asked for both leads inside the battle's draw (Engine.prefit),
+--                          so the camera is framed for a trainer's Pokemon before its send-out
 
 local Engine = {}
 
@@ -107,6 +109,10 @@ function Engine.wrapFit(hd)
           local pad = Engine.Pads and Engine.Pads.playerPad(entry, hd.real,
             love.graphics.newImage, love.image and love.image.newImageData)
           hd.drawStage(pad or entry.playerPlat, tonumber(playerOx) or 0, 0, "player")
+          if Engine.prefit then
+            local okP, errP = pcall(Engine.prefit)
+            if not okP then hd.stats.prefitError = tostring(errP) end   -- for stats(), never fatal
+          end
           return true
         end
       end
@@ -171,6 +177,45 @@ function Engine.wrapFit(hd)
       if EM and home.enemyMon then EM.x = home.enemyMon + e end
       if PM and home.playerMon then PM.x = home.playerMon + p end
       Engine.shiftNow = { enemy = e, player = p }
+    end
+
+    --- Both leads, before they are sent out: their pics as the battle will draw them (asked for
+    --- inside the battle's draw, so a sprite mod hands over its battle pics), centred where
+    --- the battle will put them, so the camera is framed for them from the first frame.
+    local okPk, Pokemon = pcall(require, "src.core.game3.pokemon")
+    local okUi, Ui = pcall(require, "src.core.game3.battle.ui")
+    -- through require: a mod's package.loaded is not the engine's
+    local okB2, BattleMod = pcall(require, "src.core.game3.battle")
+    if not okB2 then BattleMod = nil end
+    if okPk and okUi and type(Pokemon) == "table" and type(Ui) == "table"
+        and type(Ui.battlerSpriteCenter) == "function" and type(Ui.picArgs) == "function" then
+      local spots = {
+        enemy = { x = home.enemyMon or 176, y = EM and EM.y or 40 },
+        player = { x = home.playerMon or 72, y = PM and PM.y or 80 },
+      }
+      Engine.prefit = function()
+        local B = BattleMod
+        local st = B and B._st
+        if not st or st.double then return end
+        for side, spot in pairs(spots) do
+          local battler = st[side]
+          local mon = battler and battler.mon
+          local sp = mon and Pokemon.speciesOf and Pokemon.speciesOf(mon)
+          if sp then
+            local picSp, shiny, personality = Ui.picArgs(battler, sp)
+            local entry
+            if side == "enemy" then
+              entry = Pokemon.frontPic and Pokemon.frontPic(picSp, nil, shiny, personality)
+            else
+              entry = Pokemon.backPic and Pokemon.backPic(picSp, nil, shiny)
+            end
+            if entry and entry.image then
+              local cx, cy = Ui.battlerSpriteCenter(side, sp, { x = spot.x, y = spot.y }, nil, false)
+              hd.prefit(side, entry.image, cx, cy)
+            end
+          end
+        end
+      end
     end
 
     -- the player's ball is thrown from the trainer's hand: it moves with the trainer

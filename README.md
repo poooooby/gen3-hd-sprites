@@ -37,7 +37,8 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
   of it stays clear of your HP bar and the text box, and its whole animation stays on screen.
 - ↔️ **Fills the screen:** When the camera pulls back, the two Pokémon, their platforms and the
   trainers spread back out toward the sides from the first moment of the battle, and the
-  attacks follow them. Your trainer stays planted on the text box, just like the original.
+  attacks follow them. In trainer battles the camera is set for the Pokémon before they're sent
+  out, so nothing jumps when they appear. Your trainer stays planted on the text box, just like the original.
 - 🧭 **The UI stays put:** The text box, menus and HP bars never move or shrink, and stay crisp.
 - 🌄 **Depth:** The far background pulls back less than the platforms, like a real camera.
 - 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment

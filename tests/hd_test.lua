@@ -588,6 +588,35 @@ do
   check(near(fit.z, zz) and fit.target == fit.z, "...and a trainer does not change the fit")
 end
 
+-- a battler not drawn yet (a trainer's Pokemon before its send-out) frames the camera already
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.4
+  local base = canvas("ui", 240, 160)
+  local wall = canvas("wall", 256, 160)
+  local foe, page = canvas("foe", 64, 64), canvas("atlas", 4096, 4096)
+  hd.tag(foe, { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
+                top = 52, side = "enemy" })
+  local function frame(drawFoe)
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(wall, 0, 0)
+    hd.prefit("enemy", foe, 176, 40)
+    if drawFoe then G.draw(foe, 176, 40, 0, 1, 1, 32, 32) end
+    hd.seam("ui")
+    hd.endPass()
+    hd.composite(base, function() end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+    hd.endFrame()
+    return hd.fit.z
+  end
+  local before = frame(false)
+  local after = frame(true)
+  check(before < 1 and near(before, after), "the camera is framed for a Pokemon before it is sent out ("
+    .. string.format("%.3f, then %.3f", before, after) .. ")")
+end
+
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else
 do
   local G = fakeGraphics()

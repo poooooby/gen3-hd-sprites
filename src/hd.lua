@@ -342,6 +342,7 @@ function HD.new(G, opts)
       w = base:getWidth(), h = base:getHeight(), layerCount = 0, splits = 0,
       cap = self.caps[pass] or 8, pending = false, screenOpen = false,
       segment = "scene", hasUI = false,
+      prefit = {},
       -- the side shift this frame is drawn with (the engine's move coordinates use the same)
       shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player },
     }
@@ -390,6 +391,20 @@ function HD.new(G, opts)
     if cur then cur.stageDraw = true end
     G.draw(image, x, y)
     if cur then cur.stageDraw = false end
+  end
+
+  --- A battler in the battle, as it rests: its tagged pic as the battle draws it centred on
+  --- (x, y) (origin 32, 32). The fit uses this for its side instead of the drawn pic, so the
+  --- camera is framed for a trainer's Pokemon before its send-out and does not follow the
+  --- Pokemon's own movement (a jump, a lunge). Cleared each pass.
+  function self.prefit(side, image, x, y)
+    local cur = self.cur
+    local spec = image ~= nil and self.tags[image]
+    if not (cur and spec and type(x) == "number" and type(y) == "number") then return end
+    cur.prefit[side] = {
+      spec = spec, image = image, x = x, y = y, r = 0, sx = 1, sy = 1, ox = 32, oy = 32,
+      tx = 0, ty = 0, tsx = 1, tsy = 1,
+    }
   end
 
   --- Stop capturing. The pass waits for its canvas's blit (or flatten).
@@ -643,25 +658,32 @@ function HD.new(G, opts)
     local fit = self.fit
     local top, backs = math.huge, {}
     local seen = {}
+    local function take(rec)
+      local spec = rec.spec
+      if spec.side then seen[spec.side] = true end
+      if spec.side == "player" then
+        if spec.body then
+          local r = { bodyRect(rec) }
+          -- where the side shift puts it (only its x: which UI it is under)
+          if not rec.inAnim then
+            r[1], r[3] = r[1] + cur.shift.player, r[3] + cur.shift.player
+          end
+          if spec.top then r.top = artTop(rec) end
+          backs[#backs + 1] = r
+        end
+      else
+        local t = artTop(rec)
+        if t < top then top = t end
+      end
+    end
+    -- a battler the engine reported (hd.prefit) is fitted where it rests, drawn yet or not:
+    -- its send-out jump, a lunge or a shake never moves the camera
+    for _, rec in pairs(cur.prefit) do take(rec) end
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" and item.name == "ui" then break end
-      if item.kind == "hd" and not item.rec.spec.trainer then
-        local spec = item.rec.spec
-        if spec.side then seen[spec.side] = true end
-        if spec.side == "player" then
-          if spec.body then
-            local r = { bodyRect(item.rec) }
-            -- where the side shift puts it (only its x: which UI it is under)
-            if not item.rec.inAnim then
-              r[1], r[3] = r[1] + cur.shift.player, r[3] + cur.shift.player
-            end
-            if spec.top then r.top = artTop(item.rec) end
-            backs[#backs + 1] = r
-          end
-        else
-          local t = artTop(item.rec)
-          if t < top then top = t end
-        end
+      local spec = item.kind == "hd" and item.rec.spec
+      if spec and not spec.trainer and not (spec.side and cur.prefit[spec.side]) then
+        take(item.rec)
       end
     end
     local zt, et = fitSolve(top, backs)

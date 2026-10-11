@@ -91,6 +91,13 @@ The target zoom:
   - **Double-shift guard:** a Pokémon drawn inside `Anim.drawParticles` (an afterimage, a
     move's copy of it) is flagged `inAnim` and not shifted again.
   - **Not fitted:** trainers are left out of the fit itself.
+- **Battlers as they rest:** before the UI seam, `src/engine.lua` (`Engine.prefit`, inside the
+  battle's draw) asks `Pokemon.frontPic` / `backPic` for both leads, so a sprite mod hands over
+  its battle pics. It hands each to `hd.prefit(side, image, x, y)` at the spot
+  `Ui.battlerSpriteCenter` gives (origin 32, 32). The fit uses these resting placements for
+  their sides instead of the drawn pics. So in a trainer battle the camera is framed for the
+  Pokémon before they are sent out, and a send-out jump or an attack's lunge never moves it.
+  Singles only; drawn pics are used where nothing was reported.
 - The zoom snaps to the target at a battle's first frame and eases out about 20% per frame.
   The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
