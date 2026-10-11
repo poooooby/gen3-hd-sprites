@@ -22,6 +22,12 @@
 --                           top      = n        the first row of art in the frame (quad pixels),
 --                                               the highest over the animation; Battle Fit fits
 --                                               the art, not the frame's empty margin (default 0)
+--                           side     = "enemy" (default) or "player": whose Pokemon it is
+--                           body     = {x0, y0, x1, y1}  (side "player") its resting body box
+--                                               (quad pixels): Battle Fit keeps its top at or
+--                                               below the tallest cart back sprite's (y 52) and,
+--                                               when it can, at most 30% of it under the
+--                                               player's HP box and text box
 --   untag(image)
 --   isActive()            the engine seams were found and wrapped
 --   enabled(pass)         "battle", "field" or "dex" (the Pokedex screens): is it on (the

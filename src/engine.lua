@@ -25,6 +25,12 @@
 --                          src/pads.lua)
 --   BallOpen.draw          the last draw of the battle scene (src/core/game3/battle/ui.lua
 --                          Ui.draw): the UI seam goes after it
+--   Anim.drawParticles     a Pokemon drawn by a move animation is flagged (hd.inAnim)
+--   AnimCoords.SINGLES, Anim.ENEMY_MON / PLAYER_MON   the battlers' coordinates move
+--                          animations and the intro aim at: moved with the side shift before
+--                          each battle frame (Engine.shiftCoords)
+--   Pokedude.sendOutOrigin where the player's ball is thrown from: moved with the trainer
+--   TrainerPic.front / back   the trainers' pics, tagged so they move with their side
 
 local Engine = {}
 
@@ -96,11 +102,11 @@ function Engine.wrapFit(hd)
           local G = love.graphics
           G.setColor(1, 1, 1, 1)
           hd.backdrop(entry.bgImage, -((tonumber(bgOx) or 0) % 256), 0)
-          hd.drawStage(entry.enemyPlat, tonumber(enemyOx) or 0, 0)
+          hd.drawStage(entry.enemyPlat, tonumber(enemyOx) or 0, 0, "enemy")
           -- the player's pad whole (src/pads.lua): the camera may rise past its cut
           local pad = Engine.Pads and Engine.Pads.playerPad(entry, hd.real,
             love.graphics.newImage, love.image and love.image.newImageData)
-          hd.drawStage(pad or entry.playerPlat, tonumber(playerOx) or 0, 0)
+          hd.drawStage(pad or entry.playerPlat, tonumber(playerOx) or 0, 0, "player")
           return true
         end
       end
@@ -117,6 +123,89 @@ function Engine.wrapFit(hd)
       return unpack(results)
     end
     ours[BallOpen.draw] = true
+  end
+
+  -- the side shift (src/hd.lua fit.shift). Move animations aim at the engine's battler
+  -- coordinates, so those move with the shift; a Pokemon drawn while an animation runs is
+  -- flagged (hd.inAnim), as it already stands on the shifted coordinates
+  local okA, Anim = pcall(require, "src.core.game3.battle.anim")
+  local okC2, AnimCoords = pcall(require, "src.core.game3.battle.anim_coords")
+  if okA and type(Anim) == "table" and type(Anim.drawParticles) == "function" and okC2
+      and type(AnimCoords) == "table" and type(AnimCoords.SINGLES) == "table"
+      and AnimCoords.SINGLES[0] and AnimCoords.SINGLES[1] then
+    local drawParticles = Anim.drawParticles
+    if not ours[drawParticles] then
+      Anim.drawParticles = function(...)
+        -- (hd.beginPass clears it too, should a draw here ever throw)
+        hd.inAnim = true
+        local results = { drawParticles(...) }
+        hd.inAnim = false
+        return unpack(results)
+      end
+      ours[Anim.drawParticles] = true
+    end
+    local S = AnimCoords.SINGLES
+    local home = Engine.shiftHome or { player = S[0].x, enemy = S[1].x }
+    Engine.shiftHome = home
+    local function place(t, x)
+      t.x = x
+      t[1] = x
+    end
+    -- the intro's own copies of the battlers' spots (ball targets, the catch, a switch)
+    local EM, PM = type(Anim.ENEMY_MON) == "table" and Anim.ENEMY_MON, type(Anim.PLAYER_MON) == "table" and Anim.PLAYER_MON
+    home.enemyMon = home.enemyMon or (EM and EM.x)
+    home.playerMon = home.playerMon or (PM and PM.x)
+    local function on(Battle)
+      local st = Battle._st
+      return hd.fit.enabled and st ~= nil and not st.double
+    end
+    Engine.shiftOn = on
+    --- Before each battle frame: the engine's battler coordinates (move animations, the
+    --- intro's ball targets) stand where the shift this frame is drawn with puts them.
+    Engine.shiftCoords = function(Battle)
+      local fit = hd.fit
+      local e = on(Battle) and fit.shift.enemy or 0
+      local p = on(Battle) and fit.shift.player or 0
+      place(S[1], home.enemy + e)
+      place(S[0], home.player + p)
+      if EM and home.enemyMon then EM.x = home.enemyMon + e end
+      if PM and home.playerMon then PM.x = home.playerMon + p end
+      Engine.shiftNow = { enemy = e, player = p }
+    end
+
+    -- the player's ball is thrown from the trainer's hand: it moves with the trainer
+    local okP, Pokedude = pcall(require, "src.core.game3.battle.pokedude")
+    if okP and type(Pokedude) == "table" and type(Pokedude.sendOutOrigin) == "function" then
+      local origin = Pokedude.sendOutOrigin
+      if not ours[origin] then
+        Pokedude.sendOutOrigin = function(...)
+          local x, y = origin(...)
+          local d = Engine.shiftNow and Engine.shiftNow.player or 0
+          if type(x) == "number" then x = x + d end
+          return x, y
+        end
+        ours[Pokedude.sendOutOrigin] = true
+      end
+    end
+
+    -- the trainers move with their side; the player's, cut by the text box, stays cut there
+    local okT, TrainerPic = pcall(require, "src.core.game3.trainer_pic")
+    if okT and type(TrainerPic) == "table" then
+      local function tagging(name, spec)
+        local fn = TrainerPic[name]
+        if type(fn) ~= "function" or ours[fn] then return end
+        TrainerPic[name] = function(...)
+          local entry = fn(...)
+          if type(entry) == "table" and entry.image and not hd.tagOf(entry.image) then
+            hd.tag(entry.image, spec)
+          end
+          return entry
+        end
+        ours[TrainerPic[name]] = true
+      end
+      tagging("front", { side = "enemy", trainer = true })
+      tagging("back", { side = "player", trainer = true, pinBottom = 112 })
+    end
   end
   return true
 end
@@ -203,6 +292,7 @@ function Engine.install(hd)
 
     if not ours[battleDraw] then
       Battle.draw = function(...)
+        if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         hd.beginPass("battle", love.graphics.getCanvas())
         return battleDraw(...)
       end

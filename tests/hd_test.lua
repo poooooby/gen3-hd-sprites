@@ -441,6 +441,153 @@ do
   check(near(hd.stats.zoom, 0.6), "the zoom never goes below zMin")
 end
 
+-- Battle Fit and the player's own Pokemon (a back sprite: side = "player", body)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.4
+  local fit = hd.fit
+  local function check2(z, e, rects, strict, label)
+    local lift = hd.fitLift(z) + e
+    local ok = true
+    for _, r in ipairs(rects) do
+      local ue, uo, y0 = hd.fitHidden(r, z, lift)
+      if ue > fit.maxHidden + 1e-9 or y0 < fit.backTopMin - 1e-9 then ok = false end
+      if strict and uo > fit.maxHiddenOwn + 1e-9 then ok = false end
+    end
+    check(ok, label .. " (zoom " .. string.format("%.3f", z) .. ", rise +" .. e .. ")")
+  end
+
+  -- no overflow anywhere: nothing moves
+  local z, e = hd.fitSolve(math.huge, { { 20, 60, 100, 130 } })
+  check(z == 1 and e == 0, "a back mostly in view: no zoom, no rise")
+
+  -- a back 63% under the text box: the camera rises (and zooms) until most of it shows
+  local deep = { 20, 60, 100, 200 }
+  z, e = hd.fitSolve(math.huge, { deep })
+  check(z < 1 or e > 0, "a back mostly under the text box moves the camera")
+  check2(z, e, { deep }, true, "...until at most 30% of it is hidden")
+
+  -- a back reaching up under the enemy's HP box: kept mostly out from under it
+  local high = { 20, 14, 100, 50 }
+  z, e = hd.fitSolve(math.huge, { high })
+  check2(z, e, { high }, false, "a back up under the enemy's HP box is brought down to the cart's headroom")
+
+  -- with a tall enemy too: the enemy still fits (its top under the screen's)
+  local top = -40
+  z, e = hd.fitSolve(top, { deep })
+  local lift = hd.fitLift(z) + e
+  local enemyTop = fit.focus[2] + (top - fit.focus[2]) * z - lift
+  check(enemyTop >= fit.margin - 1e-6, "...and a tall enemy still fits under the top (" .. string.format("%.2f", enemyTop) .. ")")
+  check2(z, e, { deep }, true, "...with the back mostly in view")
+
+  -- headroom: a body that starts above the tallest cart back (row 52) is brought down to it,
+  -- which keeps its head out from under the enemy's HP box (rows 16-44) too
+  local horned = { 20, 30, 140, 112 }
+  z, e = hd.fitSolve(math.huge, { horned })
+  local _, _, y0 = hd.fitHidden(horned, z, hd.fitLift(z) + e)
+  check(y0 >= fit.backTopMin - 1e-9, "a tall back gets the cart's headroom (top "
+    .. string.format("%.2f, zoom %.3f", y0, z) .. ")")
+  -- top 30 -> 52 with the enemy's feet rise (112 - 40z - 76) included: z = 24 / 42 = 0.571
+  check(z <= 24 / 42 + 1e-9 and z > 24 / 42 - fit.zStep, "...and no further than that ("
+    .. string.format("%.3f", z) .. ")")
+
+  -- the whole animation must stay on the screen, but only the resting body needs headroom: a
+  -- head flung high in the animation (Blacephalon) pulls back only as far as the screen's top
+  local flung = { 20, 60, 100, 112, top = -40 }
+  z, e = hd.fitSolve(math.huge, { flung })
+  local t = fit.focus[2] + (flung.top - fit.focus[2]) * z - (hd.fitLift(z) + e)
+  check(t >= fit.margin - 1e-9, "a flung head stays on the screen (" .. string.format("%.2f", t) .. ")")
+
+  -- without backs the solve is the enemy's own fit
+  z, e = hd.fitSolve(-76, {})
+  check(near(z, 0.5) and e == 0, "no back: the enemy's fit, unchanged")
+end
+
+-- the side shift: zoomed out, each side moves back toward its unzoomed spot
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.4
+  local fit = hd.fit
+  local base = canvas("ui", 240, 160)
+  local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
+  local foe, mine, page = canvas("foe", 64, 64), canvas("mine", 64, 64), canvas("atlas", 4096, 4096)
+  -- a tall enemy (zoom 0.5) and a small back
+  hd.tag(foe, { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
+                top = 52, side = "enemy" })
+  hd.tag(mine, { texture = page, quad = quad(0, 0, 40, 40), pivot = { 20, 40 }, lowPivot = { 32, 64 },
+                 side = "player", body = { 0, 0, 40, 40 } })
+  local function frame(animCopy)
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(wall, 0, 0)
+    hd.drawStage(pad, 0, 0, "enemy")
+    G.draw(foe, 176, 40, 0, 1, 1, 32, 32)
+    G.draw(mine, 72, 80, 0, 1, 1, 32, 32)
+    if animCopy then
+      hd.inAnim = true                      -- a move animation draws the foe at its own spot
+      G.draw(foe, 176 + fit.shift.enemy, 40, 0, 1, 1, 32, 32)
+      hd.inAnim = false
+    end
+    hd.seam("ui")
+    G.rectangle("fill", 0, 112, 240, 48)
+    hd.endPass()
+    G.log = {}
+    hd.composite(base, function(c, bx, by, sx, sy) G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4) end,
+      0, 0, 4, 4, { 0, 0, 960, 640 })
+    hd.endFrame()
+  end
+  frame()
+  check(near(fit.shift.enemy, fit.shiftMax) and near(fit.shift.player, -fit.shiftMax),
+    "the sides spread from the battle's first frame, no easing")
+  -- z = 0.5: the enemy's spot 176 is back where it was with a shift of 56 -> capped at 40
+  check(near(fit.shift.enemy, fit.shiftMax) and near(fit.shift.player, -fit.shiftMax),
+    "the sides spread to the cap (" .. fit.shift.enemy .. ", " .. fit.shift.player .. ")")
+  frame(true)
+  local foes, padDraw = {}, nil
+  for _, e in ipairs(G.log) do
+    if e.image == page and e.args[1] and select(4, e.args[1]:getViewport()) == 200 then foes[#foes + 1] = e end
+    if e.image == pad then padDraw = e end
+  end
+  local z = fit.z
+  local want = 4 * (120 + (176 + fit.shiftMax - 120) * z)
+  check(#foes == 2 and near(foes[1].args[2], want) and near(foes[2].args[2], want),
+    "the foe and a move animation's copy of it stand on the same shifted spot")
+  check(padDraw and near(padDraw.args[1], 4 * (120 * (1 - z) + fit.shiftMax * z)),
+    "its pad moves with it, drawn at window resolution")
+
+  -- the player's trainer (cut by the text box at y 112): shifted with its side, and its
+  -- frame's bottom kept on the text box's line however the camera rises
+  local trainer = canvas("trainer", 64, 320)
+  local tq = quad(0, 0, 64, 64)
+  hd.tag(trainer, { side = "player", trainer = true, pinBottom = 112 })
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  G.draw(foe, 176, 40, 0, 1, 1, 32, 32)
+  G.draw(trainer, tq, 80 - 32, 80 - 32)
+  hd.seam("ui")
+  G.rectangle("fill", 0, 112, 240, 48)
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function(c, bx, by, sx, sy) G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4) end,
+    0, 0, 4, 4, { 0, 0, 960, 640 })
+  hd.endFrame()
+  local t
+  for _, e in ipairs(G.log) do if e.image == trainer then t = e end end
+  local zz, lift = fit.z, hd.fitLift(fit.z) + fit.extra
+  local s = 4 * zz
+  -- drawn about the frame's centre (32, 32): its left edge and its bottom
+  check(t and near(t.args[2] - 32 * s, 4 * (120 * (1 - zz) + (48 + fit.shift.player) * zz)),
+    "the trainer moves with the player's side")
+  check(t and near(t.args[3] + 32 * s, 4 * 112), "...its cut bottom stays on the text box's line ("
+    .. tostring(t and (t.args[3] + 32 * s) / 4) .. ")")
+  check(near(fit.z, zz) and fit.target == fit.z, "...and a trainer does not change the fit")
+end
+
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else
 do
   local G = fakeGraphics()

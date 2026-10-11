@@ -61,8 +61,30 @@ function HD.new(G, opts)
       -- the enemy's feet (its 64x64 pic box's bottom, ui.lua ENEMY_MON y 40 + 32) and the
       -- lowest they may sink to: the top of the player's HP box is just below
       feetY = 72, feetMax = 76,
+      -- the battle UI over the scene, in canvas pixels (singles, both cart layouts): the
+      -- enemy's HP box, the player's HP box, the text box (and everything below it, off the
+      -- screen too). The player's own Pokemon (a tag with side = "player" and its body box)
+      -- keeps at most maxHiddenOwn of its body under its own side's UI when the camera can
+      -- manage it, and at most maxHidden under the enemy's box when there is no headroom
+      ui = { enemy = { 14, 16, 113, 44 }, player = { 134, 74, 236, 110 }, text = { -1e4, 112, 1e4, 1e4 } },
+      maxHidden = 0.5, maxHiddenOwn = 0.3,
+      -- headroom: the player's Pokemon's body top stays no higher than the tallest cart back
+      -- sprite's (Tyranitar, Steelix, Meganium: row 0 of the 64x64 back box, centred at
+      -- y = 80 + 4, so y = 52), 8 px below the enemy's HP box
+      backTopMin = 52,
+      -- the camera may rise this far past what the enemy's feet need, to lift the player's
+      -- Pokemon out from under the text box; zooms are tried in steps of zStep
+      extraMax = 48, zStep = 0.005,
+      -- side shift: zoomed out, the two Pokemon and their pads crowd the middle. Each side is
+      -- moved back toward where it stood unzoomed (the enemy's spot x 176, the player's 72):
+      -- the tagged Pokemon and pads here, the move animations by the engine's battler
+      -- coordinates (src/engine.lua). At most shiftMax canvas px, so an effect drawn there
+      -- stays inside the canvas. It follows the zoom from a battle's first frame; the
+      -- trainers (tags with trainer = true) move with their side too.
+      enemyX = 176, playerX = 72, shiftMax = 40,
+      shift = { enemy = 0, player = 0 },
       outRate = 0.2, inRate = 0.05, holdFrames = 45,
-      z = 1, target = 1, hold = 0, idle = 99,
+      z = 1, target = 1, extra = 0, extraTarget = 0, hold = 0, idle = 99,
     },
   }
   local real = {}
@@ -217,6 +239,8 @@ function HD.new(G, opts)
       if spec and cur.splits < cur.cap then
         local rec = record(image, spec, ...)
         if rec then
+          -- drawn by a move animation: already where the engine's (shifted) coordinates put it
+          rec.inAnim = self.inAnim == true
           -- tagged draws with nothing drawn between them share one split
           if not cur.pending then cur.splits = cur.splits + 1 end
           cur.items[#cur.items + 1] = { kind = "hd", rec = rec }
@@ -311,12 +335,15 @@ function HD.new(G, opts)
   function self.beginPass(pass, base)
     -- a pass that was never ended (its frame was not presented the usual way): put it back
     if self.cur then self.flatten(self.cur) end
+    self.inAnim = false
     if not (self.installed and self.enabled[pass] and base and base.getWidth) then return false end
     self.cur = {
       pass = pass, base = base, current = base, layerSet = {}, items = {},
       w = base:getWidth(), h = base:getHeight(), layerCount = 0, splits = 0,
       cap = self.caps[pass] or 8, pending = false, screenOpen = false,
       segment = "scene", hasUI = false,
+      -- the side shift this frame is drawn with (the engine's move coordinates use the same)
+      shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player },
     }
     return true
   end
@@ -347,8 +374,19 @@ function HD.new(G, opts)
 
   --- Draw part of the battle's stage that is as big as the screen but is not a whole-scene
   --- effect (a pad, drawn on a transparent screen-sized image): it zooms with the scene.
-  function self.drawStage(image, x, y)
+  --- side ("enemy" / "player", optional): the pad moves with that side's shift (Battle Fit),
+  --- so it is recorded and drawn at window resolution instead of into the canvas.
+  function self.drawStage(image, x, y, side)
     local cur = self.cur
+    if side and cur and onPass() and self.fit.enabled and cur.pass == "battle" then
+      local rec = record(image, {}, x, y)
+      if rec then
+        cur.items[#cur.items + 1] = { kind = "stage", rec = rec, side = side }
+        cur.pending = true
+        cur.screenOpen = false
+        return
+      end
+    end
     if cur then cur.stageDraw = true end
     G.draw(image, x, y)
     if cur then cur.stageDraw = false end
@@ -408,8 +446,23 @@ function HD.new(G, opts)
     return Y - (hpy - (rec.spec.top or 0)) * math.abs(rec.sy * k * rec.tsy)
   end
 
-  local function hdDraw(rec, bx, by, bsx, bsy)
+  -- pinTo (screen y, optional): the frame's bottom is kept at least that low (a trainer cut
+  -- off by the text box stays cut there)
+  local function hdDraw(rec, bx, by, bsx, bsy, pinTo)
     local X, Y, hpx, hpy, k, tex, quad = place(rec)
+    if pinTo then
+      local fh
+      if quad then
+        local _
+        _, _, _, fh = quad:getViewport()
+      elseif tex.getHeight then
+        fh = tex:getHeight()
+      end
+      if fh then
+        local bottom = by + (Y + (fh - hpy) * rec.sy * k * rec.tsy) * bsy
+        if bottom < pinTo then by = by + (pinTo - bottom) end
+      end
+    end
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
     real.setShader(rec.shader)
     real.setBlendMode(rec.blend[1], rec.blend[2])
@@ -419,6 +472,20 @@ function HD.new(G, opts)
       real.draw(tex, quad, SX, SY, rec.r, ssx, ssy, hpx, hpy)
     else
       real.draw(tex, SX, SY, rec.r, ssx, ssy, hpx, hpy)
+    end
+  end
+
+  -- a recorded plain image (a pad) at window resolution, mapped by (bx, by, bsx, bsy)
+  local function imageDraw(rec, bx, by, bsx, bsy)
+    real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
+    real.setShader(rec.shader)
+    real.setBlendMode(rec.blend[1], rec.blend[2])
+    local X, Y = rec.tx + rec.x * rec.tsx, rec.ty + rec.y * rec.tsy
+    local sx, sy = rec.sx * rec.tsx * bsx, rec.sy * rec.tsy * bsy
+    if rec.quad then
+      real.draw(rec.image, rec.quad, bx + X * bsx, by + Y * bsy, rec.r, sx, sy, rec.ox, rec.oy)
+    else
+      real.draw(rec.image, bx + X * bsx, by + Y * bsy, rec.r, sx, sy, rec.ox, rec.oy)
     end
   end
 
@@ -478,35 +545,168 @@ function HD.new(G, opts)
   end
   self.fitZoom = fitZoom
 
-  -- the stage zoom for this frame: the zoom that fits the tallest tagged sprite, eased
+  -- a tagged draw's body box (spec.body = {x0, y0, x1, y1}, frame pixels) in canvas pixels
+  local function bodyRect(rec)
+    local b = rec.spec.body
+    local X, Y, hpx, hpy, k = place(rec)
+    local sx, sy = rec.sx * k * rec.tsx, rec.sy * k * rec.tsy
+    local xa, xb = X + (b[1] - hpx) * sx, X + (b[3] - hpx) * sx
+    local ya, yb = Y + (b[2] - hpy) * sy, Y + (b[4] - hpy) * sy
+    return math.min(xa, xb), math.min(ya, yb), math.max(xa, xb), math.max(ya, yb)
+  end
+
+  local function overlap(a0, a1, b0, b1) return math.max(0, math.min(a1, b1) - math.max(a0, b0)) end
+
+  -- how much of the rectangle (canvas px, unzoomed), seen at zoom z raised by lift, is under
+  -- the enemy's HP box, and under the player's side (its HP box and the text box); and its top
+  local function hidden(r, z, lift)
+    local fit = self.fit
+    local fx, fy = fit.focus[1], fit.focus[2]
+    local x0, x1 = fx + (r[1] - fx) * z, fx + (r[3] - fx) * z
+    local y0, y1 = fy + (r[2] - fy) * z - lift, fy + (r[4] - fy) * z - lift
+    local area = math.max(1e-6, (x1 - x0) * (y1 - y0))
+    local function under(u) return overlap(x0, x1, u[1], u[3]) * overlap(y0, y1, u[2], u[4]) end
+    return under(fit.ui.enemy) / area, (under(fit.ui.player) + under(fit.ui.text)) / area, y0
+  end
+  self.fitHidden = hidden
+
+  --- The camera for a frame: the largest zoom (and with it the least rise past the enemy's
+  --- feet) that keeps the enemy's art under the top of the screen with its feet above the
+  --- player's HP box, and for each of the player's Pokemon (`backs`, resting body rects):
+  ---   * its whole animation (r.top, a head flung up) on the screen, always;
+  ---   * headroom: its body's top no higher than backTopMin, the tallest cart back sprite's
+  ---     (which also keeps its head out from under the enemy's HP box);
+  ---   * at most maxHiddenOwn of its body under its own side's UI, if any camera manages it.
+  --- When no camera gives the headroom, at most maxHidden of the body may sit under the enemy's
+  --- HP box instead. top: the enemy art's top (math.huge: none). Returns the zoom and the rise.
+  local solved, solvedCount = {}, 0
+  local function fitSolveRaw(top, backs)
+    local fit = self.fit
+    local fy = fit.focus[2]
+    local zFront = math.max(fit.zMin, fitZoom(top))
+    if #backs == 0 then return zFront, 0 end
+    -- levels, strictest first: { headroom, own side mostly in view }
+    local levels = { { true, true }, { true, false }, { false, true }, { false, false } }
+    local function fits(z, lift, level)
+      for _, r in ipairs(backs) do
+        local underEnemy, underOwn, y0 = hidden(r, z, lift)
+        local t = r.top and (fy + (r.top - fy) * z - lift) or y0
+        if y0 < fit.margin or t < fit.margin then return false end
+        if level[1] then
+          if y0 < fit.backTopMin then return false end
+        elseif underEnemy > fit.maxHidden then
+          return false
+        end
+        if level[2] and underOwn > fit.maxHiddenOwn then return false end
+      end
+      return true
+    end
+    for _, level in ipairs(levels) do
+      local z = zFront
+      while z >= fit.zMin - 1e-9 do
+        local base = fitLift(z)
+        local most = base + fit.extraMax
+        -- rising lifts the enemy too: its art's top must stay under the screen's
+        if top < math.huge then most = math.min(most, fy + (top - fy) * z - fit.margin) end
+        local lift = base
+        while lift <= most + 1e-9 do
+          if fits(z, lift, level) then return z, lift - base end
+          lift = lift + 1
+        end
+        z = z - fit.zStep
+      end
+    end
+    return zFront, 0
+  end
+
+  -- the same, remembered: an animation repeats its frames, so a frame's inputs recur
+  local function fitSolve(top, backs)
+    local fit = self.fit
+    local parts = { string.format("%.2f|%.3f", top, fit.zMin) }
+    for _, r in ipairs(backs) do
+      parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f", r[1], r[2], r[3], r[4], r.top or 0)
+    end
+    local key = table.concat(parts, ";")
+    local hit = solved[key]
+    if hit then return hit[1], hit[2] end
+    local z, e = fitSolveRaw(top, backs)
+    if solvedCount >= 256 then solved, solvedCount = {}, 0 end
+    solved[key] = { z, e }
+    solvedCount = solvedCount + 1
+    return z, e
+  end
+  self.fitSolve = fitSolve
+
+  -- the stage zoom for this frame: the camera that fits the tagged sprites, eased (out fast;
+  -- back in only after the target has stayed nearer for holdFrames)
   local function fitStep(cur)
     local fit = self.fit
-    local top = math.huge
+    local top, backs = math.huge, {}
+    local seen = {}
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" and item.name == "ui" then break end
-      if item.kind == "hd" then
-        local t = artTop(item.rec)
-        if t < top then top = t end
+      if item.kind == "hd" and not item.rec.spec.trainer then
+        local spec = item.rec.spec
+        if spec.side then seen[spec.side] = true end
+        if spec.side == "player" then
+          if spec.body then
+            local r = { bodyRect(item.rec) }
+            -- where the side shift puts it (only its x: which UI it is under)
+            if not item.rec.inAnim then
+              r[1], r[3] = r[1] + cur.shift.player, r[3] + cur.shift.player
+            end
+            if spec.top then r.top = artTop(item.rec) end
+            backs[#backs + 1] = r
+          end
+        else
+          local t = artTop(item.rec)
+          if t < top then top = t end
+        end
       end
     end
-    local zt = math.max(fit.zMin, fitZoom(top))
-    fit.target = zt
+    local zt, et = fitSolve(top, backs)
+    fit.target, fit.extraTarget = zt, et
     if fit.idle > 2 then
-      -- a new battle: start where it should be
-      fit.z, fit.hold = zt, 0
-    elseif zt < fit.z then
-      fit.z = math.max(zt, fit.z - math.max((fit.z - zt) * fit.outRate, 0.002))
-      fit.hold = 0
-    elseif zt > fit.z then
-      fit.hold = fit.hold + 1
-      if fit.hold >= fit.holdFrames then
+      -- a new battle: start where it should be, unshifted until its intro is over
+      fit.z, fit.extra, fit.hold = zt, et, 0
+      fit.shift.enemy, fit.shift.player = 0, 0
+    else
+      local outward = zt < fit.z or et > fit.extra
+      local inward = zt > fit.z or et < fit.extra
+      if outward then fit.hold = 0 elseif inward then fit.hold = fit.hold + 1 else fit.hold = 0 end
+      local settle = fit.hold >= fit.holdFrames
+      if zt < fit.z then
+        fit.z = math.max(zt, fit.z - math.max((fit.z - zt) * fit.outRate, 0.002))
+      elseif zt > fit.z and settle then
         fit.z = math.min(zt, fit.z + math.max((zt - fit.z) * fit.inRate, 0.001))
       end
-    else
-      fit.hold = 0
+      if et > fit.extra then
+        fit.extra = math.min(et, fit.extra + math.max((et - fit.extra) * fit.outRate, 0.2))
+      elseif et < fit.extra and settle then
+        fit.extra = math.max(et, fit.extra - math.max((fit.extra - et) * fit.inRate, 0.1))
+      end
     end
+    -- the side shift: back toward each side's unzoomed spot, as far as shiftMax allows
+    local fx = fit.focus[1]
+    local wantE, wantP = 0, 0
+    if fit.z < 1 and (seen.enemy or seen.player) then
+      local k = (1 - fit.z) / fit.z
+      wantE = math.min(fit.shiftMax, (fit.enemyX - fx) * k)
+      wantP = -math.min(fit.shiftMax, (fx - fit.playerX) * k)
+    end
+    fit.shift.enemy, fit.shift.player = wantE, wantP
     fit.idle = 0
-    self.stats.zoom, self.stats.zoomTarget = fit.z, zt
+    self.stats.zoom, self.stats.zoomTarget, self.stats.extraLift = fit.z, zt, fit.extra
+    self.stats.shiftEnemy, self.stats.shiftPlayer = fit.shift.enemy, fit.shift.player
+    -- the most of any player's Pokemon's body hidden under each UI, as drawn this frame
+    -- and the highest body top (canvas px; headroom asks for backTopMin or lower)
+    local he, ho, bt = 0, 0, math.huge
+    for _, r in ipairs(backs) do
+      local e, o, y0 = hidden(r, fit.z, fitLift(fit.z) + fit.extra)
+      he, ho, bt = math.max(he, e), math.max(ho, o), math.min(bt, y0)
+    end
+    self.stats.hiddenEnemyUI, self.stats.hiddenOwnUI = he, ho
+    self.stats.backTop = bt < math.huge and bt or nil
     return fit.z
   end
 
@@ -518,10 +718,14 @@ function HD.new(G, opts)
     local cur = self.done[canvas]
     if not cur then return false end
     local fit = self.fit
-    local z = 1
-    if cur.pass == "battle" and cur.hasUI and fit.enabled then z = fitStep(cur) end
+    local z, lift = 1, 0
+    local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled
+    if fitted then
+      z = fitStep(cur)
+      lift = fitLift(z) + fit.extra
+    end
+    local moved = z ~= 1 or lift ~= 0
     local zb = 1 - (1 - z) * fit.parallax
-    local lift = fitLift(z)
     -- canvas pixels -> screen, zoomed by k about the focus and raised by `up` canvas pixels
     local function zoomed(k, up)
       return bx + fit.focus[1] * bsx * (1 - k), by + (fit.focus[2] * (1 - k) - up) * bsy, bsx * k, bsy * k
@@ -532,12 +736,12 @@ function HD.new(G, opts)
     local bkx, bky, bksx, bksy = zoomed(zb, 0)
     self.stats.lift = lift
     local inScene = true
-    if z == 1 then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy) end
+    if not moved then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy) end
     real.push("all")
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" then
         if item.name == "ui" then inScene = false end
-      elseif item.kind == "hd" or item.kind == "backdrop" then
+      elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" then
         if box then real.setScissor(box[1], box[2], box[3], box[4]) else real.setScissor() end
         if item.kind == "backdrop" then
           if inScene then
@@ -545,8 +749,18 @@ function HD.new(G, opts)
           else
             drawBackdrop(item.rec, cur.w, cur.h, bx, by, bsx, bsy, bx, by, bsx, bsy)
           end
+        elseif item.kind == "stage" then
+          local d = (fitted and cur.shift[item.side]) or 0
+          imageDraw(item.rec, sx0 + d * ssx, sy0, ssx, ssy)
         elseif inScene then
-          hdDraw(item.rec, sx0, sy0, ssx, ssy)
+          -- a battler drawn by the battle itself moves with its side's shift; one drawn by a
+          -- move animation is already where the shifted coordinates put it
+          local spec = item.rec.spec
+          local side = spec.side
+          local d = (fitted and side and not item.rec.inAnim and cur.shift[side]) or 0
+          -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
+          local pin = fitted and spec.pinBottom and (by + spec.pinBottom * bsy) or nil
+          hdDraw(item.rec, sx0 + d * ssx, sy0, ssx, ssy, pin)
         else
           hdDraw(item.rec, bx, by, bsx, bsy)
         end
@@ -555,7 +769,7 @@ function HD.new(G, opts)
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        if inScene and not item.screen and z ~= 1 then
+        if inScene and not item.screen and moved then
           blit(item.canvas, sx0, sy0, ssx, ssy)
         else
           blit(item.canvas)
@@ -585,7 +799,7 @@ function HD.new(G, opts)
     real.origin()
     real.setScissor()
     for _, item in ipairs(cur.items) do
-      if item.kind == "hd" or item.kind == "backdrop" then
+      if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" then
         local rec = item.rec
         real.push()
         real.translate(rec.tx, rec.ty)

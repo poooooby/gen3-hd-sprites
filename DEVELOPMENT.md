@@ -57,7 +57,42 @@ The target zoom:
   feet on 76. The target is then `(76 - margin) / (72 - T)`.
 - Either target is clamped to `[zMin, 1]`. `zMin` is 0.5 for Fit Sprites and 0.4 for Fit Tall
   Too. The wallpaper does not rise: its rows below y = 112 are hidden by the text box on the cart, so its bottom edge stays on the text box line.
+- **The player's own Pokémon** is a tag with `side = "player"` and a `body` box (its resting
+  pose). With one in the scene, the camera is the largest zoom, with the least extra rise (up
+  to `fit.extraMax`, 48 px), that keeps:
+  - **The whole animation on screen, always:** its art top over the whole animation (`top`)
+    stays under the screen's top. A head Blacephalon throws only has to stay on the screen.
+  - **Headroom:** the resting body's top is no higher than `fit.backTopMin` = 52. That is
+    where the tallest cart back sprites start (Tyranitar, Steelix and Meganium: row 0 of the
+    64×64 back box, centred at y = 80 + 4). It is 8 px below the enemy's HP box (y 16–44), so
+    the head never sits behind it.
+  - **The player's own side:** at most `fit.maxHiddenOwn` (30%) of the body under the
+    player's HP box plus the text box and everything below it (`fit.ui.player`, `fit.ui.text`).
+
+  Levels are relaxed in order: own side first, then headroom. Without headroom, at most
+  `fit.maxHidden` (half) of the body may sit under the enemy's box. The search steps the zoom
+  down from the enemy's own fit in `fit.zStep` (0.005) steps, and the rise in 1 px steps.
+  Below about 90% zoom the enemy's feet rise also lifts the player's Pokémon, and the search
+  accounts for it. The rise is capped where the enemy's art would leave the screen's top.
+  Results are remembered by their inputs, since an animation repeats its frames.
+- **Side shift:** zoomed out, the two Pokémon and their pads crowd the middle, so each side
+  moves back toward its unzoomed spot. The enemy's spot is x 176 and the player's is x 72;
+  the shift is `(spot - 120) * (1 - z) / z`, capped at `fit.shiftMax` (40 canvas px) so an
+  effect drawn there stays inside the canvas. It follows the zoom from a battle's first frame,
+  so nothing moves when a turn starts. Singles only.
+  - **The library moves** the Pokémon, the pads (`hd.drawStage(image, x, y, side)`) and the
+    trainers. `src/engine.lua` tags the `TrainerPic.front` / `back` images with
+    `side, trainer = true`. The player's back pic also gets `pinBottom = 112`: its frame's
+    bottom is kept on the text box's line however the camera rises, so its cut stays hidden.
+  - **The engine's coordinates move too,** before each battle frame:
+    - `AnimCoords.SINGLES`, which move animations aim at;
+    - `Anim.ENEMY_MON` / `PLAYER_MON` (ball targets, the catch, a switch);
+    - `Pokedude.sendOutOrigin`, where the player's ball leaves the trainer's hand.
+  - **Double-shift guard:** a Pokémon drawn inside `Anim.drawParticles` (an afterimage, a
+    move's copy of it) is flagged `inAnim` and not shifted again.
+  - **Not fitted:** trainers are left out of the fit itself.
 - The zoom snaps to the target at a battle's first frame and eases out about 20% per frame.
+  The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
   frames.
 - A frame with no UI seam (the post-catch Pokédex scene) is not zoomed.
@@ -106,12 +141,14 @@ end
 | `quadPivots` | `{ [quad] = {x, y, scale} }`: a draw through one of these quads scales about its own quad-local point (and, with `scale`, at its own size; `1` = a slice already drawn at its final size). Read at draw time, so it may grow. Check `features.quadPivots` |
 | `filter` | `"nearest"` (default) or `"linear"` |
 | `top` | the first row of art in the frame (quad pixels), the highest over the animation: Battle Fit fits the art, not the frame's empty margin (default 0) |
+| `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
+| `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
 
 Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true }`),
 `fitEnabled()`, `setFit("off" | "fit" | "tall")`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
-`zoomTarget`, `lift`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
+`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 
 ## Tests

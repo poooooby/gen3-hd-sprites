@@ -32,6 +32,12 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
   the move effects shrink with it, so the scene keeps its perspective. The camera also rises,
   so the opponent never sinks behind your HP bar, and your own platform shows whole instead of
   cut off at the text box.
+- 🐋 **Your Pokémon too:** A big Pokémon of yours stays in view. It never stands taller than the
+  biggest original back sprites, so its head keeps clear of the opponent's HP bar. At least 70%
+  of it stays clear of your HP bar and the text box, and its whole animation stays on screen.
+- ↔️ **Fills the screen:** When the camera pulls back, the two Pokémon, their platforms and the
+  trainers spread back out toward the sides from the first moment of the battle, and the
+  attacks follow them. Your trainer stays planted on the text box, just like the original.
 - 🧭 **The UI stays put:** The text box, menus and HP bars never move or shrink, and stay crisp.
 - 🌄 **Depth:** The far background pulls back less than the platforms, like a real camera.
 - 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment
