@@ -1,7 +1,7 @@
 {
   "id": "gen3-hd-sprites",
   "name": "Gen 3 HD Sprites",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "api": 2,
   "entry": "main.lua",
   "options_schema": "options.lua",
@@ -18,6 +18,6 @@
   "optional_dependencies": [],
   "conflicts": [],
   "incompatible": [],
-  "description": "Library for sprite mods: draws the battle, Pokedex and overworld Pokemon they tag at your screen's full resolution, at any size, on FireRed, LeafGreen, Ruby, Sapphire and Emerald. Does nothing on its own.",
+  "description": "Library for sprite mods: draws the battle, Pokedex and overworld Pokemon they tag at your screen's full resolution, at any size, on FireRed, LeafGreen, Ruby, Sapphire and Emerald, and pulls the battle camera back so tall Pokemon fit (Battle Fit). Does nothing on its own.",
   "github": "poooooby/gen3-hd-sprites"
 }
