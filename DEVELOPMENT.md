@@ -256,8 +256,10 @@ end
 | `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
 | `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
 
-Also `untag(image)`, `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true }`),
+Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
+draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
+texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `grow`, `inward`, `topY`, `uiK`,
