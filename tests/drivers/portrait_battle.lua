@@ -39,9 +39,11 @@ local function body(game, log)
   if not hd then log("FAIL gen3-hd-sprites exports missing"); return end
   log("hd active:", hd.isActive(), "fit:", hd.fitEnabled(), "fill:", hd.fillEnabled())
   -- keep the touch surface mod out of the way: no cutout, no split
-  loader.modOptions.ds_touch = loader.modOptions.ds_touch or {}
-  loader.modOptions.ds_touch.display = "off"
-  loader.modOptions.ds_touch.refresh = false      -- no care prompt after the battle
+  for _, id in ipairs({ "play_nav", "ds_touch" }) do   -- PlayNav, ds_touch before 0.3.0
+    loader.modOptions[id] = loader.modOptions[id] or {}
+    loader.modOptions[id].display = "off"
+    loader.modOptions[id].refresh = false   -- no care prompt after the battle
+  end
   local BattleAPI = require("src.battle.game3.BattleAPI")
   local bapi = BattleAPI.new(game)
   local intent = 0
