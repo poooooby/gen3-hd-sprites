@@ -29,6 +29,10 @@
 --                                               when it can, at most 30% of it under the
 --                                               player's HP box and text box
 --   untag(image)
+--   tagOf(image)          the spec an image was tagged with, or nil: a mod that draws a tagged
+--                         pic outside the battle, field and Pokedex passes (PlayNav's Super
+--                         Training rides the player's back pic on its own top screen) can draw
+--                         the full-resolution texture itself instead of the low-res stand-in
 --   isActive()            the engine seams were found and wrapped
 --   enabled(pass)         "battle", "field" or "dex" (the Pokedex screens): is it on (the
 --                         player's options)
@@ -50,9 +54,10 @@
 return function(mod, hd, state)
   local exports = {}
   exports.version = 2
-  exports.features = { quadPivots = true, dex = true, battleFit = true }
+  exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
+  exports.tagOf = function(image) return hd.tagOf(image) end
   exports.isActive = function() return state.active == true end
   exports.enabled = function(pass) return state.active == true and hd.enabled[pass] == true end
   exports.setEnabled = function(pass, on)
