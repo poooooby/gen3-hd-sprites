@@ -1,7 +1,7 @@
 {
   "id": "gen3-hd-sprites",
   "name": "Gen 3 HD Sprites",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "api": 2,
   "entry": "main.lua",
   "options_schema": "options.lua",

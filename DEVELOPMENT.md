@@ -18,6 +18,24 @@ order is kept exactly: the battle HUD, text box, menus and fades stay on top; in
 and tree tops still cover what walks under them, and the player and NPCs still sort against
 tagged Pokémon.
 
+**Shaders.** A recorded sprite is drawn later than the game asked, and the game often shares
+one shader between draws (both battlers' blend, the stat change's darken and pattern passes).
+So `Shader:send` / `sendColor` are wrapped (once, through a probe shader's method table) to
+remember what each shader was last sent; each recorded draw keeps a copy and replays it, and
+the latest values are put back after the composite or flatten. Two shaders work in the drawn
+image's own pixels, which the HD texture would blow up into giant blocks, so for an HD draw
+their uniforms are remapped (`PIXEL_SHADERS` in `src/hd.lua`, told apart by their uniforms):
+
+- **The stat-change pattern** (`origin`, `size`, `flip`, `maskTex`; Sand Attack, Growl, any
+  stat change): `origin` / `size` are recomputed so each HD texel reads the pattern at the
+  battle pixel it covers, `flip` 0 (the mapping's sign mirrors it).
+- **Mosaic** (`texSize`, `block`; Transform): the HD texture's size, and `block` in its texels.
+
+**Part of a pic.** A tagged pic drawn through a quad of its own (a `texture` + `quad` spec, the
+quad not in `quadPivots`) is part of the pic: the engine draws a pic row by row, each row shifted,
+for Rapid Spin, Spite, Extrasensory, Dig and a ghost wave. Each such draw keeps the whole pic's
+pivot and draws only the matching strip of the HD frame, so the rows rebuild the frame.
+
 When a frame can't be composited that way it is drawn the usual low-res way, so nothing is ever
 lost: a canvas swapped out mid-pass (Ruby/Sapphire/Emerald weather that reads the field), tilt
 mode, a battle transition, or more tagged draws in one frame than the cap (8 in battle and the

@@ -28,11 +28,44 @@
 -- (parallax, drawn wrapped so no edge shows) and the UI is blitted as it always is. A draw
 -- that covers the whole scene (a move's background, a flash) gets a layer of its own that is
 -- not zoomed, so it still covers the view.
+--
+-- Shaders. A recorded draw is replayed later than it was asked for, and one shader is often
+-- shared (both battlers' blend, a stat change's two passes), so what each shader is sent is
+-- remembered (Shader:send is wrapped) and each draw replays with its own uniforms. A shader
+-- that works in the drawn image's own pixels (PIXEL_SHADERS, told by its uniforms) has them
+-- remapped for the HD texture, so its pattern or blocks keep the cart's pixel size.
 
 local HD = {}
 
 local PRIMITIVES = { "rectangle", "polygon", "line", "circle", "ellipse", "arc", "points",
                      "print", "printf", "drawInstanced", "drawLayer" }
+
+-- Shaders in the drawn image's pixels, by the uniforms they are sent. remap(u, m) gets the
+-- uniforms as sent (u[name][1]: the first value) and the HD draw's texture mapping m (its
+-- texcoords in the low-res image's: tl = a + th * b, each axis; the HD texture's size; HD
+-- texels per low-res pixel), and returns the uniforms to send instead ({ name = { values } }).
+local PIXEL_SHADERS = {
+  -- the stat-change pattern: pos = origin + tc * size (flip mirrors x), in the battle's pixels
+  { uniforms = { "origin", "size", "flip", "maskTex" }, remap = function(u, m)
+    local o, s, flip = u.origin[1], u.size[1], u.flip[1]
+    if type(o) ~= "table" or type(s) ~= "table" or type(flip) ~= "number" then return nil end
+    local ax, bx = m.ax, m.bx
+    if flip > 0.5 then ax, bx = 1 - ax, -bx end
+    return { origin = { { o[1] + ax * s[1], o[2] + m.ay * s[2] } },
+             size = { { bx * s[1], m.by * s[2] } }, flip = { 0 } }
+  end },
+  -- mosaic: blocks of `block` texels of a `texSize` texture
+  { uniforms = { "texSize", "block" }, remap = function(u, m)
+    local b = u.block[1]
+    if type(b) ~= "number" then return nil end
+    return { texSize = { { m.w, m.h } }, block = { b * m.texels } }
+  end },
+}
+
+local function sentAll(u, names)
+  for _, name in ipairs(names) do if not u[name] then return false end end
+  return true
+end
 
 local function isQuad(v)
   return type(v) == "userdata" or (type(v) == "table" and type(v.getViewport) == "function")
@@ -137,6 +170,87 @@ function HD.new(G, opts)
   }
   local real = {}
   self.real = real
+
+  -- ---------------------------------------------------------------- shaders
+
+  -- what each shader was last sent: sent[shader][name] = { fn = the send used, n, values... }
+  local sent = setmetatable({}, { __mode = "k" })
+  local shaderMethods, shaderReal = nil, {}
+
+  -- wrap Shader:send / sendColor (one method table for every shader) to remember each send
+  local function trackShaders()
+    local probe = G.newShader("vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) { return Texel(t, tc) * c; }")
+    local mt = getmetatable(probe)
+    local methods = mt and (type(mt.__index) == "table" and mt.__index or mt)
+    if not (methods and type(methods.send) == "function") then return end
+    shaderMethods = methods
+    for _, name in ipairs({ "send", "sendColor" }) do
+      local fn = methods[name]
+      if type(fn) == "function" then
+        shaderReal[name] = fn
+        methods[name] = function(sh, uniform, ...)
+          local res = { fn(sh, uniform, ...) }
+          local v = { fn = fn, n = select("#", ...), ... }
+          -- a vector or array is copied (it may be reused and changed); anything else is kept
+          for i = 1, v.n do
+            if type(v[i]) == "table" and v[i][1] ~= nil then
+              local copy = {}
+              for k, x in pairs(v[i]) do copy[k] = x end
+              v[i] = copy
+            end
+          end
+          local u = sent[sh]
+          if not u then
+            u = {}
+            sent[sh] = u
+          end
+          u[uniform] = v
+          return unpack(res)
+        end
+      end
+    end
+  end
+
+  local function resend(sh, name, v)
+    pcall(v.fn, sh, name, unpack(v, 1, v.n))
+  end
+
+  -- shaders a composite or flatten sent old uniforms to: put back to their latest after it
+  local touched = {}
+  local function restoreShaders()
+    for sh in pairs(touched) do
+      for name, v in pairs(sent[sh] or {}) do resend(sh, name, v) end
+      touched[sh] = nil
+    end
+  end
+
+  -- set a recorded draw's shader with the uniforms it was drawn with; m: the HD draw's texture
+  -- mapping (texMap), for a shader in the image's own pixels
+  local function useShader(rec, m)
+    local sh = rec.shader
+    real.setShader(sh)
+    local u = rec.uniforms
+    if not (sh and u) then return end
+    local over
+    if m then
+      for _, p in ipairs(PIXEL_SHADERS) do
+        if sentAll(u, p.uniforms) then
+          local ok, res = pcall(p.remap, u, m)
+          over = ok and res or nil
+          break
+        end
+      end
+    end
+    touched[sh] = true
+    for name, v in pairs(u) do
+      local o = over and over[name]
+      if o and shaderReal.send then
+        pcall(shaderReal.send, sh, name, unpack(o))
+      else
+        resend(sh, name, v)
+      end
+    end
+  end
 
   -- ------------------------------------------------------------------ tags
 
@@ -315,11 +429,17 @@ function HD.new(G, opts)
     local _, t2y = real.transformPoint(0, 1)
     local cr, cg, cb, ca = real.getColor()
     local bm, am = real.getBlendMode()
+    local shader = real.getShader()
+    local uniforms
+    if shader and sent[shader] then
+      uniforms = {}
+      for name, v in pairs(sent[shader]) do uniforms[name] = v end
+    end
     return {
       spec = spec, image = image, quad = quad,
       x = x, y = y or 0, r = r or 0, sx = sx or 1, sy = sy or (sx or 1), ox = ox or 0, oy = oy or 0,
       tx = t0x, ty = t0y, tsx = t1x - t0x, tsy = t2y - t0y,
-      color = { cr, cg, cb, ca }, shader = real.getShader(), blend = { bm, am },
+      color = { cr, cg, cb, ca }, shader = shader, uniforms = uniforms, blend = { bm, am },
     }
   end
 
@@ -423,6 +543,8 @@ function HD.new(G, opts)
     end
     -- optional: the wallpaper is drawn wrapped through a quad of our own
     if type(G.newQuad) == "function" then real.newQuad = G.newQuad end
+    -- optional: each recorded draw replays with the shader uniforms it was drawn with
+    if type(G.newShader) == "function" and not shaderMethods then pcall(trackShaders) end
     G.draw = wrappedDraw
     G.setCanvas = wrappedSetCanvas
     G.pop = wrappedPop
@@ -437,6 +559,10 @@ function HD.new(G, opts)
   function self.uninstall()
     if not self.installed then return end
     for name, fn in pairs(real) do G[name] = fn end
+    if shaderMethods then
+      for name, fn in pairs(shaderReal) do shaderMethods[name] = fn end
+      shaderMethods, shaderReal = nil, {}
+    end
     self.installed = false
   end
 
@@ -587,12 +713,23 @@ function HD.new(G, opts)
       lpx, lpy, hpx, hpy = lp[1], lp[2], hp[1], hp[2]
     end
     local k = (qp and qp[3]) or spec.scale or 1
+    -- a part of the pic drawn on its own (its rows one by one, each shifted: Rapid Spin,
+    -- Extrasensory, Dig): the pivot is the whole pic's, and the HD frame is cut to that part
+    -- (cut: {x0, y0, x1, y1} in the HD texture's pixels)
+    local ox, oy, cut = rec.ox, rec.oy, nil
+    if spec.texture and spec.quad and rec.quad and not qp then
+      local vx, vy, vw, vh = rec.quad:getViewport()
+      ox, oy = ox + vx, oy + vy
+      local fx, fy, fw, fh = spec.quad:getViewport()
+      cut = { math.max(fx, fx + hpx + (vx - lpx) / k), math.max(fy, fy + hpy + (vy - lpy) / k),
+              math.min(fx + fw, fx + hpx + (vx + vw - lpx) / k), math.min(fy + fh, fy + hpy + (vy + vh - lpy) / k) }
+    end
     -- where the low-res draw put that point, in the pass canvas's pixels
-    local dx, dy = (lpx - rec.ox) * rec.sx, (lpy - rec.oy) * rec.sy
+    local dx, dy = (lpx - ox) * rec.sx, (lpy - oy) * rec.sy
     local cs, sn = math.cos(rec.r), math.sin(rec.r)
     local px = rec.x + dx * cs - dy * sn
     local py = rec.y + dx * sn + dy * cs
-    return rec.tx + px * rec.tsx, rec.ty + py * rec.tsy, hpx, hpy, k, tex, quad
+    return rec.tx + px * rec.tsx, rec.ty + py * rec.tsy, hpx, hpy, k, tex, quad, cut
   end
 
   -- the top of a tagged draw's art, in pass-canvas pixels (spec.top: its first row of art
@@ -621,10 +758,46 @@ function HD.new(G, opts)
     return X - hpx * s, X + (fw - hpx) * s
   end
 
+  -- an HD draw's texcoords in the low-res image's (tl = a + th * b, each axis), its texture's
+  -- size and its texels per low-res pixel, for a shader in the image's own pixels; nil when
+  -- it cannot tell (rotated, no sizes)
+  local function texMap(rec, X, Y, hpx, hpy, k, tex, quad)
+    local img = rec.image
+    if rec.r ~= 0 or rec.sx == 0 or rec.sy == 0 or rec.tsx == 0 or rec.tsy == 0 or k == 0 then return nil end
+    if not (tex.getWidth and img.getWidth) then return nil end
+    local PW, PH = tex:getWidth(), tex:getHeight()
+    local LW, LH = img:getWidth(), img:getHeight()
+    local qx, qy, lqx, lqy = 0, 0, 0, 0
+    if quad then qx, qy = quad:getViewport() end
+    if rec.quad then lqx, lqy = rec.quad:getViewport() end
+    -- HD texel u lands at canvas X + (u - qx - hpx) * s; the low-res draw put its pixel lx at
+    -- rec.tx + (rec.x + (lx - rec.ox) * rec.sx) * rec.tsx: so lx = lx0 + u * k
+    local s, sy = rec.sx * k * rec.tsx, rec.sy * k * rec.tsy
+    local lx0 = rec.ox + ((X - (qx + hpx) * s - rec.tx) / rec.tsx - rec.x) / rec.sx
+    local ly0 = rec.oy + ((Y - (qy + hpy) * sy - rec.ty) / rec.tsy - rec.y) / rec.sy
+    return { ax = (lqx + lx0) / LW, bx = PW * k / LW, ay = (lqy + ly0) / LH, by = PH * k / LH,
+             w = PW, h = PH, texels = 1 / k }
+  end
+
   -- pinTo (screen y, optional): the frame's bottom is put exactly there (a trainer cut off by
   -- the text box stands on it, so it still reads as a whole sprite behind the box)
+  local cutQuad
   local function hdDraw(rec, bx, by, bsx, bsy, pinTo)
-    local X, Y, hpx, hpy, k, tex, quad = place(rec)
+    local X, Y, hpx, hpy, k, tex, quad, cut = place(rec)
+    -- a part of the pic: only that part of the HD frame, about the same pivot
+    if cut and real.newQuad and tex.getWidth then
+      if cut[3] <= cut[1] or cut[4] <= cut[2] then return end
+      local fx, fy = quad:getViewport()
+      local tw, th = tex:getWidth(), tex:getHeight()
+      if cutQuad and cutQuad.setViewport then
+        cutQuad:setViewport(cut[1], cut[2], cut[3] - cut[1], cut[4] - cut[2], tw, th)
+      else
+        cutQuad = real.newQuad(cut[1], cut[2], cut[3] - cut[1], cut[4] - cut[2], tw, th)
+      end
+      quad = cutQuad
+      hpx, hpy = hpx - (cut[1] - fx), hpy - (cut[2] - fy)
+    end
+    local m = rec.uniforms and texMap(rec, X, Y, hpx, hpy, k, tex, quad)
     if pinTo then
       local fh
       if quad then
@@ -639,7 +812,7 @@ function HD.new(G, opts)
       end
     end
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
-    real.setShader(rec.shader)
+    useShader(rec, m)
     real.setBlendMode(rec.blend[1], rec.blend[2])
     local SX, SY = bx + X * bsx, by + Y * bsy
     local ssx, ssy = rec.sx * k * rec.tsx * bsx, rec.sy * k * rec.tsy * bsy
@@ -653,7 +826,7 @@ function HD.new(G, opts)
   -- a recorded plain image (a pad) at window resolution, mapped by (bx, by, bsx, bsy)
   local function imageDraw(rec, bx, by, bsx, bsy)
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
-    real.setShader(rec.shader)
+    useShader(rec)
     real.setBlendMode(rec.blend[1], rec.blend[2])
     local X, Y = rec.tx + rec.x * rec.tsx, rec.ty + rec.y * rec.tsy
     local sx, sy = rec.sx * rec.tsx * bsx, rec.sy * rec.tsy * bsy
@@ -675,7 +848,7 @@ function HD.new(G, opts)
   local function drawBackdrop(rec, cw, ch, bx, by, bsx, bsy, fx, fy, fsx, fsy, wrapV)
     local img = rec.image
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
-    real.setShader(rec.shader)
+    useShader(rec)
     real.setBlendMode(rec.blend[1], rec.blend[2])
     local iw, ih = img.getWidth and img:getWidth(), img.getHeight and img:getHeight()
     if not (real.newQuad and iw and ih) then
@@ -1320,6 +1493,7 @@ function HD.new(G, opts)
       end
     end
     real.pop()
+    restoreShaders()
     self.stats.composites = self.stats.composites + 1
     return true
   end
@@ -1347,7 +1521,7 @@ function HD.new(G, opts)
         real.translate(rec.tx, rec.ty)
         real.scale(rec.tsx, rec.tsy)
         real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
-        real.setShader(rec.shader)
+        useShader(rec)
         real.setBlendMode(rec.blend[1], rec.blend[2])
         if rec.quad then
           real.draw(rec.image, rec.quad, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
@@ -1364,6 +1538,7 @@ function HD.new(G, opts)
       end
     end
     real.pop()
+    restoreShaders()
     -- flattened in the middle of a pass: the engine carries on drawing into its own canvas
     if midPass then real.setCanvas(cur.base) end
     self.stats.flattened = self.stats.flattened + 1

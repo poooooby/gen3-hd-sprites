@@ -49,9 +49,21 @@ local function fakeGraphics()
   function G.setScissor() end
   function G.clear() G.log[#G.log + 1] = { op = "clear", target = st.canvas } end
   function G.newCanvas(w, h) made = made + 1; return canvas("layer" .. made, w, h) end
+  -- shaders share one method table, as LOVE's do; u: each uniform's first value as last sent
+  local shaderMethods = {}
+  function shaderMethods.send(sh, name, v) sh.u[name] = v end
+  function G.newShader(src) return setmetatable({ src = src, u = {} }, { __index = shaderMethods }) end
   function G.draw(img, ...)
+    local u
+    if st.shader then
+      u = {}
+      for k, v in pairs(st.shader.u) do u[k] = v end
+    end
+    -- vp: a quad's viewport as drawn (a quad may be reused for the next draw)
+    local q = ...
+    local vp = type(q) == "table" and q.getViewport and { q:getViewport() } or nil
     G.log[#G.log + 1] = { op = "draw", target = st.canvas, image = img, args = { ... },
-                          blend = st.blend[2] }
+                          blend = st.blend[2], uniforms = u, vp = vp }
   end
   function G.rectangle(mode, x, y, w, h)
     G.log[#G.log + 1] = { op = "rect", target = st.canvas, args = { mode, x, y, w, h } }
@@ -1025,6 +1037,126 @@ do
   check(mod.exports.fitEnabled(), "an old mode name still turns it on")
   mod.exports.setFit("off")
   check(not mod.exports.fitEnabled(), "...and 'off' off")
+end
+
+-- ---------------------------------- shaders replay with their own uniforms, remapped for HD
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 240, 160)
+  local monLow, monHD = canvas("pic", 64, 64), canvas("atlas", 4096, 4096)
+  local monQuad = quad(200, 100, 94, 94)
+  hd.tag(monLow, { texture = monHD, quad = monQuad, pivot = { 47, 90 }, scale = 0.5 })
+  local blend, mask, mosaic = G.newShader("blend"), G.newShader("mask"), G.newShader("mosaic")
+  local maskTex = canvas("maskTex", 256, 256)
+  local function frame(flip)
+    G.log = {}
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    -- both battlers through one blend shader, each with its own coefficient
+    blend:send("coeff", 3)
+    G.setShader(blend)
+    G.draw(monLow, 100, 50, 0, 1, 1, 32, 32)
+    G.rectangle()
+    blend:send("coeff", 9)
+    G.draw(monLow, 60, 80, 0, 1, 1, 32, 32)
+    G.rectangle()
+    -- the stat-change pattern, in the battle's pixels
+    mask:send("maskTex", maskTex)
+    mask:send("origin", { 68, 18 })
+    mask:send("size", { 64, 64 })
+    mask:send("flip", flip and 1 or 0)
+    G.setShader(mask)
+    G.draw(monLow, 100, 50, 0, flip and -1 or 1, 1, 32, 32)
+    G.rectangle()
+    -- mosaic, in the pic's texels
+    mosaic:send("texSize", { 64, 64 })
+    mosaic:send("block", 4)
+    G.setShader(mosaic)
+    G.draw(monLow, 100, 50, 0, 1, 1, 32, 32)
+    G.setShader()
+    blend:send("coeff", 12)                     -- the engine moves on before the composite
+    hd.endPass()
+    G.log = {}
+    hd.composite(base, function() end, 0, 0, 4, 4)
+    local hdDraws = {}
+    for _, e in ipairs(G.log) do if e.image == monHD then hdDraws[#hdDraws + 1] = e end end
+    return hdDraws
+  end
+
+  local d = frame(false)
+  check(#d == 4, "four HD draws, got " .. #d)
+  check(d[1] and d[1].uniforms.coeff == 3 and d[2] and d[2].uniforms.coeff == 9,
+    "each blend draw replays its own coefficient")
+  check(blend.u.coeff == 12, "after the composite the shader has what it was last sent")
+  -- the pattern's position at an HD texel equals the canvas x the HD draw puts it at
+  local u = d[3] and d[3].uniforms or {}
+  local function pos(th, axis) return u.origin[axis] + th * u.size[axis] end
+  check(u.flip == 0, "the pattern is sent unflipped")
+  check(u.origin and near(pos((200 + 47) / 4096, 1), 100) and near(pos((100 + 90) / 4096, 2), 50),
+    "the HD pivot reads the pattern where the low-res pic's centre did")
+  check(u.origin and near(pos((200 + 47 + 10) / 4096, 1), 105), "...10 HD texels on: 5 battle pixels on")
+  check(u.maskTex == maskTex, "...the other uniforms are replayed as sent")
+  local mu = d[4] and d[4].uniforms or {}
+  check(mu.texSize and mu.texSize[1] == 4096 and mu.texSize[2] == 4096, "mosaic is told the HD texture's size")
+  check(near(mu.block, 8), "...and blocks of 8 texels (4 pixels at 0.5)")
+  check(mosaic.u.block == 4 and mosaic.u.texSize[1] == 64, "...then put back")
+  hd.endFrame()
+
+  d = frame(true)
+  u = d[3] and d[3].uniforms or {}
+  check(u.origin and near(pos((200 + 47 + 10) / 4096, 1), 95), "flipped: 10 HD texels on is 5 battle pixels back")
+
+  -- flattened, the pic draws low-res: its uniforms as sent, not remapped
+  G.log = {}
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  mask:send("origin", { 68, 18 })
+  G.setShader(mask)
+  G.draw(monLow, 100, 50, 0, 1, 1, 32, 32)
+  G.setShader()
+  mask:send("origin", { 0, 0 })
+  hd.flatten(hd.cur)
+  local low
+  for _, e in ipairs(G.log) do if e.image == monLow then low = e end end
+  check(low and low.uniforms.origin[1] == 68, "flatten replays the uniforms the draw was made with")
+  check(mask.u.origin[1] == 0, "...then puts back the latest")
+end
+
+-- ----------------------- a pic drawn row by row (Rapid Spin, Extrasensory): each row its strip
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 240, 160)
+  local monLow, monHD = canvas("pic", 64, 64), canvas("atlas", 4096, 4096)
+  -- the HD frame: 128x128 at (200, 100), its pivot (64, 64) on the pic's (32, 32), at 0.5
+  hd.tag(monLow, { texture = monHD, quad = quad(200, 100, 128, 128), pivot = { 64, 64 }, scale = 0.5 })
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  for r = 0, 63 do
+    -- the engine's wave: each row of the pic on its own, shifted (pic top-left at y 18)
+    G.draw(monLow, quad(0, r, 64, 1), 100 + (r % 2), 18 + r, 0, 1, 1, 32, 0)
+  end
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function() end, 0, 0, 1, 1)
+  local rows = {}
+  for _, e in ipairs(G.log) do if e.image == monHD then rows[#rows + 1] = e end end
+  check(#rows == 64, "every row is drawn, got " .. #rows)
+  local okAll = true
+  for r = 0, 63 do
+    local a = rows[r + 1].args
+    local vx, vy, vw, vh = unpack(rows[r + 1].vp)
+    -- row r of the pic is HD rows 2r .. 2r+2 of the frame, all of its width
+    if not (near(vx, 200) and near(vy, 100 + 2 * r) and near(vw, 128) and near(vh, 2)) then okAll = false end
+    -- ... placed where the low-res row was: its top at 18 + r, its pivot column at 100 (+ shift)
+    local top = a[3] - a[8] * a[6]
+    local px = a[2]
+    if not (near(top, 18 + r) and near(px, 100 + (r % 2))) then okAll = false end
+  end
+  check(okAll, "each row draws only its own strip of the HD frame, where the row was")
 end
 
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))
