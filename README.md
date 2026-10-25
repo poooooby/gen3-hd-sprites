@@ -45,8 +45,9 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
   of the screen out to both sides.
 - 📱 **Made for phones held upright:** The text box and menus stretch the full width, sharp and
   even, right above the touch controls. The battle grows into the space above them, with
-  both Pokémon and both platforms always whole on screen. The two sides slide a little toward
-  each other so they can be bigger, without overlapping. Your Pokémon may stand in front of the foe's platform. The
+  both Pokémon and both platforms always whole on screen. With a sprite mod, the two sides
+  slide a little toward each other so they can be bigger, without overlapping, and your
+  Pokémon may stand in front of the foe's platform. The
   foe's HP box moves up out of the way, to just above the battle. With no controls on screen,
   the battle sits centred, with sky above and ground below.
 - 🧭 **The UI stays sharp:** The text box, menus and HP bars never shrink with the camera, and

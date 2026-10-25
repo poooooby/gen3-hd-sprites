@@ -626,6 +626,8 @@ do
   G.setCanvas(base)
   hd.beginPass("battle", base)
   hd.backdrop(wall, 0, 0)
+  -- (the engine reports the player's lead where it will rest, before its send-out)
+  hd.prefit("player", mine, 72, 80)
   G.draw(foe, 176, 40, 0, 1, 1, 32, 32)
   G.draw(trainer, tq, 80 - 32, 80 - 32)
   hd.seam("ui")
@@ -956,6 +958,42 @@ do
   frame({ 0, 0, 1920, 1080 })
   check(hd.stats.inward == 0 and fit.shift.enemy >= 0 and fit.shift.player <= 0,
     "wide: no slide (only the zoom's usual spread)")
+end
+
+-- no sprite mod: the Pokemon are drawn by the game where they always are, so nothing slides
+-- (their pads would leave them behind)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local fit = hd.fit
+  local base = canvas("ui", 240, 160)
+  local foe, mine = canvas("foe", 64, 64), canvas("mine", 64, 64)
+  local enemyPad, playerPad = canvas("epad", 256, 160), canvas("ppad", 256, 160)
+  local pads = {}
+  for _ = 1, 30 do
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(canvas("wall", 256, 160), 0, 0)
+    hd.drawStage(enemyPad, 0, 0, "enemy")
+    hd.drawStage(playerPad, 0, 0, "player")
+    G.draw(foe, 176, 40, 0, 1, 1, 32, 32)
+    G.draw(mine, 72, 80, 0, 1, 1, 32, 32)
+    hd.seam("ui")
+    G.rectangle("fill", 0, 112, 240, 48)
+    hd.endPass()
+    G.log = {}
+    hd.composite(base, function() end, 60, 100, 4, 4, { 60, 100, 960, 640 }, { 0, 0, 1080, 2400, bottom = 1500 })
+    hd.endFrame()
+    for _, e in ipairs(G.log) do if e.image == enemyPad then pads.enemy = e end end
+    for _, e in ipairs(G.log) do if e.image == playerPad then pads.player = e end end
+  end
+  check(hd.stats.inward == 0 and fit.shift.enemy == 0 and fit.shift.player == 0,
+    "untagged Pokemon on a tall screen: no slide (" .. tostring(fit.shift.enemy) .. ", " .. tostring(fit.shift.player) .. ")")
+  -- each pad drawn where the scene's own canvas puts x 0: with its Pokemon
+  local b = pads.enemy and pads.player
+  check(b and near(pads.enemy.args[1], pads.player.args[1]), "...both pads stay on the scene's own spots")
 end
 
 -- Fill Screen sits out a frame whose UI covers the whole canvas (a menu over the battle)

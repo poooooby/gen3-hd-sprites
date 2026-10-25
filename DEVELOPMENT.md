@@ -101,6 +101,9 @@ The target zoom:
   the shift is `(spot - 120) * (1 - z) / z`, capped at `fit.shiftMax` (40 canvas px) so an
   effect drawn there stays inside the canvas. It follows the zoom from a battle's first frame,
   so nothing moves when a turn starts. Singles only.
+  - **Only a tagged side moves:** a side shifts only when its Pokémon is a tagged draw that
+    frame (drawn, or reported by `hd.prefit`). An untagged Pokémon (no sprite mod) is drawn by
+    the game where it always is, so its pad and the engine's coordinates stay there too.
   - **The library moves** the Pokémon, the pads (`hd.drawStage(image, x, y, side)`) and the
     trainers. `src/engine.lua` tags the `TrainerPic.front` / `back` images with
     `side, trainer = true`. The player's back pic also gets `pinBottom = 112`. Its frame's
@@ -221,6 +224,8 @@ already covers the view.
     - The player's share stops at its own HP box's left edge; the enemy takes the rest.
     - The slide is at most `fit.inwardMax` (48) canvas px in all, so each side stays near
       its own spot.
+    - Both Pokémon must be tagged; otherwise nothing slides, and the scene keeps both
+      platforms whole at the cart's layout.
   - **`fit.topY`,** the canvas y of the area's top in scene pixels (negative with sky above),
     is the highest art may rise, in `fitZoom` and the solver. So a tall foe rises into the
     sky instead of the camera pulling back.

@@ -1162,22 +1162,25 @@ function HD.new(G, opts)
         fit.extra = math.max(et, fit.extra - math.max((fit.extra - et) * fit.inRate, 0.1))
       end
     end
-    -- the side shift: back toward each side's unzoomed spot, as far as shiftMax allows
+    -- the side shift: back toward each side's unzoomed spot, as far as shiftMax allows. Only a
+    -- side whose Pokemon is tagged moves: an untagged one is drawn by the game where it always
+    -- is, so its pad (and the engine's coordinates) must stay there too
     local fx = fit.focus[1]
     local wantE, wantP = 0, 0
-    if fit.z < 1 and (seen.enemy or seen.player) then
+    if fit.z < 1 then
       local k = (1 - fit.z) / fit.z
-      wantE = math.min(fit.shiftMax, (fit.enemyX - fx) * k)
-      wantP = -math.min(fit.shiftMax, (fx - fit.playerX) * k)
+      if seen.enemy then wantE = math.min(fit.shiftMax, (fit.enemyX - fx) * k) end
+      if seen.player then wantP = -math.min(fit.shiftMax, (fx - fit.playerX) * k) end
     end
-    fit.shift.playerY = (fit.z < 1 and (seen.enemy or seen.player))
+    fit.shift.playerY = (fit.z < 1 and seen.player)
       and playerDrop(fit.z, fitLift(fit.z) + fit.extra) or 0
     fit.shift.playerRaise = backs[1]
       and backRaise(backs[1], fit.z, fitLift(fit.z) + fit.extra, fit.shift.playerY) or 0
     -- stacked, the width short of what growing to the top needs: the sides slide inward, as far
-    -- as they may without the Pokemon overlapping (canvas px before the zoom, split evenly)
+    -- as they may without the Pokemon overlapping (canvas px before the zoom, split evenly);
+    -- both Pokemon must be tagged, or one would be left behind its pad
     local inward = 0
-    if fit.wantW and eL < eR and pL < pR then
+    if fit.wantW and eL < eR and pL < pR and seen.enemy and seen.player then
       local z = fit.z
       local L, R = math.min(eL + wantE, pL + wantP), math.max(eR + wantE, pR + wantP)
       local need = ((R - L) * z - fit.wantW) / z
