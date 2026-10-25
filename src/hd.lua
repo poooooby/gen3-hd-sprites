@@ -1387,10 +1387,12 @@ function HD.new(G, opts)
     local split = fit.split
     -- the HP box drawn just above the highest art when the scene stops short of the top (the
     -- fit still sees it at the top: nothing it places comes up under it)
+    -- With no tagged art (no sprite mod) its top is not known: the box keeps its cart spot over
+    -- the scene, as if the art began just below it
     local dyDraw = dyTop
-    if stacked and fit.artTop then
-      local artY = cy + (fit.artTop - fy) * Sy
+    if stacked then
       local boxBottom = fit.ui.enemy[4] + 4
+      local artY = cy + ((fit.artTop or (boxBottom + fit.hugGap)) - fy) * Sy
       local want = (artY - (fit.hugGap * Sy) - boxBottom * Uy - uby) / Uy
       dyDraw = math.max(dyTop, math.min(0, round2(want)))
     end

@@ -853,15 +853,13 @@ do
   -- non-whole: each UI layer is drawn at 5x into a canvas of its own, blitted at 4.5/5
   local ui = {}
   for _, e in ipairs(blits) do if e.zk then ui[#ui + 1] = e end end
-  -- (two UI layers: the tagged draw splits them; each blitted as two bands)
-  check(#ui == 4 and ui[1].zk == 5 and near(ui[1].sx, U / 5) and ui[1].canvas:getWidth() == 1200,
+  -- (two UI layers: the tagged draw splits them; no Pokemon tagged, so no art to hug: each
+  -- blitted whole, the enemy's HP box in its cart spot over the scene)
+  check(#ui == 2 and ui[1].zk == 5 and near(ui[1].sx, U / 5) and ui[1].canvas:getWidth() == 1200,
     "...sharp: drawn at the next whole scale and scaled down")
-  local low, high = ui[4], ui[3]
-  check(low and near(low.by, 1500 - 160 * U) and near(low.bx, 0), "...its lower rows docked above the controls")
-  check(low and low.box and near(low.box[2], 1500 - 94 * U) and near(low.box[4], 94 * U),
-    "...clipped to the rows below the split")
-  check(high and approx(high.by, 40) and high.box and approx(high.box[2], 40) and near(high.box[4], 66 * U),
-    "...the top band (the enemy's HP box) at the top, below the notch")
+  local low = ui[2]
+  check(low and near(low.by, 1500 - 160 * U) and near(low.bx, 0), "...docked above the controls")
+  check(hd.stats.uiTopDy == 0, "no tagged art: the HP box keeps its cart spot over the scene")
   check(approx(hd.fit.uiTopDy, (40 - (1500 - 160 * U)) / U), "the fit sees the HP box moved up by " .. tostring(hd.fit.uiTopDy))
   -- nothing seen yet: the platforms (x 0 to 240) already span the width, so the scene stays
   -- at the UI's scale, its line on the text box
@@ -874,7 +872,7 @@ do
   local icon
   for _, e in ipairs(G.log) do if e.image == hpIcon then icon = e end end
   -- (placed about its default 32, 32 pivot)
-  check(icon and approx(icon.args[2], 40 + (20 + 32) * U), "a tagged UI draw in the top band moves with it")
+  check(icon and approx(icon.args[2], 1500 - 160 * U + (20 + 32) * U), "a tagged UI draw in the top band stays with it")
   local w
   for _, e in ipairs(G.log) do if e.image == wall then w = w or e end end
   check(w and w.args[3] <= 1e-6, "the wallpaper's sky covers the top of the screen")

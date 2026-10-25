@@ -203,7 +203,8 @@ already covers the view.
     - The fit sees that band at the top of the screen (`fit.uiTopDy`): its HP-box rect and the
       back headroom (`backTopMin`) move up with it.
     - It is drawn lower when the scene stops short of the top, `fit.hugGap` above the highest
-      art (`fit.artTop`, from `fitStep`).
+      art (`fit.artTop`, from `fitStep`). With no tagged art (no sprite mod) its top is not
+      known, so the box keeps its cart spot over the scene, and the block centres as one.
     - **The straddle guard:** a visible UI draw that crosses the split but does not cover the
       whole canvas (the level-up window, the intro's closing wipe) sets `cur.uiStraddle`. That
       frame's UI is drawn in one piece.
