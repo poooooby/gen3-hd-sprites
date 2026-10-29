@@ -1,14 +1,16 @@
 <div align="center">
 
-# Gen 3 HD Sprites 🖥️
+# WoobleView 🖥️
 
-*Crisp Pokémon at any size. Battle and overworld Pokémon drawn at your screen's full
-resolution in FireRed, LeafGreen, Ruby, Sapphire and Emerald.*
+*Sharp Pokémon and battles that fit any screen, in FireRed, LeafGreen, Ruby, Sapphire and
+Emerald.*
 
 </div>
 
-A library mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp)'s Generation 3 games.
-On its own it changes nothing; sprite mods that support it look sharper with it.
+A display mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp)'s Generation 3 games.
+On its own, battles fill your screen in any shape, from a widescreen monitor to a phone held
+upright. With a sprite mod that supports it, its Pokémon are drawn at your screen's full
+resolution, and the camera pulls back so even the biggest ones fit.
 
 ## ✨ Features
 
@@ -58,7 +60,7 @@ On its own it changes nothing; sprite mods that support it look sharper with it.
 
 ## ⚙️ Options
 
-Open **OPTIONS → MODS → Gen 3 HD Sprites**.
+Open **OPTIONS → MODS → WoobleView**.
 
 | Option | Choices | Default | What it does |
 |---|---|---|---|
@@ -73,19 +75,20 @@ Open **OPTIONS → MODS → Gen 3 HD Sprites**.
 1. Download the latest release from the
    [Releases](https://github.com/poooooby/gen3-hd-sprites/releases) page.
 2. Import it with the Gen1Recomp Mod Manager, or drop it in your mods folder.
-3. Enable it alongside a mod that uses it.
+3. Enable it. Add a sprite mod that supports it for full-resolution Pokémon.
 
 ## 🔗 Works With
 
-- [G9 Battle Sprites (Gen 3)](https://github.com/poooooby/g9-battle-sprites-gen3): sharp battle
+- [WoobleSpritePack](https://github.com/poooooby/g9-battle-sprites-gen3): sharp battle
   and Pokédex sprites, each Pokémon sized to match its original sprite.
 - [Wilds of Hoenn](https://github.com/poooooby/wilds-of-hoenn): wild Pokémon and your partner at
   their true relative sizes, with its **Species Sizes** and **Overworld Size** options.
 
 ## 📌 Good to Know
 
-- Battle Fit only reacts to Pokémon drawn by a sprite mod that uses this one. With the game's
-  own sprites, battles look exactly as they always have.
+- The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
+  the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
+  to your screen.
 - The camera pulls back to 40% at most, enough for the very biggest (Lugia, Koraidon).
 - A full-screen menu opened in a battle (a summary or a care screen) shows framed, like the
   original, while Fill Screen is on.

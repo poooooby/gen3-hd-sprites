@@ -1,6 +1,6 @@
 {
   "id": "gen3-hd-sprites",
-  "name": "Gen 3 HD Sprites",
+  "name": "WoobleView",
   "version": "0.4.12",
   "api": 2,
   "entry": "main.lua",
@@ -18,6 +18,6 @@
   "optional_dependencies": [],
   "conflicts": [],
   "incompatible": [],
-  "description": "Library for sprite mods: draws the battle, Pokedex and overworld Pokemon they tag at your screen's full resolution, at any size, on FireRed, LeafGreen, Ruby, Sapphire and Emerald, and pulls the battle camera back so tall Pokemon fit (Battle Fit). Does nothing on its own.",
+  "description": "Sharp Pokemon and battles that fit any screen on FireRed, LeafGreen, Ruby, Sapphire and Emerald. Fills the battle to your screen in any shape (Fill Screen). With a sprite mod that supports it, draws its battle, Pokedex and overworld Pokemon at your screen's full resolution and pulls the battle camera back so tall Pokemon fit (Battle Fit).",
   "github": "poooooby/gen3-hd-sprites"
 }

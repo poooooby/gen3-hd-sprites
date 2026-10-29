@@ -1,4 +1,7 @@
-# Gen 3 HD Sprites: developer guide
+# WoobleView: developer guide
+
+WoobleView's mod id is `gen3-hd-sprites` (the name it shipped under). Sprite mods find it by that
+id, so the id stays.
 
 For mod authors and contributors. Players only need the [README](README.md).
 
