@@ -467,8 +467,10 @@ function HD.new(G, opts)
   -- a tagged draw past the pass's cap: drawn on the pass's own pixels (no layer), but at the size
   -- and on the point the window-resolution one would have (place's pivot and scale), so a sized
   -- sprite keeps its size. A slice of a full-resolution frame (spec.texture drawn through a quad of
-  -- the low-res image) is drawn as it is. Returns false when it drew nothing
-  local function drawAtScale(image, spec, a, b, c, d, e, f, g, h)
+  -- the low-res image) is drawn as it is, and so is a full-resolution frame under a shader (its
+  -- uniforms are in the low-res image's pixels: a battle effect's mask or mosaic).
+  -- Returns false when it drew nothing
+  local function drawAtScale(shaded, image, spec, a, b, c, d, e, f, g, h)
     local quad, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
       quad, x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g, h
@@ -476,7 +478,7 @@ function HD.new(G, opts)
       x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
     end
     if type(x) ~= "number" then return false end
-    if spec.texture and quad then return false end
+    if spec.texture and (quad or shaded) then return false end
     y, r, sx, ox, oy = y or 0, r or 0, sx or 1, ox or 0, oy or 0
     sy = sy or sx
     local qp = spec.quadPivots and quad and spec.quadPivots[quad]
@@ -574,7 +576,7 @@ function HD.new(G, opts)
       -- a draw over the whole scene, or with fill over the whole UI (a fade), gets a layer of
       -- its own that covers the whole screen
       beforeDraw(uiScreen or (sceneFit() and drawCoversScene(image, ...)))
-      if overSpec and drawAtScale(image, overSpec, ...) then return end
+      if overSpec and drawAtScale(real.getShader() ~= nil, image, overSpec, ...) then return end
     end
     return real.draw(image, ...)
   end
@@ -1627,10 +1629,24 @@ function HD.new(G, opts)
         real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
         useShader(rec)
         real.setBlendMode(rec.blend[1], rec.blend[2])
-        if rec.quad then
-          real.draw(rec.image, rec.quad, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
-        else
-          real.draw(rec.image, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+        -- a tagged draw at its own size (a flattened field under a weather's colour pass, such as
+        -- Petalburg Woods' shade, keeps its sized sprites); a slice of a full-resolution frame, and
+        -- the stage and backdrop, as recorded
+        local drawn = false
+        if item.kind == "hd" then
+          if rec.quad then
+            drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, rec.quad, rec.x, rec.y, rec.r, rec.sx, rec.sy,
+              rec.ox, rec.oy)
+          else
+            drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+          end
+        end
+        if not drawn then
+          if rec.quad then
+            real.draw(rec.image, rec.quad, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+          else
+            real.draw(rec.image, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+          end
         end
         real.pop()
       elseif item.kind == "layer" then
