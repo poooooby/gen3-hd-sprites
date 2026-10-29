@@ -538,6 +538,23 @@ function HD.new(G, opts)
 
   local function wrappedDraw(image, ...)
     local cur = self.cur
+    -- the weather's colour pass drawing the field into its new canvas through its colour map
+    -- (colorMapStart): its shader and uniforms are kept for the composite, which maps the whole
+    -- field at window resolution, sprites and all; the new canvas is left clear for what the
+    -- weather draws over it (rain, a flash)
+    local cm = cur and cur.cm
+    if cm and cm.armed and isPassCanvas(image) and real.getCanvas() == cm.to then
+      cm.armed = false
+      cm.shader = real.getShader()
+      local u = {}
+      for name, v in pairs(cm.shader and sent[cm.shader] or {}) do
+        v.shared = true
+        u[name] = v
+      end
+      cm.uniforms = u
+      real.clear(0, 0, 0, 0)
+      return
+    end
     local overSpec
     if cur and onPass() then
       local spec = self.tags[image]
@@ -614,6 +631,19 @@ function HD.new(G, opts)
     return arg
   end
 
+  -- the field's canvas while one of its pass's layers is the target: the weather swaps "the
+  -- field canvas" for a colour-mapped one (Renderer:exchangeWorldCanvas), and keeps the one it
+  -- was given to draw into next frame
+  local function wrappedGetCanvas(...)
+    local cur = self.cur
+    if cur and cur.pass == "field" then
+      local c = real.getCanvas(...)
+      if c ~= nil and cur.layerSet[c] then return cur.base end
+      return c
+    end
+    return real.getCanvas(...)
+  end
+
   local function wrappedSetCanvas(arg, ...)
     if self.cur then arg = redirectArg(arg) end
     return real.setCanvas(arg, ...)
@@ -648,6 +678,7 @@ function HD.new(G, opts)
     if type(G.newShader) == "function" and not shaderMethods then pcall(trackShaders) end
     G.draw = wrappedDraw
     G.setCanvas = wrappedSetCanvas
+    G.getCanvas = wrappedGetCanvas
     G.pop = wrappedPop
     for _, name in ipairs(PRIMITIVES) do
       if real[name] then G[name] = wrapPrimitive(name) end
@@ -783,8 +814,54 @@ function HD.new(G, opts)
     -- leave the drawing target where the engine expects it
     local c = real.getCanvas()
     if c ~= nil and (c == cur.base or cur.layerSet[c]) and c ~= cur.base then real.setCanvas(cur.base) end
-    if #cur.items > 0 then self.done[cur.base] = cur end
+    if cur.cm and cur.cm.shader then
+      self.done[cur.cm.to] = cur
+    elseif #cur.items > 0 then
+      self.done[cur.base] = cur
+    end
     return cur
+  end
+
+  --- The weather is about to swap the field canvas for one it draws through its colour map
+  --- (`to`): the pass goes on, and the colour map is applied to the composite instead.
+  function self.colorMapStart(to)
+    local cur = self.cur
+    if not (cur and cur.pass == "field" and to) then return false end
+    cur.cm = { to = to, armed = true }
+    return true
+  end
+
+  -- canvases for the colour-mapped composite, by size
+  local mapPool = {}
+  function self.mapTargets(w, h)
+    local key = w .. "x" .. h
+    local pair = mapPool[key]
+    if not pair then
+      pair = { real.newCanvas(w, h, { dpiscale = 1 }), real.newCanvas(w, h, { dpiscale = 1 }) }
+      mapPool[key] = pair
+    end
+    return pair[1], pair[2]
+  end
+
+  --- `src` through the pass's colour map into `dst`, at its corner (the shader reads its actor
+  --- mask by the target's pixels: maskSize is the target's size)
+  local maskSize = { 0, 0 }
+  function self.drawMapped(cm, src, dst)
+    real.push("all")
+    real.origin()
+    real.setScissor()
+    real.setCanvas(dst)
+    real.clear(0, 0, 0, 0)
+    real.setColor(1, 1, 1, 1)
+    useShader(cm)
+    if shaderReal.send and cm.uniforms and cm.uniforms.maskSize then
+      maskSize[1], maskSize[2] = dst:getWidth(), dst:getHeight()
+      pcall(shaderReal.send, cm.shader, "maskSize", maskSize)
+    end
+    real.setBlendMode("replace", "premultiplied")
+    real.draw(src, 0, 0)
+    real.pop()
+    restoreShaders()
   end
 
   function self.capturing(pass)
@@ -1659,6 +1736,33 @@ function HD.new(G, opts)
     end
     real.pop()
     restoreShaders()
+    -- a colour-mapped field that is not composited: the weather's colour map done here, the
+    -- flattened field through it into the new canvas, under what the weather drew over it
+    local cm = cur.cm
+    if cm and cm.shader then
+      self.done[cm.to] = nil
+      local keep = self.mapTargets(cur.w, cur.h)
+      real.push("all")
+      real.origin()
+      real.setScissor()
+      real.setShader()
+      real.setColor(1, 1, 1, 1)
+      real.setCanvas(keep)
+      real.clear(0, 0, 0, 0)
+      real.setBlendMode("replace", "premultiplied")
+      real.draw(cm.to, 0, 0)
+      real.pop()
+      self.drawMapped(cm, cur.base, cm.to)
+      real.push("all")
+      real.origin()
+      real.setScissor()
+      real.setCanvas(cm.to)
+      real.setColor(1, 1, 1, 1)
+      real.setBlendMode("alpha", "premultiplied")
+      real.draw(keep, 0, 0)
+      real.pop()
+      cur.cm = nil
+    end
     -- flattened in the middle of a pass: the engine carries on drawing into its own canvas
     if midPass then real.setCanvas(cur.base) end
     self.stats.flattened = self.stats.flattened + 1

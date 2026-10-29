@@ -353,16 +353,35 @@ function Engine.install(hd)
       Renderer.blitCanvas = function(self, canvas, sx, sy, zoneList, zsx, zsy, bx, by,
                                      boxX, boxY, boxW, boxH, dpiX, dpiY)
         if hd.done[canvas] then
+          -- a field under a weather's colour map (hd.colorMapStart): composited into a canvas the
+          -- size of its place on the screen, at its corner (ox, oy: that place), then drawn
+          -- through the colour map, then what the weather drew over it
+          local cm = hd.done[canvas].cm
+          if not (cm and cm.shader) then cm = nil end
+          local ox, oy, mapped, out = 0, 0, nil, nil
+          if cm then
+            local cw, ch = hd.done[canvas].w, hd.done[canvas].h
+            ox, oy = bx, by
+            mapped, out = hd.mapTargets(math.max(1, math.ceil(cw * sx)), math.max(1, math.ceil(ch * sy)))
+            love.graphics.push("all")
+            love.graphics.setCanvas(mapped)
+            love.graphics.origin()
+            love.graphics.setScissor()
+            love.graphics.clear(0, 0, 0, 0)
+          end
           -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
           -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels; zk:
           -- the canvas's pixels per game pixel, for the UI drawn larger to scale it sharply)
           local function blit(c, obx, oby, osx, osy, obox, zk)
             local kx, ky = (osx or sx) / sx * (zk or 1), (osy or sy) / sy * (zk or 1)
             local b = obox or { boxX, boxY, boxW, boxH }
+            local b1, b2 = b[1], b[2]
+            if not obox and b1 then b1, b2 = b1 - ox, b2 - oy end
             return blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx and zsx * kx, zsy and zsy * ky,
-                              obx or bx, oby or by, b[1], b[2], b[3], b[4], dpiX, dpiY)
+                              (obx or bx) - (obx and 0 or ox), (oby or by) - (oby and 0 or oy),
+                              b1, b2, b[3], b[4], dpiX, dpiY)
           end
-          local box = boxX and { boxX, boxY, boxW, boxH } or nil
+          local box = boxX and { boxX - ox, boxY - oy, boxW, boxH } or nil
           -- the whole screen area (Battle Fit's fill): the Renderer's view rect (inside a
           -- cutout, a touch skin's or a layout mod's game area, that rectangle), with the rows
           -- the battle may use: below the notch, above on-screen touch controls
@@ -375,7 +394,22 @@ function Engine.install(hd)
             end
           end
           local cur = hd.done[canvas]
-          local ok, handled = pcall(hd.composite, canvas, blit, bx, by, sx, sy, box, view)
+          local ok, handled = pcall(hd.composite, canvas, blit, bx - ox, by - oy, sx, sy, box, view)
+          if cm then
+            love.graphics.pop()
+            if ok and handled then
+              hd.drawMapped(cm, mapped, out)
+              local bm, am = love.graphics.getBlendMode()
+              love.graphics.setScissor(boxX, boxY, boxW, boxH)
+              love.graphics.setBlendMode("alpha", "premultiplied")
+              love.graphics.draw(out, bx, by)
+              love.graphics.setScissor()
+              -- (rain, a flash: drawn over the colour map, untinted)
+              blitCanvas(self, canvas, sx, sy, zoneList, zsx, zsy, bx, by, boxX, boxY, boxW, boxH, dpiX, dpiY)
+              love.graphics.setBlendMode(bm, am)
+              return
+            end
+          end
           if ok and handled then return end
           if not ok then
             -- put the frame back into its canvas the usual way, then blit that
@@ -431,7 +465,15 @@ function Engine.install(hd)
 
     if not ours[exchange] then
       Renderer.exchangeWorldCanvas = function(self, current, replacement, ...)
-        if hd.capturing("field") then hd.flatten(hd.cur) end
+        -- a weather's colour map over the field: the pass goes on (its composite is mapped),
+        -- unless the swap does not happen
+        if hd.capturing("field") then
+          local cur = hd.cur
+          local done = exchange(self, current, replacement, ...)
+          if done and current == cur.base and hd.colorMapStart(replacement) then return done end
+          hd.flatten(cur)
+          return done
+        end
         return exchange(self, current, replacement, ...)
       end
       ours[Renderer.exchangeWorldCanvas] = true

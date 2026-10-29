@@ -274,7 +274,9 @@ do
   hd.beginPass("field", base)
   G.draw(pic, 20, 30)
   G.rectangle()
-  local layer = G.getCanvas()
+  local layer = hd.cur.current
+  check(layer ~= base and G.getCanvas() == base,
+    "a field layer is the target, but getCanvas answers the field's own canvas")
   hd.flatten(hd.cur)                 -- a weather pass is about to read the world canvas
   check(G.getCanvas() == base, "after a mid-pass flatten the engine draws into its own canvas again")
   local sawPic, sawLayer = false, false
