@@ -122,10 +122,19 @@ The target zoom:
   - **Not fitted:** trainers are left out of the fit itself.
 - **The intro's scrolling grass** (`BattleChrome.drawEntry`): on the cart it is a background
   layer that wraps sideways, but the engine draws it as one screen-wide image. With Battle Fit
-  on it goes to `hd.band`, which draws it at the scene's zoom, repeated across the whole view
-  and transparent above and below, so the zoomed-out scene shows no ends. It zooms about the
-  text box's line but does not rise with the camera, so its bottom stays on that line, where
-  the cart puts it.
+  on it goes to `hd.band`, which draws it at the scene's zoom, repeated across the whole view's
+  width. It zooms about the text box's line but does not rise with the camera, so its rows stay
+  where the cart puts them. Each entry is a strip whose art ends at that line (grass, dunes,
+  waves; transparent above). Below the line it is clipped: on the cart the text box spans the
+  screen and hides it there, so grass that sinks out of sight (grass, long grass) never shows
+  beside a filled screen's narrower text box.
+- **The intro's black bars** (`stage.win0`, two rectangles `ui.lua` draws after the UI seam):
+  `src/engine.lua` (`Engine.introWindow`) hands the rows to `hd.window(top, bottom)` each frame.
+  With Fill Screen the two rectangles are recorded as one `win0` item instead of drawn in the
+  UI's box, and the composite draws them across the whole view, opening about the scene's
+  middle row in the view's proportions (shut: the screen is black; open: both reach its edges
+  together). They no longer cross the stacked layout's split, so they never unsplit the UI.
+  Without Fill Screen they are drawn as the engine drew them.
 - **The player's pad stays tucked** under the text box for scale: on the cart its top 11 of
   32 rows show (`fit.padTop` 101, `fit.padRows` 32).
   - **How:** pulled back, the player's side is lowered by `shift.playerY` (canvas px before the
@@ -237,6 +246,9 @@ already covers the view.
     settling over a few frames, until the sky over the HP box equals the ground under the text
     box.
 - The wallpaper, ground band and intro grass cover the view's full width and height either way.
+  When the view reaches above the wallpaper's top row (sky above the battle), the wallpaper is
+  scaled up evenly about the text box's line until its top row reaches the screen's top, rather
+  than its top row being stretched: its zoom is the larger of the parallax zoom and that one.
 - **The fit sees a smaller UI.** Over the bigger scene the UI covers less of it, so its rects,
   `feetMax` and `backTopMin` are shrunk by `fit.uiK = 1/f` about the focus before the search.
   That is why a filled widescreen battle pulls back less.

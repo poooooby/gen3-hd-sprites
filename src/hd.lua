@@ -598,9 +598,37 @@ function HD.new(G, opts)
     return real.draw(image, ...)
   end
 
+  -- one of the intro's two black bars (self.window), filled across the UI's whole width from
+  -- its top down to the window, or from the window down to its bottom: with Fill Screen it is
+  -- recorded once (a "win0" item, drawn across the view) instead of drawn in the UI's box
+  local function introBar(mode, x, y, w, h)
+    local cur = self.cur
+    local win = cur.win0
+    if not (win and mode == "fill" and uiFill()) then return false end
+    if type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
+      return false
+    end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + h)
+    if not (math.abs(x0) < 0.5 and math.abs(x1 - cur.w) < 0.5) then return false end
+    local upper = math.abs(y0) < 0.5 and math.abs(y1 - win[1]) < 0.5
+    local lower = math.abs(y0 - win[2]) < 0.5 and math.abs(y1 - cur.h) < 0.5
+    if not (upper or lower) then return false end
+    if not cur.win0Drawn then
+      cur.win0Drawn = true
+      local r, g, b, a = real.getColor()
+      cur.items[#cur.items + 1] = { kind = "win0", top = win[1], bottom = win[2], color = { r, g, b, a } }
+      -- what the UI draws after the bars (a bag, a menu) goes to a layer above them
+      cur.pending = true
+      cur.screenOpen = false
+    end
+    return true
+  end
+
   local function wrapPrimitive(name)
     return function(...)
       if self.cur and onPass() then
+        if name == "rectangle" and introBar(...) then return end
         local screen = false
         if name == "rectangle" and sceneFit() then
           local mode, x, y, w, h = ...
@@ -770,6 +798,15 @@ function HD.new(G, opts)
     cur.items[#cur.items + 1] = { kind = "band", rec = rec }
     cur.pending = true
     cur.screenOpen = false
+  end
+
+  --- The battle intro's black bars this pass (the cart's WIN0: rows top..bottom show, the rest
+  --- is black; nil, nil: none). With Fill Screen the engine's two bar rectangles are not drawn
+  --- in the UI's box but across the whole view (composite, the "win0" item).
+  function self.window(top, bottom)
+    local cur = self.cur
+    if not cur then return end
+    cur.win0 = (type(top) == "number" and type(bottom) == "number") and { top, bottom } or nil
   end
 
   --- Draw part of the battle's stage that is as big as the screen but is not a whole-scene
@@ -1551,6 +1588,12 @@ function HD.new(G, opts)
     end
     local moved = z ~= 1 or lift ~= 0 or filling
     local zb = 1 - (1 - z) * fit.parallax
+    -- filling a screen taller than the wallpaper (sky above the battle): the wallpaper is scaled
+    -- up, about the text box's line, until its top row reaches the screen's top (it wraps
+    -- sideways, so it never shows an end)
+    if filling then
+      zb = math.max(zb, (cy - sceneBox[2]) / (fy * Sy))
+    end
     -- canvas pixels -> screen, zoomed by k about the focus and raised by `up` canvas pixels
     local function zoomed(k, up)
       return cx - fx * k * S, cy - (fy * k + up) * Sy, S * k, Sy * k
@@ -1603,6 +1646,29 @@ function HD.new(G, opts)
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" then
         if item.name == "ui" then inScene = false end
+      elseif item.kind == "win0" then
+        real.setShader()
+        real.setBlendMode("alpha", "alphamultiply")
+        local c = item.color
+        real.setColor(c[1], c[2], c[3], c[4])
+        if filling then
+          -- across the whole view, opening about the scene's middle row in the view's proportions:
+          -- shut, the whole screen is black; open, the bars reach the view's edges together
+          scissor(sceneBox)
+          local v = sceneBox
+          local vTop, vBot = v[2], v[2] + v[4]
+          local mid = cur.h / 2
+          local yc = math.max(vTop, math.min(vBot, cy + (mid - fy) * Sy))
+          local t = yc - math.max(0, mid - item.top) / mid * (yc - vTop)
+          local b = yc + math.max(0, item.bottom - mid) / (cur.h - mid) * (vBot - yc)
+          if t > vTop then real.rectangle("fill", v[1], vTop, v[3], t - vTop) end
+          if b < vBot then real.rectangle("fill", v[1], b, v[3], vBot - b) end
+        else
+          -- the cart's: over the UI's box
+          scissor(uiBox)
+          real.rectangle("fill", ubx, uby, cur.w * U, item.top * Uy)
+          real.rectangle("fill", ubx, uby + item.bottom * Uy, cur.w * U, (cur.h - item.bottom) * Uy)
+        end
       elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
         scissor(inScene and sceneBox or uiBox)
         if item.kind == "backdrop" then
@@ -1613,9 +1679,13 @@ function HD.new(G, opts)
           end
         elseif item.kind == "band" then
           if inScene then
-            -- zoomed with the scene but not raised: its bottom stays on the text box's line,
-            -- where the cart puts it
+            -- zoomed with the scene but not raised: its rows stay on the text box's line, where
+            -- the cart puts them. Below that line it is hidden, as the cart's text box (the whole
+            -- screen's width) hides it: grass sinking out of sight never shows beside a text box
+            -- that no longer spans the screen
             local gx, gy = zoomed(z, 0)
+            local v = sceneBox or cover
+            real.setScissor(v[1], v[2], v[3], math.max(0, math.min(v[4], cy - v[2])))
             drawBackdrop(item.rec, cover[3], cover[4], gx, gy, ssx, ssy, cover[1], cover[2], 1, 1, "clampzero")
           else
             drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy, "clampzero")
@@ -1732,6 +1802,14 @@ function HD.new(G, opts)
         real.setBlendMode("alpha", "premultiplied")
         real.draw(item.canvas, 0, 0)
         real.setBlendMode("alpha", "alphamultiply")
+      elseif item.kind == "win0" and real.rectangle then
+        -- the intro's black bars, the cart's way
+        real.setShader()
+        real.setBlendMode("alpha", "alphamultiply")
+        local c = item.color
+        real.setColor(c[1], c[2], c[3], c[4])
+        real.rectangle("fill", 0, 0, cur.w, item.top)
+        real.rectangle("fill", 0, item.bottom, cur.w, cur.h - item.bottom)
       end
     end
     real.pop()

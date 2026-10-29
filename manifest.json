@@ -1,7 +1,7 @@
 {
   "id": "gen3-hd-sprites",
   "name": "WoobleView",
-  "version": "0.4.12",
+  "version": "0.4.13",
   "api": 2,
   "entry": "main.lua",
   "options_schema": "options.lua",

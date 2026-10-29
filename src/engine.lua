@@ -182,6 +182,16 @@ function Engine.wrapFit(hd)
       end
       ours[Anim.drawParticles] = true
     end
+    -- the intro's black bars (ui.lua draws stage.win0 as two rectangles after the UI seam):
+    -- with Fill Screen, hd draws them across the whole view
+    if type(Anim.stage) == "function" then
+      Engine.introWindow = function()
+        local s = Anim.stage()
+        local w = type(s) == "table" and s.win0
+        if type(w) == "table" then hd.window(w[1], w[2]) else hd.window(nil, nil) end
+      end
+    end
+
     local S = AnimCoords.SINGLES
     local home = Engine.shiftHome or { player = S[0].x, enemy = S[1].x, playerY = S[0].y }
     Engine.shiftHome = home
@@ -484,6 +494,7 @@ function Engine.install(hd)
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not ok then hd.fail("battle pass: " .. tostring(err)) end
+        if Engine.introWindow then pcall(Engine.introWindow) end
         return battleDraw(...)
       end
       ours[Battle.draw] = true

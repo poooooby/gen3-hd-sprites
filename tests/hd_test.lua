@@ -46,7 +46,7 @@ local function fakeGraphics()
   function G.setShader(s) st.shader = s end
   function G.getBlendMode() return st.blend[1], st.blend[2] end
   function G.setBlendMode(a, b) st.blend = { a, b } end
-  function G.setScissor() end
+  function G.setScissor(x, y, w, h) st.scissor = x and { x, y, w, h } or nil end
   function G.clear() G.log[#G.log + 1] = { op = "clear", target = st.canvas } end
   function G.newCanvas(w, h) made = made + 1; return canvas("layer" .. made, w, h) end
   -- shaders share one method table, as LOVE's do; u: each uniform's first value as last sent
@@ -63,7 +63,7 @@ local function fakeGraphics()
     local q = ...
     local vp = type(q) == "table" and q.getViewport and { q:getViewport() } or nil
     G.log[#G.log + 1] = { op = "draw", target = st.canvas, image = img, args = { ... },
-                          blend = st.blend[2], uniforms = u, vp = vp }
+                          blend = st.blend[2], uniforms = u, vp = vp, scissor = st.scissor }
   end
   function G.rectangle(mode, x, y, w, h)
     G.log[#G.log + 1] = { op = "rect", target = st.canvas, args = { mode, x, y, w, h } }
@@ -721,6 +721,67 @@ do
     "...and is not raised with the camera (bottom " .. tostring(bottomY and bottomY / 4) .. ")")
 end
 
+-- Fill Screen: the intro's grass reaches both sides, and its black bars open across the screen
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local grass = canvas("grass", 256, 256)
+  local passLog
+  local function frame(slide, top, bottom, fill)
+    hd.fit.fill = fill ~= false
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.window(top, bottom)
+    hd.backdrop(canvas("wall", 256, 160), 0, 0)
+    hd.band(grass, 0, slide)
+    hd.seam("ui")
+    G.rectangle("fill", 0, 112, 240, 48)              -- the text box
+    G.setColor(0, 0, 0, 1)
+    if top then
+      G.rectangle("fill", 0, 0, 240, top)              -- the engine's bars (ui.lua, stage.win0)
+      G.rectangle("fill", 0, bottom, 240, 160 - bottom)
+    end
+    G.setColor(1, 1, 1, 1)
+    hd.endPass()
+    passLog = G.log
+    G.log = {}
+    -- a 1920x1080 screen: the Renderer's 6x box is 1440 wide, centred
+    hd.composite(base, function() end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 })
+    hd.endFrame()
+  end
+  local function rects(log)
+    local out = {}
+    for _, e in ipairs(log or G.log) do if e.op == "rect" then out[#out + 1] = e.args end end
+    return out
+  end
+  frame(0, 80, 80)
+  local g
+  for _, e in ipairs(G.log) do if e.image == grass then g = e end end
+  -- the text box's line: docked at y 120 + 112 * 6 = 792 (the 1440x960 box at the bottom)
+  check(g and near(g.args[2], 0) and near(g.args[2] + g.vp[3] * g.args[5], 1920),
+    "filled: the grass reaches both sides of the screen")
+  check(g and g.scissor and near(g.scissor[2], 0) and near(g.scissor[2] + g.scissor[4], 792),
+    "...and is hidden below the text box's line, as the cart's text box hides it")
+  local r = rects()
+  check(#r == 2 and near(r[1][2], 0) and near(r[1][3], 0) and near(r[1][4], 1920)
+    and near(r[1][3] + r[1][5], r[2][3]) and near(r[2][3] + r[2][5], 1080),
+    "shut: the bars black out the whole screen, meeting in the middle")
+  frame(0, 40, 120)
+  r = rects()
+  -- they open about the scene's row 80: the text box's line (y 792, docked) less 32 scene rows
+  local yc = 792 + (80 - 112) * 6 * hd.stats.fill
+  check(#r == 2 and near(r[1][4], 1920) and near(r[1][5], yc / 2) and near(1080 - r[2][3], (1080 - yc) / 2),
+    "half open: each bar covers half of its side of the screen")
+  frame(0, 40, 120, false)
+  r = rects(passLog)
+  local bars = 0
+  for _, a in ipairs(r) do if a[4] == 240 and (a[5] == 40 or a[3] == 120) then bars = bars + 1 end end
+  check(bars == 2 and #rects() == 0, "Fill Screen off: the engine's own bars, drawn as always")
+end
+
 -- when the game presents without the Renderer (its fallback), or something of ours failed,
 -- nothing is captured: every frame is drawn the game's own way
 do
@@ -878,6 +939,7 @@ do
   local w
   for _, e in ipairs(G.log) do if e.image == wall then w = w or e end end
   check(w and w.args[3] <= 1e-6, "the wallpaper's sky covers the top of the screen")
+  check(w and w.vp[2] >= -1e-6, "...scaled up so its own top row reaches it (none stretched) (" .. tostring(w and w.vp[2]) .. ")")
 end
 
 do

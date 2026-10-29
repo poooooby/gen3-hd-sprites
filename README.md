@@ -44,7 +44,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
   out, so nothing jumps when they appear. Your trainer stays planted on the text box, just like the original.
 - 🖥️ **Fills your screen:** With **Fill Screen**, the battle fills your screen in any shape,
   with no black bars. On a widescreen monitor or a phone held sideways it reaches from the top
-  of the screen out to both sides.
+  of the screen out to both sides. The battle's opening fills it too: the black curtain opens
+  across the whole screen and the grass, sand or waves sweep across its full width, and the sky
+  stretches up to the top of the screen.
 - 📱 **Made for phones held upright:** The text box and menus stretch the full width, sharp and
   even, right above the touch controls. The battle grows into the space above them, with
   both Pokémon and both platforms always whole on screen. With a sprite mod, the two sides

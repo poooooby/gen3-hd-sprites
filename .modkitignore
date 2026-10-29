@@ -4,3 +4,4 @@ DEVELOPMENT.md
 CLAUDE.md
 tests/pads_test.lua
 tests/drivers/portrait_battle.lua
+tests/drivers/intro_fill.lua
