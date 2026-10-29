@@ -464,10 +464,86 @@ function HD.new(G, opts)
     }
   end
 
+  -- a tagged draw past the pass's cap: drawn on the pass's own pixels (no layer), but at the size
+  -- and on the point the window-resolution one would have (place's pivot and scale), so a sized
+  -- sprite keeps its size. A slice of a full-resolution frame (spec.texture drawn through a quad of
+  -- the low-res image) is drawn as it is. Returns false when it drew nothing
+  local function drawAtScale(image, spec, a, b, c, d, e, f, g, h)
+    local quad, x, y, r, sx, sy, ox, oy
+    if isQuad(a) then
+      quad, x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g, h
+    else
+      x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
+    end
+    if type(x) ~= "number" then return false end
+    if spec.texture and quad then return false end
+    y, r, sx, ox, oy = y or 0, r or 0, sx or 1, ox or 0, oy or 0
+    sy = sy or sx
+    local qp = spec.quadPivots and quad and spec.quadPivots[quad]
+    local lpx, lpy, hpx, hpy
+    if spec.anchor == "feet" and quad and not qp then
+      local _, _, qw, qh = quad:getViewport()
+      lpx, lpy = qw / 2, qh
+      hpx, hpy = lpx, lpy
+    else
+      local lp = qp or spec.lowPivot
+      lpx, lpy = lp and lp[1] or 32, lp and lp[2] or 32
+      local hp = (not qp and spec.pivot) or lp
+      hpx, hpy = hp and hp[1] or lpx, hp and hp[2] or lpy
+    end
+    local k = (qp and qp[3]) or spec.scale or 1
+    -- where the draw put the pivot, then the frame drawn k times larger about it
+    local dx, dy = (lpx - ox) * sx, (lpy - oy) * sy
+    local cs, sn = math.cos(r), math.sin(r)
+    local px, py = x + dx * cs - dy * sn, y + dx * sn + dy * cs
+    if spec.texture then
+      if spec.quad then
+        real.draw(spec.texture, spec.quad, px, py, r, sx * k, sy * k, hpx, hpy)
+      else
+        real.draw(spec.texture, px, py, r, sx * k, sy * k, hpx, hpy)
+      end
+    elseif quad then
+      real.draw(image, quad, px, py, r, sx * k, sy * k, hpx, hpy)
+    else
+      real.draw(image, px, py, r, sx * k, sy * k, hpx, hpy)
+    end
+    return true
+  end
+
+  -- a tagged draw wholly off the pass's canvas, allowing for its size (the low-res rectangle
+  -- grown by the spec's scale about its middle) and a margin: it shows nothing, so it takes no
+  -- layer (a mod's wanderers out of view are still drawn every frame). Unknown (rotated): false.
+  -- (no garbage: drawRect and transformPoint return numbers)
+  local OFF_MARGIN = 16
+  local function offCanvas(image, spec, a, b, c, d, e, f, g, h)
+    local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
+    if not x then return false end
+    local k = math.max(1, math.abs(tonumber(spec.scale) or 1))
+    if spec.quadPivots then
+      for _, p in pairs(spec.quadPivots) do
+        if p[3] then k = math.max(k, math.abs(p[3])) end
+      end
+    end
+    local mx, my = x + w / 2, y + hh / 2
+    local hw, hh2 = math.abs(w) * k / 2, math.abs(hh) * k / 2
+    local x0, y0 = real.transformPoint(mx - hw, my - hh2)
+    local x1, y1 = real.transformPoint(mx + hw, my + hh2)
+    if x0 > x1 then x0, x1 = x1, x0 end
+    if y0 > y1 then y0, y1 = y1, y0 end
+    local cur = self.cur
+    return x1 < -OFF_MARGIN or y1 < -OFF_MARGIN or x0 > cur.w + OFF_MARGIN or y0 > cur.h + OFF_MARGIN
+  end
+
   local function wrappedDraw(image, ...)
     local cur = self.cur
+    local overSpec
     if cur and onPass() then
       local spec = self.tags[image]
+      -- (the field only: Battle Fit's zoomed-out view shows past the battle canvas's edges)
+      if spec and cur.pass == "field" and offCanvas(image, spec, ...) then
+        self.stats.offCanvas = (self.stats.offCanvas or 0) + 1
+        return real.draw(image, ...)
+      end
       if spec and cur.splits < cur.cap then
         local rec = record(image, spec, ...)
         if rec then
@@ -483,6 +559,7 @@ function HD.new(G, opts)
         end
       elseif spec then
         self.stats.overCap = self.stats.overCap + 1
+        overSpec = spec
       end
       -- the wallpaper drawn again in the scene (a ground fill continued under a text box moved
       -- off the screen, Kanto Gear): the recorded wallpaper already covers the whole view
@@ -497,6 +574,7 @@ function HD.new(G, opts)
       -- a draw over the whole scene, or with fill over the whole UI (a fade), gets a layer of
       -- its own that covers the whole screen
       beforeDraw(uiScreen or (sceneFit() and drawCoversScene(image, ...)))
+      if overSpec and drawAtScale(image, overSpec, ...) then return end
     end
     return real.draw(image, ...)
   end

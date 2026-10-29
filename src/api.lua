@@ -38,9 +38,12 @@
 --                         player's options)
 --   setEnabled(pass, on)
 --   cap(pass)             most tagged draws (layers) a pass may use before the rest are drawn
---                         low-res: battle 8, field 12, dex 8. Each layer is one window-sized canvas.
+--                         on the game's pixels, at their own size: battle 8, field 12, dex 8. Each
+--                         layer is one window-sized canvas. On the field a tagged draw wholly off
+--                         the screen takes none.
 --   setCap(pass, n)       change it (1..32)
---   stats()               counters for debugging: splits, composites, flattened, overCap
+--   stats()               counters for debugging: splits, composites, flattened, overCap,
+--                         offCanvas
 --   features              { quadPivots = true, dex = true, battleFit = true }: what this
 --                         version supports
 --   fitEnabled()          Battle Fit is on: the battle scene zooms out so tall sprites fit
