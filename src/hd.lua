@@ -174,6 +174,8 @@ function HD.new(G, opts)
   -- ---------------------------------------------------------------- shaders
 
   -- what each shader was last sent: sent[shader][name] = { fn = the send used, n, values... }
+  -- A record is reused by the next send of its uniform (no garbage a send: every mod's shaders
+  -- send each frame) unless a recorded draw holds it (`shared`, set by the draw): then a new one.
   local sent = setmetatable({}, { __mode = "k" })
   local shaderMethods, shaderReal = nil, {}
 
@@ -189,23 +191,38 @@ function HD.new(G, opts)
       if type(fn) == "function" then
         shaderReal[name] = fn
         methods[name] = function(sh, uniform, ...)
-          local res = { fn(sh, uniform, ...) }
-          local v = { fn = fn, n = select("#", ...), ... }
-          -- a vector or array is copied (it may be reused and changed); anything else is kept
-          for i = 1, v.n do
-            if type(v[i]) == "table" and v[i][1] ~= nil then
-              local copy = {}
-              for k, x in pairs(v[i]) do copy[k] = x end
-              v[i] = copy
-            end
-          end
           local u = sent[sh]
           if not u then
             u = {}
             sent[sh] = u
           end
-          u[uniform] = v
-          return unpack(res)
+          local v = u[uniform]
+          if not v or v.shared then
+            v = { copies = {} }
+            u[uniform] = v
+          end
+          local n = select("#", ...)
+          v.fn, v.n = fn, n
+          -- a vector or array is copied (it may be reused and changed) into the record's own
+          -- table for that place; anything else is kept
+          local copies = v.copies
+          for i = 1, n do
+            local x = (select(i, ...))
+            if type(x) == "table" and x[1] ~= nil then
+              local copy = copies[i]
+              if copy then
+                for k in pairs(copy) do copy[k] = nil end
+              else
+                copy = {}
+                copies[i] = copy
+              end
+              for k, y in pairs(x) do copy[k] = y end
+              v[i] = copy
+            else
+              v[i] = x
+            end
+          end
+          return fn(sh, uniform, ...)
         end
       end
     end
@@ -433,7 +450,11 @@ function HD.new(G, opts)
     local uniforms
     if shader and sent[shader] then
       uniforms = {}
-      for name, v in pairs(sent[shader]) do uniforms[name] = v end
+      -- (held by this draw: the next send of each makes a new record)
+      for name, v in pairs(sent[shader]) do
+        v.shared = true
+        uniforms[name] = v
+      end
     end
     return {
       spec = spec, image = image, quad = quad,
@@ -518,14 +539,14 @@ function HD.new(G, opts)
     return real.setCanvas(arg, ...)
   end
 
+  -- (love.graphics.pop returns nothing: no table of its results, which was garbage every pop)
   local function wrappedPop(...)
-    local res = { real.pop(...) }
+    real.pop(...)
     local cur = self.cur
     if cur then
       local c = real.getCanvas()
       if isPassCanvas(c) and c ~= cur.current then real.setCanvas(cur.current) end
     end
-    return unpack(res)
   end
 
   --- Wrap the graphics functions (once). Returns false when something needed is missing.
