@@ -30,9 +30,9 @@ return {
   },
   {
     key = "dex_hd",
-    label = "Pokedex HD",
+    label = "Pokedex & Summary HD",
     type = "toggle",
     default = true,
-    description = "Draw the Pokedex's Pokemon that a sprite mod has tagged at your screen's full resolution, scaled to fit the Pokedex. Off: the game's usual pixel grid.",
+    description = "Draw the Pokemon that a sprite mod has tagged in the Pokedex and on the Pokemon summary screen at your screen's full resolution, scaled to fit their frame. Off: the game's usual pixel grid.",
   },
 }

@@ -12,7 +12,9 @@ by a whole number, so a sprite shrunk or moved by part of a pixel is resampled o
 mod lifts tagged sprites off it.
 
 A "pass" is the drawing of one canvas: the battle (from `Battle.draw` to the frame's end), a
-Pokédex screen (from its `Pokedex.draw`; inside a battle the battle pass covers it) or the field
+Pokédex or summary screen (a "dex" pass, from its `Pokedex.draw` or the summary's draw: FireRed /
+LeafGreen's `SummaryMenu.draw`, or the Ruby/Sapphire or Emerald skin the screen stack draws in its
+place; inside a battle the battle pass covers it) or the field
 (`Renderer:beginWorldPass` … `endWorldPass`). While a pass runs, a draw of a tagged image is
 recorded instead of drawn, and everything drawn after it goes to a fresh transparent layer. When
 the Renderer blits that canvas to the window (`Renderer:blitCanvas`), the blit becomes: the

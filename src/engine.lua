@@ -14,6 +14,10 @@
 --                          (src/ui/game3/pokedex.lua), wrapped once each is loaded; like the
 --                          battle pass it ends at Renderer:endFrame. Inside a battle (a caught
 --                          Pokemon's entry) the battle pass is already capturing it.
+--   SummaryMenu.draw       the Pokemon summary screen, a dex pass: FireRed/LeafGreen's
+--                          (src/ui/game3/summary_menu.lua) and the skins the screen stack draws
+--                          in its place, Emerald's (rse/summary_menu.lua) and Ruby/Sapphire's
+--                          (rs/summary_menu.lua)
 --
 -- Field capture is skipped in tilt mode and during a battle transition, which draw the
 -- field through canvases of their own.
@@ -47,8 +51,10 @@ end
 -- our own wrappers, so a reload does not wrap them twice
 local ours = setmetatable({}, { __mode = "k" })
 
--- the Pokedex screens, by module name; each is wrapped when it is first seen loaded
-local DEX_MODULES = { "src.ui.game3.rse.pokedex", "src.ui.game3.pokedex" }
+-- the Pokedex screens and the summary screen, by module name; each is wrapped when it is first
+-- seen loaded, and draws in a dex pass
+local DEX_MODULES = { "src.ui.game3.rse.pokedex", "src.ui.game3.pokedex", "src.ui.game3.summary_menu",
+  "src.ui.game3.rse.summary_menu", "src.ui.game3.rs.summary_menu" }
 
 local dexMissing = {}       -- module names that could not be required (not asked again)
 

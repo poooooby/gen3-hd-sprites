@@ -69,7 +69,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
 | **Battle Fit** | On / Off | On | Pull the battle camera back so tall Pokémon fit. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. Off: the usual framed battle screen. Needs Battle Fit. |
-| **Pokedex HD** | On / Off | On | Pokédex Pokémon at full resolution, fitted to the Pokédex. |
+| **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
 ## 💾 Installation
