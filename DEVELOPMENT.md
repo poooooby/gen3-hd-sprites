@@ -268,6 +268,20 @@ already covers the view.
     again with one canvas pixel as wide or tall as each gap, clipped to it (`stats().card` counts
     these frames);
   - a half-faded cover is not one: the battle keeps its fill, and the cover spans the view.
+- **Double battles (`hd.setDouble`):** `Battle.draw` hands over both sides' HP boxes, from the
+  engine's `Healthbox.center`. The foes' feet stop at the top of the player's upper box, a back's
+  head stops `doublesGap` under the foes' lower box, and `split` falls between the two sides.
+  With no tagged foes the scene is not raised. `tests/drivers/doubles_battle.lua` shows foes of
+  each size, one window size a run (`HD_ATTACK=1` adds a turn of moves).
+  - **Aim:** `AnimCoords.DOUBLES` follows the side shift, so moves land on the shifted Pokémon.
+    The battle draws its battlers from that table too: hd takes the shift back off a tagged one
+    when recording it, and while the battle draws, the table's rows are the unshifted ones
+    (`Engine.doublesY`), because the game caps how low a double battle's back may stand.
+  - **`shiftMax`** is `doublesShiftMax` (16): the outer battlers stand near the canvas's edges,
+    and a move's effect is clipped to the canvas.
+  - **Tall screens (`sceneUp`):** with the rows to spare, the scene's line stands above the
+    player's two HP boxes, so the stack is foes' boxes, scene, player's boxes, text box. `uiY` and
+    `uiRect` take it into account. `doublesSlack` lets an HP box's empty rows cross `split`.
 - **Boot screens:** a `Display.presentUi` frame of kind `"boot"` (the intro movie, title, main
   menu, options, the professor's speech, the naming screens, a mod's boot screen) is a `boot` pass
   (`hd.enabled.boot`: Battle HD, Battle Fit and Fill Screen all on). It is composited even with

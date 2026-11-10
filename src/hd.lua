@@ -166,8 +166,17 @@ function HD.new(G, opts)
       wholeBelow = 36, cutAbove = 56,
       outRate = 0.2, inRate = 0.05, holdFrames = 45,
       z = 1, target = 1, extra = 0, extraTarget = 0, hold = 0, idle = 99,
+      -- a double battle (setDouble): a back's head stops this far below the foes' lower HP box.
+      -- Its outer battlers stand near the canvas's edges, so the side shift is smaller: a move's
+      -- effect on them stays inside the canvas. sceneUp: on a tall screen the scene's line is
+      -- raised this many UI rows above the text box, clear of the player's two HP boxes
+      -- doublesSlack: rows a UI draw may cross the split and still not count as crossing it (an HP
+      -- box is drawn on an image taller than the box: the empty rows meet those of the next one)
+      double = false, doublesGap = 4, doublesShiftMax = 16, doublesSlack = 4, sceneUp = 0,
     },
   }
+  self.fit.singles = { ui = self.fit.ui, feetMax = self.fit.feetMax, backTopMin = self.fit.backTopMin,
+    split = self.fit.split, shiftMax = self.fit.shiftMax }
   local real = {}
   self.real = real
 
@@ -411,7 +420,8 @@ function HD.new(G, opts)
     local x1, y1 = real.transformPoint(x + w, y + h)
     if y0 > y1 then y0, y1 = y1, y0 end
     if x0 > x1 then x0, x1 = x1, x0 end
-    if not (y0 < split - 0.5 and y1 > split + 0.5) then return end
+    local slack = 0.5 + (self.fit.double and self.fit.doublesSlack or 0)
+    if not (y0 < split - slack and y1 > split + slack) then return end
     local cur = self.cur
     if x0 <= 0.5 and y0 <= 0.5 and x1 >= cur.w - 0.5 and y1 >= cur.h - 0.5 then return end
     local _, _, _, a = real.getColor()
@@ -568,6 +578,12 @@ function HD.new(G, opts)
         if rec then
           -- drawn by a move animation: already where the engine's (shifted) coordinates put it
           rec.inAnim = self.inAnim == true
+          -- a double battle's battlers are placed from the shifted columns themselves: back to
+          -- the spot they rest on, so the fit and the draw below treat them as in singles
+          if self.fit.double and self.fit.enabled and cur.pass == "battle" and cur.segment == "scene"
+              and spec.side and not spec.trainer and not rec.inAnim then
+            rec.tx = rec.tx - (cur.shift[spec.side] or 0)
+          end
           -- tagged draws with nothing drawn between them share one split
           if not cur.pending then cur.splits = cur.splits + 1 end
           cur.items[#cur.items + 1] = { kind = "hd", rec = rec }
@@ -1119,28 +1135,29 @@ function HD.new(G, opts)
   -- a UI row (canvas px of the UI) in the scene's canvas pixels: the same with the scene and UI
   -- at one scale; with fill the scene is bigger, so the UI shrinks about the text box's line
   local function uiY(y)
-    local fy = self.fit.focus[2]
-    return fy + (y - fy) * (self.fit.uiK or 1)
+    local fit = self.fit
+    local fy = fit.focus[2]
+    return fy + (y + (fit.sceneUp or 0) - fy) * (fit.uiK or 1)
   end
   local function uiRect(r)
     local fit = self.fit
-    local k = fit.uiK or 1
-    if k == 1 then return r end
+    local k, up = fit.uiK or 1, fit.sceneUp or 0
+    if k == 1 and up == 0 then return r end
     local fx, fy = fit.focus[1], fit.focus[2]
-    return { fx + (r[1] - fx) * k, fy + (r[2] - fy) * k, fx + (r[3] - fx) * k, fy + (r[4] - fy) * k }
+    return { fx + (r[1] - fx) * k, fy + (r[2] + up - fy) * k, fx + (r[3] - fx) * k, fy + (r[4] + up - fy) * k }
   end
 
   -- the enemy's HP box over the scene, in the scene's canvas pixels: moved up with the
   -- stacked layout's top band, then as uiRect (remembered: the solver asks for it a lot)
-  local enemyUI, enemyUIKey = nil, nil
+  local enemyUI, enemyUIKey, enemyUIUp = nil, nil, nil
   local function uiEnemy()
     local fit = self.fit
     local d = fit.uiTopDy or 0
-    local key = (fit.uiK or 1) * 1e6 + d
-    if enemyUIKey ~= key then
+    local key, up = (fit.uiK or 1) * 1e6 + d, fit.sceneUp or 0
+    if enemyUIKey ~= key or enemyUIUp ~= up then
       local e = fit.ui.enemy
       enemyUI = uiRect({ e[1], e[2] + d, e[3], e[4] + d })
-      enemyUIKey = key
+      enemyUIKey, enemyUIUp = key, up
     end
     return enemyUI
   end
@@ -1152,6 +1169,9 @@ function HD.new(G, opts)
 
   local function fitLift(z)
     local fit = self.fit
+    -- (a double battle's boxes are higher than the game's own sprites were placed for: without
+    -- tagged foes the scene keeps its place, its art's height unknown)
+    if fit.double and not fit.doubleArt then return 0 end
     local fy = fit.focus[2]
     return math.max(0, fy + (fit.feetY - fy) * z - uiY(fit.feetMax))
   end
@@ -1203,8 +1223,10 @@ function HD.new(G, opts)
   --- for a big one (cutAbove), blended between; 0 for a back already showing that much.
   local function backRaise(r, z, lift, v)
     local fit = self.fit
-    local line = fit.focus[2]
-    local top = line + (r[2] + v - line) * z - lift
+    local fy = fit.focus[2]
+    -- the text box's top in the scene's pixels (the scene's line, unless the scene is raised)
+    local line = uiY(fy)
+    local top = fy + (r[2] + v - fy) * z - lift
     local h = r[4] - r[2]
     local u = math.max(0, math.min(1, (h - fit.wholeBelow) / math.max(1e-6, fit.cutAbove - fit.wholeBelow)))
     local share = 1 + (fit.minVisible - 1) * u          -- 1 (whole) for a small back
@@ -1221,7 +1243,7 @@ function HD.new(G, opts)
     local y0, y1 = fy + (r[2] - fy) * z - lift, fy + (r[4] - fy) * z - lift
     local area = math.max(1e-6, (x1 - x0) * (y1 - y0))
     local function under(u) return overlap(x0, x1, u[1], u[3]) * overlap(y0, y1, u[2], u[4]) end
-    return under(uiEnemy()) / area, (under(uiRect(fit.ui.player)) + under(fit.ui.text)) / area, y0
+    return under(uiEnemy()) / area, (under(uiRect(fit.ui.player)) + under(uiRect(fit.ui.text))) / area, y0
   end
   self.fitHidden = hidden
 
@@ -1287,8 +1309,8 @@ function HD.new(G, opts)
   -- the same, remembered: an animation repeats its frames, so a frame's inputs recur
   local function fitSolve(top, backs)
     local fit = self.fit
-    local parts = { string.format("%.2f|%.3f|%.4f|%.2f|%.2f", top, fit.zMin, fit.uiK or 1,
-      fit.topY or 0, fit.uiTopDy or 0) }
+    local parts = { string.format("%.2f|%.3f|%.4f|%.2f|%.2f|%.2f|%s", top, fit.zMin, fit.uiK or 1,
+      fit.topY or 0, fit.uiTopDy or 0, fit.sceneUp or 0, tostring(fit.doubleArt)) }
     for _, r in ipairs(backs) do
       parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f", r[1], r[2], r[3], r[4], r.top or 0)
     end
@@ -1302,6 +1324,30 @@ function HD.new(G, opts)
     return z, e
   end
   self.fitSolve = fitSolve
+
+  --- Which battle's UI the fit plans around: a double battle's two HP boxes a side stand
+  --- elsewhere. enemy, player: each side's boxes together, {x0, y0, x1, y1} canvas px. The foes'
+  --- feet stay above the player's boxes, a back's head just under the foes', and the stacked
+  --- layout splits the UI between them. Without both (or `on` false): the singles layout.
+  function self.setDouble(on, enemy, player)
+    local fit = self.fit
+    on = on == true and enemy ~= nil and player ~= nil
+    if fit.double == on then return end
+    fit.double, fit.doubleArt = on, false
+    if on then
+      fit.ui = { enemy = enemy, player = player, text = fit.singles.ui.text }
+      fit.feetMax = player[2]
+      fit.backTopMin = enemy[4] + fit.doublesGap
+      fit.split = math.floor((enemy[4] + player[2]) / 2 + 0.5)
+      fit.shiftMax = fit.doublesShiftMax
+    else
+      fit.ui, fit.feetMax = fit.singles.ui, fit.singles.feetMax
+      fit.backTopMin, fit.split = fit.singles.backTopMin, fit.singles.split
+      fit.shiftMax = fit.singles.shiftMax
+    end
+    enemyUIKey = nil
+    solved, solvedCount = {}, 0
+  end
 
   -- the stage zoom for this frame: the camera that fits the tagged sprites, eased (out fast;
   -- back in only after the target has stayed nearer for holdFrames)
@@ -1356,6 +1402,8 @@ function HD.new(G, opts)
         take(item.rec)
       end
     end
+    if fit.idle > 2 then fit.doubleArt = false end
+    if seen.enemy then fit.doubleArt = true end
     local zt, et = fitSolve(top, backs)
     fit.target, fit.extraTarget = zt, et
     if fit.idle > 2 then
@@ -1640,6 +1688,7 @@ function HD.new(G, opts)
     local filling = fitted and fit.fill and view ~= nil
     local stacked, dyTop, top = false, 0, nil
     fit.wantW = nil
+    fit.sceneUp = 0
     if filling then
       local vx, vy, vw, vh = view[1], view[2], view[3], view[4]
       top = math.max(vy, view.top or vy)
@@ -1658,7 +1707,14 @@ function HD.new(G, opts)
         ubx = round2(vx + (vw - cur.w * U) / 2)
         uby = round2(bottom - cur.h * Uy)
         dyTop = math.min(0, round2((top - uby) / Uy))
-        cy = uby + fy * Uy
+        -- a double battle: with the rows to spare, the scene stands above the player's two HP
+        -- boxes instead of behind them (the foes' boxes still need their rows above it)
+        if fit.double then
+          local e = fit.ui.enemy
+          local spare = (uby - top) / Uy - (e[4] - e[2])
+          fit.sceneUp = round2(math.max(0, math.min(spare, fy - fit.ui.player[2] + fit.doublesGap)))
+        end
+        cy = uby + (fy - fit.sceneUp) * Uy
         -- the scene grows about the text box's line into the space above, up to the screen's
         -- top, or until both sides' art spans the width, whichever comes first
         local span = fit.span or fit.spanDefault
@@ -1709,7 +1765,7 @@ function HD.new(G, opts)
     fit.uiK = U / S
     fit.uiTopDy = dyTop
     fit.topY = filling and math.min(0, round2(fy - (cy - top) / Sy)) or 0
-    self.stats.topY, self.stats.uiK = fit.topY, fit.uiK
+    self.stats.topY, self.stats.uiK, self.stats.sceneUp = fit.topY, fit.uiK, fit.sceneUp
     local z, lift = 1, 0
     if fitted then
       z = fitStep(cur)
@@ -1837,7 +1893,7 @@ function HD.new(G, opts)
             dy = dy - (cur.shift.playerRaise or 0)
           end
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
-          local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy) or nil
+          local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy + fit.sceneUp * Uy) or nil
           hdDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, pin)
         elseif banded and item.rec.ty + item.rec.y * item.rec.tsy < split then
           scissor(topBox)

@@ -8,3 +8,4 @@ tests/drivers/intro_fill.lua
 tests/drivers/summary.lua
 tests/drivers/end_cards.lua
 tests/drivers/boot_cards.lua
+tests/drivers/doubles_battle.lua

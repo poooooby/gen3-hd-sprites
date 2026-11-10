@@ -185,7 +185,10 @@ function Engine.wrapFit(hd)
       Anim.drawParticles = function(...)
         -- (hd.beginPass clears it too, should a draw here ever throw)
         hd.inAnim = true
+        local setY = Engine.doublesY
+        local wasY = setY and setY(true)
         local results = { drawParticles(...) }
+        if setY then setY(wasY) end
         hd.inAnim = false
         return unpack(results)
       end
@@ -213,9 +216,39 @@ function Engine.wrapFit(hd)
     home.enemyMon = home.enemyMon or (EM and EM.x)
     home.playerMon = home.playerMon or (PM and PM.x)
     home.playerMonY = home.playerMonY or (PM and PM.y)
+    -- a double battle's own table: its battlers are drawn on these too, so hd puts a tagged one
+    -- back on its unshifted spot when it records it (hd's wrapped draw) and shifts it as usual.
+    -- Their rows are the unshifted ones while the battle draws them (Engine.doublesY false): the
+    -- game caps how low a back stands, which would swallow the player's side's drop; moves read
+    -- the shifted rows, between draws and in Anim.drawParticles
+    local D = type(AnimCoords.DOUBLES) == "table" and AnimCoords.DOUBLES or nil
+    if D and not home.doubles then
+      home.doubles = {}
+      for id = 0, 3 do home.doubles[id] = D[id] and { x = D[id].x, y = D[id].y } or nil end
+    end
+    local doublesDy, yShifted = 0, true
+    if D then
+      --- Put the battlers' rows on the shifted or the unshifted spots; returns the previous state.
+      Engine.doublesY = function(shifted)
+        local was = yShifted
+        yShifted = shifted
+        for id = 0, 3 do
+          local h = home.doubles[id]
+          if h then
+            local y = h.y + ((shifted and id % 2 == 0) and doublesDy or 0)
+            D[id].y, D[id][2] = y, y
+          end
+        end
+        return was
+      end
+    end
     local function on(Battle)
       local st = Battle._st
       return hd.fit.enabled and st ~= nil and not st.double
+    end
+    local function onDouble(Battle)
+      local st = Battle._st
+      return hd.fit.enabled and st ~= nil and st.double == true
     end
     Engine.shiftOn = on
     --- Before each battle frame: the engine's battler coordinates (move animations, the
@@ -233,7 +266,18 @@ function Engine.wrapFit(hd)
       if EM and home.enemyMon then EM.x = home.enemyMon + e end
       if PM and home.playerMon then PM.x = home.playerMon + p end
       if PM and home.playerMonY then PM.y = home.playerMonY + pm end
-      Engine.shiftNow = { enemy = e, player = p, playerY = py }
+      local two = D and onDouble(Battle)
+      local de = two and fit.shift.enemy or 0
+      local dp = two and fit.shift.player or 0
+      doublesDy = two and (fit.shift.playerY - (fit.shift.playerRaise or 0)) or 0
+      if D then
+        for id = 0, 3 do
+          local h = home.doubles[id]
+          if h then place(D[id], h.x + (id % 2 == 0 and dp or de)) end
+        end
+        Engine.doublesY(true)
+      end
+      Engine.shiftNow = { enemy = two and de or e, player = two and dp or p, playerY = two and fit.shift.playerY or py }
     end
 
     --- Both leads, before they are sent out: their pics as the battle will draw them (asked for
@@ -498,13 +542,42 @@ function Engine.install(hd)
       ours[Renderer.exchangeWorldCanvas] = true
     end
 
+    -- a double battle's HP boxes, from the engine's own centres (they differ by game): each
+    -- side's two together, {x0, y0, x1, y1}; the box's extent about its centre as the game draws it
+    local okH, Healthbox = pcall(require, "src.core.game3.battle.healthbox")
+    local function doubleBoxes(st)
+      if not (okH and type(Healthbox) == "table" and type(Healthbox.center) == "function") then return nil end
+      local function span(a, b, x0, x1, y0)
+        local ca, cb = Healthbox.center(st, a), Healthbox.center(st, b)
+        return { math.min(ca.x, cb.x) + x0, math.min(ca.y, cb.y) + y0,
+                 math.max(ca.x, cb.x) + x1, math.max(ca.y, cb.y) + 10 }
+      end
+      return span(1, 3, -31, 60, -14), span(0, 2, -22, 68, -13)
+    end
+    local wasDouble = false
+    local function noteDouble()
+      local st = Battle._st
+      local double = type(st) == "table" and st.double == true
+      if double == wasDouble then return end
+      wasDouble = double
+      if double then hd.setDouble(true, doubleBoxes(st)) else hd.setDouble(false) end
+    end
+
+    -- the battlers' rows go back to the shifted ones once the battle is drawn (see Engine.doublesY)
+    local function drawn(...)
+      if Engine.doublesY then Engine.doublesY(true) end
+      return ...
+    end
+
     if not ours[battleDraw] then
       Battle.draw = function(...)
+        pcall(noteDouble)
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not ok then hd.fail("battle pass: " .. tostring(err)) end
         if Engine.introWindow then pcall(Engine.introWindow) end
-        return battleDraw(...)
+        if Engine.doublesY then Engine.doublesY(false) end
+        return drawn(battleDraw(...))
       end
       ours[Battle.draw] = true
     end

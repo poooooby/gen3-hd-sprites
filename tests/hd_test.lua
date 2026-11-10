@@ -1135,6 +1135,79 @@ do
   check(blits[#blits].bx == nil, "Fill Screen off: as the game draws it")
 end
 
+-- a double battle's layout: its HP boxes, from setDouble
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled = true
+  local single = hd.fit.ui
+  local enemy, player = { 1, 5, 104, 54 }, { 137, 62, 239, 110 }
+  hd.setDouble(true, enemy, player)
+  check(hd.fit.feetMax == 62 and hd.fit.backTopMin == 58 and hd.fit.split == 58 and hd.fit.ui.player == player,
+    "doubles: the foes' feet stop at the player's upper box, the UI splits between the two sides")
+  check(hd.fitLift(1) == 0, "doubles without tagged foes: the scene keeps its place")
+  hd.fit.doubleArt = true
+  check(near(hd.fitLift(1), 10), "doubles with tagged foes: the camera rises to clear the boxes")
+  hd.setDouble(false)
+  check(hd.fit.ui == single and hd.fit.feetMax == 76 and hd.fit.backTopMin == 52 and hd.fit.split == 66
+    and hd.fitLift(1) == 0, "back to singles: the singles layout")
+  hd.setDouble(true, nil, nil)
+  check(hd.fit.double == false, "no box positions: the singles layout")
+
+  -- a battler stands on the shifted coordinates: recorded back on its own spot; one drawn by a
+  -- move animation is left where it is
+  hd.setDouble(true, enemy, player)
+  check(hd.fit.shiftMax == 16, "doubles: the side shift stays small")
+  local base, foe = canvas("ui", 240, 160), canvas("foe", 64, 64)
+  hd.tag(foe, { side = "enemy" })
+  hd.fit.shift.enemy = 10
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  G.draw(foe, 210, 40)
+  hd.inAnim = true
+  G.draw(foe, 210, 40)
+  hd.inAnim = false
+  local cur = hd.endPass()
+  check(near(cur.items[1].rec.tx, -10) and near(cur.items[2].rec.tx, 0),
+    "doubles: a battler is recorded on its unshifted spot, an animation's draw is not")
+  hd.endFrame()
+
+  -- upright with rows to spare: the scene's line above the player's boxes, the UI where it was
+  hd.fit.fill, hd.fit.shift.enemy = true, 0
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.seam("ui")
+  G.rectangle("fill", 8, 8, 16, 16)
+  hd.endPass()
+  hd.composite(base, function() end, 0, 900, 4.5, 4.5, nil, { 0, 0, 1080, 2400, bottom = 1500 })
+  hd.endFrame()
+  check(near(hd.stats.sceneUp, 54) and near(hd.stats.uiScale, 4.5), "doubles upright: the scene stands above the player's boxes")
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.seam("ui")
+  G.rectangle("fill", 8, 8, 16, 16)
+  hd.endPass()
+  hd.composite(base, function() end, 0, 0, 6, 6, nil, { 0, 0, 1920, 1080 })
+  hd.endFrame()
+  check(hd.stats.sceneUp == 0, "doubles on a wide screen: the scene stays on the text box")
+  -- an HP box's empty rows may cross the split; a window across it still counts
+  local function crosses(y, h)
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.seam("ui")
+    G.setColor(1, 1, 1, 1)
+    G.rectangle("fill", 0, y, 128, h)
+    local c = hd.endPass()
+    hd.endFrame()
+    return c.uiStraddle == true
+  end
+  check(not crosses(28, 32), "doubles: an HP box's empty rows do not stop the split")
+  check(crosses(30, 60), "doubles: a window across the split still does")
+  hd.setDouble(false)
+  check(hd.fit.shiftMax == 40, "back to singles: the singles side shift")
+end
+
 -- Fill Screen: the screens before the game starts (nothing tagged) are composited, as one picture
 do
   local G = fakeGraphics()
