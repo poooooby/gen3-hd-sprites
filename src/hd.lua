@@ -173,6 +173,10 @@ function HD.new(G, opts)
       -- doublesSlack: rows a UI draw may cross the split and still not count as crossing it (an HP
       -- box is drawn on an image taller than the box: the empty rows meet those of the next one)
       double = false, doublesGap = 4, doublesShiftMax = 16, doublesSlack = 4, sceneUp = 0,
+      -- a whole screen filling the screen (compositeCard): beyond the picture, the picture blurred
+      -- and dimmed to cardDim (cardBlur), or its edge pixels continued outward; with the blur, the
+      -- picture's rim fades into it over cardFeather game pixels
+      cardBlur = true, cardDim = 0.80, cardFeather = 4,
     },
   }
   self.fit.singles = { ui = self.fit.ui, feetMax = self.fit.feetMax, backTopMin = self.fit.backTopMin,
@@ -1569,6 +1573,78 @@ function HD.new(G, opts)
     return cardFlat
   end
 
+  -- a card's blurred backdrop: the flat picture averaged down to a quarter (each halving with
+  -- linear filtering is an exact 2x2 average), then a Gaussian across and down, twice
+  local BLUR_SRC = [[
+extern vec2 dir;
+vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
+  vec4 s = Texel(t, tc) * 0.2270270270;
+  s += (Texel(t, tc + dir * 1.3846153846) + Texel(t, tc - dir * 1.3846153846)) * 0.3162162162;
+  s += (Texel(t, tc + dir * 3.2307692308) + Texel(t, tc - dir * 3.2307692308)) * 0.0702702703;
+  return s * c;
+}]]
+  -- the backdrop again over the picture's rim, fading out inward: rect, the picture in the
+  -- backdrop's texture coordinates (an edge with no gap beside it is moved out of reach);
+  -- feather, how far in the fade reaches
+  local FEATHER_SRC = [[
+extern vec4 rect;
+extern vec2 feather;
+vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
+  float ax = min(tc.x - rect.x, rect.z - tc.x) / feather.x;
+  float ay = min(tc.y - rect.y, rect.w - tc.y) / feather.y;
+  float a = 1.0 - smoothstep(0.0, 1.0, clamp(min(ax, ay), 0.0, 1.0));
+  return Texel(t, tc) * c * a;
+}]]
+  local featherShader    -- nil: not made yet; false: this device cannot make it
+  local featherRect, featherSize = { 0, 0, 1, 1 }, { 1, 1 }
+  local blurShader       -- nil: not made yet; false: this device cannot make it
+  local blurHalf, blurA, blurB, blurW, blurH = nil, nil, nil, 0, 0
+  local blurDir = { 0, 0 }
+  local function blurInto(dst, src, sx, sy)
+    real.setCanvas(dst)
+    real.clear(0, 0, 0, 0)
+    real.draw(src, 0, 0, 0, sx, sy)
+  end
+  local function blurCard(flat, w, h)
+    if blurShader == nil then
+      local ok, sh = pcall(G.newShader, BLUR_SRC)
+      blurShader = ok and sh or false
+    end
+    if not blurShader then return nil end
+    local w4, h4 = math.ceil(w / 4), math.ceil(h / 4)
+    if not blurA or blurW ~= w4 or blurH ~= h4 then
+      blurHalf = real.newCanvas(math.ceil(w / 2), math.ceil(h / 2), { dpiscale = 1 })
+      blurA = real.newCanvas(w4, h4, { dpiscale = 1 })
+      blurB = real.newCanvas(w4, h4, { dpiscale = 1 })
+      for _, c in ipairs({ blurHalf, blurA, blurB }) do
+        if c.setFilter then c:setFilter("linear", "linear") end
+      end
+      blurW, blurH = w4, h4
+    end
+    local send = shaderReal.send or blurShader.send
+    real.push("all")
+    real.origin()
+    real.setScissor()
+    real.setShader()
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("replace", "premultiplied")
+    if flat.setFilter then flat:setFilter("linear", "linear") end
+    blurInto(blurHalf, flat, 0.5, 0.5)
+    if flat.setFilter then flat:setFilter("nearest", "nearest") end
+    blurInto(blurA, blurHalf, 0.5, 0.5)
+    real.setShader(blurShader)
+    for _ = 1, 2 do
+      blurDir[1], blurDir[2] = 1 / w4, 0
+      send(blurShader, "dir", blurDir)
+      blurInto(blurB, blurA, 1, 1)
+      blurDir[1], blurDir[2] = 0, 1 / h4
+      send(blurShader, "dir", blurDir)
+      blurInto(blurA, blurB, 1, 1)
+    end
+    real.pop()
+    return blurA
+  end
+
   --- A screen of the game's own in a battle (fit.fill): the Pokedex page and the caught scene of
   --- a new catch, the summary, the nickname screen, evolution, the party, the bag. It is a whole
   --- 240x160 picture, so it is scaled as far as it fits (sharply, as the stacked UI is) and the
@@ -1589,7 +1665,9 @@ function HD.new(G, opts)
     local x1, y1 = ubx + cur.w * U, uby + cur.h * Uy
     local vr, vb = vx + vw, vy + vh
     local screen = { vx, vy, vw, vh }
-    local box = clipRect(ubx, uby, cur.w * U, cur.h * Uy, screen)
+    -- the picture's clip, out to whole pixels (a clip's fractions are cut off)
+    local bx0, by0 = math.floor(ubx), math.floor(uby)
+    local box = clipRect(bx0, by0, math.ceil(x1) - bx0, math.ceil(y1) - by0, screen)
     local k = U ~= math.floor(U) and math.ceil(U) or 1
     self.stats.fill, self.stats.uiScale, self.stats.uiTopDy = U / bsx, U, 0
     self.stats.card = (self.stats.card or 0) + 1
@@ -1603,26 +1681,45 @@ function HD.new(G, opts)
     real.setShader()
     real.setColor(1, 1, 1, 1)
     real.setBlendMode("alpha", "premultiplied")
-    -- beyond the picture: a canvas pixel as wide (or tall) as the gap, clipped to the gap
+    -- beyond the picture: a canvas pixel as wide (or tall) as the gap, clipped to the gap. A
+    -- clip is cut to whole pixels, so each gap's clip reaches over the picture's edge pixel
+    -- (ceil / floor): a screen pixel the picture covers less than half of is the gap's, and the
+    -- picture, drawn after, covers the rest
+    local soft, sdx, sdy, sdw, sdh
     if ubx > vx or x1 < vr or uby > vy or y1 < vb then
       local flat = flattenCard(cur)
-      local h = cur.h * Uy
+      -- the picture blurred, dimmed and grown to cover the whole screen behind it
+      soft = self.fit.cardBlur and blurCard(flat, cur.w, cur.h)
+      if soft then
+        local S = math.max(vw / cur.w, vh * bsx / (cur.h * bsy))
+        sdw, sdh = cur.w * S, cur.h * S * bsy / bsx
+        sdx, sdy = vx + (vw - sdw) / 2, vy + (vh - sdh) / 2
+        local d = self.fit.cardDim
+        real.setColor(d, d, d, 1)
+        blit(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), screen)
+        real.setColor(1, 1, 1, 1)
+      end
+    end
+    if not soft and (ubx > vx or x1 < vr or uby > vy or y1 < vb) then
+      local flat = cardFlat
+      local floor, ceil = math.floor, math.ceil
+      local ry0, ry1 = floor(uby), ceil(y1)
       if ubx > vx then
         local w = ubx - vx
-        blit(flat, ubx - w, uby, w, Uy, { vx, uby, w, h })
+        blit(flat, ubx - w, uby, w, Uy, { vx, ry0, ceil(ubx) - vx, ry1 - ry0 })
       end
       if x1 < vr then
         local w = vr - x1
-        blit(flat, x1 - (cur.w - 1) * w, uby, w, Uy, { x1, uby, w, h })
+        blit(flat, x1 - (cur.w - 1) * w, uby, w, Uy, { floor(x1), ry0, vr - floor(x1), ry1 - ry0 })
       end
       local sw = vw / cur.w
       if uby > vy then
         local g = uby - vy
-        blit(flat, vx, uby - g, sw, g, { vx, vy, vw, g })
+        blit(flat, vx, uby - g, sw, g, { vx, vy, vw, ceil(uby) - vy })
       end
       if y1 < vb then
         local g = vb - y1
-        blit(flat, vx, y1 - (cur.h - 1) * g, sw, g, { vx, y1, vw, g })
+        blit(flat, vx, y1 - (cur.h - 1) * g, sw, g, { vx, floor(y1), vw, vb - floor(y1) })
       end
     end
     local inScene, hidden = true, cur.uiCovers
@@ -1653,6 +1750,32 @@ function HD.new(G, opts)
           real.setBlendMode("alpha", "premultiplied")
           picture(item.canvas)
         end
+      end
+    end
+    -- the picture's rim fades into the backdrop: the backdrop again, opaque at an edge with a gap
+    -- beside it and gone cardFeather game pixels in
+    local F = self.fit.cardFeather
+    if soft and F > 0 then
+      if featherShader == nil then
+        local ok, sh = pcall(G.newShader, FEATHER_SRC)
+        featherShader = ok and sh or false
+      end
+      if featherShader then
+        local send = shaderReal.send or featherShader.send
+        featherRect[1] = ubx > vx and (ubx - sdx) / sdw or -1
+        featherRect[2] = uby > vy and (uby - sdy) / sdh or -1
+        featherRect[3] = x1 < vr and (x1 - sdx) / sdw or 2
+        featherRect[4] = y1 < vb and (y1 - sdy) / sdh or 2
+        featherSize[1], featherSize[2] = F * U / sdw, F * Uy / sdh
+        send(featherShader, "rect", featherRect)
+        send(featherShader, "feather", featherSize)
+        real.setScissor()
+        real.setShader(featherShader)
+        real.setBlendMode("alpha", "premultiplied")
+        local d = self.fit.cardDim
+        real.setColor(d, d, d, 1)
+        blit(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), box)
+        real.setShader()
       end
     end
     real.pop()

@@ -1059,12 +1059,13 @@ do
 end
 
 -- Fill Screen: a whole screen over the battle (the summary, the party, a Pokedex page) and the
--- caught scene are one picture that fills the screen, its edges continued past it
+-- caught scene are one picture that fills the screen, its edges continued past it (with the
+-- blur off: the boot tests below check the blurred backdrop)
 do
   local G = fakeGraphics()
   local hd = HD.new(G)
   hd.install()
-  hd.fit.enabled, hd.fit.fill = true, true
+  hd.fit.enabled, hd.fit.fill, hd.fit.cardBlur = true, true, false
   local base = canvas("ui", 240, 160)
   local mon = canvas("mon", 64, 64)
   hd.tag(mon, { scale = 1 })
@@ -1223,7 +1224,11 @@ do
     check(hd.done[base] == cur, "...and waits for its blit with nothing tagged")
     local blits = {}
     local handled = hd.composite(base, function(c, bx, by, sx, sy, box, zk)
-      blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box, zk = zk }
+      local sh = G.getShader()
+      local u = {}
+      if sh then for k, v in pairs(sh.u) do u[k] = { unpack(v) } end end
+      blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box, zk = zk,
+                            shader = sh, u = u }
     end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, view)
     hd.endFrame()
     return blits, handled
@@ -1233,10 +1238,38 @@ do
   for _, e in ipairs(blits) do if e.zk then pic = e end end
   check(handled and near(hd.stats.uiScale, 6.75) and pic and near(pic.bx, 150) and near(pic.by, 0),
     "a boot screen fills the screen, centred")
-  check(blits[1].box and near(blits[1].box[3], 150), "...its edges run out to the sides")
+  -- behind it, the picture blurred at a quarter size, grown to cover the screen (1920 wide: 8 a
+  -- game pixel, 32 a blurred one; 1280 tall, centred) and clipped to it
+  local soft = blits[1]
+  check(soft.canvas.getWidth() == 60 and near(soft.sx, 32) and near(soft.sy, 32) and near(soft.bx, 0)
+      and near(soft.by, -100) and soft.box[1] == 0 and soft.box[3] == 1920 and soft.box[4] == 1080
+      and soft ~= pic, "...over its picture blurred, covering the screen")
+  -- last, the picture's rim fades into it: the backdrop again through the feather, clipped to the
+  -- picture; its sides fade (the picture from 150 to 1770 of a backdrop 1920 wide, 4 game pixels
+  -- in), its top and bottom, with no gap beside them, do not
+  local rim = blits[#blits]
+  local r, f = rim.u.rect, rim.u.feather
+  check(rim.canvas == soft.canvas and rim.shader and rim.shader.src:find("feather") and rim.box == pic.box
+      and near(r[1], 150 / 1920) and near(r[3], 1770 / 1920) and r[2] < 0 and r[4] > 1
+      and near(f[1], 4 * 6.75 / 1920), "...the picture's sides fade into it, its top and bottom do not")
+  hd.fit.cardBlur = false
+  blits = frame({ 0, 0, 1920, 1080 })
+  check(blits[1].box and near(blits[1].box[3], 150), "without the blur its edges run out to the sides")
   blits = frame({ 0, 0, 1080, 2400, bottom = 1500 })
   for _, e in ipairs(blits) do if e.zk then pic = e end end
   check(near(hd.stats.uiScale, 4.5) and near(pic.by, 1500 - 720), "upright: spanning the width, above the controls")
+  -- a scale that puts the picture's edges inside a screen pixel (2560x1369: 252.8 to 2307.2): the
+  -- clips are cut to whole pixels, so the side strips and the picture together cover every column
+  blits = frame({ 0, 0, 2560, 1369 })
+  for _, e in ipairs(blits) do if e.zk then pic = e end end
+  local left, right = blits[1].box, blits[2].box
+  local function cut(b) return math.floor(b[1]), math.floor(b[1]) + math.floor(b[3]) end
+  local l0, l1 = cut(left)
+  local r0, r1 = cut(right)
+  local p0, p1 = cut(pic.box)
+  check(near(pic.bx, 252.8) and l0 == 0 and l1 >= p0 and l1 >= 253 and p1 >= r0 and r0 <= 2307 and r1 == 2560,
+    "a picture's edge inside a screen pixel leaves no unpainted column")
+  hd.fit.cardBlur = true
   hd.enabled.boot = false
   G.setCanvas(base)
   check(not hd.beginPass("boot", base), "with Fill Screen off no boot pass starts")

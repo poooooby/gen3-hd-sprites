@@ -49,8 +49,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
   stretches up to the top of the screen.
 - 🏁 **Every screen in a battle fills it too:** The Pokédex page and the caught Pokémon of a new
   catch, the nickname screen, the summary and move-forget screen, evolution, the party and the
-  bag all grow as large as your screen allows, with their backgrounds running out to its edges.
-  Nothing is cropped or stretched, and no frame shows.
+  bag all grow as large as your screen allows. The space around them is a soft, dimmed blur of
+  the screen itself, and their edges fade gently into it. Nothing is cropped or stretched, and no
+  black bars show.
 - 🎬 **So does everything before your adventure:** The intro movie, the title screen, the main
   menu and its options, the professor's speech and the naming screens fill your screen the same
   way.

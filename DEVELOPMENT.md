@@ -264,9 +264,18 @@ already covers the view.
   - it is scaled as far as it fits the usable rows (`view.top` to `view.bottom`), sharply through
     `sharpen`, centred, or docked above touch controls;
   - tagged draws on it (its Pokémon) go at that scale;
-  - the rest of the view continues its edges: the pass is flattened (`flattenCard`) and blitted
-    again with one canvas pixel as wide or tall as each gap, clipped to it (`stats().card` counts
-    these frames);
+  - the rest of the view is the picture blurred (`fit.cardBlur`): the pass is flattened
+    (`flattenCard`), averaged down to a quarter (`blurCard`: each halving with linear filtering is
+    an exact 2×2 average), given two Gaussian passes across and down, then blitted dimmed to
+    `fit.cardDim` and grown to cover the whole view behind the picture;
+  - after the picture and its draws, the backdrop is blitted again through `FEATHER_SRC`, clipped
+    to the picture: opaque at an edge with a gap beside it, gone `fit.cardFeather` game pixels in,
+    so the picture fades into it (an edge on the view's border does not fade);
+  - without the blur (`cardBlur = false`, or a device that cannot make the shader) the view
+    continues the picture's edges instead: the flat pass blitted again with one canvas pixel as
+    wide or tall as each gap, clipped to it. A clip is cut to whole pixels, so each clip reaches
+    over the picture's edge pixel (`ceil` / `floor`), or a column is left unpainted at a scale
+    that puts the edge inside a pixel (2560×1369). `stats().card` counts these frames;
   - a half-faded cover is not one: the battle keeps its fill, and the cover spans the view.
 - **Double battles (`hd.setDouble`):** `Battle.draw` hands over both sides' HP boxes, from the
   engine's `Healthbox.center`. The foes' feet stop at the top of the player's upper box, a back's
