@@ -14,6 +14,9 @@
 --                          (src/ui/game3/pokedex.lua), wrapped once each is loaded; like the
 --                          battle pass it ends at Renderer:endFrame. Inside a battle (a caught
 --                          Pokemon's entry) the battle pass is already capturing it.
+--   Display.presentUi      a "boot" frame (the intro movie, the title, the main menu, Oak's or
+--                          Birch's speech, the naming screens) is a boot pass: with Fill Screen
+--                          it fills the screen as one picture
 --   SummaryMenu.draw       the Pokemon summary screen, a dex pass: FireRed/LeafGreen's
 --                          (src/ui/game3/summary_menu.lua) and the skins the screen stack draws
 --                          in its place, Emerald's (rse/summary_menu.lua) and Ruby/Sapphire's
@@ -441,7 +444,7 @@ function Engine.install(hd)
 
     if not ours[endFrame] then
       Renderer.endFrame = function(self, ...)
-        if hd.capturing("battle") or hd.capturing("dex") then hd.endPass() end
+        if hd.capturing("battle") or hd.capturing("dex") or hd.capturing("boot") then hd.endPass() end
         for base, cur in pairs(hd.done) do
           local willBlit = base == self.canvas
             or (base == self.worldCanvas and self.worldActive and not self.worldOverride
@@ -504,6 +507,23 @@ function Engine.install(hd)
         return battleDraw(...)
       end
       ours[Battle.draw] = true
+    end
+    -- the screens before the game starts: one reused closure, the frame's own draw in a local
+    if okD and type(Display) == "table" and type(Display.presentUi) == "function"
+        and not ours[Display.presentUi] then
+      local presentUi = Display.presentUi
+      local drawFrame
+      local function drawBoot()
+        local okB, errB = pcall(hd.beginPass, "boot", love.graphics.getCanvas())
+        if not okB then hd.fail("boot pass: " .. tostring(errB)) end
+        return drawFrame()
+      end
+      Display.presentUi = function(game, winW, winH, kind, drawFn, ...)
+        if kind ~= "boot" then return presentUi(game, winW, winH, kind, drawFn, ...) end
+        drawFrame = drawFn
+        return presentUi(game, winW, winH, kind, drawBoot, ...)
+      end
+      ours[Display.presentUi] = true
     end
     Engine.wrapDex(hd)
     local okFit, fitOk = pcall(Engine.wrapFit, hd)

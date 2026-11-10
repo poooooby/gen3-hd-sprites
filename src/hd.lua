@@ -78,9 +78,9 @@ function HD.new(G, opts)
     G = G,
     log = opts.log,
     tags = setmetatable({}, { __mode = "k" }),
-    enabled = { battle = true, field = true, dex = true },
+    enabled = { battle = true, field = true, dex = true, boot = true },
     -- most splits (window-sized layers) a pass may use; a tagged draw past it is drawn low-res
-    caps = { battle = 8, field = 12, dex = 8 },
+    caps = { battle = 8, field = 12, dex = 8, boot = 8 },
     cur = nil,          -- the pass being captured
     done = {},          -- finished passes waiting for their blit, by base canvas
     pool = {},          -- layer canvases by "w x h" -> list
@@ -853,7 +853,8 @@ function HD.new(G, opts)
     if c ~= nil and (c == cur.base or cur.layerSet[c]) and c ~= cur.base then real.setCanvas(cur.base) end
     if cur.cm and cur.cm.shader then
       self.done[cur.cm.to] = cur
-    elseif #cur.items > 0 then
+    elseif #cur.items > 0 or cur.pass == "boot" then
+      -- (a boot screen is composited even with nothing tagged: it fills the screen)
       self.done[cur.base] = cur
     end
     return cur
@@ -1623,10 +1624,10 @@ function HD.new(G, opts)
     local cur = self.done[canvas]
     if not cur then return false end
     local fit = self.fit
-    -- a whole screen over the battle (uiCovers), or the caught scene, which has no scene or UI
-    -- of a battle (no seam): the picture fills the screen
-    if cur.pass == "battle" and fit.enabled and fit.fill and view ~= nil
-      and (cur.uiCovers or not cur.hasUI) then
+    -- a whole screen over the battle (uiCovers), the caught scene, which has no scene or UI of
+    -- a battle (no seam), or a screen before the game starts: the picture fills the screen
+    if view ~= nil and fit.enabled and fit.fill
+      and (cur.pass == "boot" or (cur.pass == "battle" and (cur.uiCovers or not cur.hasUI))) then
       return compositeCard(cur, blit, bsx, bsy, view)
     end
     local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled

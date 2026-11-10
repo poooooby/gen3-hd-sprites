@@ -268,6 +268,11 @@ already covers the view.
     again with one canvas pixel as wide or tall as each gap, clipped to it (`stats().card` counts
     these frames);
   - a half-faded cover is not one: the battle keeps its fill, and the cover spans the view.
+- **Boot screens:** a `Display.presentUi` frame of kind `"boot"` (the intro movie, title, main
+  menu, options, the professor's speech, the naming screens, a mod's boot screen) is a `boot` pass
+  (`hd.enabled.boot`: Battle HD, Battle Fit and Fill Screen all on). It is composited even with
+  nothing tagged, always through `compositeCard`. `tests/drivers/boot_cards.lua` plays through
+  them with the buttons.
 - The outward side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px
   canvas. The stacked layout's inward slide needs no cap.
 

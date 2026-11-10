@@ -1135,6 +1135,40 @@ do
   check(blits[#blits].bx == nil, "Fill Screen off: as the game draws it")
 end
 
+-- Fill Screen: the screens before the game starts (nothing tagged) are composited, as one picture
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local function frame(view)
+    G.setCanvas(base)
+    check(hd.beginPass("boot", base) == true, "a boot pass starts")
+    G.rectangle("fill", 8, 8, 16, 16)
+    local cur = hd.endPass()
+    check(hd.done[base] == cur, "...and waits for its blit with nothing tagged")
+    local blits = {}
+    local handled = hd.composite(base, function(c, bx, by, sx, sy, box, zk)
+      blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box, zk = zk }
+    end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, view)
+    hd.endFrame()
+    return blits, handled
+  end
+  local blits, handled = frame({ 0, 0, 1920, 1080 })
+  local pic
+  for _, e in ipairs(blits) do if e.zk then pic = e end end
+  check(handled and near(hd.stats.uiScale, 6.75) and pic and near(pic.bx, 150) and near(pic.by, 0),
+    "a boot screen fills the screen, centred")
+  check(blits[1].box and near(blits[1].box[3], 150), "...its edges run out to the sides")
+  blits = frame({ 0, 0, 1080, 2400, bottom = 1500 })
+  for _, e in ipairs(blits) do if e.zk then pic = e end end
+  check(near(hd.stats.uiScale, 4.5) and near(pic.by, 1500 - 720), "upright: spanning the width, above the controls")
+  hd.enabled.boot = false
+  G.setCanvas(base)
+  check(not hd.beginPass("boot", base), "with Fill Screen off no boot pass starts")
+end
+
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else
 do
   local G = fakeGraphics()
