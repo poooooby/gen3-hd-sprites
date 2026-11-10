@@ -168,7 +168,8 @@ The target zoom:
   The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
   frames.
-- A frame with no UI seam (the post-catch Pokédex scene) is neither zoomed nor filled.
+- A frame with no UI seam (the post-catch Pokédex scene) is not zoomed; it fills as a whole
+  screen (see Fill Screen).
 
 With no `top`, the frame's own top row counts, empty margin included. Pass `top` (the first
 row of art, the highest over the animation) so the camera fits the art and not the frame.
@@ -256,9 +257,17 @@ already covers the view.
   That is why a filled widescreen battle pulls back less.
 - **Whole-scene layers** (a move's background, a flash), and UI draws over the whole canvas (a
   fade), get a layer of their own, cover-scaled to the view.
-- **Sitting out:** an opaque draw over the whole 240×160 canvas after the UI seam (a summary or
-  care screen opened in the battle, a fade at full black) sets `cur.uiCovers`, and that frame is
-  composited framed, as without fill. A half-faded cover keeps the fill, so a fade doesn't jump.
+- **Whole screens (`compositeCard`):** an opaque draw over the whole 240×160 canvas after the UI
+  seam (the summary, nickname, party, bag, the Pokédex page, evolution, a mod's screen, a fade at
+  full black) sets `cur.uiCovers`; a frame with no seam at all is the caught scene. Either is one
+  picture:
+  - it is scaled as far as it fits the usable rows (`view.top` to `view.bottom`), sharply through
+    `sharpen`, centred, or docked above touch controls;
+  - tagged draws on it (its Pokémon) go at that scale;
+  - the rest of the view continues its edges: the pass is flattened (`flattenCard`) and blitted
+    again with one canvas pixel as wide or tall as each gap, clipped to it (`stats().card` counts
+    these frames);
+  - a half-faded cover is not one: the battle keeps its fill, and the cover spans the view.
 - The outward side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px
   canvas. The stacked layout's inward slide needs no cap.
 
@@ -303,7 +312,7 @@ texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pas
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
-`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `grow`, `inward`, `topY`, `uiK`,
+`zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,
 `failed`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 

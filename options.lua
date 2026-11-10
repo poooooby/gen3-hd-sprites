@@ -19,7 +19,7 @@ return {
     label = "Fill Screen",
     type = "toggle",
     default = true,
-    description = "With Battle Fit, the battle scene fills your whole screen, top to bottom and out to the sides, while the text box, HP bars and menus keep their sharp size, docked to the bottom. Off: the usual framed battle screen.",
+    description = "With Battle Fit, the battle scene fills your whole screen, top to bottom and out to the sides, while the text box, HP bars and menus keep their sharp size, docked to the bottom. The summary, party, bag, Pokedex page, evolution and nickname screens fill it too. Off: the usual framed battle screen.",
   },
   {
     key = "field_hd",

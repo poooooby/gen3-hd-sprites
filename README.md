@@ -47,6 +47,10 @@ resolution, and the camera pulls back so even the biggest ones fit.
   of the screen out to both sides. The battle's opening fills it too: the black curtain opens
   across the whole screen and the grass, sand or waves sweep across its full width, and the sky
   stretches up to the top of the screen.
+- 🏁 **Every screen in a battle fills it too:** The Pokédex page and the caught Pokémon of a new
+  catch, the nickname screen, the summary and move-forget screen, evolution, the party and the
+  bag all grow as large as your screen allows, with their backgrounds running out to its edges.
+  Nothing is cropped or stretched, and no frame shows.
 - 📱 **Made for phones held upright:** The text box and menus stretch the full width, sharp and
   even, right above the touch controls. The battle grows into the space above them, with
   both Pokémon and both platforms always whole on screen. With a sprite mod, the two sides
@@ -68,7 +72,7 @@ Open **OPTIONS → MODS → WoobleView**.
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
 | **Battle Fit** | On / Off | On | Pull the battle camera back so tall Pokémon fit. Needs Battle HD. |
-| **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. Off: the usual framed battle screen. Needs Battle Fit. |
+| **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too. Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
@@ -92,8 +96,6 @@ Open **OPTIONS → MODS → WoobleView**.
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
   to your screen.
 - The camera pulls back to 40% at most, enough for the very biggest (Lugia, Koraidon).
-- A full-screen menu opened in a battle (a summary or a care screen) shows framed, like the
-  original, while Fill Screen is on.
 - If your device can't draw battles this way, the mod steps aside for that session and the
   game draws everything as usual.
 

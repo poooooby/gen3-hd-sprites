@@ -1058,34 +1058,81 @@ do
   check(b and near(pads.enemy.args[1], pads.player.args[1]), "...both pads stay on the scene's own spots")
 end
 
--- Fill Screen sits out a frame whose UI covers the whole canvas (a menu over the battle)
+-- Fill Screen: a whole screen over the battle (the summary, the party, a Pokedex page) and the
+-- caught scene are one picture that fills the screen, its edges continued past it
 do
   local G = fakeGraphics()
   local hd = HD.new(G)
   hd.install()
   hd.fit.enabled, hd.fit.fill = true, true
   local base = canvas("ui", 240, 160)
-  local function frame(menuAlpha)
+  local mon = canvas("mon", 64, 64)
+  hd.tag(mon, { scale = 1 })
+  local function frame(menuAlpha, view, noSeam)
     G.setCanvas(base)
     hd.beginPass("battle", base)
     hd.backdrop(canvas("wall", 256, 160), 0, 0)
-    hd.seam("ui")
+    if not noSeam then hd.seam("ui") end
     G.setColor(1, 1, 1, menuAlpha)
     G.rectangle("fill", 0, 0, 240, 160)
     G.setColor(1, 1, 1, 1)
+    G.draw(mon, 120, 80)
+    G.rectangle("fill", 0, 112, 240, 48)
     hd.endPass()
     local blits = {}
-    hd.composite(base, function(c, bx, by, sx, sy, box)
-      blits[#blits + 1] = { bx = bx, by = by, sx = sx }
-    end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 })
-    return blits[#blits]
+    G.log = {}
+    hd.composite(base, function(c, bx, by, sx, sy, box, zk)
+      blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box, zk = zk }
+    end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, view)
+    hd.endFrame()
+    return blits
   end
-  local ui = frame(1)
-  check(hd.stats.fill == 1 and ui and (ui.by or 60) == 60, "an opaque full-canvas menu: the frame is framed as usual")
-  ui = frame(0.5)
-  -- (it covers the whole screen: 1920x1080 by the 240x160 canvas at 8x, centred)
-  check(hd.stats.fill > 1 and ui and near(ui.sx, 8) and near(ui.by, (1080 - 160 * 8) / 2) and near(ui.bx, 0),
-    "a half-faded cover keeps the fill, and covers the whole screen")
+  local function pictures(blits)
+    local pics = {}
+    for _, e in ipairs(blits) do if e.zk then pics[#pics + 1] = e end end
+    return pics
+  end
+  local wide = { 0, 0, 1920, 1080 }
+  local blits = frame(1, wide)
+  local pics = pictures(blits)
+  local U = 6.75
+  check(near(hd.stats.uiScale, U) and #pics >= 1 and near(pics[1].bx, 150) and near(pics[1].by, 0)
+    and near(pics[1].sx * pics[1].zk, U), "an opaque full-canvas screen is scaled as far as it fits, centred")
+  check(pics[1].zk == 7 and near(pics[1].box[3], 1620) and near(pics[1].box[4], 1080), "...sharply, whole")
+  local left, right = blits[1], blits[2]
+  check(left and left.box and near(left.box[1], 0) and near(left.box[3], 150) and near(left.sx, 150)
+    and near(left.bx, 0), "its first column runs out to the left edge")
+  check(right and right.box and near(right.box[1], 1770) and near(right.box[3], 150) and near(right.sx, 150)
+    and near(right.bx + 239 * right.sx, 1770), "its last column to the right edge")
+  local icon
+  for _, e in ipairs(G.log) do if e.image == mon then icon = e end end
+  check(icon and near(icon.args[1], 150 + (120 + 32) * U), "a tagged draw on it is at the picture's scale")
+  -- upright, above the touch controls: the width fits; its edge rows above and below
+  blits = frame(1, { 0, 0, 1080, 2400, bottom = 1500 })
+  pics = pictures(blits)
+  check(near(hd.stats.uiScale, 4.5) and near(pics[1].bx, 0) and near(pics[1].by, 1500 - 160 * 4.5),
+    "upright: spanning the width, docked above the controls")
+  check(blits[1].box and near(blits[1].box[4], 780) and near(blits[1].sy, 780)
+    and blits[2].box and near(blits[2].box[2], 1500) and near(blits[2].box[4], 900),
+    "...its top row up to the screen's top, its bottom row down to the bottom")
+  -- upright with nothing below: centred
+  blits = frame(1, { 0, 0, 1080, 2400 })
+  pics = pictures(blits)
+  check(near(pics[1].by, (2400 - 720) / 2), "upright, no controls: centred")
+  -- the caught scene: no seam, the same
+  blits = frame(1, wide, true)
+  pics = pictures(blits)
+  check(near(hd.stats.uiScale, U) and near(pics[1].bx, 150), "a frame with no seam (the caught scene) fills the same")
+  -- a translucent cover is not a screen: the battle goes on under it, the cover over the whole screen
+  blits = frame(0.5, wide)
+  local cover
+  for _, e in ipairs(blits) do if near(e.sx, 8) then cover = e end end
+  check(hd.stats.fill > 1 and near(hd.stats.uiScale, 6) and cover and near(cover.bx, 0),
+    "a half-faded cover keeps the battle's fill, and covers the whole screen")
+  -- Fill Screen off: the frame is the Renderer's
+  hd.fit.fill = false
+  blits = frame(1, wide)
+  check(blits[#blits].bx == nil, "Fill Screen off: as the game draws it")
 end
 
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else

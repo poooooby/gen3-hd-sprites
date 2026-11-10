@@ -419,9 +419,9 @@ function HD.new(G, opts)
     cur.uiStraddle = true
   end
 
-  -- an opaque draw over the battle's whole canvas after the UI seam (a menu or summary
-  -- screen opened over the battle, a fade at full black): fill sits that frame out, so the
-  -- screen shows framed like the game's own rather than docked over the scene
+  -- an opaque draw over the battle's whole canvas after the UI seam (a screen opened over the
+  -- battle: the summary, the party, the bag, evolution; a fade at full black): that frame is a
+  -- whole picture, and fills the screen as one (compositeCard)
   local function noteUICover(covers)
     local cur = self.cur
     if not (covers and self.fit.fill and cur.pass == "battle" and cur.segment == "ui") then return end
@@ -1490,6 +1490,128 @@ function HD.new(G, opts)
     return sharp, k
   end
 
+  -- the last rows and columns of a card (the pass's picture, flat), for the screen beyond it
+  local cardFlat, cardFlatW, cardFlatH = nil, 0, 0
+  local function flattenCard(cur)
+    if not cardFlat or cardFlatW ~= cur.w or cardFlatH ~= cur.h then
+      if cardFlat and cardFlat.release then pcall(cardFlat.release, cardFlat) end
+      cardFlat = real.newCanvas(cur.w, cur.h, { dpiscale = 1 })
+      if cardFlat.setFilter then cardFlat:setFilter("nearest", "nearest") end
+      cardFlatW, cardFlatH = cur.w, cur.h
+    end
+    real.push("all")
+    real.setCanvas(cardFlat)
+    real.origin()
+    real.setScissor()
+    real.setShader()
+    real.clear(0, 0, 0, 0)
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("alpha", "premultiplied")
+    local inScene, hidden = true, cur.uiCovers
+    if not hidden then real.draw(cur.base, 0, 0) end
+    for _, item in ipairs(cur.items) do
+      if item.kind == "seam" then
+        if item.name == "ui" then inScene = false end
+      elseif item.canvas and not (inScene and hidden) then
+        real.draw(item.canvas, 0, 0)
+      end
+    end
+    real.pop()
+    return cardFlat
+  end
+
+  --- A screen of the game's own in a battle (fit.fill): the Pokedex page and the caught scene of
+  --- a new catch, the summary, the nickname screen, evolution, the party, the bag. It is a whole
+  --- 240x160 picture, so it is scaled as far as it fits (sharply, as the stacked UI is) and the
+  --- rest of the screen continues its edges: each row's first and last pixel out to the sides,
+  --- the top and bottom rows up and down. Nothing is cropped or stretched, and no frame shows.
+  local function compositeCard(cur, blit, bsx, bsy, view)
+    -- the camera keeps its place behind the screen
+    if cur.hasUI then fitStep(cur) end
+    local vx, vy, vw, vh = view[1], view[2], view[3], view[4]
+    local top = math.max(vy, view.top or vy)
+    local bottom = math.min(vy + vh, view.bottom or (vy + vh))
+    local docked = view.bottom ~= nil
+    if bottom - top < cur.h * bsy then top, bottom, docked = vy, vy + vh, false end
+    local U = round2(math.min(vw / cur.w, (bottom - top) * bsx / (cur.h * bsy)))
+    local Uy = round2(U * bsy / bsx)
+    local ubx = round2(vx + (vw - cur.w * U) / 2)
+    local uby = round2(docked and (bottom - cur.h * Uy) or (top + ((bottom - top) - cur.h * Uy) / 2))
+    local x1, y1 = ubx + cur.w * U, uby + cur.h * Uy
+    local vr, vb = vx + vw, vy + vh
+    local screen = { vx, vy, vw, vh }
+    local box = clipRect(ubx, uby, cur.w * U, cur.h * Uy, screen)
+    local k = U ~= math.floor(U) and math.ceil(U) or 1
+    self.stats.fill, self.stats.uiScale, self.stats.uiTopDy = U / bsx, U, 0
+    self.stats.card = (self.stats.card or 0) + 1
+    local function picture(c)
+      local src, kk = c, 1
+      if k > 1 then src, kk = sharpen(c, cur.w, cur.h, k) end
+      blit(src, ubx, uby, U / kk, Uy / kk, box, kk)
+    end
+    real.push("all")
+    real.setScissor()
+    real.setShader()
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("alpha", "premultiplied")
+    -- beyond the picture: a canvas pixel as wide (or tall) as the gap, clipped to the gap
+    if ubx > vx or x1 < vr or uby > vy or y1 < vb then
+      local flat = flattenCard(cur)
+      local h = cur.h * Uy
+      if ubx > vx then
+        local w = ubx - vx
+        blit(flat, ubx - w, uby, w, Uy, { vx, uby, w, h })
+      end
+      if x1 < vr then
+        local w = vr - x1
+        blit(flat, x1 - (cur.w - 1) * w, uby, w, Uy, { x1, uby, w, h })
+      end
+      local sw = vw / cur.w
+      if uby > vy then
+        local g = uby - vy
+        blit(flat, vx, uby - g, sw, g, { vx, vy, vw, g })
+      end
+      if y1 < vb then
+        local g = vb - y1
+        blit(flat, vx, y1 - (cur.h - 1) * g, sw, g, { vx, y1, vw, g })
+      end
+    end
+    local inScene, hidden = true, cur.uiCovers
+    if not hidden then picture(cur.base) end
+    for _, item in ipairs(cur.items) do
+      if item.kind == "seam" then
+        if item.name == "ui" then inScene = false end
+      elseif not (inScene and hidden) then
+        real.setScissor(box[1], box[2], box[3], box[4])
+        if item.kind == "hd" then
+          hdDraw(item.rec, ubx, uby, U, Uy)
+        elseif item.kind == "stage" then
+          imageDraw(item.rec, ubx, uby, U, Uy)
+        elseif item.kind == "backdrop" or item.kind == "band" then
+          drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy,
+            item.kind == "band" and "clampzero" or nil)
+        elseif item.kind == "win0" then
+          real.setShader()
+          real.setBlendMode("alpha", "alphamultiply")
+          local c = item.color
+          real.setColor(c[1], c[2], c[3], c[4])
+          real.rectangle("fill", ubx, uby, cur.w * U, item.top * Uy)
+          real.rectangle("fill", ubx, uby + item.bottom * Uy, cur.w * U, (cur.h - item.bottom) * Uy)
+        elseif item.canvas then
+          real.setScissor()
+          real.setShader()
+          real.setColor(1, 1, 1, 1)
+          real.setBlendMode("alpha", "premultiplied")
+          picture(item.canvas)
+        end
+      end
+    end
+    real.pop()
+    restoreShaders()
+    self.stats.composites = self.stats.composites + 1
+    return true
+  end
+
   --- Replace a blit of a captured canvas. `blit(canvas, bx, by, bsx, bsy, box, zk)` performs
   --- the Renderer's own blit of a canvas with the same arguments (the optional ones replace
   --- its origin, scale and clip; zk: the canvas's pixels per game pixel, for one drawn larger);
@@ -1501,6 +1623,12 @@ function HD.new(G, opts)
     local cur = self.done[canvas]
     if not cur then return false end
     local fit = self.fit
+    -- a whole screen over the battle (uiCovers), or the caught scene, which has no scene or UI
+    -- of a battle (no seam): the picture fills the screen
+    if cur.pass == "battle" and fit.enabled and fit.fill and view ~= nil
+      and (cur.uiCovers or not cur.hasUI) then
+      return compositeCard(cur, blit, bsx, bsy, view)
+    end
     local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled
     local fx, fy = fit.focus[1], fit.focus[2]
     -- the scene's frame on screen: where canvas (fx, fy) lands and how big a canvas pixel is;
@@ -1508,7 +1636,7 @@ function HD.new(G, opts)
     local cx, cy, S, Sy = bx + fx * bsx, by + fy * bsy, bsx, bsy
     local ubx, uby, U, Uy = bx, by, bsx, bsy
     local sceneBox, uiBox = box, box
-    local filling = fitted and fit.fill and view ~= nil and not cur.uiCovers
+    local filling = fitted and fit.fill and view ~= nil
     local stacked, dyTop, top = false, 0, nil
     fit.wantW = nil
     if filling then
