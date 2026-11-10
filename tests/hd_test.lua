@@ -765,6 +765,22 @@ do
     "filled: the grass reaches both sides of the screen")
   check(g and g.scissor and near(g.scissor[2], 0) and near(g.scissor[2] + g.scissor[4], 792),
     "...and is hidden below the text box's line, as the cart's text box hides it")
+  -- a band ending on a solid row (grass, sand, waves): not hidden below the line, its last solid
+  -- row repeated from under it down to the screen's bottom
+  hd.solidRow = function(img) return img == grass and 111 or false end
+  frame(0, 80, 80)
+  local art, run
+  for _, e in ipairs(G.log) do
+    if e.image == grass then
+      if e.vp and e.vp[2] == 111 and e.vp[4] == 1 then run = e else art = e end
+    end
+  end
+  check(art and not (art.scissor and near(art.scissor[2] + art.scissor[4], 792)),
+    "solid grass is not hidden below the text box's line")
+  check(run and near(run.args[3], 792) and near(run.args[3] + run.args[6], 1080),
+    "...its last row runs on from the line to the screen's bottom (" .. tostring(run and run.args[3]) .. ")")
+  hd.solidRow = function() return false end
+  frame(0, 80, 80)
   local r = rects()
   check(#r == 2 and near(r[1][2], 0) and near(r[1][3], 0) and near(r[1][4], 1920)
     and near(r[1][3] + r[1][5], r[2][3]) and near(r[2][3] + r[2][5], 1080),
@@ -780,6 +796,25 @@ do
   local bars = 0
   for _, a in ipairs(r) do if a[4] == 240 and (a[5] == 40 or a[3] == 120) then bars = bars + 1 end end
   check(bars == 2 and #rects() == 0, "Fill Screen off: the engine's own bars, drawn as always")
+end
+
+-- a band's last solid row, read back from its pixels: nine tenths of the width opaque
+do
+  local G = fakeGraphics()
+  local alphaAt
+  function G.newCanvas(w, h)
+    local c = canvas("readback", w, h)
+    c.newImageData = function()
+      return { getPixel = function(_, x, y) return 0, 0, 0, alphaAt(x, y) end }
+    end
+    return c
+  end
+  local hd = HD.new(G)
+  hd.install()
+  alphaAt = function(_, y) return (y >= 50 and y <= 111) and 1 or 0 end
+  check(hd.solidRow(canvas("grass", 256, 256)) == 111, "the grass's last solid row is found")
+  alphaAt = function(x, y) return (y >= 60 and y <= 100 and x % 3 == 0) and 1 or 0 end
+  check(hd.solidRow(canvas("lines", 256, 256)) == false, "speed lines have none")
 end
 
 -- when the game presents without the Renderer (its fallback), or something of ours failed,

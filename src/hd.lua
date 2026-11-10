@@ -815,9 +815,51 @@ function HD.new(G, opts)
     if not (cur and onPass()) then return real.draw(image, x, y) end
     local rec = record(image, {}, x, y)
     if not rec then return real.draw(image, x, y) end
-    cur.items[#cur.items + 1] = { kind = "band", rec = rec }
+    cur.items[#cur.items + 1] = { kind = "band", rec = rec, fill = self.solidRow(image) }
     cur.pending = true
     cur.screenOpen = false
+  end
+
+  --- A band's last solid row (at least nine tenths of its width opaque), or false: the grass,
+  --- sand and waves of the intro end on one, and past it the band runs on down to the view's
+  --- bottom. Read back once an image (a canvas's pixels); false where that cannot be done.
+  local solidRows = setmetatable({}, { __mode = "k" })
+  function self.solidRow(image)
+    local row = solidRows[image]
+    if row ~= nil then return row end
+    row = false
+    local w, h = image.getWidth and image:getWidth(), image.getHeight and image:getHeight()
+    if w and h and w > 0 and h > 0 then
+      local ok, c = pcall(real.newCanvas, w, h, { dpiscale = 1 })
+      if ok and c and c.newImageData then
+        real.push("all")
+        real.setCanvas(c)
+        real.origin()
+        real.setScissor()
+        real.setShader()
+        real.clear(0, 0, 0, 0)
+        real.setColor(1, 1, 1, 1)
+        real.setBlendMode("replace", "premultiplied")
+        real.draw(image, 0, 0)
+        real.pop()
+        local okD, data = pcall(c.newImageData, c)
+        if okD and data then
+          local need = math.ceil(w * 0.9)
+          for y = h - 1, 0, -1 do
+            local n = 0
+            for x = 0, w - 1 do
+              local _, _, _, a = data:getPixel(x, y)
+              if a > 0.5 then n = n + 1 end
+            end
+            if n >= need then row = y; break end
+          end
+          if data.release then pcall(data.release, data) end
+        end
+        if c.release then pcall(c.release, c) end
+      end
+    end
+    solidRows[image] = row
+    return row
   end
 
   --- The battle intro's black bars this pass (the cart's WIN0: rows top..bottom show, the rest
@@ -1081,7 +1123,9 @@ function HD.new(G, opts)
   -- horizontal wrap repeats it, the top row stretches up
   -- wrapV: how the image wraps vertically ("clamp": the wallpaper's top row stretches up;
   -- "clampzero": nothing past its edge, a band such as the intro's grass)
-  local function drawBackdrop(rec, cw, ch, bx, by, bsx, bsy, fx, fy, fsx, fsy, wrapV)
+  -- fill: a band's last solid row, repeated from below it down to the view's bottom
+  local fillQuad
+  local function drawBackdrop(rec, cw, ch, bx, by, bsx, bsy, fx, fy, fsx, fsy, wrapV, fill)
     local img = rec.image
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
     useShader(rec)
@@ -1121,6 +1165,13 @@ function HD.new(G, opts)
     if stop > v0 then
       backdropQuad = quad(backdropQuad, u0, v0, uw, stop - v0)
       real.draw(img, backdropQuad, bx + p0x * bsx, by + p0y * bsy, 0, sx, sy)
+    end
+    if fill then
+      local r0, r1 = math.max(fill + 1, v0), v0 + vh
+      if r1 > r0 then
+        fillQuad = quad(fillQuad, u0, fill, uw, 1)
+        real.draw(img, fillQuad, bx + p0x * bsx, by + (p0y + (r0 - v0) * rec.tsy) * bsy, 0, sx, sy * (r1 - r0))
+      end
     end
     if stop < v0 + vh then
       local bandH = g[2] - g[1]
@@ -1988,13 +2039,17 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         elseif item.kind == "band" then
           if inScene then
             -- zoomed with the scene but not raised: its rows stay on the text box's line, where
-            -- the cart puts them. Below that line it is hidden, as the cart's text box (the whole
-            -- screen's width) hides it: grass sinking out of sight never shows beside a text box
-            -- that no longer spans the screen
+            -- the cart puts them. A band that ends on a solid row (grass, sand, waves) runs on
+            -- down to the view's bottom, so beside a text box that no longer spans the screen it
+            -- still covers the field; any other (speed lines) is hidden below that line, as the
+            -- cart's text box (the whole screen's width) hides it
             local gx, gy = zoomed(z, 0)
             local v = sceneBox or cover
-            real.setScissor(v[1], v[2], v[3], math.max(0, math.min(v[4], cy - v[2])))
-            drawBackdrop(item.rec, cover[3], cover[4], gx, gy, ssx, ssy, cover[1], cover[2], 1, 1, "clampzero")
+            if not item.fill then
+              real.setScissor(v[1], v[2], v[3], math.max(0, math.min(v[4], cy - v[2])))
+            end
+            drawBackdrop(item.rec, cover[3], cover[4], gx, gy, ssx, ssy, cover[1], cover[2], 1, 1,
+              "clampzero", item.fill)
           else
             drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy, "clampzero")
           end

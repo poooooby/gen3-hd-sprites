@@ -45,8 +45,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
 - 🖥️ **Fills your screen:** With **Fill Screen**, the battle fills your screen in any shape,
   with no black bars. On a widescreen monitor or a phone held sideways it reaches from the top
   of the screen out to both sides. The battle's opening fills it too: the black curtain opens
-  across the whole screen and the grass, sand or waves sweep across its full width, and the sky
-  stretches up to the top of the screen.
+  across the whole screen, the grass, sand or waves sweep across its full width and run all the
+  way down to its bottom, and the sky stretches up to the top of the screen.
 - 🏁 **Every screen in a battle fills it too:** The Pokédex page and the caught Pokémon of a new
   catch, the nickname screen, the summary and move-forget screen, evolution, the party and the
   bag all grow as large as your screen allows. The space around them is a soft, dimmed blur of

@@ -127,9 +127,12 @@ The target zoom:
   on it goes to `hd.band`, which draws it at the scene's zoom, repeated across the whole view's
   width. It zooms about the text box's line but does not rise with the camera, so its rows stay
   where the cart puts them. Each entry is a strip whose art ends at that line (grass, dunes,
-  waves; transparent above). Below the line it is clipped: on the cart the text box spans the
-  screen and hides it there, so grass that sinks out of sight (grass, long grass) never shows
-  beside a filled screen's narrower text box.
+  waves; transparent above and below). On the cart the text box spans the screen and hides
+  what is below the line; beside a filled screen's narrower text box the field would show
+  there. So a strip that ends on a solid row (`hd.solidRow`: the last row at least nine tenths
+  opaque, read back once an image from a canvas) repeats that row from under it down to the
+  view's bottom, and grass that sinks out of sight sinks beside the text box. A strip with no
+  solid row (the speed lines) is clipped at the line instead.
 - **The intro's black bars** (`stage.win0`, two rectangles `ui.lua` draws after the UI seam):
   `src/engine.lua` (`Engine.introWindow`) hands the rows to `hd.window(top, bottom)` each frame.
   With Fill Screen the two rectangles are recorded as one `win0` item instead of drawn in the
