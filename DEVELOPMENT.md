@@ -140,6 +140,38 @@ The target zoom:
   middle row in the view's proportions (shut: the screen is black; open: both reach its edges
   together). They no longer cross the stacked layout's split, so they never unsplit the UI.
   Without Fill Screen they are drawn as the engine drew them.
+- **Moves' effects at the canvas's sides** (Fill Screen): the zoomed scene is wider than the
+  240-px canvas, so an effect drawn to the canvas's sides would stop there. Two kinds of draw
+  in the battle's scene are carried on to the view's sides:
+  - **Edge layers:** a filled rectangle or polygon reaching either side, or an image, canvas or
+    line spanning the width (Fake Out's black curtains, a procedural wave), goes in a layer of
+    its own (`cur.open == "edge"`; `stats().edge` counts them). The composite draws it at the
+    scene's zoom through a quad over the whole view, the canvas sampled clamped
+    (`drawEdge`), so its first and last columns (and its top row) run on. A sprite only
+    crossing a side is not one: it would smear.
+  - **Background bands** (`wideBackground`): a quad of an image wrapped `"repeat"` across,
+    spanning the width, upright, but not over the whole canvas (Surf's and Muddy Water's wave,
+    which the engine draws as up to three bands of its BG tilemap with their own blend). It
+    is recorded as a `wide` item with the quad's viewport as drawn (the engine moves one quad
+    from band to band) and drawn across the whole view with its shader and blend
+    (`drawWide`): the tiles continue sideways. Surf draws its water only down to the text
+    box's line (the cart's text box hides the rest), so a band reaching the line continues its
+    tiles on down to the view's bottom, beside a filled screen's narrower text box. Nothing
+    continues upward past the canvas's top. `stats().wide` counts them.
+  - **Whole backgrounds** (a quad the canvas's size, over the whole scene) are left as they
+    were: a `screen` layer stretched to cover the view, since many backgrounds hold unrelated
+    rows below their visible 160.
+  - **Effects that stop at the text box's line:** the cart's colour fade (`P.drawColorEffect`,
+    Encore's and Flatter's dimming, through their spotlight's window) covers rows 0 to 112
+    only, since the text box hid the rest. A `screen` or `edge` layer whose draws all end on
+    the line (`markBottom`: `toLine`, none `below`) runs its last row on from the line down to
+    the view's bottom (`runDown`), beside a filled screen's narrower text box. A layer with
+    anything below the line (a whole background) does not.
+  - `tests/drivers/move_edges.lua` plays every move from both sides and logs which ones
+    open edge layers, background bands or whole-scene layers (`stats().screen`), with a
+    screenshot of each. In Emerald: edge layers for Fake Out, Encore and Flatter; bands for
+    Surf and Muddy Water; whole-scene layers for about 60 moves (Psychic, Night Shade,
+    Thunder, Sandstorm...), all of which already cover the view.
 - **The player's pad stays tucked** under the text box for scale: on the cart its top 11 of
   32 rows show (`fit.padTop` 101, `fit.padRows` 32).
   - **How:** pulled back, the player's side is lowered by `shift.playerY` (canvas px before the

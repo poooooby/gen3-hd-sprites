@@ -335,17 +335,24 @@ function HD.new(G, opts)
   end
 
   -- start a fresh transparent layer; what the pass draws next goes into it.
-  -- screen: a layer of whole-scene draws, composited without Battle Fit's zoom
-  local function openLayer(screen)
+  -- open (cur.open, the kind of layer the pass draws into; nil: an ordinary one):
+  --   "screen": whole-scene draws, composited without Battle Fit's zoom, covering the screen
+  --   "edge": a move's effect anchored to the canvas's sides (Fake Out's curtains, Encore's
+  --     dimming), zoomed with the scene, its edge pixels run on out to the screen's sides
+  local function openLayer(open)
     local cur = self.cur
     local drawing = onPass()
     cur.pending = false
-    cur.screenOpen = screen and true or false
+    cur.open = open or nil
     cur.layerCount = cur.layerCount + 1
     local layer = getLayer(cur.w, cur.h, cur.layerCount)
     cur.layerSet[layer] = true
     cur.current = layer
-    cur.items[#cur.items + 1] = { kind = "layer", canvas = layer, screen = screen }
+    local item = { kind = "layer", canvas = layer, screen = open == "screen", edge = open == "edge" }
+    cur.items[#cur.items + 1] = item
+    cur.openItem = item
+    if open == "edge" then self.stats.edge = (self.stats.edge or 0) + 1 end
+    if open == "screen" and cur.segment == "scene" then self.stats.screen = (self.stats.screen or 0) + 1 end
     real.push("all")
     real.setCanvas(layer)
     real.origin()
@@ -358,13 +365,14 @@ function HD.new(G, opts)
   end
 
   -- a draw is about to happen on the pass: open the layer a tagged draw left pending, or
-  -- move between whole-scene draws and the rest
-  local function beforeDraw(screen)
+  -- move between whole-scene draws, edge-anchored effects and the rest (kind: "screen",
+  -- "edge" or nil)
+  local function beforeDraw(kind)
     local cur = self.cur
-    if screen then
-      if not cur.screenOpen then openLayer(true) end
-    elseif cur.pending or cur.screenOpen then
-      openLayer(false)
+    if kind then
+      if cur.open ~= kind then openLayer(kind) end
+    elseif cur.pending or cur.open then
+      openLayer(nil)
     end
   end
 
@@ -376,7 +384,10 @@ function HD.new(G, opts)
 
   -- does the rectangle (x, y, w, h), in the current transform, cover the scene (down to the
   -- text box's line), or with `bottom` the canvas down to that row?
+  -- the bottom row (canvas y) of the last draw coversScene or edgeBounds looked at (markBottom)
+  local lastBottom
   local function coversScene(x, y, w, h, bottom)
+    lastBottom = nil
     if type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
       return false
     end
@@ -384,7 +395,23 @@ function HD.new(G, opts)
     local x1, y1 = real.transformPoint(x + w, y + h)
     if x0 > x1 then x0, x1 = x1, x0 end
     if y0 > y1 then y0, y1 = y1, y0 end
+    lastBottom = y1
     return x0 <= 0.5 and y0 <= 0.5 and x1 >= self.cur.w - 0.5 and y1 >= (bottom or self.fit.focus[2]) - 0.5
+  end
+
+  -- a whole-scene or edge draw just made in the scene's open layer: does it end on the text box's
+  -- line (the cart's text box hid the rows below: an effect over the battle stops there), or
+  -- reach below it? A layer whose draws all end on the line runs its last row on down beside a
+  -- filled screen's narrower text box (Encore's and Flatter's dimming)
+  local function markBottom()
+    local item = self.cur.openItem
+    if not (item and lastBottom) then return end
+    local line = self.fit.focus[2]
+    if lastBottom > line + 0.5 then
+      item.below = true
+    elseif lastBottom > line - 0.5 then
+      item.toLine = true
+    end
   end
 
   -- the rectangle (x, y, w, h) an image draw covers, before the current transform; nil when
@@ -412,6 +439,80 @@ function HD.new(G, opts)
     local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
     if not x then return false end
     return coversScene(x, y, w, hh, bottom)
+  end
+
+  -- does a draw over the canvas's x0..x1, y0..y1 (canvas pixels) belong to an effect anchored
+  -- to the canvas's sides? A fill (a rectangle, a polygon) reaching either side, or anything
+  -- spanning the whole width, on the canvas's rows (a sprite only crossing a side is not)
+  local function edgeBounds(x0, y0, x1, y1, fill)
+    lastBottom = y1
+    local cur = self.cur
+    local w = cur.w
+    if not (y1 > 0.5 and y0 < cur.h - 0.5 and x1 > 0.5 and x0 < w - 0.5) then return false end
+    local l, r = x0 <= 0.5, x1 >= w - 0.5
+    if fill then return l or r end
+    return l and r
+  end
+
+  -- an image draw in the battle's scene: "screen" over the whole scene, "edge" spanning the
+  -- canvas's width (a canvas too: it is zoomed with the scene, its sides run on), else nil
+  local function sceneDrawKind(image, ...)
+    if drawCoversScene(image, ...) then return "screen" end
+    local x, y, w, hh = drawRect(image, ...)
+    if not x then return nil end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + hh)
+    if x0 > x1 then x0, x1 = x1, x0 end
+    if y0 > y1 then y0, y1 = y1, y0 end
+    return edgeBounds(x0, y0, x1, y1, false) and "edge" or nil
+  end
+
+  -- the bounds of a polygon's or a line's points (a table, or the arguments from `first` on),
+  -- in the current transform; nil when they cannot be read
+  local function pointBounds(first, ...)
+    local t = select(first, ...)
+    local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+    local n = type(t) == "table" and #t or select("#", ...) - first + 1
+    if n < 4 then return nil end
+    for k = 1, n - 1, 2 do
+      local x, y
+      if type(t) == "table" then
+        x, y = t[k], t[k + 1]
+      else
+        x, y = select(first + k - 1, ...)
+      end
+      if type(x) ~= "number" or type(y) ~= "number" then return nil end
+      x, y = real.transformPoint(x, y)
+      if x < x0 then x0 = x end
+      if x > x1 then x1 = x end
+      if y < y0 then y0 = y end
+      if y > y1 then y1 = y end
+    end
+    return x0, y0, x1, y1
+  end
+
+  -- a primitive in the battle's scene anchored to the canvas's sides (edgeBounds): a filled
+  -- rectangle or polygon, or a line spanning the width
+  local function primitiveEdge(name, ...)
+    local x0, y0, x1, y1
+    local fill = false
+    if name == "rectangle" then
+      local mode, x, y, w, h = ...
+      if type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
+        return false
+      end
+      x0, y0 = real.transformPoint(x, y)
+      x1, y1 = real.transformPoint(x + w, y + h)
+      if x0 > x1 then x0, x1 = x1, x0 end
+      if y0 > y1 then y0, y1 = y1, y0 end
+      fill = mode == "fill"
+    elseif name == "polygon" then
+      fill = (...) == "fill"
+      x0, y0, x1, y1 = pointBounds(2, ...)
+    elseif name == "line" then
+      x0, y0, x1, y1 = pointBounds(1, ...)
+    end
+    return x0 ~= nil and edgeBounds(x0, y0, x1, y1, fill)
   end
 
   -- a UI draw across the row the stacked layout splits the UI at (a level-up window, the
@@ -552,6 +653,35 @@ function HD.new(G, opts)
     return x1 < -OFF_MARGIN or y1 < -OFF_MARGIN or x0 > cur.w + OFF_MARGIN or y0 > cur.h + OFF_MARGIN
   end
 
+  -- a move's background drawn in bands across the battle's scene (Surf's and Muddy Water's wave):
+  -- a quad of a tiled image (wrapped "repeat" across) spanning the canvas's
+  -- width, upright, but not over the whole canvas (a whole background covers the screen as a
+  -- "screen" layer). Returns its "wide" item, recorded with the quad's viewport as drawn (the
+  -- engine moves one quad from band to band), or nil
+  local function wideBackground(image, a, b, c, d, e, f, g, h)
+    local t = type(image)
+    if not (real.newQuad and isQuad(a) and (t == "userdata" or t == "table") and image.getWrap and image.getWidth) then
+      return nil
+    end
+    if image.typeOf and image:typeOf("Canvas") then return nil end
+    if image:getWrap() ~= "repeat" then return nil end
+    if (d or 0) ~= 0 or (e or 1) <= 0 or (f or e or 1) <= 0 then return nil end
+    local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
+    if not x then return nil end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + hh)
+    if x1 <= x0 or y1 <= y0 then return nil end
+    local cur = self.cur
+    if not edgeBounds(x0, y0, x1, y1, false) then return nil end
+    if y0 <= 0.5 and y1 >= cur.h - 0.5 then return nil end
+    local rec = record(image, {}, a, b, c, d, e, f, g, h)
+    if not rec then return nil end
+    local qx, qy, qw, qh = a:getViewport()
+    -- (bottom: it reaches the text box's line, below which the cart's text box hid the rest)
+    return { kind = "wide", rec = rec, qx = qx, qy = qy, qw = qw, qh = qh,
+             bottom = y1 >= self.fit.focus[2] - 0.5 }
+  end
+
   local function wrappedDraw(image, ...)
     local cur = self.cur
     -- the weather's colour pass drawing the field into its new canvas through its colour map
@@ -594,7 +724,7 @@ function HD.new(G, opts)
           if not cur.pending then cur.splits = cur.splits + 1 end
           cur.items[#cur.items + 1] = { kind = "hd", rec = rec }
           cur.pending = true
-          cur.screenOpen = false
+          cur.open = nil
           self.stats.splits = self.stats.splits + 1
           return
         end
@@ -605,6 +735,17 @@ function HD.new(G, opts)
       -- the wallpaper drawn again in the scene (a ground fill continued under a text box moved
       -- off the screen, Kanto Gear): the recorded wallpaper already covers the whole view
       if image == cur.backdropImage and sceneFit() then return end
+      -- with fill, a move's background in bands is recorded, and drawn across the whole view
+      if self.fit.fill and sceneFit() then
+        local item = wideBackground(image, ...)
+        if item then
+          cur.items[#cur.items + 1] = item
+          cur.pending = true
+          cur.open = nil
+          self.stats.wide = (self.stats.wide or 0) + 1
+          return
+        end
+      end
       local uiScreen = false
       if uiFill() then
         local a, b, c, d, e, f, g, h = ...
@@ -613,8 +754,15 @@ function HD.new(G, opts)
         if not cur.uiStraddle then noteStraddle(drawRect(image, a, b, c, d, e, f, g, h)) end
       end
       -- a draw over the whole scene, or with fill over the whole UI (a fade), gets a layer of
-      -- its own that covers the whole screen
-      beforeDraw(uiScreen or (sceneFit() and drawCoversScene(image, ...)))
+      -- its own that covers the whole screen; with fill, one spanning the scene's width gets one
+      -- whose sides run on to the screen's
+      local kind = uiScreen and "screen" or nil
+      if not kind and sceneFit() then
+        if self.fit.fill then kind = sceneDrawKind(image, ...)
+        elseif drawCoversScene(image, ...) then kind = "screen" end
+      end
+      beforeDraw(kind)
+      if kind and not uiScreen then markBottom() end
       if overSpec and drawAtScale(real.getShader() ~= nil, image, overSpec, ...) then return end
     end
     return real.draw(image, ...)
@@ -642,7 +790,7 @@ function HD.new(G, opts)
       cur.items[#cur.items + 1] = { kind = "win0", top = win[1], bottom = win[2], color = { r, g, b, a } }
       -- what the UI draws after the bars (a bag, a menu) goes to a layer above them
       cur.pending = true
-      cur.screenOpen = false
+      cur.open = nil
     end
     return true
   end
@@ -651,18 +799,26 @@ function HD.new(G, opts)
     return function(...)
       if self.cur and onPass() then
         if name == "rectangle" and introBar(...) then return end
-        local screen = false
-        if name == "rectangle" and sceneFit() then
-          local mode, x, y, w, h = ...
-          screen = mode == "fill" and coversScene(x, y, w, h)
+        local kind, scene = nil, false
+        if sceneFit() then
+          if name == "rectangle" then
+            local mode, x, y, w, h = ...
+            if mode == "fill" and coversScene(x, y, w, h) then kind = "screen" end
+          end
+          -- with fill: a move's effect anchored to the canvas's sides (Fake Out's curtains, a
+          -- procedural wave) runs on to the screen's
+          if not kind and self.fit.fill and primitiveEdge(name, ...) then kind = "edge" end
+          scene = kind ~= nil
         end
         if name == "rectangle" and uiFill() then
           local mode, x, y, w, h = ...
-          screen = mode == "fill" and coversScene(x, y, w, h, self.cur.h)
+          local screen = mode == "fill" and coversScene(x, y, w, h, self.cur.h)
           noteUICover(screen)
           if not self.cur.uiStraddle then noteStraddle(x, y, w, h) end
+          kind = screen and "screen" or nil
         end
-        beforeDraw(screen)
+        beforeDraw(kind)
+        if scene then markBottom() end
       end
       return real[name](...)
     end
@@ -774,7 +930,7 @@ function HD.new(G, opts)
     self.cur = {
       pass = pass, base = base, current = base, layerSet = {}, items = {},
       w = base:getWidth(), h = base:getHeight(), layerCount = 0, splits = 0,
-      cap = self.caps[pass] or 8, pending = false, screenOpen = false,
+      cap = self.caps[pass] or 8, pending = false,
       segment = "scene", hasUI = false,
       -- a screen over the field with Pokedex & Summary HD off: its Pokemon are drawn as tagged
       -- images usually are outside a pass (the screen still fills the screen)
@@ -809,7 +965,7 @@ function HD.new(G, opts)
     cur.items[#cur.items + 1] = { kind = "backdrop", rec = rec }
     cur.backdropImage = image
     cur.pending = true
-    cur.screenOpen = false
+    cur.open = nil
   end
 
   --- Draw a band that wraps sideways (the intro's scrolling grass): recorded, then drawn at
@@ -822,7 +978,7 @@ function HD.new(G, opts)
     if not rec then return real.draw(image, x, y) end
     cur.items[#cur.items + 1] = { kind = "band", rec = rec, fill = self.solidRow(image) }
     cur.pending = true
-    cur.screenOpen = false
+    cur.open = nil
   end
 
   --- A band's last solid row (at least nine tenths of its width opaque), or false: the grass,
@@ -887,7 +1043,7 @@ function HD.new(G, opts)
       if rec then
         cur.items[#cur.items + 1] = { kind = "stage", rec = rec, side = side }
         cur.pending = true
-        cur.screenOpen = false
+        cur.open = nil
         return
       end
     end
@@ -1702,6 +1858,86 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     return blurA
   end
 
+  -- A layer of a move's effect anchored to the canvas's sides ("edge"), drawn with the scene's
+  -- mapping (canvas pixel (0, 0) at x0, y0; sx, sy screen pixels a canvas pixel) over the whole
+  -- box: through a quad reaching past the canvas, sampled clamped, so its first and last columns
+  -- (and its top row, where it reaches the top) run on out to the box's edges. False when it
+  -- cannot be drawn so (it is then blitted as any layer).
+  local edgeQuad
+  local function drawEdge(c, x0, y0, sx, sy, box)
+    if not (real.newQuad and c.setWrap and c.getWidth and box) then return false end
+    local cw, ch = c:getWidth(), c:getHeight()
+    local u0, v0 = (box[1] - x0) / sx, (box[2] - y0) / sy
+    local uw, vh = box[3] / sx, box[4] / sy
+    if edgeQuad then
+      edgeQuad:setViewport(u0, v0, uw, vh, cw, ch)
+    else
+      edgeQuad = real.newQuad(u0, v0, uw, vh, cw, ch)
+    end
+    c:setWrap("clamp", "clamp")
+    real.setScissor(box[1], box[2], box[3], box[4])
+    real.draw(c, edgeQuad, box[1], box[2], 0, sx, sy)
+    real.setScissor()
+    return true
+  end
+
+  -- A layer of a move's effect whose draws all end on the text box's line (markBottom: toLine),
+  -- mapped with canvas pixel (0, 0) at x0, y0 (sx, sy screen pixels a canvas pixel): its last
+  -- row above the line, run on from the line down to the box's bottom across the box's width
+  -- (the cart's text box hid those rows; beside a filled screen's narrower one they show)
+  local runQuad
+  local function runDown(c, x0, y0, sx, sy, line, box)
+    if not (real.newQuad and c.setWrap and c.getWidth and box) then return end
+    local top, bottom = y0 + line * sy, box[2] + box[4]
+    if top >= bottom then return end
+    local cw, ch = c:getWidth(), c:getHeight()
+    local u0, uw = (box[1] - x0) / sx, box[3] / sx
+    if runQuad then
+      runQuad:setViewport(u0, line - 1, uw, 1, cw, ch)
+    else
+      runQuad = real.newQuad(u0, line - 1, uw, 1, cw, ch)
+    end
+    c:setWrap("clamp", "clamp")
+    real.setScissor(box[1], box[2], box[3], box[4])
+    real.draw(c, runQuad, box[1], top, 0, sx, bottom - top)
+    real.setScissor()
+  end
+
+  -- A move's background band ("wide", wideBackground) drawn with the scene's mapping (canvas
+  -- pixel (0, 0) at x0, y0; sx, sy screen pixels a canvas pixel) across the whole box: its tiled
+  -- image continues sideways, and a band reaching the text box's line on down to the box's
+  -- bottom (Surf's water stops at the line, where the cart's text box spans the screen: beside a
+  -- filled screen's narrower one, the water runs on under it). With its own colour, blend and
+  -- shader as drawn.
+  local wideQuad
+  local function drawWide(item, x0, y0, sx, sy, box)
+    local rec = item.rec
+    local img = rec.image
+    local iw, ih = img:getWidth(), img:getHeight()
+    -- canvas pixels a texel across and down, and the canvas point of the band's first texel
+    local kx, ky = rec.tsx * rec.sx, rec.tsy * rec.sy
+    local px = rec.tx + rec.tsx * (rec.x - rec.ox * rec.sx)
+    local py = rec.ty + rec.tsy * (rec.y - rec.oy * rec.sy)
+    local u0 = item.qx + ((box[1] - x0) / sx - px) / kx
+    local uw = box[3] / (sx * kx)
+    local top = y0 + py * sy
+    local v0, vh = item.qy, item.qh
+    local bottom = top + vh * ky * sy
+    if item.bottom and bottom < box[2] + box[4] then vh = vh + (box[2] + box[4] - bottom) / (sy * ky) end
+    if wideQuad then
+      wideQuad:setViewport(u0, v0, uw, vh, iw, ih)
+    else
+      wideQuad = real.newQuad(u0, v0, uw, vh, iw, ih)
+    end
+    real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
+    useShader(rec)
+    real.setBlendMode(rec.blend[1], rec.blend[2])
+    real.setScissor(box[1], box[2], box[3], box[4])
+    real.draw(img, wideQuad, box[1], top, 0, sx * kx, sy * ky)
+    real.setScissor()
+    real.setShader()
+  end
+
   --- A screen of the game's own in a battle (fit.fill): the Pokedex page and the caught scene of
   --- a new catch, the summary, the nickname screen, evolution, the party, the bag. It is a whole
   --- 240x160 picture, so it is scaled as far as it fits (sharply, as the stacked UI is) and the
@@ -2036,6 +2272,9 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           real.rectangle("fill", ubx, uby, cur.w * U, item.top * Uy)
           real.rectangle("fill", ubx, uby + item.bottom * Uy, cur.w * U, (cur.h - item.bottom) * Uy)
         end
+      elseif item.kind == "wide" then
+        -- a move's background band: across the whole view with fill, else in the canvas's box
+        drawWide(item, sx0, sy0, ssx, ssy, sceneBox or cover)
       elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
         scissor(inScene and sceneBox or uiBox)
         if item.kind == "backdrop" then
@@ -2098,7 +2337,14 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           -- the whole screen
           local v = sceneBox
           local sc = math.max(v[3] / cur.w, v[4] / cur.h)
-          blit(item.canvas, v[1] + (v[3] - cur.w * sc) / 2, v[2] + (v[4] - cur.h * sc) / 2, sc, sc, sceneBox)
+          local lx, ly = v[1] + (v[3] - cur.w * sc) / 2, v[2] + (v[4] - cur.h * sc) / 2
+          blit(item.canvas, lx, ly, sc, sc, sceneBox)
+          if inScene and item.toLine and not item.below then runDown(item.canvas, lx, ly, sc, sc, fy, sceneBox) end
+        elseif item.edge and inScene and filling and drawEdge(item.canvas, sx0, sy0, ssx, ssy, sceneBox) then
+          -- (drawn: zoomed with the scene, its edge pixels run on out to the screen's sides, and
+          -- one that stops on the text box's line on down beside it)
+          if item.toLine and not item.below then runDown(item.canvas, sx0, sy0, ssx, ssy, fy, sceneBox) end
+          self.stats.edgeDrawn = (self.stats.edgeDrawn or 0) + 1
         elseif inScene and not item.screen and moved then
           blit(item.canvas, sx0, sy0, ssx, ssy, sceneBox)
         elseif not inScene and filling then
@@ -2139,7 +2385,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     real.origin()
     real.setScissor()
     for _, item in ipairs(cur.items) do
-      if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
+      if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band"
+          or item.kind == "wide" then
         local rec = item.rec
         real.push()
         real.translate(rec.tx, rec.ty)
@@ -2158,6 +2405,17 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           else
             drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
           end
+        end
+        if not drawn and item.kind == "wide" then
+          -- (through the quad's viewport as it was drawn: the engine has moved its quad since)
+          local iw, ih = rec.image:getWidth(), rec.image:getHeight()
+          if wideQuad then
+            wideQuad:setViewport(item.qx, item.qy, item.qw, item.qh, iw, ih)
+          else
+            wideQuad = real.newQuad(item.qx, item.qy, item.qw, item.qh, iw, ih)
+          end
+          real.draw(rec.image, wideQuad, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+          drawn = true
         end
         if not drawn then
           if rec.quad then

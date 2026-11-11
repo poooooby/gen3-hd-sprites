@@ -798,6 +798,133 @@ do
   check(bars == 2 and #rects() == 0, "Fill Screen off: the engine's own bars, drawn as always")
 end
 
+-- Fill Screen: a move's effect anchored to the canvas's sides runs on to the screen's sides. A
+-- fill reaching a side (Fake Out's curtains) or a polygon spanning the width (a wave) goes in an
+-- "edge" layer, drawn through a quad over the whole view, clamped; a background drawn in bands
+-- (Surf's) is recorded and its tiled image drawn across the whole view, and below the text box's
+-- line beside it. A sprite crossing a side is not, and a whole background covers the screen as
+-- before
+do
+  local G = fakeGraphics()
+  function G.polygon(mode, ...) G.log[#G.log + 1] = { op = "polygon", target = G.getCanvas(), args = { mode, ... } } end
+  local newCanvas = G.newCanvas
+  function G.newCanvas(w, h)
+    local c = newCanvas(w, h)
+    function c.setWrap(self, a, b) self.wrap = { a, b } end
+    return c
+  end
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local wave = canvas("wave", 512, 256)
+  wave.getWrap = function() return "repeat", "repeat" end
+  local spark = canvas("spark", 16, 16)
+  local function frame(draw, fill)
+    hd.fit.fill = fill ~= false
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(canvas("wall", 256, 160), 0, 0)
+    draw()
+    hd.seam("ui")
+    G.rectangle("fill", 0, 112, 240, 48)
+    local cur = hd.endPass()
+    G.log = {}
+    hd.composite(base, function(c, ...) G.log[#G.log + 1] = { op = "blit", image = c, args = { ... } } end,
+      240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 })
+    hd.endFrame()
+    local layers = {}
+    for _, it in ipairs(cur.items) do if it.kind == "layer" then layers[#layers + 1] = it end end
+    return cur, layers
+  end
+  local function drawOf(image)
+    for _, e in ipairs(G.log) do if e.op == "draw" and e.image == image then return e end end
+  end
+  -- Fake Out's left curtain
+  local cur, layers = frame(function()
+    G.setColor(0, 0, 0, 1)
+    G.rectangle("fill", 0, 0, 60, 160)
+    G.setColor(1, 1, 1, 1)
+  end)
+  local edge = layers[1]
+  local e = edge and drawOf(edge.canvas)
+  check(edge and edge.edge and e and near(e.args[2], 0) and e.vp[1] < 0 and e.vp[1] + e.vp[3] > 240
+      and near(e.vp[3] * e.args[5], 1920) and edge.canvas.wrap and edge.canvas.wrap[1] == "clamp",
+    "a curtain reaching a side: its layer drawn across the whole screen, its edge run on")
+  -- an effect over the battle stops on the text box's line (the cart's text box hid the rest):
+  -- its last row runs on from the line (y 792 here) down beside the text box to the screen's bottom
+  local function runOf(c)
+    for _, ev in ipairs(G.log) do
+      if ev.op == "draw" and ev.image == c and ev.vp and near(ev.vp[2], 111) and near(ev.vp[4], 1) then return ev end
+    end
+  end
+  cur, layers = frame(function()
+    G.setColor(0, 0, 0, 0.5)
+    G.rectangle("fill", 0, 0, 240, 112)                 -- a fade to the line (Encore's dimming)
+    G.setColor(1, 1, 1, 1)
+  end)
+  local run = layers[1] and runOf(layers[1].canvas)
+  check(layers[1] and layers[1].screen and layers[1].toLine and run and near(run.args[3] + run.args[6], 1080)
+      and near(run.args[2], 0) and near(run.vp[3] * run.args[5], 1920),
+    "a fade to the text box's line runs on down beside it to the screen's bottom")
+  cur, layers = frame(function() G.polygon("fill", 0, 50, 240, 40, 240, 112, 0, 112) end)
+  run = layers[1] and runOf(layers[1].canvas)
+  check(layers[1] and layers[1].edge and run and near(run.args[3], 792) and near(run.args[3] + run.args[6], 1080),
+    "...and so does an edge effect ending on the line")
+  cur, layers = frame(function() G.draw(wave, G.newQuad(0, 0, 240, 160, 512, 256), 0, 0) end)
+  check(layers[1] and layers[1].below and not runOf(layers[1].canvas), "a background reaching below the line does not")
+  -- a wave spanning the width, then a sprite crossing the left side: not in the wave's layer
+  cur, layers = frame(function()
+    G.polygon("fill", 0, 50, 240, 40, 240, 112, 0, 112)
+    G.draw(spark, -8, 30)
+  end)
+  check(#layers >= 2 and layers[1].edge and not layers[2].edge, "a wave across the width is an edge layer, a sprite crossing a side is not")
+  -- Surf's bands: one quad moved from band to band, the wave above the text box's line (the cart's
+  -- text box hides the rest). Each covers the whole view's width with its tiles; the band reaching
+  -- the line runs on below it, beside the text box, down to the screen's bottom
+  local q = G.newQuad(0, 0, 240, 48, 512, 256)
+  local function surf()
+    G.draw(wave, q, 0, 0)
+    q:setViewport(100, 48, 240, 64)
+    G.draw(wave, q, 0, 48)
+  end
+  cur = frame(surf)
+  local wides = {}
+  for _, it in ipairs(cur.items) do if it.kind == "wide" then wides[#wides + 1] = it end end
+  local bands = {}
+  for _, ev in ipairs(G.log) do if ev.op == "draw" and ev.image == wave then bands[#bands + 1] = ev end end
+  check(#wides == 2 and wides[1].qy == 0 and wides[1].qh == 48 and wides[2].qx == 100 and wides[2].bottom
+      and not wides[1].bottom, "a background's bands are recorded with their quad as drawn")
+  check(#bands == 2 and near(bands[1].args[2], 0) and bands[1].vp[1] < 0 and near(bands[1].vp[2], 0)
+      and near(bands[1].vp[3] * bands[1].args[5], 1920) and near(bands[1].vp[4], 48),
+    "...each drawn across the whole screen, its tiles continued sideways")
+  -- the line: y 792 on this screen (the 1440x960 box docked at the bottom)
+  check(bands[2] and near(bands[2].vp[2], 48) and near(bands[2].args[3] + 64 * bands[2].args[6], 792)
+      and near(bands[2].args[3] + bands[2].vp[4] * bands[2].args[6], 1080),
+    "...the band reaching the text box's line runs on below it to the screen's bottom")
+  -- the scene raised: still down to the bottom, never up past the canvas's top
+  hd.fit.extra = 60
+  q:setViewport(0, 0, 240, 48)
+  frame(surf)
+  hd.fit.extra = 0
+  bands = {}
+  for _, ev in ipairs(G.log) do if ev.op == "draw" and ev.image == wave then bands[#bands + 1] = ev end end
+  check(bands[1] and near(bands[1].vp[2], 0) and near(bands[1].vp[4], 48) and bands[2]
+      and near(bands[2].args[3] + bands[2].vp[4] * bands[2].args[6], 1080),
+    "...with the scene raised too, and the top band does not run on upward")
+  -- a whole background (the canvas's size) still covers the screen as a whole-scene layer
+  cur, layers = frame(function() G.draw(wave, G.newQuad(0, 0, 240, 160, 512, 256), 0, 0) end)
+  check(layers[1] and layers[1].screen, "a whole background is still a whole-scene layer")
+  -- Fill Screen off: nothing of this
+  cur, layers = frame(function()
+    G.polygon("fill", 0, 50, 240, 40, 240, 112, 0, 112)
+    G.draw(wave, q, 0, 48)
+  end, false)
+  local any = false
+  for _, it in ipairs(cur.items) do if it.kind == "wide" or it.edge then any = true end end
+  check(not any, "Fill Screen off: no edge layers, no backgrounds across the view")
+end
+
 -- a band's last solid row, read back from its pixels: nine tenths of the width opaque
 do
   local G = fakeGraphics()
