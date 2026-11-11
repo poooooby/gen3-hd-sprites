@@ -299,6 +299,16 @@ already covers the view.
   (`hd.enabled.boot`: Battle HD, Battle Fit and Fill Screen all on). It is composited even with
   nothing tagged, always through `compositeCard`. `tests/drivers/boot_cards.lua` plays through
   them with the buttons.
+- **Screens over the field:** a frame the display draws with no field behind it, because a
+  screen-stack layer is `fullscreen` (the Pokedex, party, bag, options, mods, trainer card,
+  region map, PC boxes...), is a `screen` pass. It starts in the `Renderer:beginFrame` wrapper
+  when the frame is opaque, no battle is active, `Stack.fullscreen()` holds and the frame is not
+  `Display.presentUi`'s (`Engine.presentingUi`). Like a boot pass, it needs `hd.enabled.screen`
+  (the same three options), is composited even with nothing tagged, and always goes through
+  `compositeCard`. A Pokedex or summary drawn in it is in-pass (`stats().dexInPass`). With
+  Pokedex & Summary HD off the pass is `plain`: its tagged images are drawn as they would be
+  outside a pass. `stats().screenPasses` counts them. `tests/drivers/field_screens.lua` opens
+  each start-menu screen.
 - The outward side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px
   canvas. The stacked layout's inward slide needs no cap.
 

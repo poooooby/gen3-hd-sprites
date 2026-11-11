@@ -1310,6 +1310,48 @@ do
   check(not hd.beginPass("boot", base), "with Fill Screen off no boot pass starts")
 end
 
+-- Fill Screen: a whole screen over the field (the Pokedex, the party, the bag) fills the screen
+-- as one picture; its tagged Pokemon at full resolution only with Pokedex & Summary HD on
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local pic = canvas("pic", 64, 64)
+  hd.tag(pic, {})
+  local function frame()
+    G.setCanvas(base)
+    check(hd.beginPass("screen", base) == true, "a screen pass starts")
+    G.rectangle("fill", 0, 0, 240, 160)
+    G.draw(pic, 88, 48)
+    local cur = hd.endPass()
+    local tagged = 0
+    for _, it in ipairs(cur.items) do if it.kind == "hd" then tagged = tagged + 1 end end
+    local cards = hd.stats.card or 0
+    local handled = hd.composite(base, function() end, 240, 60, 6, 6, { 240, 60, 1440, 960 },
+      { 0, 0, 1920, 1080 })
+    hd.endFrame()
+    return handled and hd.stats.card == cards + 1 and near(hd.stats.uiScale, 6.75), tagged
+  end
+  local filled, tagged = frame()
+  check(filled and tagged == 1, "a screen over the field fills the screen, its Pokemon sharp")
+  hd.enabled.dex = false
+  filled, tagged = frame()
+  check(filled and tagged == 0, "...with Pokedex & Summary HD off its Pokemon are drawn plainly")
+  -- with nothing tagged it still waits for its blit
+  hd.enabled.dex = true
+  G.setCanvas(base)
+  hd.beginPass("screen", base)
+  G.rectangle("fill", 0, 0, 240, 160)
+  local cur = hd.endPass()
+  check(hd.done[base] == cur, "a screen with nothing tagged is composited too")
+  hd.endFrame()
+  hd.enabled.screen = false
+  G.setCanvas(base)
+  check(not hd.beginPass("screen", base), "with Fill Screen off no screen pass starts")
+end
+
 -- Battle Fit off: a full-scene flash is drawn in the layer like anything else
 do
   local G = fakeGraphics()

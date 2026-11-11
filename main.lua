@@ -60,8 +60,10 @@ return function(mod)
     local fit = option("battle_fit", true)
     hd.fit.enabled = hd.fit.available and fit ~= "off" and fit ~= false
     hd.fit.fill = option("fill_screen", true) ~= false
-    -- (the screens before the game starts are only captured to fill the screen)
+    -- (the screens before the game starts, and the whole screens opened over the field, are
+    -- only captured to fill the screen)
     hd.enabled.boot = hd.enabled.battle and hd.fit.enabled and hd.fit.fill
+    hd.enabled.screen = hd.enabled.boot
   end
 
   local function install()

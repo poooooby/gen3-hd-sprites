@@ -55,6 +55,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
 - 🎬 **So does everything before your adventure:** The intro movie, the title screen, the main
   menu and its options, the professor's speech and the naming screens fill your screen the same
   way.
+- 🎒 **And every screen you open on your journey:** The Pokédex, your party, the bag, the
+  options, the mods, your trainer card and every other full screen opened from the start menu
+  or the overworld fill your screen the same way.
 - 📱 **Made for phones held upright:** The text box and menus stretch the full width, sharp and
   even, right above the touch controls. The battle grows into the space above them, with
   both Pokémon and both platforms always whole on screen. With a sprite mod, the two sides
@@ -76,7 +79,7 @@ Open **OPTIONS → MODS → WoobleView**.
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
 | **Battle Fit** | On / Off | On | Pull the battle camera back so tall Pokémon fit. Needs Battle HD. |
-| **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech and the naming screens. Off: the usual framed battle screen. Needs Battle Fit. |
+| **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 

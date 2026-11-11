@@ -17,6 +17,9 @@
 --   Display.presentUi      a "boot" frame (the intro movie, the title, the main menu, Oak's or
 --                          Birch's speech, the naming screens) is a boot pass: with Fill Screen
 --                          it fills the screen as one picture
+--   Renderer:beginFrame    a frame of a whole screen over the field (the screen stack's
+--                          fullscreen layers: the Pokedex, the party, the bag, the options, the
+--                          mods, the trainer card...) is a "screen" pass, filling the screen the same
 --   SummaryMenu.draw       the Pokemon summary screen, a dex pass: FireRed/LeafGreen's
 --                          (src/ui/game3/summary_menu.lua) and the skins the screen stack draws
 --                          in its place, Emerald's (rse/summary_menu.lua) and Ruby/Sapphire's
@@ -396,6 +399,7 @@ function Engine.install(hd)
     need(G, "transformPoint")
     local blitCanvas = need(Renderer, "blitCanvas")
     local endFrame = need(Renderer, "endFrame")
+    local beginFrame = need(Renderer, "beginFrame")
     local beginWorldPass = need(Renderer, "beginWorldPass")
     local endWorldPass = need(Renderer, "endWorldPass")
     local exchange = need(Renderer, "exchangeWorldCanvas")
@@ -488,7 +492,7 @@ function Engine.install(hd)
 
     if not ours[endFrame] then
       Renderer.endFrame = function(self, ...)
-        if hd.capturing("battle") or hd.capturing("dex") or hd.capturing("boot") then hd.endPass() end
+        if hd.capturing() and not hd.capturing("field") then hd.endPass() end
         for base, cur in pairs(hd.done) do
           local willBlit = base == self.canvas
             or (base == self.worldCanvas and self.worldActive and not self.worldOverride
@@ -501,6 +505,33 @@ function Engine.install(hd)
         return unpack(results)
       end
       ours[Renderer.endFrame] = true
+    end
+
+    -- a frame of a whole screen over the field (the Pokedex, the party, the bag, the options, the
+    -- mods: the screen stack's fullscreen layers, which the display draws with no field behind
+    -- them) is a screen pass: with Fill Screen it fills the screen as one picture. Not a frame
+    -- the screens before the game starts present (Display.presentUi: those are boot passes).
+    if not ours[beginFrame] then
+      -- (through require: a mod's package.loaded is not the engine's)
+      local Stack
+      local function fullScreen()
+        Stack = Stack or require("src.ui.game3.stack")
+        return type(Stack) == "table" and type(Stack.fullscreen) == "function"
+          and not Battle.isActive() and Stack.fullscreen() == true
+      end
+      Renderer.beginFrame = function(self, transparent, ...)
+        -- (the Renderer's beginFrame returns nothing: no results table each frame)
+        beginFrame(self, transparent, ...)
+        if not transparent and not Engine.presentingUi and hd.enabled.screen then
+          local okS, full = pcall(fullScreen)
+          if okS and full then
+            hd.stats.screenPasses = (hd.stats.screenPasses or 0) + 1
+            local okP, errP = pcall(hd.beginPass, "screen", love.graphics.getCanvas())
+            if not okP then hd.fail("screen pass: " .. tostring(errP)) end
+          end
+        end
+      end
+      ours[Renderer.beginFrame] = true
     end
 
     if not ours[beginWorldPass] then
@@ -591,10 +622,15 @@ function Engine.install(hd)
         if not okB then hd.fail("boot pass: " .. tostring(errB)) end
         return drawFrame()
       end
+      local function presented(...)
+        Engine.presentingUi = false
+        return ...
+      end
       Display.presentUi = function(game, winW, winH, kind, drawFn, ...)
-        if kind ~= "boot" then return presentUi(game, winW, winH, kind, drawFn, ...) end
+        Engine.presentingUi = true
+        if kind ~= "boot" then return presented(presentUi(game, winW, winH, kind, drawFn, ...)) end
         drawFrame = drawFn
-        return presentUi(game, winW, winH, kind, drawBoot, ...)
+        return presented(presentUi(game, winW, winH, kind, drawBoot, ...))
       end
       ours[Display.presentUi] = true
     end

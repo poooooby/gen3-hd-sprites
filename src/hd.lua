@@ -78,9 +78,11 @@ function HD.new(G, opts)
     G = G,
     log = opts.log,
     tags = setmetatable({}, { __mode = "k" }),
-    enabled = { battle = true, field = true, dex = true, boot = true },
+    -- boot: a screen before the game starts; screen: a whole screen opened over the field (the
+    -- Pokedex, the party, the bag, the options, the mods); both only fill the screen
+    enabled = { battle = true, field = true, dex = true, boot = true, screen = true },
     -- most splits (window-sized layers) a pass may use; a tagged draw past it is drawn low-res
-    caps = { battle = 8, field = 12, dex = 8, boot = 8 },
+    caps = { battle = 8, field = 12, dex = 8, boot = 8, screen = 8 },
     cur = nil,          -- the pass being captured
     done = {},          -- finished passes waiting for their blit, by base canvas
     pool = {},          -- layer canvases by "w x h" -> list
@@ -571,7 +573,7 @@ function HD.new(G, opts)
     end
     local overSpec
     if cur and onPass() then
-      local spec = self.tags[image]
+      local spec = not cur.plain and self.tags[image]
       -- (the field only: Battle Fit's zoomed-out view shows past the battle canvas's edges)
       if spec and cur.pass == "field" and offCanvas(image, spec, ...) then
         self.stats.offCanvas = (self.stats.offCanvas or 0) + 1
@@ -774,6 +776,9 @@ function HD.new(G, opts)
       w = base:getWidth(), h = base:getHeight(), layerCount = 0, splits = 0,
       cap = self.caps[pass] or 8, pending = false, screenOpen = false,
       segment = "scene", hasUI = false,
+      -- a screen over the field with Pokedex & Summary HD off: its Pokemon are drawn as tagged
+      -- images usually are outside a pass (the screen still fills the screen)
+      plain = pass == "screen" and not self.enabled.dex,
       prefit = {},
       -- the side shift this frame is drawn with (the engine's move coordinates use the same)
       shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player,
@@ -915,8 +920,9 @@ function HD.new(G, opts)
     if c ~= nil and (c == cur.base or cur.layerSet[c]) and c ~= cur.base then real.setCanvas(cur.base) end
     if cur.cm and cur.cm.shader then
       self.done[cur.cm.to] = cur
-    elseif #cur.items > 0 or cur.pass == "boot" then
-      -- (a boot screen is composited even with nothing tagged: it fills the screen)
+    elseif #cur.items > 0 or cur.pass == "boot" or cur.pass == "screen" then
+      -- (a boot screen or a screen over the field is composited even with nothing tagged: it
+      -- fills the screen)
       self.done[cur.base] = cur
     end
     return cur
@@ -1847,9 +1853,11 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     if not cur then return false end
     local fit = self.fit
     -- a whole screen over the battle (uiCovers), the caught scene, which has no scene or UI of
-    -- a battle (no seam), or a screen before the game starts: the picture fills the screen
+    -- a battle (no seam), a screen before the game starts or one over the field: the picture
+    -- fills the screen
     if view ~= nil and fit.enabled and fit.fill
-      and (cur.pass == "boot" or (cur.pass == "battle" and (cur.uiCovers or not cur.hasUI))) then
+      and (cur.pass == "boot" or cur.pass == "screen"
+           or (cur.pass == "battle" and (cur.uiCovers or not cur.hasUI))) then
       return compositeCard(cur, blit, bsx, bsy, view)
     end
     local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled
