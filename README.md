@@ -101,7 +101,7 @@ Open **OPTIONS → MODS → WoobleView**.
   and Pokédex sprites, each Pokémon sized to match its original sprite.
 - [Wilds of Hoenn](https://github.com/poooooby/wilds-of-hoenn): wild Pokémon and your partner at
   their true relative sizes, with its **Species Sizes** and **Overworld Size** options.
-- [Vivid Worlds: OG](https://github.com/poooooby/vivid-worlds-og): in Red, Blue, Yellow, Gold,
+- **Vivid Worlds: OG**: in Red, Blue, Yellow, Gold,
   Silver and Crystal, its wild Pokémon and your partner sharp, gliding and at their true relative
   sizes, with its **Species Sizes** option.
 
