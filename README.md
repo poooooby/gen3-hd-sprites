@@ -3,11 +3,12 @@
 # WoobleView 🖥️
 
 *Sharp Pokémon and battles that fit any screen, in FireRed, LeafGreen, Ruby, Sapphire and
-Emerald.*
+Emerald, and in part in Red, Blue and Yellow.*
 
 </div>
 
-A display mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp)'s Generation 3 games.
+A display mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp)'s Generation 3 games,
+and in part for Red, Blue and Yellow.
 On its own, battles fill your screen in any shape, from a widescreen monitor to a phone held
 upright. With a sprite mod that supports it, its Pokémon are drawn at your screen's full
 resolution, and the camera pulls back so even the biggest ones fit.
@@ -109,6 +110,11 @@ Open **OPTIONS → MODS → WoobleView**.
 - The camera pulls back to 40% at most, enough for the very biggest (Lugia, Koraidon).
 - If your device can't draw battles this way, the mod steps aside for that session and the
   game draws everything as usual.
+- 🔴 **In Red, Blue and Yellow:** battles in the original layout fill your screen with
+  **Fill Screen**, the text box along the bottom and the battle growing into the space above it.
+  Battles in the WIDE layout, the Pokédex and summary screens and the overworld look just as the
+  game draws them, and a battle another mod draws in an arena of its own is left to that mod.
+  Gold, Silver and Crystal aren't supported.
 
 ---
 

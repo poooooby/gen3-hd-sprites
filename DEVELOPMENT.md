@@ -7,7 +7,7 @@ For mod authors and contributors. Players only need the [README](README.md).
 
 ## How it works
 
-Gen 3 draws a battle into a 240×160 canvas and the field into a world canvas, then scales them up
+Gen 3 draws a battle into a 240×160 canvas (Gen 1 into 160×144) and the field into a world canvas, then scales them up
 by a whole number, so a sprite shrunk or moved by part of a pixel is resampled on that grid. This
 mod lifts tagged sprites off it.
 
@@ -47,6 +47,31 @@ mode, a battle transition, or more tagged draws in one frame than the cap (8 in 
 Pokédex, 12 in the field; `cap(pass)` / `setCap(pass, n)`). Tagged draws with nothing drawn
 between them share one layer. A layer is one window-sized canvas, so a high cap costs memory
 only in scenes that use it.
+
+## Generations
+
+`src/engine.lua` wraps the Renderer's seams, which every generation that draws through the
+Renderer shares (Gen 1 and Gen 3; Gen 2 composites its own frame and is not supported). Each
+generation's own seams are wrapped by its adapter, picked by `GameVersion.generation()`
+(`Engine.adapters`, filled in `main.lua`):
+
+- **`src/gen3.lua`:** everything in this guide that names a Gen 3 module (`Battle.draw`, the
+  Pokédex and summary screens, `Display.presentUi`, the screen stack, Battle Fit's seams).
+- **`src/gen1.lua`:** Red, Blue and Yellow. Wraps `BattleState:drawClassic` (the ORIGINAL
+  layout) and starts the battle pass there. The game draws its HUDs and text box into one gray
+  canvas with the white field, colours it zone by zone (`drawZonePass`), then draws the Pokémon
+  over it; with Battle Fit on the adapter draws the field without them (`drawHUDs` /
+  `drawTextArea` shadowed on the battle), then the UI seam, then the HUDs and text box on a
+  canvas of their own through the same zone pass. A WIDE battle (`WideBattle.draw`) never
+  reaches `drawClassic` and is drawn the game's way, as is a battle another mod draws over a
+  world of its own (Terrarium's arena: `renderer.worldOverride` set for the frame). No Pokédex,
+  summary, boot or screen passes yet.
+
+**Battle layouts.** The battle screen's canvas numbers (`fit.focus`, the HP-box rects, the
+enemy's feet, the pads, the side shift's spots, the wallpaper rows...) are a layout:
+`hd.layouts[name]`, picked with `hd.useLayout(name)` before a battle pass. `"gen3"` is the table
+in `src/hd.lua`; `src/gen1.lua` adds `"gen1_og"` (text box line at row 96, enemy feet at 56, no
+pads or wallpaper, no side shift: Gen 1's move animations are placed in the cart's coordinates).
 
 ## Battle Fit
 

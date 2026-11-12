@@ -183,6 +183,39 @@ function HD.new(G, opts)
   }
   self.fit.singles = { ui = self.fit.ui, feetMax = self.fit.feetMax, backTopMin = self.fit.backTopMin,
     split = self.fit.split, shiftMax = self.fit.shiftMax }
+
+  -- Battle layouts: the canvas numbers of one generation's battle screen (its text box's line,
+  -- its HP boxes, where its Pokemon stand), by name. The adapter picks one (useLayout) before a
+  -- battle pass; "gen3" is the table above.
+  local LAYOUT_KEYS = { "focus", "feetY", "feetMax", "split", "spanDefault", "pads", "inwardMax",
+    "ui", "backTopMin", "extraMax", "enemyX", "playerX", "shiftMax", "ground", "padTop", "padRows",
+    "padTuck", "wholeBelow", "cutAbove" }
+  self.layouts = { gen3 = {} }
+  for _, key in ipairs(LAYOUT_KEYS) do self.layouts.gen3[key] = self.fit[key] end
+  self.layout = "gen3"
+
+  --- Use the battle layout `name` (self.layouts) from now on; returns whether it exists. A key
+  --- a layout leaves out is false (no pads, no ground rows). A double battle's own numbers
+  --- (setDouble) are set again over it.
+  function self.useLayout(name)
+    local L = self.layouts[name]
+    if not L then return false end
+    if self.layout == name then return true end
+    self.layout = name
+    local fit = self.fit
+    for _, key in ipairs(LAYOUT_KEYS) do
+      local v = L[key]
+      if v == nil then v = false end
+      fit[key] = v
+    end
+    fit.singles = { ui = fit.ui, feetMax = fit.feetMax, backTopMin = fit.backTopMin,
+      split = fit.split, shiftMax = fit.shiftMax }
+    if fit.double then
+      fit.double = false
+      fit.doubleArt = false
+    end
+    return true
+  end
   local real = {}
   self.real = real
 
@@ -1607,7 +1640,7 @@ function HD.new(G, opts)
     -- its send-out jump, a lunge or a shake never moves the camera
     for _, rec in pairs(cur.prefit) do take(rec) end
     -- the platforms count as each side's art: the scene never crops them
-    if fit.wantW then
+    if fit.wantW and fit.pads then
       local pe, pp = fit.pads.enemy, fit.pads.player
       eL, eR = math.min(eL, pe[1]), math.max(eR, pe[2])
       pL, pR = math.min(pL, pp[1]), math.max(pR, pp[2])

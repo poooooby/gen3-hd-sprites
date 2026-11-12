@@ -35,6 +35,9 @@ return function(mod)
   local Engine = loadSibling(mod, "src/engine.lua")
   local Api = loadSibling(mod, "src/api.lua")
   if not (HD and Engine and Api) then return end
+  -- the generations it draws, each by its own adapter (src/engine.lua picks the game's)
+  Engine.adapters[1] = loadSibling(mod, "src/gen1.lua")
+  Engine.adapters[3] = loadSibling(mod, "src/gen3.lua")
   -- optional: without it the player's pad is the game's own (cut at the text box)
   Engine.Pads = loadSibling(mod, "src/pads.lua")
 

@@ -1,0 +1,149 @@
+-- The Gen 1 seams (Red, Blue, Yellow), wrapped by src/engine.lua's install once its Renderer
+-- seams are checked (Gen1.prepare checks these first, so nothing is wrapped when one is missing):
+--
+--   BattleState:drawClassic  the ORIGINAL battle layout's draw (src/battle/BattleState.lua); the
+--                          battle pass starts here. The battle draws its HUDs and text box into a
+--                          gray canvas together with the white field, colours that canvas zone by
+--                          zone (drawZonePass), then draws the Pokemon over it. Battle Fit needs
+--                          the field and the UI apart (the UI over the scene, after the UI seam):
+--                          with the fit on, the field is drawn without them (drawHUDs and
+--                          drawTextArea skipped), then the UI seam, then the HUDs and the text box
+--                          on a canvas of their own, coloured by the same zone pass.
+--
+-- A WIDE battle (src/battle/WideBattle.lua) never reaches drawClassic: it is drawn the game's
+-- usual way. So is a battle another mod draws over a world of its own (Terrarium's 3D arena:
+-- its BattleState:draw sets the Renderer's world override before the game's draw runs), and
+-- any battle whose drawClassic another mod replaced before this one was loaded (it is called
+-- through, not around).
+
+local Gen1 = {}
+
+-- The ORIGINAL battle screen (160x144), from pokered's tile layout: the text box's top at row
+-- 96 (hlcoord 0,12); the enemy's pic in the 7x7 tile slot at hlcoord 12,0 (x 96-152, feet at
+-- y 56); the player's back pic at hlcoord 1,5, its feet on the text box (x 8-64, y 40-96);
+-- the enemy's HUD in the zone at tiles 1,0-10,3 and the player's at 9,7-19,11 (with its bracket
+-- line). No pads, no wallpaper: the field is the palette's paper colour.
+Gen1.LAYOUTS = {
+  gen1_og = {
+    focus = { 80, 96 }, feetY = 56, feetMax = 58,
+    split = 44, spanDefault = { 0, 160 },
+    pads = { enemy = { 96, 152 }, player = { 8, 64 } }, inwardMax = 32,
+    ui = { enemy = { 8, 0, 88, 32 }, player = { 72, 56, 160, 96 }, text = { -1e4, 96, 1e4, 1e4 } },
+    backTopMin = 40, extraMax = 40,
+    -- no side shift: the move animations' sprites are placed in the cart's coordinates
+    enemyX = 124, playerX = 36, shiftMax = 0,
+    ground = false,
+    -- the back pic stands on the text box (no pad to tuck): a rising camera lowers it with
+    -- the line
+    padTop = 96, padRows = 0, padTuck = 0,
+    wholeBelow = 36, cutAbove = 56,
+  },
+}
+
+local function noop() end
+
+--- Check the Gen 1 seams (raises when one is missing, before anything is wrapped) and return
+--- the function that wraps them, which src/engine.lua calls once its own seams are in place.
+function Gen1.prepare(Engine, hd)
+  local need, ours = Engine.need, Engine.ours
+  local BattleState = require("src.battle.BattleState")
+  local drawClassic = need(BattleState, "drawClassic")
+  need(BattleState, "drawHUDs")
+  need(BattleState, "drawTextArea")
+  need(BattleState, "drawZonePass")
+  need(BattleState, "colorMode")
+  local okT, Timing = pcall(require, "src.core.Timing")
+  if not okT then Timing = nil end
+  for name, L in pairs(Gen1.LAYOUTS) do hd.layouts[name] = L end
+  hd.useLayout("gen1_og")
+  Engine.fullScreen, Engine.fieldBusy = nil, nil
+  Engine.dexModules = {}
+
+  -- the HUDs and the text box, on a canvas of their own (the field's size)
+  local uiCanvas
+  local function canvasFor(w, h)
+    if not (uiCanvas and uiCanvas:getWidth() == w and uiCanvas:getHeight() == h) then
+      if uiCanvas and uiCanvas.release then pcall(uiCanvas.release, uiCanvas) end
+      uiCanvas = hd.real.newCanvas(w, h, { dpiscale = 1 })
+      uiCanvas:setFilter("nearest", "nearest")
+    end
+    return uiCanvas
+  end
+
+  -- the window shake drawClassic draws with (SE_SHAKE_SCREEN, the enemy-hit shake)
+  local function shake(battle)
+    local fx = battle.fx
+    local sx = (fx and fx.shakeX) or 0
+    local sy = (fx and fx.shakeY) or 0
+    if sx == 0 and sy == 0 and fx and fx.shake and fx.shake > 0 then
+      sx = (battle.frame or 0) % 4 < 2 and 2 or -2
+    end
+    return sx, sy
+  end
+
+  --- The ORIGINAL battle, its field and its UI apart (see the header). The HUDs and the text box
+  --- are the class's own (another mod's wrappers of them included), asked for when drawn.
+  local function drawSplit(battle)
+    battle.drawHUDs, battle.drawTextArea = noop, noop
+    local ok, err = pcall(drawClassic, battle)
+    battle.drawHUDs, battle.drawTextArea = nil, nil
+    if not ok then error(err, 0) end
+    hd.seam("ui")
+    local G = love.graphics
+    local prev = G.getCanvas()
+    local c = canvasFor(160, 144)
+    local slide = (battle.introSlide or 0) * ((Timing and Timing.BATTLE_SLIDE_PX_PER_FRAME) or 2)
+    G.push("all")
+    G.setCanvas(c)
+    G.origin()
+    G.setScissor()
+    G.clear(0, 0, 0, 0)
+    G.setColor(1, 1, 1, 1)
+    local okU, errU = pcall(function()
+      battle:drawHUDs(slide)
+      battle:drawTextArea()
+    end)
+    G.pop()
+    G.setCanvas(prev)
+    if not okU then error(errU, 0) end
+    local sx, sy = shake(battle)
+    battle:drawZonePass(c, sx, sy)
+    G.setColor(1, 1, 1, 1)
+  end
+
+  -- another mod's world under this battle (Terrarium's arena), set for this frame
+  local function arena(battle)
+    local game = battle.game
+    local renderer = game and game.renderer
+    return renderer ~= nil and renderer.worldOverride ~= nil
+  end
+
+  return function()
+    if not ours[drawClassic] then
+      BattleState.drawClassic = function(self, ...)
+        if arena(self) then
+          hd.stats.gen1Arena = (hd.stats.gen1Arena or 0) + 1
+          return drawClassic(self, ...)
+        end
+        hd.useLayout("gen1_og")
+        local okP, errP = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
+        if not okP then hd.fail("battle pass: " .. tostring(errP)) end
+        -- the field and the UI apart only when the fit draws them apart, and only on the
+        -- coloured path (the flat fallback, a blanked field: drawn whole, filling the screen)
+        if not (hd.capturing("battle") and hd.fit.enabled) or self.blankForAskName
+            or self.blackoutBlank or not self:colorMode() then
+          return drawClassic(self, ...)
+        end
+        local ok, err = pcall(drawSplit, self)
+        if not ok then
+          hd.fail("Gen 1 battle: " .. tostring(err))
+          return drawClassic(self, ...)
+        end
+      end
+      ours[BattleState.drawClassic] = true
+    end
+    hd.fit.available = true
+  end
+end
+
+return Gen1
