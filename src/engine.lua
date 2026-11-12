@@ -193,6 +193,12 @@ function Engine.install(hd)
               return
             end
           end
+          -- what the game draws over the UI canvas after blitting it, placed where the filled
+          -- screen put the UI (Engine.overUi: the adapter's)
+          if ok and handled and Engine.overUi and canvas == self.canvas and hd.uiMap.cur == cur then
+            local okO, errO = pcall(Engine.overUi, self, hd.uiMap)
+            if not okO then hd.fail("over the UI: " .. tostring(errO)) end
+          end
           if ok and handled then return end
           if not ok then
             -- put the frame back into its canvas the usual way, then blit that

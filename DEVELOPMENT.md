@@ -67,8 +67,22 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   pass is the shared one (`Renderer:beginWorldPass`, which `OverworldController` calls). A sprite
   mod should tag only what it draws in true colour: in the palette modes the world canvas is
   coloured zone by zone after it is drawn, which a window-resolution draw never reaches (Vivid
-  Worlds: OG untags its sheets outside `PaletteFX.honorsTrueColor()`). No Pokédex, summary, boot
-  or screen passes yet.
+  Worlds: OG untags its sheets outside `PaletteFX.honorsTrueColor()`). The screen pass: `Game:draw`
+  is wrapped to read the state stack before `Renderer:beginFrame`, and a frame whose lowest drawn
+  state is opaque and neither the overworld nor a battle (the intro, the title, Oak's speech, the
+  naming screens, the Pokédex, the party, the trainer card, the options, the mod manager, a menu
+  over an ORIGINAL battle) is a `"screen"` pass (`Engine.fullScreen`); not while a WIDE or
+  world-backed battle is on the stack. A battle is told by its class's own
+  `isWideBattleLayout` (a screen's proxy may answer any method name). The SGB palettes colour the
+  UI canvas as it is blitted, zone by zone, so a card's blurred backdrop is made from the picture
+  blitted once 1:1 through the Renderer's blit (`flattenCard`), and drawn as it is. OG RED's
+  object-palette sprites (`PaletteFX.markUiSpriteRedraw`: the intro's, the diploma's, a battle's
+  party balls) are drawn again by the Renderer over the blitted canvas, at the letterbox's
+  spots: over a filled screen the adapter draws them where the UI went (`Engine.overUi` with
+  `hd.uiMap`, which a card and a filled battle record: an upright battle's top band moved up) and
+  empties the Renderer's list. The Renderer may blit the UI canvas more than once a frame (a
+  docked text box apart): a card is drawn on the first and the rest are taken as done. No
+  Pokédex or summary passes yet.
 - **`src/gen2.lua`:** Gold, Silver and Crystal. Gold composites its own frame (`Game2`), never
   through the Renderer, and its battle draws the 160×144 panel straight to the window
   (`Chrome.withPanel`). The adapter wraps `BattleState:drawWidescreen` (ORIGINAL layout, white
@@ -435,6 +449,9 @@ image itself a real low-res picture: it is what shows whenever a frame falls bac
 ## Tests
 
 `luajit tests/hd_test.lua` (a fake `love.graphics`; no game needed). Every test file is listed by
-exact path in `.modkitignore`.
+exact path in `.modkitignore`. The drivers in `tests/drivers/` run in the game
+(`POKEPORT_DRIVER`, each file's header says how) and screenshot what they check; for the Game
+Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT` and `GEN1_COLORS`), `gen2_battle.lua`,
+`field_gb.lua` (Field HD with Vivid Worlds: OG) and `screens_gb.lua` (Red's whole screens).
 
 Keep [README.md](README.md) describing the mod as it is now (players read it).

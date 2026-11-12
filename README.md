@@ -115,12 +115,16 @@ Open **OPTIONS → MODS → WoobleView**.
   game draws everything as usual.
 - 🔴 **In Red, Blue, Yellow, Gold, Silver and Crystal:** battles in the original layout fill
   your screen with **Fill Screen**, the text box along the bottom and the battle growing into the
-  space above it. **Field HD** draws the overworld Pokémon of a mod that supports it sharp and at
-  their own sizes (in Red, Blue and Yellow with the **ADVANCED** colours, where they keep their
-  full colour). Battles in the WIDE layout, Gold, Silver and Crystal battles with a black or
-  overworld background, the Pokédex and summary screens and the rest of the overworld look just
-  as the game draws them, and a battle another mod draws in an arena of its own is left to that
-  mod.
+  space above it. With a sprite mod that supports it, their Pokémon are sharp and the camera
+  pulls back for the big ones. In Red, Blue and Yellow, **Fill Screen** also fills your screen
+  with the intro, the title screen, the main menu, Oak's speech, the naming screens and every
+  full screen opened on your journey (the Pokédex, the party, your trainer card, the options, the
+  mods), in every colour mode. **Field HD** draws the overworld Pokémon of a mod that supports it
+  sharp and at their own sizes (in Red, Blue and Yellow with the **ADVANCED** colours, where they
+  keep their full colour). Battles in the WIDE layout, Gold, Silver and Crystal battles with a
+  black or overworld background, Gold, Silver and Crystal's other screens, the Pokémon on the
+  Pokédex and summary screens and the rest of the overworld look just as the game draws them,
+  and a battle another mod draws in an arena of its own is left to that mod.
 
 ---
 

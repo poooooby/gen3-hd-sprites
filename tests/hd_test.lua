@@ -79,6 +79,21 @@ local function fakeGraphics()
   return G
 end
 
+-- a card's draws past the blit, to the window (its edges run out, its blurred backdrop and the
+-- backdrop's rim): the canvases it made, drawn as they are
+local function cardDraws(G)
+  local out = {}
+  for _, e in ipairs(G.log) do
+    if e.op == "draw" and e.scissor and type(e.image) == "table"
+        and tostring(e.image.name):match("^layer") then
+      local a = e.args
+      out[#out + 1] = { canvas = e.image, bx = a[1], by = a[2], sx = a[4], sy = a[5], box = e.scissor,
+                        u = e.uniforms or {} }
+    end
+  end
+  return out
+end
+
 local function drawsTo(G, target)
   local n = 0
   for _, e in ipairs(G.log) do if e.target == target and e.op ~= "clear" then n = n + 1 end end
@@ -1279,7 +1294,7 @@ do
       blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy, box = box, zk = zk }
     end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, view)
     hd.endFrame()
-    return blits
+    return blits, cardDraws(G)
   end
   local function pictures(blits)
     local pics = {}
@@ -1287,13 +1302,15 @@ do
     return pics
   end
   local wide = { 0, 0, 1920, 1080 }
-  local blits = frame(1, wide)
+  local blits, edges = frame(1, wide)
   local pics = pictures(blits)
   local U = 6.75
   check(near(hd.stats.uiScale, U) and #pics >= 1 and near(pics[1].bx, 150) and near(pics[1].by, 0)
     and near(pics[1].sx * pics[1].zk, U), "an opaque full-canvas screen is scaled as far as it fits, centred")
   check(pics[1].zk == 7 and near(pics[1].box[3], 1620) and near(pics[1].box[4], 1080), "...sharply, whole")
-  local left, right = blits[1], blits[2]
+  check(blits[1].canvas ~= base and blits[1].bx == 0 and blits[1].sx == 1 and blits[1].zk == nil,
+    "...first through the blit, one pixel to a pixel (the picture as the game colours it)")
+  local left, right = edges[1], edges[2]
   check(left and left.box and near(left.box[1], 0) and near(left.box[3], 150) and near(left.sx, 150)
     and near(left.bx, 0), "its first column runs out to the left edge")
   check(right and right.box and near(right.box[1], 1770) and near(right.box[3], 150) and near(right.sx, 150)
@@ -1302,12 +1319,12 @@ do
   for _, e in ipairs(G.log) do if e.image == mon then icon = e end end
   check(icon and near(icon.args[1], 150 + (120 + 32) * U), "a tagged draw on it is at the picture's scale")
   -- upright, above the touch controls: the width fits; its edge rows above and below
-  blits = frame(1, { 0, 0, 1080, 2400, bottom = 1500 })
+  blits, edges = frame(1, { 0, 0, 1080, 2400, bottom = 1500 })
   pics = pictures(blits)
   check(near(hd.stats.uiScale, 4.5) and near(pics[1].bx, 0) and near(pics[1].by, 1500 - 160 * 4.5),
     "upright: spanning the width, docked above the controls")
-  check(blits[1].box and near(blits[1].box[4], 780) and near(blits[1].sy, 780)
-    and blits[2].box and near(blits[2].box[2], 1500) and near(blits[2].box[4], 900),
+  check(edges[1].box and near(edges[1].box[4], 780) and near(edges[1].sy, 780)
+    and edges[2].box and near(edges[2].box[2], 1500) and near(edges[2].box[4], 900),
     "...its top row up to the screen's top, its bottom row down to the bottom")
   -- upright with nothing below: centred
   blits = frame(1, { 0, 0, 1080, 2400 })
@@ -1416,6 +1433,7 @@ do
     local cur = hd.endPass()
     check(hd.done[base] == cur, "...and waits for its blit with nothing tagged")
     local blits = {}
+    G.log = {}
     local handled = hd.composite(base, function(c, bx, by, sx, sy, box, zk)
       local sh = G.getShader()
       local u = {}
@@ -1424,44 +1442,61 @@ do
                             shader = sh, u = u }
     end, 240, 60, 6, 6, { 240, 60, 1440, 960 }, view)
     hd.endFrame()
-    return blits, handled
+    return blits, handled, cardDraws(G)
   end
-  local blits, handled = frame({ 0, 0, 1920, 1080 })
+  local blits, handled, plain = frame({ 0, 0, 1920, 1080 })
   local pic
   for _, e in ipairs(blits) do if e.zk then pic = e end end
   check(handled and near(hd.stats.uiScale, 6.75) and pic and near(pic.bx, 150) and near(pic.by, 0),
     "a boot screen fills the screen, centred")
   -- behind it, the picture blurred at a quarter size, grown to cover the screen (1920 wide: 8 a
   -- game pixel, 32 a blurred one; 1280 tall, centred) and clipped to it
-  local soft = blits[1]
+  local soft = plain[1]
   check(soft.canvas.getWidth() == 60 and near(soft.sx, 32) and near(soft.sy, 32) and near(soft.bx, 0)
       and near(soft.by, -100) and soft.box[1] == 0 and soft.box[3] == 1920 and soft.box[4] == 1080
       and soft ~= pic, "...over its picture blurred, covering the screen")
   -- last, the picture's rim fades into it: the backdrop again through the feather, clipped to the
   -- picture; its sides fade (the picture from 150 to 1770 of a backdrop 1920 wide, 4 game pixels
   -- in), its top and bottom, with no gap beside them, do not
-  local rim = blits[#blits]
+  local rim = plain[#plain]
   local r, f = rim.u.rect, rim.u.feather
-  check(rim.canvas == soft.canvas and rim.shader and rim.shader.src:find("feather") and rim.box == pic.box
+  local function same(a, b) return a and b and a[1] == b[1] and a[2] == b[2] and a[3] == b[3] and a[4] == b[4] end
+  check(#plain == 2 and rim.canvas == soft.canvas and r and f and same(rim.box, pic.box)
       and near(r[1], 150 / 1920) and near(r[3], 1770 / 1920) and r[2] < 0 and r[4] > 1
       and near(f[1], 4 * 6.75 / 1920), "...the picture's sides fade into it, its top and bottom do not")
   hd.fit.cardBlur = false
-  blits = frame({ 0, 0, 1920, 1080 })
-  check(blits[1].box and near(blits[1].box[3], 150), "without the blur its edges run out to the sides")
+  blits, handled, plain = frame({ 0, 0, 1920, 1080 })
+  check(plain[1].box and near(plain[1].box[3], 150), "without the blur its edges run out to the sides")
   blits = frame({ 0, 0, 1080, 2400, bottom = 1500 })
   for _, e in ipairs(blits) do if e.zk then pic = e end end
   check(near(hd.stats.uiScale, 4.5) and near(pic.by, 1500 - 720), "upright: spanning the width, above the controls")
   -- a scale that puts the picture's edges inside a screen pixel (2560x1369: 252.8 to 2307.2): the
   -- clips are cut to whole pixels, so the side strips and the picture together cover every column
-  blits = frame({ 0, 0, 2560, 1369 })
+  blits, handled, plain = frame({ 0, 0, 2560, 1369 })
   for _, e in ipairs(blits) do if e.zk then pic = e end end
-  local left, right = blits[1].box, blits[2].box
+  local left, right = plain[1].box, plain[2].box
   local function cut(b) return math.floor(b[1]), math.floor(b[1]) + math.floor(b[3]) end
   local l0, l1 = cut(left)
   local r0, r1 = cut(right)
   local p0, p1 = cut(pic.box)
   check(near(pic.bx, 252.8) and l0 == 0 and l1 >= p0 and l1 >= 253 and p1 >= r0 and r0 <= 2307 and r1 == 2560,
     "a picture's edge inside a screen pixel leaves no unpainted column")
+  -- where the picture went, for the game's own redraws over it; blitted again in parts (a docked
+  -- text box apart) in the same frame, the card is drawn once
+  do
+    G.setCanvas(base)
+    hd.beginPass("boot", base)
+    local cur = hd.endPass()
+    local n = 0
+    local function count() n = n + 1 end
+    check(hd.composite(base, count, 240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 }) == true
+      and hd.uiMap.cur == cur and near(hd.uiMap.x, 150) and near(hd.uiMap.y, 0)
+      and near(hd.uiMap.sx, 6.75) and near(hd.uiMap.box[3], 1620), "a card records where its picture went")
+    local first = n
+    check(hd.composite(base, count, 240, 60, 6, 6, { 240, 60, 1440, 960 }, { 0, 0, 1920, 1080 }) == true
+      and n == first, "...and a second blit of its canvas that frame draws nothing more")
+    hd.endFrame()
+  end
   hd.fit.cardBlur = true
   hd.enabled.boot = false
   G.setCanvas(base)

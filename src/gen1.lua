@@ -10,6 +10,15 @@
 --                          drawTextArea skipped), then the UI seam, then the HUDs and the text box
 --                          on a canvas of their own, coloured by the same zone pass.
 --
+--   Game:draw              a frame whose lowest drawn state is a whole screen of its own (the
+--                          title, the intro, Oak's speech, the naming screens, the Pokedex,
+--                          the party, the bag, the options, a menu opened over an ORIGINAL
+--                          battle ...: an opaque state that is neither the overworld nor a
+--                          battle) is a "screen" pass (src/engine.lua's Renderer:beginFrame
+--                          wrapper asks Engine.fullScreen): with Fill Screen it fills the screen
+--                          as one picture. Not while a WIDE or world-backed battle is on the
+--                          stack (the game shows it around the menu).
+--
 -- A WIDE battle (src/battle/WideBattle.lua) never reaches drawClassic: it is drawn the game's
 -- usual way. So is a battle another mod draws over a world of its own (Terrarium's 3D arena:
 -- its BattleState:draw sets the Renderer's world override before the game's draw runs), and
@@ -58,6 +67,58 @@ function Gen1.prepare(Engine, hd)
   hd.useLayout("gen1_og")
   Engine.fullScreen, Engine.fieldBusy = nil, nil
   Engine.dexModules = {}
+
+  -- a whole screen (optional: without it every screen keeps the game's framing)
+  local okG, Game = pcall(require, "src.core.Game")
+  local gameDraw = okG and type(Game) == "table" and type(Game.draw) == "function" and Game.draw or nil
+  local whole = false
+  if gameDraw then
+    Engine.fullScreen = function() return whole end
+  end
+
+  -- the sprites the Renderer draws again over the UI canvas once it is blitted (OG RED's
+  -- object-palette sprites: the intro's, the diploma's, a battle's party balls:
+  -- PaletteFX.markUiSpriteRedraw), drawn where a filled screen put its UI (hd.uiMap), and
+  -- taken off the Renderer's list
+  local okPF, PaletteFX = pcall(require, "src.render.PaletteFX")
+  Engine.overUi = nil
+  if okPF and type(PaletteFX) == "table" and type(PaletteFX.uiSpriteRedraws) == "function" then
+    Engine.overUi = function(_, map)
+      local list = PaletteFX.uiSpriteRedraws()
+      if not (type(list) == "table" and list[1]) then return end
+      local G = love.graphics
+      local X, U, Uy = map.x, map.sx, map.sy
+      G.push("all")
+      G.setShader()
+      G.setBlendMode("alpha", "alphamultiply")
+      for i = 1, #list do
+        local r = list[i]
+        local c = r.clip
+        -- (an upright battle's top band moved up: a sprite above its split goes with it)
+        local top = map.banded and r.y < map.split
+        local Y = top and map.topY or map.y
+        local b = map.banded and (top and map.topBox or map.lowBox) or map.box
+        local x1, y1, x2, y2 = b[1], b[2], b[1] + b[3], b[2] + b[4]
+        if c then
+          x1, y1 = math.max(x1, X + c[1] * U), math.max(y1, Y + c[2] * Uy)
+          x2, y2 = math.min(x2, X + (c[1] + c[3]) * U), math.min(y2, Y + (c[2] + c[4]) * Uy)
+        end
+        if x2 > x1 and y2 > y1 then
+          G.setScissor(x1, y1, x2 - x1, y2 - y1)
+          local col = r.color
+          G.setColor(col and col[1] or 1, col and col[2] or 1, col and col[3] or 1, col and col[4] or 1)
+          local sx, sy = U * (r.sx or 1), Uy * (r.sy or 1)
+          if r.quad then
+            G.draw(r.image, r.quad, X + r.x * U, Y + r.y * Uy, 0, sx, sy)
+          else
+            G.draw(r.image, X + r.x * U, Y + r.y * Uy, 0, sx, sy)
+          end
+        end
+      end
+      G.pop()
+      for i = #list, 1, -1 do list[i] = nil end
+    end
+  end
 
   -- the HUDs and the text box, on a canvas of their own (the field's size)
   local uiCanvas
@@ -118,7 +179,40 @@ function Gen1.prepare(Engine, hd)
     return renderer ~= nil and renderer.worldOverride ~= nil
   end
 
+  --- Is this frame a whole screen of its own (see the header)? Read off the state stack the
+  --- way Game:draw reads it.
+  local function wholeScreen(game)
+    local stack = game.stack
+    if not (type(stack) == "table" and stack.visibleBase and type(stack.states) == "table") then
+      return false
+    end
+    local base = stack:visibleBase()
+    local state = stack.states[base]
+    if type(state) ~= "table" or state == game.overworld then return false end
+    -- a battle draws its own pass; a WIDE battle or a world-backed one shows around a menu
+    -- (by the class's own method: a screen's proxy may answer any method name)
+    if state.isWideBattleLayout ~= nil and state.isWideBattleLayout == BattleState.isWideBattleLayout then
+      return false
+    end
+    if Game.drawBaseInStack and Game.drawBaseInStack(stack, base) ~= base then return false end
+    if Game.wideBattleInStack and Game.wideBattleInStack(stack) then return false end
+    return true
+  end
+
+  local function drawn(...)
+    whole = false
+    return ...
+  end
+
   return function()
+    if gameDraw and not ours[gameDraw] then
+      Game.draw = function(self, ...)
+        local ok, full = pcall(wholeScreen, self)
+        whole = ok and full == true
+        return drawn(gameDraw(self, ...))
+      end
+      ours[Game.draw] = true
+    end
     if not ours[drawClassic] then
       BattleState.drawClassic = function(self, ...)
         if arena(self) then

@@ -86,6 +86,13 @@ function HD.new(G, opts)
     cur = nil,          -- the pass being captured
     direct = false,     -- the pass drawn straight at window resolution (self.beginDirect)
     done = {},          -- finished passes waiting for their blit, by base canvas
+    -- where the last pass composited to fill the screen put its UI (a card: its whole
+    -- picture), for the game's own draws over it (src/engine.lua): its pass, the screen point
+    -- canvas pixel (0, 0) went to, the size of a canvas pixel and its clip; banded: the rows
+    -- above `split` moved up to `topY` (an upright battle's top band), clipped to topBox, the
+    -- rest to lowBox
+    uiMap = { cur = nil, x = 0, y = 0, sx = 1, sy = 1, box = { 0, 0, 0, 0 },
+              banded = false, split = 0, topY = 0, topBox = { 0, 0, 0, 0 }, lowBox = { 0, 0, 0, 0 } },
     pool = {},          -- layer canvases by "w x h" -> list
     stats = { splits = 0, composites = 0, flattened = 0, overCap = 0, zoom = 1, zoomTarget = 1, lift = 0 },
     -- Battle Fit (see the header). z eases toward target: out fast, back in only after the
@@ -1816,13 +1823,20 @@ function HD.new(G, opts)
     return sharp, k
   end
 
-  -- the last rows and columns of a card (the pass's picture, flat), for the screen beyond it
+  -- the last rows and columns of a card (the pass's picture, flat), for the screen beyond it;
+  -- cardShown: that picture as the blit shows it (Red's SGB palettes colour the canvas's shades
+  -- as it is blitted, zone by zone), which the backdrop is drawn from as it is
   local cardFlat, cardFlatW, cardFlatH = nil, 0, 0
-  local function flattenCard(cur)
+  local cardShown
+  local function flattenCard(cur, blit)
     if not cardFlat or cardFlatW ~= cur.w or cardFlatH ~= cur.h then
       if cardFlat and cardFlat.release then pcall(cardFlat.release, cardFlat) end
+      if cardShown and cardShown.release then pcall(cardShown.release, cardShown) end
       cardFlat = real.newCanvas(cur.w, cur.h, { dpiscale = 1 })
-      if cardFlat.setFilter then cardFlat:setFilter("nearest", "nearest") end
+      cardShown = real.newCanvas(cur.w, cur.h, { dpiscale = 1 })
+      for _, c in ipairs({ cardFlat, cardShown }) do
+        if c.setFilter then c:setFilter("nearest", "nearest") end
+      end
       cardFlatW, cardFlatH = cur.w, cur.h
     end
     real.push("all")
@@ -1842,8 +1856,21 @@ function HD.new(G, opts)
         real.draw(item.canvas, 0, 0)
       end
     end
+    -- through the blit, one canvas pixel to a pixel
+    real.setCanvas(cardShown)
+    real.clear(0, 0, 0, 0)
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("alpha", "premultiplied")
+    blit(cardFlat, 0, 0, 1, 1, { 0, 0, cur.w, cur.h })
     real.pop()
-    return cardFlat
+    return cardShown
+  end
+
+  -- a canvas drawn as it is (the backdrop, already as the blit shows it), clipped to a box
+  local function drawPlain(c, x, y, sx, sy, box)
+    real.setScissor(box[1], box[2], box[3], box[4])
+    real.draw(c, x, y, 0, sx, sy)
+    real.setScissor()
   end
 
   -- a card's blurred backdrop: the flat picture averaged down to a quarter (each halving with
@@ -2003,6 +2030,22 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
   --- 240x160 picture, so it is scaled as far as it fits (sharply, as the stacked UI is) and the
   --- rest of the screen continues its edges: each row's first and last pixel out to the sides,
   --- the top and bottom rows up and down. Nothing is cropped or stretched, and no frame shows.
+  local function copyRect(dst, src)
+    dst[1], dst[2], dst[3], dst[4] = src[1], src[2], src[3], src[4]
+  end
+  -- self.uiMap, for this pass
+  local function noteUi(cur, x, y, sx, sy, box, split, topY, topBox, lowBox)
+    local map = self.uiMap
+    map.cur, map.x, map.y, map.sx, map.sy = cur, x, y, sx, sy
+    copyRect(map.box, box)
+    map.banded = topBox ~= nil
+    if topBox then
+      map.split, map.topY = split, topY
+      copyRect(map.topBox, topBox)
+      copyRect(map.lowBox, lowBox)
+    end
+  end
+
   local function compositeCard(cur, blit, bsx, bsy, view)
     -- the camera keeps its place behind the screen
     if cur.hasUI then fitStep(cur) end
@@ -2024,6 +2067,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     local k = U ~= math.floor(U) and math.ceil(U) or 1
     self.stats.fill, self.stats.uiScale, self.stats.uiTopDy = U / bsx, U, 0
     self.stats.card = (self.stats.card or 0) + 1
+    -- where the picture went (the game's own redraws over it are placed by it)
+    noteUi(cur, ubx, uby, U, Uy, box)
     local function picture(c)
       local src, kk = c, 1
       if k > 1 then src, kk = sharpen(c, cur.w, cur.h, k) end
@@ -2040,7 +2085,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- picture, drawn after, covers the rest
     local soft, sdx, sdy, sdw, sdh
     if ubx > vx or x1 < vr or uby > vy or y1 < vb then
-      local flat = flattenCard(cur)
+      local flat = flattenCard(cur, blit)
       -- the picture blurred, dimmed and grown to cover the whole screen behind it
       soft = self.fit.cardBlur and blurCard(flat, cur.w, cur.h)
       if soft then
@@ -2049,12 +2094,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         sdx, sdy = vx + (vw - sdw) / 2, vy + (vh - sdh) / 2
         local d = self.fit.cardDim
         real.setColor(d, d, d, 1)
-        blit(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), screen)
+        drawPlain(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), screen)
         real.setColor(1, 1, 1, 1)
       end
     end
     if not soft and (ubx > vx or x1 < vr or uby > vy or y1 < vb) then
-      local flat = cardFlat
+      local flat = cardShown
+      local blit = drawPlain
       local floor, ceil = math.floor, math.ceil
       local ry0, ry1 = floor(uby), ceil(y1)
       if ubx > vx then
@@ -2127,7 +2173,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         real.setBlendMode("alpha", "premultiplied")
         local d = self.fit.cardDim
         real.setColor(d, d, d, 1)
-        blit(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), box)
+        drawPlain(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), box)
         real.setShader()
       end
     end
@@ -2154,6 +2200,10 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     if view ~= nil and fit.enabled and fit.fill
       and (cur.pass == "boot" or cur.pass == "screen"
            or (cur.pass == "battle" and (cur.uiCovers or not cur.hasUI))) then
+      -- (the Renderer may blit the canvas again in parts, a docked text box apart: the card,
+      -- the whole picture, is drawn once)
+      if cur.carded then return true end
+      cur.carded = true
       return compositeCard(cur, blit, bsx, bsy, view)
     end
     local fitted = cur.pass == "battle" and cur.hasUI and fit.enabled
@@ -2296,6 +2346,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, sceneBox)
     end
     local k = filling and U ~= math.floor(U) and math.ceil(U) or 1
+    if filling then noteUi(cur, ubx, uby, U, Uy, uiBox, split, topBy, topBox, lowBox) end
     self.stats.lift = lift
     self.stats.fill = S / bsx
     self.stats.uiScale = U

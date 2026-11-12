@@ -3,7 +3,8 @@
 -- screenshots it in each battle layout (GEN1_LAYOUTS, default "og,wide") and window size
 -- (HD_SIZES, default 1920x1080), with Fill Screen on and off, logging WoobleView's stats.
 -- GEN1_MOVES=THUNDERBOLT,PSYCHIC plays those moves too (from the player's side), shooting
--- GEN1_MOVE_SHOTS frames of each (default 10,30). Run from the engine root:
+-- GEN1_MOVE_SHOTS frames of each (default 10,30). GEN1_INTRO_SHOT=1 also shoots the intro once
+-- its party balls show; GEN1_COLORS sets the colour mode (PaletteFX). Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=red POKEPORT_VERSION=red \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen1_battle.lua love .
 
@@ -38,6 +39,14 @@ local function body(game, log)
   if not ow then log("FAIL no overworld"); return end
 
   local options = game.save.options
+  local okP, PaletteFX = pcall(require, "src.render.PaletteFX")
+  if okP and env("GEN1_COLORS") then PaletteFX.mode = env("GEN1_COLORS") end
+  -- (the intro is shot at the first size)
+  do
+    local w, h = (env("HD_SIZES") or "1920x1080"):match("(%d+)x(%d+)")
+    love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
+    U.wait(5)
+  end
   local foe = env("GEN1_FOE") or "ONIX"
   local function stat(k) return tostring(hd.stats()[k]) end
   for layout in (env("GEN1_LAYOUTS") or "og,wide"):gmatch("[^,]+") do
@@ -45,9 +54,20 @@ local function body(game, log)
     local battle = BattleState.newWild(game, foe, 30)
     battle.onFinish = function() end
     ow:pushBattle(battle)
-    local ready = false
+    local ready, intro = false, not env("GEN1_INTRO_SHOT")
     for _ = 1, 3000 do
       if game.stack:top() == battle and battle.phase == "menu" then ready = true break end
+      -- GEN1_INTRO_SHOT=1: the intro once its party balls show, Fill Screen on and off
+      if not intro and game.stack:top() == battle and battle.introBalls == true then
+        intro = true
+        for _, fill in ipairs({ true, false }) do
+          hd.setFill(fill)
+          U.wait(2)
+          U.still(game, ("%s/%s_intro_%s.png"):format(dir, layout, fill and "fill" or "nofill"))
+        end
+        hd.setFill(true)
+        log(layout .. " intro shot")
+      end
       U.tap(game, "a")
       U.wait(4)
     end
