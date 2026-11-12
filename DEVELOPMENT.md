@@ -63,8 +63,12 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   `drawTextArea` shadowed on the battle), then the UI seam, then the HUDs and text box on a
   canvas of their own through the same zone pass. A WIDE battle (`WideBattle.draw`) never
   reaches `drawClassic` and is drawn the game's way, as is a battle another mod draws over a
-  world of its own (Terrarium's arena: `renderer.worldOverride` set for the frame). No Pokédex,
-  summary, boot or screen passes yet.
+  world of its own (Terrarium's arena: `renderer.worldOverride` set for the frame). The field
+  pass is the shared one (`Renderer:beginWorldPass`, which `OverworldController` calls). A sprite
+  mod should tag only what it draws in true colour: in the palette modes the world canvas is
+  coloured zone by zone after it is drawn, which a window-resolution draw never reaches (Vivid
+  Worlds: OG untags its sheets outside `PaletteFX.honorsTrueColor()`). No Pokédex, summary, boot
+  or screen passes yet.
 - **`src/gen2.lua`:** Gold, Silver and Crystal. Gold composites its own frame (`Game2`), never
   through the Renderer, and its battle draws the 160×144 panel straight to the window
   (`Chrome.withPanel`). The adapter wraps `BattleState:drawWidescreen` (ORIGINAL layout, white
@@ -74,7 +78,12 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   composited where the panel would stand (`hd.composite` with a plain scissored blit standing in
   for the Renderer's; `hd.endFrame` after it). A WIDE battle and a black or world background
   (`Game2:paintBattleSurround` paints those around the panel afterwards) are drawn the game's way.
-  Layout `"gen2_og"`.
+  Layout `"gen2_og"`. The field has no low-res canvas either: `World:draw` draws the map and
+  people straight to the window at its zoom, already at window resolution. So the adapter wraps
+  `World:drawPeople` in a **direct** field pass (`hd.beginDirect("field")` / `hd.endDirect()`):
+  a tagged image is drawn in place at its spec's `scale` about its pivot (`lowPivot`, or the
+  quad's feet with `anchor = "feet"`), the way a draw past a pass's cap is; nothing is recorded,
+  layered or composited, and the draw order (Crystal's grass over the feet) is the game's.
 
 **Battle layouts.** The battle screen's canvas numbers (`fit.focus`, the HP-box rects, the
 enemy's feet, the pads, the side shift's spots, the wallpaper rows...) are a layout:

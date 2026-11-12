@@ -84,6 +84,7 @@ function HD.new(G, opts)
     -- most splits (window-sized layers) a pass may use; a tagged draw past it is drawn low-res
     caps = { battle = 8, field = 12, dex = 8, boot = 8, screen = 8 },
     cur = nil,          -- the pass being captured
+    direct = false,     -- the pass drawn straight at window resolution (self.beginDirect)
     done = {},          -- finished passes waiting for their blit, by base canvas
     pool = {},          -- layer canvases by "w x h" -> list
     stats = { splits = 0, composites = 0, flattened = 0, overCap = 0, zoom = 1, zoomTarget = 1, lift = 0 },
@@ -734,6 +735,15 @@ function HD.new(G, opts)
       real.clear(0, 0, 0, 0)
       return
     end
+    -- (no pass: a direct one draws a tagged image at its size in place, self.beginDirect)
+    if self.direct and not cur then
+      local spec = self.tags[image]
+      if spec then
+        self.stats.direct = (self.stats.direct or 0) + 1
+        if drawAtScale(real.getShader() ~= nil, image, spec, ...) then return end
+      end
+      return real.draw(image, ...)
+    end
     local overSpec
     if cur and onPass() then
       local spec = not cur.plain and self.tags[image]
@@ -943,6 +953,7 @@ function HD.new(G, opts)
     if self.failed then return end
     self.failed = tostring(err)
     self.stats.failed = self.failed
+    self.direct = false
     if self.log and self.log.error then
       pcall(self.log.error, self.log, "turned off for this session, frames are drawn the game's usual way: %s",
         self.failed)
@@ -1115,6 +1126,22 @@ function HD.new(G, opts)
       self.done[cur.base] = cur
     end
     return cur
+  end
+
+  --- Draws made straight at the window's resolution, with no low-res canvas to capture (Gen 2's
+  --- field: Gold draws its map and people to the window at its zoom). While `pass` is on, a
+  --- tagged image is drawn in place at its spec's size about its pivot (what a pass's draw past
+  --- its cap does on the canvas): already sharp and between pixels, so nothing is recorded.
+  --- Returns true when it turned it on (a nested call returns false: the outer one ends it).
+  function self.beginDirect(pass)
+    if self.direct or self.cur or self.failed then return false end
+    if not (self.installed and self.enabled[pass]) then return false end
+    self.direct = pass
+    return true
+  end
+
+  function self.endDirect()
+    self.direct = false
   end
 
   --- The weather is about to swap the field canvas for one it draws through its colour map

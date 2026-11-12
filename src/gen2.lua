@@ -14,6 +14,12 @@
 --                          text box (drawEnemyHud, drawPlayerHud, drawBottom: skipped while the
 --                          scene draws, then drawn after it).
 --
+--   World:drawPeople        the field's people (src/world/gen2/World.lua), the player, the NPCs and
+--                          what other mods add to them (Vivid Worlds: OG's wild Pokemon). Gold
+--                          draws its map and people straight to the window at its zoom, so they
+--                          are already at window resolution: a direct field pass (hd.beginDirect)
+--                          draws a tagged sheet in place at its spec's size about its feet.
+--
 -- A WIDE battle (src/ui/gen2/WideBattle.lua) is drawn the game's usual way, and so is a battle
 -- with a black or world background (Game2 paints those around the panel after it is drawn).
 
@@ -58,6 +64,10 @@ function Gen2.prepare(Engine, hd)
   if not (okF and type(Font) == "table" and type(Font.useBattleExtra) == "function") then Font = nil end
   local okP, GbcPalette = pcall(require, "src.render.GbcPalette")
   if not (okP and type(GbcPalette) == "table" and type(GbcPalette.setBgp) == "function") then GbcPalette = nil end
+  -- (optional: without it the field is drawn the game's own way)
+  local okW, World = pcall(require, "src.world.gen2.World")
+  local drawPeople = okW and type(World) == "table" and type(World.drawPeople) == "function"
+    and World.drawPeople or nil
   for name, L in pairs(Gen2.LAYOUTS) do hd.layouts[name] = L end
   hd.useLayout("gen2_og")
   Engine.fullScreen, Engine.fieldBusy = nil, nil
@@ -174,6 +184,16 @@ function Gen2.prepare(Engine, hd)
         end
       end
       ours[BattleState.drawWidescreen] = true
+    end
+    if drawPeople and not ours[drawPeople] then
+      World.drawPeople = function(self, ...)
+        local began = hd.beginDirect("field")
+        if not began then return drawPeople(self, ...) end
+        local ok, err = pcall(drawPeople, self, ...)
+        hd.endDirect()
+        if not ok then error(err, 0) end
+      end
+      ours[World.drawPeople] = true
     end
     hd.fit.available = true
   end

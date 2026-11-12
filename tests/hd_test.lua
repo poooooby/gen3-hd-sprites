@@ -182,6 +182,37 @@ do
     and first.args[7] == 16 and first.args[8] == 32, "a feet-anchored sprite stands where it stood")
 end
 
+-- ------------- a direct pass (Gen 2's field, drawn at window resolution): sized in place
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local sheet = canvas("sheet", 32, 576)
+  local other = canvas("other", 16, 16)
+  hd.tag(sheet, { scale = 1.5, lowPivot = { 16, 28 } })
+  local q = quad(0, 0, 32, 32)
+  check(hd.beginDirect("field") == true, "a direct pass starts")
+  check(hd.beginDirect("field") == false, "...a nested one does not")
+  G.log = {}
+  G.draw(sheet, q, 10, 20)
+  G.draw(other, 40, 40)
+  hd.endDirect()
+  local e = G.log[1]
+  -- its pivot (16, 28) stood at (26, 48): the frame drawn 1.5x about it, there
+  check(e and e.image == sheet and near(e.args[2], 26) and near(e.args[3], 48) and near(e.args[5], 1.5)
+    and e.args[7] == 16 and e.args[8] == 28, "a tagged sheet is drawn at its size about its pivot")
+  check(G.log[2] and G.log[2].image == other and G.log[2].args[1] == 40, "anything else is drawn as it was")
+  check(hd.stats.direct == 1 and hd.cur == nil and next(hd.done) == nil, "nothing is recorded")
+  G.log = {}
+  G.draw(sheet, q, 10, 20)
+  check(G.log[1] and near(G.log[1].args[2], 10) and G.log[1].args[5] == nil, "after it ends, drawn as it was")
+  hd.enabled.field = false
+  check(hd.beginDirect("field") == false, "Field HD off: no direct pass")
+  hd.enabled.field = true
+  hd.fail("test")
+  check(hd.beginDirect("field") == false, "...nor after a failure")
+end
+
 -- ---------------------- a quad of its own stands on its own pivot (quadPivots)
 do
   local G = fakeGraphics()
