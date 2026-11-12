@@ -330,7 +330,8 @@ function HD.new(G, opts)
   --- Tag an image: draws of it inside a pass are drawn at window resolution.
   --- spec: { texture = img|nil, quad = q|nil, pivot = {x, y}|nil, lowPivot = {x, y}|nil,
   ---         scale = k (default 1), anchor = "feet"|nil, filter = "nearest"|"linear"|nil,
-  ---         quadPivots = { [quad] = {x, y, scale?} }|nil }  (read at draw time, so it can grow)
+  ---         quadPivots = { [quad] = {x, y, scale?} }|nil,
+  ---         flip = true|nil (texture's frame mirrored about its pivot) }  (read at draw time)
   function self.tag(image, spec)
     if image == nil then return end
     spec = spec or {}
@@ -657,10 +658,12 @@ function HD.new(G, opts)
     local cs, sn = math.cos(r), math.sin(r)
     local px, py = x + dx * cs - dy * sn, y + dx * sn + dy * cs
     if spec.texture then
+      -- (flip: the full-resolution frame mirrored about its pivot)
+      local fsx = spec.flip and -sx * k or sx * k
       if spec.quad then
-        real.draw(spec.texture, spec.quad, px, py, r, sx * k, sy * k, hpx, hpy)
+        real.draw(spec.texture, spec.quad, px, py, r, fsx, sy * k, hpx, hpy)
       else
-        real.draw(spec.texture, px, py, r, sx * k, sy * k, hpx, hpy)
+        real.draw(spec.texture, px, py, r, fsx, sy * k, hpx, hpy)
       end
     elseif quad then
       real.draw(image, quad, px, py, r, sx * k, sy * k, hpx, hpy)
@@ -1228,8 +1231,11 @@ function HD.new(G, opts)
       local vx, vy, vw, vh = rec.quad:getViewport()
       ox, oy = ox + vx, oy + vy
       local fx, fy, fw, fh = spec.quad:getViewport()
-      cut = { math.max(fx, fx + hpx + (vx - lpx) / k), math.max(fy, fy + hpy + (vy - lpy) / k),
-              math.min(fx + fw, fx + hpx + (vx + vw - lpx) / k), math.min(fy + fh, fy + hpy + (vy + vh - lpy) / k) }
+      -- (a mirrored frame: the part's columns from the other side of the pivot)
+      local x0, x1 = (vx - lpx) / k, (vx + vw - lpx) / k
+      if spec.flip then x0, x1 = -x1, -x0 end
+      cut = { math.max(fx, fx + hpx + x0), math.max(fy, fy + hpy + (vy - lpy) / k),
+              math.min(fx + fw, fx + hpx + x1), math.min(fy + fh, fy + hpy + (vy + vh - lpy) / k) }
     end
     -- where the low-res draw put that point, in the pass canvas's pixels
     local dx, dy = (lpx - ox) * rec.sx, (lpy - oy) * rec.sy
@@ -1262,6 +1268,7 @@ function HD.new(G, opts)
       fw = 64
     end
     local s = math.abs(rec.sx * k * rec.tsx)
+    if rec.spec.flip then return X - (fw - hpx) * s, X + hpx * s end
     return X - hpx * s, X + (fw - hpx) * s
   end
 
@@ -1304,7 +1311,8 @@ function HD.new(G, opts)
       quad = cutQuad
       hpx, hpy = hpx - (cut[1] - fx), hpy - (cut[2] - fy)
     end
-    local m = rec.uniforms and texMap(rec, X, Y, hpx, hpy, k, tex, quad)
+    local flip = rec.spec.flip and rec.spec.texture ~= nil
+    local m = rec.uniforms and not flip and texMap(rec, X, Y, hpx, hpy, k, tex, quad)
     if pinTo then
       local fh
       if quad then
@@ -1323,6 +1331,8 @@ function HD.new(G, opts)
     real.setBlendMode(rec.blend[1], rec.blend[2])
     local SX, SY = bx + X * bsx, by + Y * bsy
     local ssx, ssy = rec.sx * k * rec.tsx * bsx, rec.sy * k * rec.tsy * bsy
+    -- flip: the full-resolution frame mirrored about its pivot (a stand-in drawn mirrored)
+    if flip then ssx = -ssx end
     if quad then
       real.draw(tex, quad, SX, SY, rec.r, ssx, ssy, hpx, hpy)
     else

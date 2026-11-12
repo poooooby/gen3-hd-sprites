@@ -19,11 +19,20 @@
 --                          as one picture. Not while a WIDE or world-backed battle is on the
 --                          stack (the game shows it around the menu).
 --
--- A WIDE battle (src/battle/WideBattle.lua) never reaches drawClassic: it is drawn the game's
--- usual way. So is a battle another mod draws over a world of its own (Terrarium's 3D arena:
--- its BattleState:draw sets the Renderer's world override before the game's draw runs), and
--- any battle whose drawClassic another mod replaced before this one was loaded (it is called
--- through, not around).
+--   WideBattle.draw        the WIDE layout's draw (src/battle/WideBattle.lua, a 304x144 canvas);
+--                          the battle pass starts here too (layout "gen1_wide"). Its HUDs and
+--                          text box are its own locals, drawn after the Pokemon and the move
+--                          animation; each first asks the battle statusHUDVisible or
+--                          bottomUIVisible, so with the fit on those are shadowed on the battle
+--                          for the frame and the first ask is the UI seam. The intro's party
+--                          balls (drawBallRow, drawn before the animation) are held back until
+--                          the seam, so they stay with the UI. With the EXTENDED HUD (its HUD
+--                          drawn in window space) the battle is drawn the game's usual way.
+--
+-- A battle another mod draws over a world of its own (Terrarium's 3D arena: its
+-- BattleState:draw sets the Renderer's world override before the game's draw runs) is drawn the
+-- game's usual way, as is any battle whose drawClassic another mod replaced before this one was
+-- loaded (it is called through, not around).
 
 local Gen1 = {}
 
@@ -47,6 +56,24 @@ Gen1.LAYOUTS = {
     padTop = 96, padRows = 0, padTuck = 0,
     wholeBelow = 36, cutAbove = 56,
   },
+  -- The WIDE battle screen (304x144, src/battle/WideBattle.lua): the field above row 104
+  -- (FIELD_BOTTOM), the message and menu windows below it. Each side is the ORIGINAL's 160x144
+  -- placement moved into a region of its own: the player's by (20, 8) (its back pic at x 28-84,
+  -- y 48-104, its feet on the windows), the enemy's by (136, 0) (x 232-288, feet at y 56). The
+  -- enemy's status panel at (0, 0), 16x4 tiles; the player's at (184, 56), 15x5 tiles, under
+  -- the enemy's pic.
+  gen1_wide = {
+    focus = { 152, 104 }, feetY = 56, feetMax = 58,
+    split = 44, spanDefault = { 0, 304 },
+    pads = { enemy = { 232, 288 }, player = { 28, 84 } }, inwardMax = 32,
+    ui = { enemy = { 0, 0, 128, 32 }, player = { 184, 56, 304, 96 }, text = { -1e4, 104, 1e4, 1e4 } },
+    backTopMin = 48, extraMax = 40,
+    -- no side shift: the move animations are moved as a group by WideBattle.animationOffset
+    enemyX = 260, playerX = 56, shiftMax = 0,
+    ground = false,
+    padTop = 104, padRows = 0, padTuck = 0,
+    wholeBelow = 36, cutAbove = 56,
+  },
 }
 
 local function noop() end
@@ -63,6 +90,11 @@ function Gen1.prepare(Engine, hd)
   need(BattleState, "colorMode")
   local okT, Timing = pcall(require, "src.core.Timing")
   if not okT then Timing = nil end
+  -- the WIDE layout (optional: without it a WIDE battle is drawn the game's usual way)
+  local okW, WideBattle = pcall(require, "src.battle.WideBattle")
+  local wideDraw = okW and type(WideBattle) == "table" and type(WideBattle.draw) == "function"
+    and type(BattleState.statusHUDVisible) == "function" and type(BattleState.bottomUIVisible) == "function"
+    and type(BattleState.drawBallRow) == "function" and WideBattle.draw or nil
   for name, L in pairs(Gen1.LAYOUTS) do hd.layouts[name] = L end
   hd.useLayout("gen1_og")
   Engine.fullScreen, Engine.fieldBusy = nil, nil
@@ -172,6 +204,39 @@ function Gen1.prepare(Engine, hd)
     G.setColor(1, 1, 1, 1)
   end
 
+  --- The WIDE battle with its scene and UI apart (see the header): the battle's methods it asks
+  --- first for its HUDs and text box are shadowed for the frame (the battle's own, or another
+  --- mod's on the instance, are called through), and the first ask is the UI seam.
+  local function drawWideSplit(battle, ...)
+    local askHUD, askText, ballRow = battle.statusHUDVisible, battle.bottomUIVisible, battle.drawBallRow
+    local ownHUD, ownText, ownBall = rawget(battle, "statusHUDVisible"), rawget(battle, "bottomUIVisible"),
+      rawget(battle, "drawBallRow")
+    local seamed, held = false, nil
+    local function seam()
+      if seamed then return end
+      seamed = true
+      hd.seam("ui")
+      if held then
+        for i = 1, #held do ballRow(battle, unpack(held[i], 1, held[i].n)) end
+      end
+    end
+    battle.statusHUDVisible = function(b, ...) seam(); return askHUD(b, ...) end
+    battle.bottomUIVisible = function(b, ...) seam(); return askText(b, ...) end
+    battle.drawBallRow = function(b, ...)
+      if seamed then return ballRow(b, ...) end
+      held = held or {}
+      held[#held + 1] = { n = select("#", ...), ... }
+    end
+    local ok, err = pcall(wideDraw, battle, ...)
+    battle.statusHUDVisible, battle.bottomUIVisible, battle.drawBallRow = ownHUD, ownText, ownBall
+    if not ok then error(err, 0) end
+    -- (a frame that drew no UI, a blanked field: its held balls are still drawn)
+    if not seamed and held then
+      seamed = true
+      for i = 1, #held do ballRow(battle, unpack(held[i], 1, held[i].n)) end
+    end
+  end
+
   -- another mod's world under this battle (Terrarium's arena), set for this frame
   local function arena(battle)
     local game = battle.game
@@ -212,6 +277,25 @@ function Gen1.prepare(Engine, hd)
         return drawn(gameDraw(self, ...))
       end
       ours[Game.draw] = true
+    end
+    if wideDraw and not ours[wideDraw] then
+      WideBattle.draw = function(battle, ...)
+        local okE, extended = pcall(battle.extendedHUD, battle)
+        if arena(battle) or (okE and extended) or not okE then
+          hd.stats.gen1WideSkipped = (hd.stats.gen1WideSkipped or 0) + 1
+          return wideDraw(battle, ...)
+        end
+        hd.useLayout("gen1_wide")
+        local okP, errP = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
+        if not okP then hd.fail("battle pass: " .. tostring(errP)) end
+        if not (hd.capturing("battle") and hd.fit.enabled) then return wideDraw(battle, ...) end
+        local ok, err = pcall(drawWideSplit, battle, ...)
+        if not ok then
+          hd.fail("Gen 1 WIDE battle: " .. tostring(err))
+          return wideDraw(battle, ...)
+        end
+      end
+      ours[WideBattle.draw] = true
     end
     if not ours[drawClassic] then
       BattleState.drawClassic = function(self, ...)

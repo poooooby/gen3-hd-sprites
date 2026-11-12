@@ -1,7 +1,8 @@
 -- Driver: a Gen 2 battle with WoobleView (Gold, Silver, Crystal). Puts the player on Route 29 with
 -- a small party, starts a wild battle (GEN2_FOE, default ONIX), waits for the FIGHT menu and
 -- screenshots it in each window size (HD_SIZES, default 1920x1080), with Fill Screen on and off,
--- logging WoobleView's stats. Run from the engine root:
+-- logging WoobleView's stats; GEN2_LAYOUTS=og,wide shoots each battle layout. Run from the engine
+-- root:
 --   SHOT_DIR=<dir> POKEPORT_IDENTITY=gold-dev POKEPORT_GAME=gold POKEPORT_TOUCH=0 \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen2_battle.lua love .
 
@@ -61,18 +62,23 @@ local function body(game, log)
   if battle.phase ~= "menu" then log("FAIL battle never reached its menu (phase " .. tostring(battle.phase) .. ")"); return end
   U.wait(20)
   local function stat(k) return tostring(hd.stats()[k]) end
-  for size in (env("HD_SIZES") or "1920x1080"):gmatch("[^,]+") do
-    local w, h = size:match("(%d+)x(%d+)")
-    love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
-    U.wait(10)
-    for _, fill in ipairs({ true, false }) do
-      hd.setFill(fill)
-      U.wait(6)
-      U.shot(game, ("%s/og_%s_%s.png"):format(dir, size, fill and "fill" or "nofill"))
-      log(("og %s fill=%s: zoom %s fillScale %s uiScale %s composites %s failed %s"):format(size,
-        tostring(fill), stat("zoom"), stat("fill"), stat("uiScale"), stat("composites"), stat("failed")))
+  -- GEN2_LAYOUTS=og,wide: each battle layout in turn (the game reads it every frame)
+  local before = game.options.battleLayout
+  for layout in (env("GEN2_LAYOUTS") or "og"):gmatch("[^,]+") do
+    game.options.battleLayout = layout == "wide" and "wide" or before
+    for size in (env("HD_SIZES") or "1920x1080"):gmatch("[^,]+") do
+      local w, h = size:match("(%d+)x(%d+)")
+      love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
+      U.wait(10)
+      for _, fill in ipairs({ true, false }) do
+        hd.setFill(fill)
+        U.wait(6)
+        U.shot(game, ("%s/%s_%s_%s.png"):format(dir, layout, size, fill and "fill" or "nofill"))
+        log(("%s %s fill=%s: zoom %s fillScale %s uiScale %s composites %s failed %s"):format(layout, size,
+          tostring(fill), stat("zoom"), stat("fill"), stat("uiScale"), stat("composites"), stat("failed")))
+      end
+      hd.setFill(true)
     end
-    hd.setFill(true)
   end
   -- GEN2_MOVES=PSYCHIC,EARTHQUAKE: those moves' animations (the player's turn), shot at
   -- GEN2_MOVE_SHOTS frames (default 10,30)

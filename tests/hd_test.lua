@@ -228,6 +228,42 @@ do
   check(hd.beginDirect("field") == false, "...nor after a failure")
 end
 
+-- ---------------- flip: a full-resolution frame mirrored about its pivot (a mirrored stand-in)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 160, 144)
+  local pic, atlas = canvas("pic", 56, 56), canvas("atlas", 1024, 1024)
+  local frame = quad(100, 0, 80, 90)
+  hd.tag(pic, { texture = atlas, quad = frame, pivot = { 30, 88 }, lowPivot = { 28, 56 }, scale = 0.5, flip = true })
+  local function drawn(flip)
+    hd.tagOf(pic).flip = flip
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    G.draw(pic, 96, 0)
+    hd.endPass()
+    G.log = {}
+    hd.composite(base, function() end, 0, 0, 4, 4, { 0, 0, 640, 576 })
+    hd.endFrame()
+    for _, e in ipairs(G.log) do if e.image == atlas then return e end end
+  end
+  local e = drawn(true)
+  check(e and e.args[1] == frame and near(e.args[2], (96 + 28) * 4) and near(e.args[3], 56 * 4)
+    and near(e.args[5], -2) and near(e.args[6], 2) and e.args[7] == 30 and e.args[8] == 88,
+    "a flipped frame is drawn mirrored about its pivot, where the stand-in's pivot was")
+  e = drawn(nil)
+  check(e and near(e.args[5], 2), "...and unflipped as it is")
+  -- in place (a direct pass, or past a pass's cap): mirrored the same
+  hd.tagOf(pic).flip = true
+  hd.beginDirect("battle")
+  G.log = {}
+  G.draw(pic, 10, 20)
+  hd.endDirect()
+  check(G.log[1] and G.log[1].image == atlas and near(G.log[1].args[5], -0.5) and near(G.log[1].args[6], 0.5),
+    "...drawn in place, mirrored too")
+end
+
 -- ---------------------- a quad of its own stands on its own pivot (quadPivots)
 do
   local G = fakeGraphics()

@@ -44,7 +44,7 @@
 --   setCap(pass, n)       change it (1..32)
 --   stats()               counters for debugging: splits, composites, flattened, overCap,
 --                         offCanvas
---   features              { quadPivots = true, dex = true, battleFit = true }: what this
+--   features              { quadPivots = true, dex = true, battleFit = true, flip = true }: what this
 --                         version supports
 --   fitEnabled()          Battle Fit is on: the battle scene zooms out so tall sprites fit
 --                         under the top of the screen (the UI is never zoomed)
@@ -57,7 +57,7 @@
 return function(mod, hd, state)
   local exports = {}
   exports.version = 2
-  exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true }
+  exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end

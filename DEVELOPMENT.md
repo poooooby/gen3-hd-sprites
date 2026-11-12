@@ -61,9 +61,15 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   canvas with the white field, colours it zone by zone (`drawZonePass`), then draws the Pokémon
   over it; with Battle Fit on the adapter draws the field without them (`drawHUDs` /
   `drawTextArea` shadowed on the battle), then the UI seam, then the HUDs and text box on a
-  canvas of their own through the same zone pass. A WIDE battle (`WideBattle.draw`) never
-  reaches `drawClassic` and is drawn the game's way, as is a battle another mod draws over a
-  world of its own (Terrarium's arena: `renderer.worldOverride` set for the frame). The field
+  canvas of their own through the same zone pass. A WIDE battle never reaches `drawClassic`:
+  the adapter wraps `WideBattle.draw` (304×144, layout `"gen1_wide"`) and starts the battle pass
+  there too. Its HUDs and text box are locals of that module, drawn after the Pokémon and the
+  move animation; each first asks the battle `statusHUDVisible` / `bottomUIVisible`, so with
+  Battle Fit on those are shadowed on the battle for the frame and the first ask is the UI seam
+  (the intro's `drawBallRow` calls, which come before the animation, are held until the seam).
+  With the EXTENDED HUD (`battle:extendedHUD()`: the HUD in window space) a WIDE battle is
+  drawn the game's way, as is a battle another mod draws over a world of its own (Terrarium's
+  arena: `renderer.worldOverride` set for the frame). The field
   pass is the shared one (`Renderer:beginWorldPass`, which `OverworldController` calls). A sprite
   mod should tag only what it draws in true colour: in the palette modes the world canvas is
   coloured zone by zone after it is drawn, which a window-resolution draw never reaches (Vivid
@@ -90,9 +96,12 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   apart for Battle Fit (`drawEnemyHud`, `drawPlayerHud`, `drawBottom` shadowed during
   `drawScene`, then drawn after the UI seam under the exit fade's palette), and the pass is
   composited where the panel would stand (`hd.composite` with a plain scissored blit standing in
-  for the Renderer's; `hd.endFrame` after it). A WIDE battle and a black or world background
-  (`Game2:paintBattleSurround` paints those around the panel afterwards) are drawn the game's way.
-  Layout `"gen2_og"`. The field has no low-res canvas either: `World:draw` draws the map and
+  for the Renderer's; `hd.endFrame` after it). Layout `"gen2_og"`. A WIDE battle the same way
+  through `WideBattle.draw` (a 304×144 canvas, layout `"gen2_wide"`, composited where its 38×18
+  tile panel would stand): its field (`WideBattle.drawField`) in `drawScene`, the UI seam, then
+  `drawTopHud` / `drawBottomHud` under the exit fade's palette; docked to the window
+  (`WideBattle.docked`, the EXTENDED HUD) it is drawn the game's way. A black or world background
+  (`Game2:paintBattleSurround` paints those around the panel afterwards) is drawn the game's way. The field has no low-res canvas either: `World:draw` draws the map and
   people straight to the window at its zoom, already at window resolution. So the adapter wraps
   `World:drawPeople` in a **direct** field pass (`hd.beginDirect("field")` / `hd.endDirect()`):
   a tagged image is drawn in place at its spec's `scale` about its pivot (`lowPivot`, or the
@@ -103,7 +112,12 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
 enemy's feet, the pads, the side shift's spots, the wallpaper rows...) are a layout:
 `hd.layouts[name]`, picked with `hd.useLayout(name)` before a battle pass. `"gen3"` is the table
 in `src/hd.lua`; `src/gen1.lua` adds `"gen1_og"` (text box line at row 96, enemy feet at 56, no
-pads or wallpaper, no side shift: Gen 1's move animations are placed in the cart's coordinates).
+pads or wallpaper, no side shift: Gen 1's move animations are placed in the cart's coordinates)
+and `"gen1_wide"` (304×144: the line at row 104, each side's 160×144 placement moved into its
+region, the player's by (20, 8) and the enemy's by (136, 0)); `src/gen2.lua` adds `"gen2_og"`
+and `"gen2_wide"` (the ORIGINAL's scene moved right by 72, the player's HUD by 144). A WIDE
+canvas is wider than 16:9, so on a wide screen Fill Screen uses the stacked arrangement (the
+UI across the width, the enemy's HP box up at the top, the scene growing between).
 
 ## Battle Fit
 
@@ -435,11 +449,12 @@ end
 | `top` | the first row of art in the frame (quad pixels), the highest over the animation: Battle Fit fits the art, not the frame's empty margin (default 0) |
 | `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
 | `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
+| `flip` | `true`: the `texture`/`quad` frame is drawn mirrored about its `pivot` (a stand-in the mod drew mirrored; `lowPivot` is in the stand-in as drawn). Check `features.flip` |
 
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,

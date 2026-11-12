@@ -4,7 +4,9 @@
 -- (HD_SIZES, default 1920x1080), with Fill Screen on and off, logging WoobleView's stats.
 -- GEN1_MOVES=THUNDERBOLT,PSYCHIC plays those moves too (from the player's side), shooting
 -- GEN1_MOVE_SHOTS frames of each (default 10,30). GEN1_INTRO_SHOT=1 also shoots the intro once
--- its party balls show; GEN1_COLORS sets the colour mode (PaletteFX). Run from the engine root:
+-- its party balls show; GEN1_COLORS sets the colour mode (PaletteFX); GEN1_NO_BATTLE_PASS=1 leaves
+-- the battle to the game, for comparison; GEN1_FIGHT=1 picks FIGHT and the first move. Run from
+-- the engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=red POKEPORT_VERSION=red \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen1_battle.lua love .
 
@@ -47,6 +49,8 @@ local function body(game, log)
     love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
     U.wait(5)
   end
+  -- GEN1_NO_BATTLE_PASS=1: WoobleView leaves the battle to the game (for comparison)
+  if env("GEN1_NO_BATTLE_PASS") and hd.setEnabled then hd.setEnabled("battle", false) end
   local foe = env("GEN1_FOE") or "ONIX"
   local function stat(k) return tostring(hd.stats()[k]) end
   for layout in (env("GEN1_LAYOUTS") or "og,wide"):gmatch("[^,]+") do
@@ -87,6 +91,21 @@ local function body(game, log)
           stat("failed")))
       end
       hd.setFill(true)
+    end
+    -- GEN1_FIGHT=1: FIGHT, the first move, played as the battle plays it (its turn's messages
+    -- and animations), a shot every 8 frames
+    if env("GEN1_FIGHT") then
+      U.tap(game, "a")
+      U.wait(20)
+      U.tap(game, "a")
+      for f = 1, 240 do
+        U.wait(1)
+        if f % 8 == 0 then
+          U.shot(game, ("%s/%s_fight_%03d.png"):format(dir, layout, f))
+          if battle.animPlaying then log(("%s fight frame %d: animation playing"):format(layout, f)) end
+        end
+      end
+      log(layout .. " fight done; failed " .. stat("failed"))
     end
     local moves = env("GEN1_MOVES")
     if moves then

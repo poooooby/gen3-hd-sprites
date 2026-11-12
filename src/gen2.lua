@@ -20,8 +20,15 @@
 --                          are already at window resolution: a direct field pass (hd.beginDirect)
 --                          draws a tagged sheet in place at its spec's size about its feet.
 --
--- A WIDE battle (src/ui/gen2/WideBattle.lua) is drawn the game's usual way, and so is a battle
--- with a black or world background (Game2 paints those around the panel after it is drawn).
+--   WideBattle.draw         the WIDE layout's battle (src/ui/gen2/WideBattle.lua, 304x144): the same,
+--                          on a 304x144 canvas (layout "gen2_wide"), composited where its 38x18
+--                          tile panel would stand. Its field (WideBattle.drawField: the ORIGINAL's
+--                          scene moved right by FIELD_X) is the scene; its HUDs (drawTopHud,
+--                          drawBottomHud) come after the UI seam. With its HUD docked to the window
+--                          (the EXTENDED HUD) it is drawn the game's usual way.
+--
+-- A battle with a black or world background is drawn the game's usual way (Game2 paints those
+-- around the panel after it is drawn).
 
 local Gen2 = {}
 
@@ -38,6 +45,20 @@ Gen2.LAYOUTS = {
     backTopMin = 48, extraMax = 40,
     -- no side shift: the move animations' objects are placed in the cart's coordinates
     enemyX = 124, playerX = 40, shiftMax = 0,
+    ground = false,
+    padTop = 96, padRows = 0, padTuck = 0,
+    wholeBelow = 36, cutAbove = 56,
+  },
+  -- The WIDE battle screen (304x144): the ORIGINAL's scene moved right by FIELD_X (72): the
+  -- enemy's pic box at x 168-224, the player's at 88-136; the enemy's HUD where the ORIGINAL
+  -- has it, the player's moved right by 144 (EXTRA_TILES), the text box across the bottom
+  gen2_wide = {
+    focus = { 152, 96 }, feetY = 56, feetMax = 58,
+    split = 44, spanDefault = { 0, 304 },
+    pads = { enemy = { 168, 224 }, player = { 88, 136 } }, inwardMax = 32,
+    ui = { enemy = { 8, 0, 96, 32 }, player = { 216, 56, 304, 96 }, text = { -1e4, 96, 1e4, 1e4 } },
+    backTopMin = 48, extraMax = 40,
+    enemyX = 196, playerX = 112, shiftMax = 0,
     ground = false,
     padTop = 96, padRows = 0, padTuck = 0,
     wholeBelow = 36, cutAbove = 56,
@@ -64,6 +85,13 @@ function Gen2.prepare(Engine, hd)
   if not (okF and type(Font) == "table" and type(Font.useBattleExtra) == "function") then Font = nil end
   local okP, GbcPalette = pcall(require, "src.render.GbcPalette")
   if not (okP and type(GbcPalette) == "table" and type(GbcPalette.setBgp) == "function") then GbcPalette = nil end
+  -- (optional: without it a WIDE battle is drawn the game's own way)
+  local okWB, WideBattle = pcall(require, "src.ui.gen2.WideBattle")
+  local wideDraw = okWB and type(WideBattle) == "table" and type(WideBattle.draw) == "function"
+    and type(WideBattle.drawField) == "function" and type(WideBattle.drawTopHud) == "function"
+    and type(WideBattle.drawBottomHud) == "function" and type(WideBattle.docked) == "function"
+    and type(WideBattle.drawSurface) == "function" and type(Chrome.fitOriginFor) == "function"
+    and WideBattle.draw or nil
   -- (optional: without it the field is drawn the game's own way)
   local okW, World = pcall(require, "src.world.gen2.World")
   local drawPeople = okW and type(World) == "table" and type(World.drawPeople) == "function"
@@ -100,6 +128,22 @@ function Gen2.prepare(Engine, hd)
     if GbcPalette and battle.exitFadeBgp then GbcPalette.setBgp(prevBgp) end
   end
 
+  --- The WIDE battle's scene, then the UI seam, then its HUDs (under the exit fade's palette, as
+  --- drawScene draws them), into the pass's canvas.
+  local function drawWideSplit(battle)
+    local sides = false
+    battle:drawScene(function() sides = WideBattle.drawField(battle) end)
+    if not sides then return end
+    if hd.capturing("battle") then hd.seam("ui") end
+    local prevBgp
+    if GbcPalette and battle.exitFadeBgp then
+      prevBgp = GbcPalette.setBgp(battle:exitFadeBgp() or GbcPalette.bgp)
+    end
+    WideBattle.drawTopHud(battle)
+    WideBattle.drawBottomHud(battle)
+    if GbcPalette and battle.exitFadeBgp then GbcPalette.setBgp(prevBgp) end
+  end
+
   --- The scene, then the UI seam, then the UI, into `c` (a battle pass on it).
   local function drawSplit(battle)
     battle.drawEnemyHud, battle.drawPlayerHud, battle.drawBottom = noop, noop, noop
@@ -117,24 +161,36 @@ function Gen2.prepare(Engine, hd)
     return not ok or mode == nil or mode == "white"
   end
 
-  local function present(battle, winW, winH)
+  local function present(battle, winW, winH, wide)
     local G = love.graphics
     local scale = battle:battlePanelScale(winW, winH)
-    local bx, by = Chrome.fitOrigin(winW, winH, scale)
-    local box = { bx, by, 160 * scale, 144 * scale }
+    local cw = wide and WideBattle.WIDTH or 160
+    local bx, by
+    if wide then
+      bx, by = Chrome.fitOriginFor(winW, winH, scale, cw / 8, 144 / 8)
+    else
+      bx, by = Chrome.fitOrigin(winW, winH, scale)
+    end
+    local box = { bx, by, cw * scale, 144 * scale }
     if Chrome.letterbox then Chrome.letterbox(winW, winH, 1, 1, 1) end
-    local c = canvasFor(160, 144)
+    local c = canvasFor(cw, 144)
     G.push("all")
     G.setCanvas(c)
     G.origin()
     G.setScissor()
     G.clear(1, 1, 1, 1)
     G.setColor(1, 1, 1, 1)
-    hd.useLayout("gen2_og")
+    hd.useLayout(wide and "gen2_wide" or "gen2_og")
     local okP, errP = pcall(hd.beginPass, "battle", c)
     if not okP then hd.fail("battle pass: " .. tostring(errP)) end
     local ok, err
-    if hd.capturing("battle") and hd.fit.enabled then
+    if wide then
+      if hd.capturing("battle") and hd.fit.enabled then
+        ok, err = pcall(drawWideSplit, battle)
+      else
+        ok, err = pcall(battle.drawScene, battle, function() WideBattle.drawSurface(battle) end)
+      end
+    elseif hd.capturing("battle") and hd.fit.enabled then
       ok, err = pcall(drawSplit, battle)
     else
       ok, err = pcall(battle.drawScene, battle)
@@ -184,6 +240,20 @@ function Gen2.prepare(Engine, hd)
         end
       end
       ours[BattleState.drawWidescreen] = true
+    end
+    if wideDraw and not ours[wideDraw] then
+      WideBattle.draw = function(battle, winW, winH, ...)
+        local okD, docked = pcall(WideBattle.docked, battle)
+        if not hd.enabled.battle or hd.failed or not okD or docked or not whitePaper(battle) then
+          return wideDraw(battle, winW, winH, ...)
+        end
+        local ok, err = pcall(present, battle, winW, winH, true)
+        if not ok then
+          hd.fail("Gen 2 WIDE battle: " .. tostring(err))
+          return wideDraw(battle, winW, winH, ...)
+        end
+      end
+      ours[WideBattle.draw] = true
     end
     if drawPeople and not ours[drawPeople] then
       World.drawPeople = function(self, ...)
