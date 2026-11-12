@@ -12,3 +12,4 @@ tests/drivers/doubles_battle.lua
 tests/drivers/field_screens.lua
 tests/drivers/move_edges.lua
 tests/drivers/gen1_battle.lua
+tests/drivers/gen2_battle.lua

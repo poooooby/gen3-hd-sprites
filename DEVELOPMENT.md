@@ -50,10 +50,9 @@ only in scenes that use it.
 
 ## Generations
 
-`src/engine.lua` wraps the Renderer's seams, which every generation that draws through the
-Renderer shares (Gen 1 and Gen 3; Gen 2 composites its own frame and is not supported). Each
-generation's own seams are wrapped by its adapter, picked by `GameVersion.generation()`
-(`Engine.adapters`, filled in `main.lua`):
+`src/engine.lua` wraps the Renderer's seams, which the generations that draw through the
+Renderer share (Gen 1 and Gen 3). Each generation's own seams are wrapped by its adapter, picked
+by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
 
 - **`src/gen3.lua`:** everything in this guide that names a Gen 3 module (`Battle.draw`, the
   Pokédex and summary screens, `Display.presentUi`, the screen stack, Battle Fit's seams).
@@ -66,6 +65,16 @@ generation's own seams are wrapped by its adapter, picked by `GameVersion.genera
   reaches `drawClassic` and is drawn the game's way, as is a battle another mod draws over a
   world of its own (Terrarium's arena: `renderer.worldOverride` set for the frame). No Pokédex,
   summary, boot or screen passes yet.
+- **`src/gen2.lua`:** Gold, Silver and Crystal. Gold composites its own frame (`Game2`), never
+  through the Renderer, and its battle draws the 160×144 panel straight to the window
+  (`Chrome.withPanel`). The adapter wraps `BattleState:drawWidescreen` (ORIGINAL layout, white
+  background): the scene is drawn into a 160×144 canvas of its own in a battle pass, its parts
+  apart for Battle Fit (`drawEnemyHud`, `drawPlayerHud`, `drawBottom` shadowed during
+  `drawScene`, then drawn after the UI seam under the exit fade's palette), and the pass is
+  composited where the panel would stand (`hd.composite` with a plain scissored blit standing in
+  for the Renderer's; `hd.endFrame` after it). A WIDE battle and a black or world background
+  (`Game2:paintBattleSurround` paints those around the panel afterwards) are drawn the game's way.
+  Layout `"gen2_og"`.
 
 **Battle layouts.** The battle screen's canvas numbers (`fit.focus`, the HP-box rects, the
 enemy's feet, the pads, the side shift's spots, the wallpaper rows...) are a layout:
