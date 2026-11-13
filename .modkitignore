@@ -19,3 +19,7 @@ tests/drivers/dex_gb.lua
 tests/scene_test.lua
 tests/drivers/scene_battle.lua
 tools/pack_trees.py
+tests/roles_test.lua
+tests/drivers/roles_dump.lua
+tests/relief_solve_test.lua
+tests/drivers/relief_dump.lua

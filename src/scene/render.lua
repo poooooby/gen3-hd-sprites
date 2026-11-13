@@ -105,9 +105,10 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
   local Trees = trees and trees.Trees
   local timg = trees and trees.image
   local dim, e = Trees and Trees.DIM or 1, Render.UV_INSET
-  -- a tree's quad (corners in map cells, uvs in atlas texels)
+  -- a tree's quad (corners in map cells, uvs in atlas texels), lifted with its cell (`lift`)
+  local lift = 0
   local function putTree(a, b, c, d, u0, v0, u1, v1)
-    local function rel(p) return { p[1] - ox, p[2], p[3] - oz } end
+    local function rel(p) return { p[1] - ox, p[2] + lift, p[3] - oz + lift } end
     quad(list("trees", timg), rel(a), rel(b), rel(c), rel(d),
       (u0 + e) / dim, (v0 + e) / dim, (u1 - e) / dim, (v1 - e) / dim, 1, 1)
   end
@@ -128,17 +129,21 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
         end
         -- (a sign's cell, and a lamp's head's, lay the ground round them: src/scene/signs.lua)
         local slot = t.slot(cell.groundMid or mid)
-        local x0, z0 = cell.cx - ox, cell.cy - oz
+        -- (lifted with its map and its relief: a point h up stands h south, src/scene/relief.lua)
+        local dy = cell.dy or 0
+        lift = dy
+        local x0, z0 = cell.cx - ox, cell.cy - oz + dy
         local x1, z1 = x0 + 1, z0 + 1
         -- on the ground: north-west corner first (the tile's top left). A standing cell's ground
         -- copy is marked (alpha 0.5): it shows only while the cards rise
-        local a, b, c, d = { x0, 0, z0 }, { x1, 0, z0 }, { x1, 0, z1 }, { x0, 0, z1 }
+        local a, b, c, d = { x0, dy, z0 }, { x1, dy, z0 }, { x1, dy, z1 }, { x0, dy, z1 }
         -- (a tree's cell lays the tree's own ground, unless it stands in water the ground lays)
         local treeGround = part and Trees.laysGround(sec, cell.mid)
         -- what stands as a card: a blocked cell no model covers (a tree's, a crown's over it)
         local card = cell.up and not part and mid == cell.mid
         local flat = card and Render.FLAT_MARK or 1
-        if not treeGround then
+        -- (a lifted cell's ground is its relief's: src/scene/relief.lua, but a tree's)
+        if not treeGround and not cell.lifted then
           put("lower", t.image, t.quad(slot), a, b, c, d, 1, flat)
           put("upper", t.overImage, t.overQuad(slot), a, b, c, d, 1, flat)
         end
@@ -151,7 +156,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
         end
         if card then
           -- standing on the run's southern edge, `up` tiles high
-          local z, y0 = cell.base + 1 - oz, cell.up
+          local z, y0 = cell.base + 1 - oz + dy, cell.up + dy
           local ca, cb = { x0, y0 + 1, z }, { x1, y0 + 1, z }
           local cc, cd = { x1, y0, z }, { x0, y0, z }
           local s = Render.CARD_SHADE
@@ -165,9 +170,14 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
   -- ground image)
   for _, pl in ipairs(buildings and buildings.placements or {}) do
     local md = pl.model
+    -- (lifted as the cell it stands on: src/scene/relief.lua)
+    local pdy = pl.dy or 0
     if md.image then
       local l = list("models", md.image)
-      buildings.Buildings.emit(pl, ox, oz, function(v) l[#l + 1] = v end)
+      buildings.Buildings.emit(pl, ox, oz, function(v)
+        v[2], v[3] = v[2] + pdy, v[3] + pdy
+        l[#l + 1] = v
+      end)
     end
     if pl.ground then
       local w, h = md.ref.w, md.ref.h
@@ -176,8 +186,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
         for i = 0, w - 1 do
           local cell = grid.at(pl.cx + i, pl.cy + j)
           if cell and cell.model == pl then
-            local x0, z0 = pl.cx + i - ox, pl.cy + j - oz
-            quad(gl, { x0, 0, z0 }, { x0 + 1, 0, z0 }, { x0 + 1, 0, z0 + 1 }, { x0, 0, z0 + 1 },
+            local cdy = cell.dy or 0
+            local x0, z0 = pl.cx + i - ox, pl.cy + j - oz + cdy
+            quad(gl, { x0, cdy, z0 }, { x0 + 1, cdy, z0 }, { x0 + 1, cdy, z0 + 1 }, { x0, cdy, z0 + 1 },
               (i + e / 16) / w, (j + e / 16) / h, (i + 1 - e / 16) / w, (j + 1 - e / 16) / h, 1, 1)
           end
         end
@@ -229,7 +240,7 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h)
     target:setFilter("linear", "linear")
     targetW, targetH = w, h
   end
-  local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist)
+  local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist, pose.ty)
   G.push("all")
   G.setCanvas({ target, depth = true })
   G.origin()

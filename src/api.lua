@@ -102,6 +102,10 @@ return function(mod, hd, state)
     s.progress = 1
     return true
   end
+  -- (dev: a relief.bin's bytes for the scene to draw, src/scene/relief.lua; read by the driver)
+  exports._sceneRelief = function(bytes)
+    return hd.scene and hd.scene.setReliefBytes and hd.scene.setReliefBytes(bytes) or false
+  end
   -- (tests: the current battle scene alone, as image data w x h)
   exports._sceneShot = function(w, h)
     return hd.scene and hd.scene.snapshot and hd.scene.snapshot(w, h) or nil

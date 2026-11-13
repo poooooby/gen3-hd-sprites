@@ -33,15 +33,16 @@ Camera.STAGE_PITCH, Camera.STAGE_DIST = rad(30), 7
 Camera.FIELD_PITCH = rad(90)
 Camera.FIELD_DIST = 5 / tan(Camera.FOV / 2)
 
---- A pose: { tx, tz, pitch, dist }.
-function Camera.pose(tx, tz, pitch, dist)
-  return { tx = tx, tz = tz, pitch = pitch or Camera.STAGE_PITCH, dist = dist or Camera.STAGE_DIST }
+--- A pose: { tx, tz, pitch, dist, ty } (ty: the target's height, 0 when not given; on lifted
+--- ground its tz is as far south again, src/scene/relief.lua).
+function Camera.pose(tx, tz, pitch, dist, ty)
+  return { tx = tx, tz = tz, pitch = pitch or Camera.STAGE_PITCH, dist = dist or Camera.STAGE_DIST, ty = ty or 0 }
 end
 
 --- The eye, and the view's up and forward vectors (right is always east, (1, 0, 0)).
 function Camera.basis(p)
   local s, c = sin(p.pitch), cos(p.pitch)
-  local ex, ey, ez = p.tx, p.dist * s, p.tz + p.dist * c
+  local ex, ey, ez = p.tx, (p.ty or 0) + p.dist * s, p.tz + p.dist * c
   -- up (0, c, -s), forward (0, -s, -c)
   return ex, ey, ez, c, -s, -s, -c
 end
@@ -106,18 +107,19 @@ Camera.PITCH_MAX = rad(89)
 --- small settling quake.
 function Camera.glide(from, to, t)
   t = math.max(0, math.min(1, t or 1))
-  if t >= 1 then return Camera.pose(to.tx, to.tz, to.pitch, to.dist) end
+  if t >= 1 then return Camera.pose(to.tx, to.tz, to.pitch, to.dist, to.ty) end
   if t < Camera.TRAVEL then
     local q = smoother(t / Camera.TRAVEL)
     local pitch = lerp(from.pitch, to.pitch, q) + Camera.CRANE * sin(pi * q)
     -- (the arc never tips past straight down, nor below where the glide started)
     return Camera.pose(lerp(from.tx, to.tx, q), lerp(from.tz, to.tz, q),
-      math.min(math.max(Camera.PITCH_MAX, from.pitch), pitch), lerp(from.dist, to.dist, q))
+      math.min(math.max(Camera.PITCH_MAX, from.pitch), pitch), lerp(from.dist, to.dist, q),
+      lerp(from.ty or 0, to.ty or 0, q))
   end
   local q = (t - Camera.TRAVEL) / (1 - Camera.TRAVEL)
   local dist = to.dist * (1 - 0.16 * exp(-6 * q) * sin(3 * pi * q))
   local quake = 0.07 * exp(-7 * q)
-  return Camera.pose(to.tx + quake * sin(q * 37), to.tz + quake * cos(q * 29), to.pitch, dist)
+  return Camera.pose(to.tx + quake * sin(q * 37), to.tz + quake * cos(q * 29), to.pitch, dist, to.ty)
 end
 
 return Camera

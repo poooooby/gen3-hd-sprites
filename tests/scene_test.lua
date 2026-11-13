@@ -261,7 +261,7 @@ do
     end
   end
   function grid.at(x, y) return grid.rows[y] and grid.rows[y][x] end
-  local found = Signs.find(grid, { isWall = function(c) return c == 1 end, layers = function(mid)
+  local function layers(mid)
     local lo = {}
     for k = 0, 255 do
       local x, y = k % 16, math.floor(k / 16)
@@ -269,11 +269,47 @@ do
       lo[k] = post and { 0.5, 0.5, 0.5 } or (mid == 8 and { 0.6, 0.3, 0.2 }) or { 0.8, 0.7, 0.4 }
     end
     return lo, nil
-  end })
+  end
+  -- (2, 2) is a sign event, and its metatile one the game's free-standing sign events are drawn with
+  local found = Signs.find(grid, { isWall = function(c) return c == 1 end, layers = layers,
+    signAt = function(x, y) return x == 2 and y == 2 end, postAt = function(mid) return mid == 7 end })
   local at = {}
   for _, f in ipairs(found) do at[f.cell.cx .. "," .. f.cell.cy] = f end
   check(#found == 2 and at["2,2"] and at["5,2"] and not at["4,2"],
-    "signs: a post open on three sides, and one drawn alike against a wall; not the wall")
+    "signs: a post open on three sides, and one drawn as a sign event against a wall; not the wall")
+  -- with no sign events, a post open on three sides still is one; not one drawn alike against a wall
+  found = Signs.find(grid, { isWall = function(c) return c == 1 end, layers = layers })
+  check(#found == 1 and found[1].cell.cx == 2, "...with no sign event, only the post open on three sides")
+  -- the mountain is never a post: the General tileset's rock, a tile drawn in its colours, a cover
+  local function one(mid, pair, opt)
+    grid.rows[2][2].mid, grid.rows[2][2].pair = mid, pair
+    opt = opt or {}
+    opt.isWall = function(c) return c == 1 end
+    opt.layers = function(m)
+      local lo, up = {}, nil
+      for k = 0, 255 do
+        local x = k % 16
+        if m == 0x300 then lo[k] = { 0xDE / 255, 0xB4 / 255, 0xA4 / 255 }   -- the mountain's top colour
+        elseif m == 0x301 then
+          lo[k] = { 0.8, 0.7, 0.4 }
+          up = up or {}
+          if x < 12 then up[k] = { 0.4, 0.4, 0.4 } end                     -- drawn over the player
+        elseif m >= 0x64 and m <= 0xBF then lo[k] = (x >= 6 and x < 10) and { 0.5, 0.5, 0.5 } or { 0.8, 0.7, 0.4 }
+        else return layers(m) end
+      end
+      return lo, up
+    end
+    local f = Signs.find(grid, opt)
+    for _, s in ipairs(f) do if s.cell.cx == 2 and s.cell.cy == 2 then return true end end
+    return false
+  end
+  check(not one(0x070, "general__mossdeep", { mountainRock = true }) and one(0x070, "general__mossdeep"),
+    "...not the General tileset's mountain rock (a ledge's end), in Hoenn")
+  check(not one(0x300, "general__mossdeep"), "...nor a tile drawn in the mountain's colours")
+  check(not one(0x301, "general__mossdeep"), "...nor one drawn over the player down the cell (a boulder)")
+  check(one(0x070, "general__mossdeep", { mountainRock = true, signAt = function(x, y) return x == 2 and y == 2 end }),
+    "...but a sign event always is")
+  grid.rows[2][2].mid, grid.rows[2][2].pair = 7, "p"
   check(at["2,2"].rows[4] == 2 ^ 6 + 2 ^ 7 + 2 ^ 8 + 2 ^ 9 and at["2,2"].rows[3] == 0 and at["2,2"].ground == 1,
     "...its silhouette is what the ground round it does not draw; its cell laid with that ground")
   local quads, top = 0, 0
@@ -512,6 +548,94 @@ do
     "a Rustboro block: found by its corner, 3 wide to its end, 3 tall to its foot")
   local okK, km = pcall(K.build, kits[1].spec.parts())
   check(okK and #km.tris > 0, "...and built as a flat-roofed block of that size")
+end
+
+-- ---------------------------------------------------------------- relief
+do
+  local Relief = dofile("src/scene/relief.lua")
+  local function u16(v) return string.char(v % 256, math.floor(v / 256) % 256) end
+  local function u32(v) return u16(v % 65536) .. u16(math.floor(v / 65536)) end
+  -- a relief.bin: layout 7, 2 x 1 cells, cell (1, 0) a south face a level tall (its north row
+  -- 16 px, its south row 0); one cut variant (the tile's lower half its background), one cut record
+  local heights = {}
+  for j = 0, 4 do for i = 0, 4 do heights[#heights + 1] = string.char((4 - j) * 4) end end
+  local head = "VXL4" .. u16(1) .. u16(5)
+  local index = u16(7) .. u16(1) .. u16(2) .. u16(1) .. u32(8 + 14) .. u16(0)
+  local cells = string.char(1, 0) .. table.concat(heights)
+  local blob = head .. index .. cells
+  local rows = ""
+  for j = 0, 15 do rows = rows .. u16(j >= 8 and 0xFFFF or 0) end
+  local cutTable = u16(1) .. u16(1) .. u16(7) .. u16(0x70) .. rows
+    .. u16(7) .. string.char(1, 0) .. u16(0) .. u16(16) .. u16(1) .. u16(0x7C) .. string.char(0xFF, 0)
+  local s = blob .. cutTable .. u32(#blob) .. "CUTS"
+  local R = Relief.parse(s)
+  local L = R and R.layouts[7]
+  check(L and L.w == 2 and L.h == 1 and L.cells[1] and L.cells[1][0] == 16 and L.cells[1][24] == 0 and not L.cells[0],
+    "relief: a layout's cells read, heights in pixels, row by row")
+  local cut = L and L.cuts[1]
+  check(cut and cut.variant == 0 and cut.foot == 16 and cut.ground == 1 and cut.wall == 0x7C and cut.sides == 0xFF
+    and L.faceTile == 0x7C and R.variants[0].metatile == 0x70 and R.variants[0].rows[8] == 0xFFFF,
+    "...its cut record and variant, the map's face tile its commonest wall")
+  check(Relief.isSlope(L.cells[1]) and Relief.centre(L.cells[1]) == 8 and Relief.sample(L.cells[1], 0.5, 0) == 16,
+    "...a slope, its middle and its points sampled")
+  -- a tile cut corner to corner: one 45-degree side; a half cut straight across: none
+  local tri = {}
+  for j = 0, 15 do
+    local r = 0
+    for i = 0, 15 do if i + j > 15 then r = r + 2 ^ i end end
+    tri[j] = r
+  end
+  local d = Relief.cutDiagonals(tri)
+  check(d.count == 1 and d.a[1] == 1 and d.b[1] == 1, "a cut tile's rock cut along its diagonal")
+  check(Relief.cutDiagonals(R.variants[0].rows).count == 0, "...a straight cut has no diagonal")
+  local tex = Relief.cutTexture(R.variants[0].rows, function() return { 1, 0, 0 } end)
+  check(tex[0] and not tex[8 * 16], "...its texture: the rock drawn, the background clear")
+  -- a seam: two maps side by side, the east one's edge a level under the west one's
+  local A = { base = 0, w = 1, h = 2, cells = {} }
+  local Bm = { base = 0, w = 1, h = 2, cells = {} }
+  local function level(v) local g = {} for k = 0, 24 do g[k] = v end return g end
+  A.cells[0], A.cells[1] = level(16), level(16)
+  check(Relief.seamStep({ L = A, x = 0, y = 0, w = 1, h = 2 }, { L = Bm, x = 1, y = 0, w = 1, h = 2 }) == 16,
+    "a seam asks the map beside to stand a level up to meet it")
+  -- a cell with cliffs: its south face walled down to the lower ground in front
+  local quads = 0
+  local B = { quad = function() quads = quads + 1 end, tri = function() quads = quads + 1 end,
+              sameMap = function() return true end, cell = function(x, y) return x == 0 and y == 0 and level(16) or nil end,
+              cut = function() return nil end, variant = function() return nil end,
+              tileUV = function() return 0, 0, 1, 1 end, metatileUV = function() return 0, 0, 1, 1 end,
+              cutUV = function() return nil end }
+  Relief.cliffWalls(B, 0, 0, level(16), level(16), 0x7C, nil, 0, 0xFF, false)
+  check(quads == 12, "...a level-topped cell walls its west, east and south sides down to the ground, a quad a lattice step")
+  -- a model round-trips through relief.bin's bytes
+  local M = Relief.decode(s)
+  check(Relief.encode(M) == s, "...a relief.bin decoded and encoded again is the same bytes")
+  check(Relief.pyround(2.5) == 2 and Relief.pyround(3.5) == 4 and Relief.pyround(-0.5) == 0,
+    "...heights rounded as Python rounds (half to even)")
+end
+
+-- ---------------------------------------------------------------- relief's last passes
+do
+  local Relief = dofile("src/scene/relief.lua")
+  local Post = dofile("src/scene/relief_post.lua")
+  local v, order = Post.json('{"b":1,"a":{"y":[1,2],"x":null},"c":true}')
+  check(order[v][1] == "b" and order[v][2] == "a" and order[v][3] == "c" and v.a.x == Post.NULL and v.a.y[2] == 2,
+    "the hand marks' JSON: objects keep their keys' order, null kept apart from absent")
+  -- a cut tile on level ground at 32 px whose foot sank to 0: raised to the ground beside it
+  local function level(h) local g = {} for k = 0, 24 do g[k] = h end return g end
+  local M = { layouts = { [5] = { w = 3, h = 3, flags = 0, base = 0, cells = {} } }, cuts = {}, edges = {} }
+  for k = 0, 8 do M.layouts[5].cells[k] = level(32) end
+  M.cuts[5 * 65536 + 1 * 256 + 1] = { 0, 0, 0xFFFF, 0xFFFF, 0xFF, 0 }
+  check(Post.cutFeet(M) == 1 and M.cuts[5 * 65536 + 257][2] == 32, "a cut tile's foot raised to the ground round it")
+  -- the marks: a level set on a cell with no lattice yet (on one that has its own, a level only
+  -- places a piece or a cut), a base on the map
+  M.layouts[5].cells[2] = nil
+  local world = { index = function(n) return n == "LAYOUT_X" and 5 or nil end, size = function() return 3, 3 end,
+                  links = {}, tilesets = function() return "gTileset_General", "gTileset_X" end,
+                  metatile = function() return 0 end, isWater = function() return false end }
+  local fixes, ord = Post.json('{"layouts":{"LAYOUT_X":{"base":16,"cells":{"2,0":{"level":48}}}}}')
+  Post.applyFixes(M, world, fixes, ord)
+  check(M.layouts[5].base == 16 and M.layouts[5].cells[2][12] == 48, "the hand marks: a map's base, a cell's level")
+  check(Relief.decode(Relief.encode(M)).layouts[5].cells[2][0] == 48, "...and written as relief.bin")
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))

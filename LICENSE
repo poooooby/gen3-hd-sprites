@@ -55,8 +55,24 @@ colours compared at the GBA's 5 bits a channel.
 
 The battle scene's signposts (src/scene/signs.lua) adapt Emerald 3DS's sign masks and sign
 solids (3ds_port/scripts/voxel_sign_mask.py, gen_voxel_sign_masks.py, src/voxel/voxel_sign.c,
-the signpost role of voxel_cells.py). Changes: found in the game over the window around the
-battle by their shape alone (no sign events), drawn from a texture of their own.
+the signpost role of voxel_cells.py, with its rules for which cells are posts). Changes: read in
+the game over the window around the battle (the engine's sign events, warps and drawings), drawn
+from a texture of their own.
+
+The battle scene's terrain relief (src/scene/relief.lua) adapts Emerald 3DS's relief file format
+and runtime (3ds_port/src/voxel/voxel_relief.c: lattices, cut tiles, seam steps) and how its mesh
+builder and atlas draw a lifted cell (voxel_mesh_builder.c: the cell's drawing on its lattice,
+cut tiles' flat layers and run-on ground, cliff walls, a back's north face; voxel_atlas.c: a cut
+tile's cleared background). Changes: rewritten in Lua for LOVE; no lighting; one texture of the
+drawings a battle's window lays.
+
+The relief's last passes (src/scene/relief_post.lua) adapt Emerald 3DS's sea ramps and cut feet
+(3ds_port/scripts/gen_voxel_relief.py) and its hand corrections (voxel_relief_fixes.py: how
+relief.bin is read and written, how the corrections apply), and assets/scene/relief_fixes.json
+is Emerald 3DS's own hand corrections (3ds_port/assets/voxel/relief_fixes.json: levels, pieces,
+bases, belts and edge fills set by hand, cell by cell, for 39 maps; no data of the cartridge's).
+Changes: rewritten in Lua, the maps read from the game instead of pret's files; the corrections
+file minified (its contents and key order unchanged).
 
 Pokemon is (c) Nintendo, Game Freak and Creatures. WoobleView contains none of their content.
 

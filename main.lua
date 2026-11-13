@@ -65,6 +65,9 @@ return function(mod)
     Kernel = loadSibling(mod, "src/scene/models/kernel.lua"),
     -- (optional: without it signs, lamps and boulders lie flat)
     Signs = loadSibling(mod, "src/scene/signs.lua"),
+    Relief = loadSibling(mod, "src/scene/relief.lua"),
+    -- (Emerald 3DS's cell roles, over the game's own layouts: src/scene/world.lua)
+    Roles = loadSibling(mod, "src/scene/roles.lua"),
     path = mod.path,
     hd = hd,
   }
@@ -86,6 +89,11 @@ return function(mod)
       local okC, comps = pcall(componentsOf, sceneDeps.Kernel, fence)
       if okC and type(comps) == "table" then sceneDeps.Components = comps end
     end
+  end
+  local worldOf = loadSibling(mod, "src/scene/world.lua")
+  if type(worldOf) == "function" and sceneDeps.Roles then
+    local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles })
+    if okW and type(world) == "table" then sceneDeps.World = world end
   end
   if SceneInit and sceneDeps.Camera and sceneDeps.Cells and sceneDeps.Stage and sceneDeps.Render then
     local ok, Scene = pcall(SceneInit, sceneDeps)

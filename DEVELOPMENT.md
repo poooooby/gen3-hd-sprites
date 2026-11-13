@@ -452,14 +452,22 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   (`Map.worldMidAt` for art; collision and behaviour through the cell's own map: the primary
   layout, a connection found as `fromDir` finds it, `Map.world`). Kinds: floor, grass, sand,
   water, blocked (`CollPermissions.isWall`), void (off every map indoors); each keeps its
-  `coll` and `beh`. Nothing without a model stands up (Emerald 3DS's rule), but trees: each
-  column's run of blocked cells with a tree's metatile (`env.stands`: a primary tileset's, half
-  its drawn pixels leaves, something on its upper layer - Kanto's; Hoenn's are models) stands as
-  cards on the run's southern edge, at most 6 high. Rocks, cliffs, unmodelled buildings lie flat.
-- `signs.lua`: signposts (Emerald 3DS's `voxel_sign_mask.py`, `gen_voxel_sign_masks.py`,
-  `voxel_sign.c`): a blocked cell open west, east and south (not a model's nor beside one, no
-  tree, not a column run); one drawn as such a post (metatile or upper layer) with walkable ground
-  south; a lamp drawn as a free one against a wall. Its silhouette (upper layer, lower-layer
+  `coll` and `beh`. Nothing without a model stands up (Emerald 3DS's rule). In Kanto's games
+  trees stand too: each column's run of blocked cells with a tree's metatile (`env.stands`: a
+  primary tileset's, half its drawn pixels leaves, something on its upper layer) stands as cards
+  on the run's southern edge, at most 6 high. In Hoenn's `env.stands` is always false (its trees
+  are models; Mossdeep's half-grass ledges passed the leaves test). Rocks, cliffs, unmodelled
+  buildings lie flat.
+- `signs.lua`: signposts (Emerald 3DS's `voxel_cells.py` rules, `voxel_sign_mask.py`,
+  `gen_voxel_sign_masks.py`, `voxel_sign.c`): a blocked cell open west, east and south that is a
+  sign event of its map (`env.signAt`, from the maps' `bgEvents`), or a drawing that is no
+  mountain (the General tileset's rock 0x064-0x0BF in Hoenn, a tile drawn mostly in the
+  mountain's colours, a corner of its outline), no cover (upper layer down the cell), no
+  foliage, no house (the mass above a house door: `env.doorAt` warps on a door behaviour) and not
+  a column run; a cell drawn as a sign event that stands open on three sides anywhere in the game
+  (`signPosts` in `init.lua`: every outdoor map's sign events, read once a game; its metatile or
+  its upper layer) with walkable ground south; a lamp drawn as a free one against a house's wall.
+  Never a model's cell. Its silhouette (upper layer, lower-layer
   pixels the clean ground beside it does not draw, closed off from the border), a head from the
   north cell's upper layer (a lantern), the ground its cell and its head's are laid with
   (`cell.groundMid`); `Signs.emit` builds each 8-connected piece 2 px thick standing on its own
@@ -534,6 +542,36 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   the lower layer and `overImage` as the upper, except for a metatile with nothing over whose
   `image` shows more than one colour where `midImage` is clear (a NORMAL one shows only the
   backdrop there): that one is COVERED, its upper layer `midImage`.
+- `relief.lua`: terrain read off the drawing (Emerald 3DS's `voxel_relief.c` and the relief
+  parts of `voxel_mesh_builder.c` / `voxel_atlas.c`): its `relief.bin` format (`Relief.parse`),
+  cut tiles (`cutDiagonals`, `cutClear`, `cutTexture`), the seam step between maps, and a lifted
+  cell's geometry (`emitCell`: its drawing on its 5x5 lattice at (u, h, v + h), a cut tile's flat
+  layer and the ground run on under it, cliff walls, a back's north face; `treeStep`). In
+  `init.lua`, `placeRelief` finds each cell's map (`env.where`) and layout id (the cache's
+  `map_tree/maps/G_N/header.json`), places the maps by their bases and seam steps, and sets
+  `cell.g` (heights), `cell.dy` (how high what stands on it is, tiles: a point h up also stands
+  h south), `cell.lifted`; `emitRelief` draws the lifted cells from one texture of the drawings
+  they lay (two passes). Trees, models, signs and flat cells are lifted by `dy`. For now the
+  heights come only from a dev driver: `WOOBLE_RELIEF_BIN` names a relief.bin (Emerald 3DS's
+  own, read locally to check the renderer, never shipped), which `scene_battle.lua` hands over
+  through `exports._sceneRelief`; the solver's port comes next. `Relief.decode` / `encode` are
+  `voxel_relief_fixes.py`'s lossless `parse` / `pack` (byte for byte, Python's round-half-even
+  included); `Relief.view` is what the renderer reads.
+- `relief_post.lua`: the solver's last passes, after the terraces: `seaRamps`, `cutFeet`,
+  `seamEases` (`gen_voxel_relief.py`) and `applyFixes` (`voxel_relief_fixes.py`) over a model,
+  with `Post.json` (a JSON decoder that keeps object key order: the marks' edge fills are written
+  in file order). `assets/scene/relief_fixes.json` is Emerald 3DS's hand marks, minified, contents
+  and order unchanged. Each pass gives the same bytes as Emerald 3DS's stage outputs.
+- `roles.lua`: `voxel_cells.py` whole (every cell's role: water, ledge, stair, floor, signpost,
+  wall, tree, fence, cliff, shelf), over an adapter of a layout; matches the Python cell for cell
+  on 21 layouts. Its drawings are exact layers from the atlas blobs (`Roles.blobPixels`: colour
+  index 0 left out, pret's colour rounding); `blocked` is the cartridge's collision bits.
+- `world.lua` (engine side, battle-free): Emerald's layouts by the cartridge's layout id (from
+  `map_tree/maps/G_N/header.json`, `events.json`, `grid.bin`), their maps' warps and sign events
+  joined as `voxel_cells.MapEvents` joins them, `roles.lua` adapters over them, the game's sign
+  posts and each layout's roles, cached once a game. `signs.lua` asks it in Emerald
+  (`opt.signpostAt`). The raw tilesets are in the cache too (`map_tree/tilesets/ts_<ptr>/`:
+  `metatiles.bin`, `tiles.4bpp`, `palettes.bin`, `attributes.bin`).
 - `render.lua`: static meshes per atlas and layer (ground quads, then cards, then trees, then
   buildings); a shader that
   outputs screen pixel x depth through LOVE's own projection with the view depth as w (so the
@@ -599,12 +637,18 @@ Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT` and `GEN1_COLORS`), `gen2_b
 `field_gb.lua` (Field HD with Vivid Worlds: OG), `screens_gb.lua` (Red's whole screens) and
 `dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off). Battle Scene:
 `luajit tests/scene_test.lua` (camera, cells, stage search, vertices, trees, the building kernel,
-specs and placement, look-alike cells, solids, component runs, fences, kits, signs) and the driver
+specs and placement, look-alike cells, solids, component runs, fences, kits, signs, relief and its
+last passes), `luajit tests/roles_test.lua` (the cell roles) and the drivers
 `scene_battle.lua` (`SCENE_SPOTS`, `SCENE_LOOK` for shots aimed elsewhere, each also saved as the
 scene alone through the test hooks `exports._sceneLook` / `_sceneShot`; it logs every placed
-model with its cell, every component run with its triangles, every sign (cell, metatile, head)
-and the build time phase by phase (`scenePhases`);
+model with its cell, every component run with its triangles, every sign (cell, metatile, head),
+the relief's lifted cells and layouts (`sceneRelief`) and the build time phase by phase
+(`scenePhases`);
 `SCENE_DUMP` for collision codes, `SCENE_SELFTEST` for the
-renderer on a synthetic field).
+renderer on a synthetic field) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
+`voxel_cells.py` prints them, to diff). The relief is checked against Emerald 3DS's own scripts
+run locally: pret's pokeemerald at their pinned commit with its graphics built, their
+`3ds_port` overlaid, `romfs/voxel/buildings.bin` in place, Python 3.13 (their pinned version;
+3.14 changes the output); the stages after export are then compared byte for byte.
 
 Keep [README.md](README.md) describing the mod as it is now (players read it).

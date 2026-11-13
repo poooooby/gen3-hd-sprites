@@ -9,22 +9,37 @@
 -- bottom, two pixels thick, in the depth band of that bottom's half cell; its cell is laid with the
 -- ground round it, the head's cell with its own ground.
 --
--- A signpost is a blocked cell outdoors with walkable ground west, east and south, no tree, no
--- building's (nor beside one), and not a run of one drawing down a column (a fence's); and one
--- drawn as such a post is (its metatile, or its upper layer pixel for pixel) wherever it stands
--- with walkable ground south of it (a sign against a wall); and a lamp drawn as a free one is
--- (its post and its lantern), against a wall on one side.
+-- Which cells are signposts, as Emerald 3DS's voxel_cells.py says: a blocked cell outdoors with
+-- walkable ground west, east and south that is
+--   * a sign event of its map, or
+--   * a drawing that is no mountain (the General tileset's mountain rock, a tile drawn mostly in
+--     the mountain's colours, a corner of its outline), no cover (drawn over the player right down
+--     the cell: a boulder, a bush), no foliage and no house (the mass above a house door), and not
+--     a run of one drawing down a column (a fence's);
+-- and a cell drawn as a sign event that stands so anywhere in the game (its metatile, or its upper
+-- layer pixel for pixel) is one wherever it stands with walkable ground south (a house's sign
+-- against its wall); and a lamp drawn as a free one (its post and its lantern) is one against a
+-- house's wall on one side. A building's cells (a model's) and a tree's never are.
 --
 -- Adapted from Emerald 3DS (3ds_port/scripts/voxel_sign_mask.py, gen_voxel_sign_masks.py,
 -- src/voxel/voxel_sign.c; voxel_cells.py's signposts; by Zallax and contributors, CC BY-NC-SA 4.0,
--- https://github.com/ZallaxDev/emerald-3ds; see LICENSE). Changes here: found in the game over the
--- window around the battle (no sign events: by shape alone), drawn from a texture of their own.
+-- https://github.com/ZallaxDev/emerald-3ds; see LICENSE). Changes here: read in the game over the
+-- window around the battle (the engine's sign events, warps and drawings), drawn from a texture of
+-- their own.
 --
 -- Plain Lua over a grid of src/scene/cells.lua and:
 --   opt.isWall(coll)
 --   opt.layers(mid, pair) -> lower, upper: { [y * 16 + x] = { r, g, b } } of each layer's drawn
 --                            pixels (0..1), or nil
 --   opt.stands(mid, pair)   a tree's metatile (src/scene/init.lua), never a sign
+--   opt.signAt(cx, cy)      a sign event there
+--   opt.doorAt(cx, cy), opt.isHouseDoor(behavior)   a warp there; a house door's behaviour
+--   opt.postAt(mid, pair), opt.postUpper(key)        drawn as a sign event that stands open on
+--                           three sides somewhere: its metatile; its upper layer (Signs.upperKey)
+--   opt.mountainRock        the primary tileset is Hoenn's General (its mountain rock is known)
+--   opt.signpostAt(cell) -> true/false: the cell's role in its own layout is "signpost"
+--                           (src/scene/roles.lua); nil where no layout says (the rules above,
+--                           over the window, decide)
 
 local Signs = {}
 
@@ -32,8 +47,39 @@ Signs.DEPTH = 2            -- pixels thick
 Signs.HEAD_MAX_WIDTH = 15
 Signs.HEAD_MAX_PIXELS = 160
 Signs.FOLIAGE = 0.5
+Signs.COVER_SLACK = 2      -- rows a covering drawing may leave short
+Signs.HOUSE_HALF_WIDTH, Signs.HOUSE_HEIGHT = 5, 7
+
+local SECONDARY = 0x200
+-- Secondary-tileset metatiles that stand alone with no sign event and are never a post: Slateport's
+-- curb ends, its harbour bollard, the market's goods, a moored sailboat's cell
+local NOT_POSTS = { slateport = { [0x2B9] = true, [0x2C7] = true, [0x32D] = true, [0x20C] = true,
+                                  [0x26B] = true, [0x26C] = true, [0x338] = true } }
+-- the General tileset's mountain rock (Hoenn's): a cliff's corner standing free, a ledge's end, a
+-- rock in the sea - blocked and open on three sides like a post, but never one
+local MOUNTAIN_ROCK = { 0x064, 0x0BF }
+local NEIGHBOURS = { { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } }
 
 local floor = math.floor
+
+-- the mountain's colours (tops, rim, faces, the speckle in both), 5 bits a channel as the GBA has them
+local function key5(c)
+  return floor(floor(c[1] * 255 + 0.5) / 8) * 1024 + floor(floor(c[2] * 255 + 0.5) / 8) * 32
+    + floor(floor(c[3] * 255 + 0.5) / 8)
+end
+local ROCK = {}
+for _, c in ipairs({ { 0xDE, 0xB4, 0xA4 }, { 0xBD, 0x94, 0x8B }, { 0xEE, 0xD5, 0xCD }, { 0x83, 0x5A, 0x5A },
+                     { 0x62, 0x41, 0x52 }, { 0x41, 0x31, 0x41 }, { 0x9C, 0x73, 0x73 } }) do
+  ROCK[floor(c[1] / 8) * 1024 + floor(c[2] / 8) * 32 + floor(c[3] / 8)] = true
+end
+
+--- An engine tileset pair's primary and secondary tileset names ("general__mossdeep" -> "general",
+--- "mossdeep"), lower case without underscores.
+function Signs.tilesets(pair)
+  local p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
+  if not p then return nil, nil end
+  return p:lower(), (s:gsub("_", "")):lower()
+end
 
 local function key(c) return floor(c[1] * 255 + 0.5) * 65536 + floor(c[2] * 255 + 0.5) * 256 + floor(c[3] * 255 + 0.5) end
 
@@ -68,6 +114,17 @@ function Signs.cutout(solid, w, h)
     rows[y] = r
   end
   return rows
+end
+
+--- A layer's pixels as one string ({ [y * 16 + x] = { r, g, b } }): two layers drawing the same
+--- pixels have the same key.
+function Signs.upperKey(up)
+  local parts = {}
+  for k = 0, 255 do
+    local p = up[k]
+    if p then parts[#parts + 1] = k .. "=" .. key(p) end
+  end
+  return table.concat(parts, ",")
 end
 
 local function bit(row, x) return floor(row / 2 ^ x) % 2 == 1 end
@@ -111,79 +168,152 @@ function Signs.find(grid, opt)
     end
     return n > 0 and green / n or 0
   end
-  -- a post open on three sides: no building's (nor beside one: a model's corner), no tree, not a
-  -- run of one drawing down a column (a fence's)
-  local function besideModel(i, j)
-    for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
-      local n = cell(i + d[1], j + d[2])
-      if n and n.model then return true end
-    end
-    return false
+  local function drawn(c)
+    local lo, up = layers(c)
+    local all = {}
+    for k, p in pairs(lo or {}) do all[k] = p end
+    for k, p in pairs(up or {}) do all[k] = p end
+    return all
   end
-  local function post(i, j)
+  -- drawn over the player right down the cell (a boulder, a bush, a rock outcrop; not a lamp or a
+  -- post, whose top at most is drawn over the player)
+  local function covers(c)
+    local _, up = layers(c)
+    if not up then return false end
+    local rowsOf = {}
+    for k in pairs(up) do
+      local y = floor(k / 16)
+      rowsOf[y] = (rowsOf[y] or 0) + 1
+    end
+    local n = 0
+    for y = 0, 15 do if (rowsOf[y] or 0) >= 8 then n = n + 1 end end
+    return n >= 16 - Signs.COVER_SLACK
+  end
+  -- the mountain's own colours: how many of a cell's pixels, and whether they are most of it
+  local function rockPixels(c)
+    local n, rock = 0, 0
+    for _, p in pairs(drawn(c)) do
+      n = n + 1
+      if ROCK[key5(p)] then rock = rock + 1 end
+    end
+    return rock, n
+  end
+  local function mountainDrawn(c)
+    local rock, n = rockPixels(c)
+    return n > 0 and 2 * rock >= n
+  end
+  -- the houses: the blocked mass above each house door, at most HOUSE_HALF_WIDTH cells either
+  -- side of it and HOUSE_HEIGHT tall, not foliage
+  local houses = {}
+  if opt.doorAt and opt.isHouseDoor then
+    for j = 1, H - 1 do
+      for i = 0, W - 1 do
+        local d = rows[j][i]
+        if opt.doorAt(d.cx, d.cy) and opt.isHouseDoor(d.beh) and blocked(i, j - 1) then
+          local stack = { { i, j - 1 } }
+          houses[(j - 1) * W + i] = true
+          while #stack > 0 do
+            local p = table.remove(stack)
+            for _, o in ipairs(NEIGHBOURS) do
+              local x, y = p[1] + o[1], p[2] + o[2]
+              if not houses[y * W + x] and cell(x, y) and blocked(x, y) and math.abs(x - i) <= Signs.HOUSE_HALF_WIDTH
+                  and y <= j and y >= j - Signs.HOUSE_HEIGHT and foliage(rows[y][x]) < Signs.FOLIAGE then
+                houses[y * W + x] = true
+                stack[#stack + 1] = { x, y }
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  local function house(i, j)
+    local c = cell(i, j)
+    return houses[j * W + i] == true or (c ~= nil and c.model ~= nil)
+  end
+  local function signEvent(c) return opt.signAt ~= nil and opt.signAt(c.cx, c.cy) == true end
+
+  -- a blocked cell that may be a post: never a building's (a model draws its cells) nor a tree's
+  local function candidate(i, j)
     local c = cell(i, j)
     if not c or c.model or c.kind ~= "blocked" or c.coll == nil or not blocked(i, j) then return false end
-    if opt.stands and opt.stands(c.mid, c.pair) then return false end
-    if foliage(c) >= Signs.FOLIAGE then return false end
-    return not blocked(i, j - 1) or cell(i, j - 1).mid ~= c.mid
+    return not (opt.stands and opt.stands(c.mid, c.pair))
   end
-  local function free(i, j)
-    if not post(i, j) or besideModel(i, j) then return false end
+  -- blocked outdoors and walkable to the west, east and south
+  local function openPost(i, j)
+    if not candidate(i, j) then return false end
     for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, 1 } }) do
       if off(i + d[1], j + d[2]) or blocked(i + d[1], j + d[2]) then return false end
     end
     return true
   end
-  -- lamps: (post, head) drawings of the free posts with a head drawn in the open cell north; one
-  -- drawn so against a wall (a building on one side, walkable south) is a lamp too
+  -- a post open on three sides: a sign event, or a drawing that is no mountain (its rock, a corner
+  -- of its outline), no cover, no foliage and no house, under open ground or another drawing (a
+  -- fence's run repeats itself)
+  local function free(i, j)
+    if not openPost(i, j) then return false end
+    local c = rows[j][i]
+    if signEvent(c) then return true end
+    local primary, secondary = Signs.tilesets(c.pair)
+    local m = c.mid
+    if m >= SECONDARY and NOT_POSTS[secondary] and NOT_POSTS[secondary][m] then return false end
+    if m < SECONDARY and opt.mountainRock and primary == "general" and m >= MOUNTAIN_ROCK[1]
+        and m <= MOUNTAIN_ROCK[2] then
+      return false
+    end
+    if m >= SECONDARY and mountainDrawn(c) then return false end
+    if m >= SECONDARY and rockPixels(c) > 0 then
+      for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, 1 } }) do
+        local n = cell(i + d[1], j + d[2])
+        if n and not off(i + d[1], j + d[2]) and mountainDrawn(n) then return false end
+      end
+    end
+    if covers(c) then return false end
+    if foliage(c) >= Signs.FOLIAGE or house(i, j) then return false end
+    return not blocked(i, j - 1) or cell(i, j - 1).mid ~= m
+  end
+  -- lamps: (post, head) drawings of the free posts with no sign event and a head drawn in the open
+  -- cell north; one drawn so against a house's wall (on one side, walkable south) is a lamp too
   local lamps = {}
   for j = 1, H - 1 do
     for i = 0, W - 1 do
       local c, n = rows[j][i], rows[j - 1][i]
-      if free(i, j) and not blocked(i, j - 1) and not off(i, j - 1) and hasUpper(n) then
+      if not signEvent(c) and not off(i, j - 1) and not blocked(i, j - 1) and hasUpper(n) and free(i, j) then
         lamps[tostring(c.pair) .. ":" .. tostring(c.mid) .. ":" .. tostring(n.mid)] = true
       end
     end
   end
-  -- signs drawn as the free posts are (their metatile, or its upper layer pixel for pixel): one
-  -- is a sign wherever it stands, walkable to its south (a house's sign against its wall)
-  local function upperKey(c)
-    local _, up = layers(c)
-    if not up then return nil end
-    local parts = {}
-    for k = 0, 255 do
-      local p = up[k]
-      if p then parts[#parts + 1] = k .. "=" .. key(p) end
-    end
-    return table.concat(parts, ",")
-  end
-  local postMids, postUppers = {}, {}
-  for j = 0, H - 1 do
-    for i = 0, W - 1 do
-      if free(i, j) then
-        local c = rows[j][i]
-        postMids[tostring(c.pair) .. ":" .. tostring(c.mid)] = true
-        local u = upperKey(c)
-        if u then postUppers[u] = true end
-      end
-    end
-  end
+  -- drawn as a sign that stands open on three sides somewhere in the game (opt.postAt: its
+  -- metatile; opt.postUpper: its upper layer pixel for pixel): a sign wherever it stands, walkable
+  -- to its south (a house's sign against its wall)
   local function drawnAsPost(c)
-    if postMids[tostring(c.pair) .. ":" .. tostring(c.mid)] then return true end
-    local u = upperKey(c)
-    return u ~= nil and postUppers[u] == true
+    if opt.postAt and opt.postAt(c.mid, c.pair) then return true end
+    if not opt.postUpper then return false end
+    local _, up = layers(c)
+    return up ~= nil and opt.postUpper(Signs.upperKey(up)) == true
   end
-  local function signpost(i, j)
-    if free(i, j) then return true end
-    if not post(i, j) or off(i, j + 1) or blocked(i, j + 1) then return false end
+  local function windowSignpost(i, j)
+    if not candidate(i, j) then return false end
     local c = rows[j][i]
-    if drawnAsPost(c) then return true end
-    if j < 1 then return false end
+    if not off(i, j + 1) and not blocked(i, j + 1) and drawnAsPost(c) then return true end
+    if free(i, j) then return true end
+    if off(i, j + 1) or blocked(i, j + 1) or j < 1 then return false end
     local n = rows[j - 1][i]
     if not lamps[tostring(c.pair) .. ":" .. tostring(c.mid) .. ":" .. tostring(n.mid)] then return false end
-    local sides = 0
-    for _, dx in ipairs({ -1, 1 }) do if blocked(i + dx, j) or off(i + dx, j) then sides = sides + 1 end end
-    return sides == 1
+    local sides = {}
+    for _, dx in ipairs({ -1, 1 }) do if blocked(i + dx, j) then sides[#sides + 1] = i + dx end end
+    return #sides == 1 and house(sides[1], j)
+  end
+  -- (where the cell's own layout says, its role: src/scene/roles.lua, Emerald 3DS's exactly)
+  local function signpost(i, j)
+    local c = cell(i, j)
+    if c and opt.signpostAt then
+      local v = opt.signpostAt(c)
+      if v ~= nil then
+        return v and not c.model and not (opt.stands and opt.stands(c.mid, c.pair)) or false
+      end
+    end
+    return windowSignpost(i, j)
   end
 
   local out = {}

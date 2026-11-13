@@ -78,6 +78,15 @@ local function body(game, log)
     end
   end
   hd.setScene(true)
+  -- (dev: Emerald 3DS's relief.bin, read locally, to check the relief renderer)
+  local reliefPath = os.getenv("WOOBLE_RELIEF_BIN")
+  if reliefPath and hd._sceneRelief then
+    local f = io.open(reliefPath, "rb")
+    if f then
+      log("relief file:", tostring(hd._sceneRelief(f:read("*a"))))
+      f:close()
+    end
+  end
   log("hd active:", hd.isActive(), "fit:", hd.fitEnabled(), "fill:", hd.fillEnabled(), "scene:", hd.sceneEnabled())
   local BattleBridge = require("src.core.game3.battle_bridge")
   local Battle = require("src.core.game3.battle")
@@ -169,6 +178,7 @@ local function body(game, log)
       stat("sceneError"), stat("composites"), stat("failed")))
     log(("%s buildings: %s (error %s)"):format(mapId, stat("sceneBuildings"), stat("sceneBuildingError")))
     log(("%s signs: %s (error %s)"):format(mapId, stat("sceneSigns"), stat("sceneSignError")))
+    log(("%s relief: %s (error %s)"):format(mapId, stat("sceneRelief"), stat("sceneReliefError")))
     log(("%s runs: %s (built in %s ms: %s)"):format(mapId, stat("sceneRuns"), stat("sceneMs"), stat("scenePhases")))
     hd.setScene(false)
     U.wait(6)

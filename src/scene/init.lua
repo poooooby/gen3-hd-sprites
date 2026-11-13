@@ -90,6 +90,80 @@ return function(deps)
       end
       return nil
     end
+    -- which map holds a cell (as env.cell finds it): its def, the cell in it, the map's id and
+    -- where the map's north-west corner stands in the battle map's cells; nil outside every map
+    local Runtime = req("src.core.game3.runtime")
+    local sess = Runtime and Runtime.getSession and Runtime.getSession()
+    env.mapId = sess and sess.map
+    function env.where(cx, cy)
+      if inside(layout, cx, cy) then return def, cx, cy, env.mapId, 0, 0 end
+      local dir = cy < 0 and "north" or cy >= H and "south" or cx < 0 and "west" or cx >= W and "east" or nil
+      for _, n in ipairs(Map.neighborList or {}) do
+        local L = n.dir == dir and n.def and n.def.midLayout
+        if L then
+          local off = tonumber(n.offset) or 0
+          local ox, oy
+          if dir == "north" then ox, oy = off, -(L.height or 0)
+          elseif dir == "south" then ox, oy = off, H
+          elseif dir == "west" then ox, oy = -(L.width or 0), off
+          else ox, oy = W, off end
+          if inside(L, cx - ox, cy - oy) then return n.def, cx - ox, cy - oy, n.mapId or n.map, ox, oy end
+        end
+      end
+      for _, e in ipairs(Map.world or {}) do
+        local L = e.def ~= def and e.def and e.def.midLayout
+        if L then
+          local ox, oy = e.ox or 0, e.oy or 0
+          if inside(L, cx - ox, cy - oy) then return e.def, cx - ox, cy - oy, e.id, ox, oy end
+        end
+      end
+      return nil
+    end
+    -- the events of the maps the window shows (the battle's, its neighbours, the world round it),
+    -- by world cell: sign events and warps
+    local signsAt, warpsAt, seenDef = {}, {}, {}
+    local Space = package.loaded["src.core.game3.scripting.space"]
+    local function addEvents(d, id, ox, oy)
+      if type(d) ~= "table" or seenDef[d] then return end
+      seenDef[d] = true
+      local evs = d.bgEvents
+      if type(evs) ~= "table" then
+        local b = Space and Space.bundle and Space.bundle.events and id and Space.bundle.events[id]
+        evs = b and b.bgEvents
+      end
+      for _, ev in ipairs(type(evs) == "table" and evs or {}) do
+        local x, y = tonumber(ev.x), tonumber(ev.y)
+        if ev.type == "sign" and x and y then signsAt[(x + ox) .. "," .. (y + oy)] = true end
+      end
+      for _, w in ipairs(type(d.warps) == "table" and d.warps or {}) do
+        local x, y = tonumber(w.x), tonumber(w.y)
+        if x and y then warpsAt[(x + ox) .. "," .. (y + oy)] = true end
+      end
+    end
+    addEvents(def, nil, 0, 0)
+    for _, n in ipairs(Map.neighborList or {}) do
+      local L = n.def and n.def.midLayout
+      if L then
+        local off = tonumber(n.offset) or 0
+        local ox, oy
+        if n.dir == "north" then ox, oy = off, -(L.height or 0)
+        elseif n.dir == "south" then ox, oy = off, H
+        elseif n.dir == "west" then ox, oy = -(L.width or 0), off
+        elseif n.dir == "east" then ox, oy = W, off end
+        if ox then addEvents(n.def, n.mapId or n.map, ox, oy) end
+      end
+    end
+    for _, e in ipairs(Map.world or {}) do addEvents(e.def, e.id, e.ox or 0, e.oy or 0) end
+    function env.signAt(cx, cy) return signsAt[cx .. "," .. cy] == true end
+    function env.doorAt(cx, cy) return warpsAt[cx .. "," .. cy] == true end
+    -- a house door's behaviour (Emerald 3DS's HOUSE_DOORS), in the engine's behaviour ids
+    local MB = req("src.core.game3.mb")
+    local doors = {}
+    for _, name in ipairs({ "ANIMATED_DOOR", "PETALBURG_GYM_DOOR", "CLOSED_SOOTOPOLIS_DOOR" }) do
+      local v = MB and MB.id(name)
+      if v then doors[v] = true end
+    end
+    function env.isHouseDoor(b) return doors[tonumber(b) or -1] == true end
     -- (without the module: the engine's own fallback, 0x07 / 0xff walls and 0x29 water)
     env.isWall = Perm and Perm.isWall or function(c) return c == 0x07 or c == 0xff end
     env.isWater = Perm and Perm.isWater or function(c) return c == 0x29 end
@@ -189,7 +263,7 @@ return function(deps)
   -- ── buildings (src/scene/buildings.lua) ──
 
   local Buildings, Kernel, Specs = deps.Buildings, deps.Kernel, deps.Specs
-  local Signs = deps.Signs
+  local Signs, Relief, World = deps.Signs, deps.Relief, deps.World
   local placeComponents
 
   -- a reference layout, by its id (LAYOUT_X is the game's map EM_X)
@@ -281,6 +355,8 @@ return function(deps)
     srcCache[ts] = src
     return src
   end
+  -- (for the dev drivers: a pair's layers, pixel by pixel)
+  Scene._pixelSource = pixelSource
 
   local function imageOf(W, H, fill)
     local ok, data = pcall(love.image.newImageData, W, H)
@@ -590,6 +666,285 @@ return function(deps)
     return found
   end
 
+  -- the metatiles signs are drawn with (Emerald 3DS's post_metatiles): every outdoor map's sign
+  -- events that stand open on three sides (blocked, walkable west, east and south), read once a
+  -- game; by the tileset that draws it and its id, with a pair it was found in
+  local postIndex = setmetatable({}, { __mode = "k" })
+  local function postKey(mid, pair)
+    local primary, secondary = Signs.tilesets(pair)
+    return tostring(mid < 512 and primary or secondary) .. ":" .. mid
+  end
+  local function signPosts(env)
+    local Runtime, Map, Dataset = req("src.core.game3.runtime"), req("src.core.game3.map"), req("src.core.game3.dataset")
+    local game = Runtime and Runtime._game
+    local maps = game and game.data and game.data.maps
+    if type(maps) ~= "table" or not (Map and Dataset and Dataset.isOutdoorMapType) then return nil end
+    local hit = postIndex[maps]
+    if hit then return hit end
+    local Space = package.loaded["src.core.game3.scripting.space"]
+    local found = {}
+    for id, d in pairs(maps) do
+      local evs = type(d) == "table" and d.bgEvents
+      if type(d) == "table" and type(evs) ~= "table" then
+        local b = Space and Space.bundle and Space.bundle.events and Space.bundle.events[id]
+        evs = b and b.bgEvents
+      end
+      if type(evs) == "table" and Dataset.isOutdoorMapType(d.mapType) then
+        local L
+        for _, ev in ipairs(evs) do
+          local x, y = tonumber(ev.x), tonumber(ev.y)
+          if ev.type == "sign" and x and y then
+            if L == nil then
+              local ok, l = pcall(Map.ensureMidLayout, game, id, d)
+              L = ok and l or false
+            end
+            if not L then break end
+            local w, h = L.width or 0, L.height or 0
+            local function blocked(cx, cy)
+              if cx < 0 or cy < 0 or cx >= w or cy >= h then return false end
+              return env.isWall(L:collAt(cx, cy)) == true
+            end
+            if x < w and y < h and blocked(x, y) and not blocked(x - 1, y) and not blocked(x + 1, y)
+                and not blocked(x, y + 1) then
+              local mid, pair = L:midAt(x, y), L.pair or d.pair
+              if mid and pair then found[postKey(mid, pair)] = { mid, pair } end
+            end
+          end
+        end
+      end
+    end
+    postIndex[maps] = found
+    return found
+  end
+
+  -- the relief (src/scene/relief.lua): heights read off the drawing, by layout id. For now only a
+  -- relief.bin a dev driver hands over (Emerald 3DS's own, read locally to check the renderer
+  -- against; never shipped); the port of its solver comes next
+  local reliefData
+  function Scene.setReliefBytes(bytes)
+    reliefData = Relief and Relief.parse(bytes) or nil
+    return reliefData ~= nil
+  end
+  function Scene.reliefData() return reliefData end
+
+  -- a map's layout id (the cartridge's: its map header's), as the engine's cache keeps it
+  local layoutIds = {}
+  local function layoutIdOf(mapId)
+    if mapId == nil then return nil end
+    local hit = layoutIds[mapId]
+    if hit ~= nil then return hit or nil end
+    layoutIds[mapId] = false
+    local Rse, Dataset = req("src.core.game3.rse"), req("src.core.game3.dataset")
+    local ok, g, num = pcall(function() return Rse.mapGroupNum(mapId) end)
+    if ok and g and Dataset and Dataset.cache then
+      local okC, cache = pcall(Dataset.cache)
+      local raw = okC and cache and cache:read("data/generated/gba/map_tree/maps/" .. g .. "_" .. num .. "/header.json")
+      layoutIds[mapId] = tonumber(raw and raw:match('"layoutId":(%d+)')) or false
+    end
+    return layoutIds[mapId] or nil
+  end
+
+  -- each cell's relief: its map's heights there (cell.g), and how high what stands on it is
+  -- (cell.dy, tiles: its map's level over the battle map's - its base and the lift its seam with
+  -- the battle map asks - and its relief's at its middle; a point h up stands h south as well),
+  -- less the player's cell's, so the battle stands where it did. Returns the maps placed.
+  local function placeRelief(grid, env, R, px, py)
+    local maps = {}
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        local d, lx, ly, id, ox, oy = env.where(c.cx, c.cy)
+        if d then
+          local m = maps[d]
+          if not m then
+            local ML = d.midLayout
+            m = { def = d, L = R.layouts[layoutIdOf(id) or -1], x = ox, y = oy,
+                  w = ML and ML.width or 0, h = ML and ML.height or 0 }
+            if m.L and (m.L.w ~= m.w or m.L.h ~= m.h) then m.L = nil end
+            maps[d] = m
+          end
+          c.rmap, c.lx, c.ly = m, lx, ly
+          c.g = m.L and m.L.cells[ly * m.L.w + lx] or nil
+        end
+      end
+    end
+    local cur = maps[env.def]
+    if not cur then return maps end
+    for _, m in pairs(maps) do
+      if m == cur then
+        m.rel = 0
+      else
+        local step = Relief.seamStep({ L = cur.L, x = 0, y = 0, w = cur.w, h = cur.h },
+          { L = m.L, x = m.x, y = m.y, w = m.w, h = m.h })
+        m.rel = (m.L and m.L.base or 0) + step - (cur.L and cur.L.base or 0)
+      end
+    end
+    local here = grid.at(px, py)
+    local h0 = here and here.rmap and here.rmap.rel + Relief.centre(here.g) or 0
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        if c.rmap then
+          c.mapLift = (c.rmap.rel - h0) / 16
+          c.lifted = c.g ~= nil
+          -- (for the stage search: its ground's height at its middle, tiles; rock or stairs)
+          c.liftT = c.mapLift + Relief.centre(c.g) / 16
+          c.slope = Relief.isSlope(c.g)
+          -- (a sign at the foot of a face stands on the ground under its board)
+          local at = c.g and (c.sign and Relief.isSlope(c.g)) and c.g[3 * Relief.SIDE + 2] or Relief.centre(c.g)
+          c.dy = c.mapLift + at / 16
+        end
+      end
+    end
+    return maps
+  end
+
+  -- the relief's vertices (into `l`, relative to the player's cell px, py) and the texture of the
+  -- drawings it lays: each lifted cell as Relief.emitCell draws it, in two passes (the first only
+  -- asks which drawings it needs: the cells' own, their grounds and walls, the cut tiles)
+  local function emitRelief(grid, R, NativeTileset, px, py)
+    local slots, order = {}, {}
+    local function slotOf(key, make)
+      local s = slots[key]
+      if not s then
+        order[#order + 1] = { key = key, make = make }
+        s = #order
+        slots[key] = s
+      end
+      return s
+    end
+    local W, image
+    local function rect(s)
+      if not image then return 0, 0, 1, 1 end
+      local e = Render.UV_INSET
+      local sx, sy = (s - 1) % 64, math.floor((s - 1) / 64)
+      local iw, ih = image:getDimensions()
+      return (sx * 16 + e) / iw, (sy * 16 + e) / ih, (sx * 16 + 16 - e) / iw, (sy * 16 + 16 - e) / ih
+    end
+    local function composite(pair, mid)
+      return function(x, y)
+        local ps = pixelSource(NativeTileset, pair)
+        if not ps then return nil end
+        local r, g, b, a = ps.over(mid, x, y)
+        if not (a and a > 0.5) then r, g, b, a = ps.under(mid, x, y) end
+        if r and a and a > 0.5 then return { r, g, b } end
+        return nil
+      end
+    end
+    local function metatileUV(pair, mid)
+      if mid == nil or pair == nil then return nil end
+      local ps = pixelSource(NativeTileset, pair)
+      if not (ps and ps.ts.midToSlot[mid]) then return nil end
+      return rect(slotOf(pair .. ":" .. mid, composite(pair, mid)))
+    end
+    local out = {}
+    local function pass()
+      out = {}
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local c = grid.rows[j][i]
+          if c.g and c.rmap and c.rmap.L then
+            local m = c.rmap
+            local L = m.L
+            local function same(x, y)
+              local o = grid.at(x, y)
+              return o ~= nil and o.rmap == m
+            end
+            local B = { lift = 0, shift = 0, faceTile = L.faceTile }
+            local dyBase = c.mapLift
+            function B.quad(a, b, cc, d)
+              for _, p in ipairs({ a, b, cc, a, cc, d }) do
+                out[#out + 1] = { p[1] - px, p[2] + dyBase, p[3] - py + dyBase, p[4], p[5], p[6], p[6], p[6], 1 }
+              end
+            end
+            function B.tri(a, b, cc)
+              for _, p in ipairs({ a, b, cc }) do
+                out[#out + 1] = { p[1] - px, p[2] + dyBase, p[3] - py + dyBase, p[4], p[5], p[6], p[6], p[6], 1 }
+              end
+            end
+            B.sameMap = same
+            function B.cell(x, y)
+              local o = grid.at(x, y)
+              return o and o.rmap == m and o.g or nil
+            end
+            function B.cut(x, y)
+              local o = grid.at(x, y)
+              if not (o and o.rmap == m) then return nil end
+              return L.cuts[o.ly * L.w + o.lx]
+            end
+            function B.variant(k) return R.variants[k] end
+            function B.tileUV(x, y)
+              local o = grid.at(x, y)
+              if not o then return nil end
+              return metatileUV(o.pair, o.mid)
+            end
+            function B.metatileUV(mt) return metatileUV(c.pair, mt) end
+            function B.cutUV(k)
+              local v = R.variants[k]
+              if not v then return nil end
+              local pair = c.pair
+              return rect(slotOf("cut:" .. pair .. ":" .. k, function(x, y)
+                if not v._tex then v._tex = {} end
+                local t = v._tex[pair]
+                if not t then
+                  t = Relief.cutTexture(v.rows, composite(pair, v.metatile))
+                  v._tex[pair] = t
+                end
+                return t[y * 16 + x]
+              end))
+            end
+            function B.sign(x, y)
+              local o = grid.at(x, y)
+              return o and o.sign and o.groundMid or nil
+            end
+            function B.headGround(x, y)
+              local o = grid.at(x, y)
+              return o and not o.sign and o.groundMid or nil
+            end
+            function B.modelTop(x, y)
+              local o = grid.at(x, y)
+              return o and o.model and 2 or nil
+            end
+            local part
+            if Trees then
+              local sec, general = Trees.tilesets(c.pair)
+              part = general and Trees.part(sec, c.mid)
+              if part and not Trees.laysGround(sec, c.mid) then part = nil end
+            end
+            if part then
+              Relief.treeStep(B, c.cx, c.cy)
+            elseif not Relief.emitCell(B, c.cx, c.cy, c.g) then
+              c.lifted = false       -- a model's cell: its ground lies flat at the cell's middle
+            end
+          end
+        end
+      end
+    end
+    pass()
+    if #order == 0 then return nil end
+    W = math.min(64, #order)
+    image = imageOf(16 * W, 16 * math.ceil(#order / 64), function(data)
+      for s, e in ipairs(order) do
+        local sx, sy = ((s - 1) % 64) * 16, math.floor((s - 1) / 64) * 16
+        for y = 0, 15 do
+          for x = 0, 15 do
+            local p = e.make(x, y)
+            if p then data:setPixel(sx + x, sy + y, p[1], p[2], p[3], 1) end
+          end
+        end
+      end
+    end)
+    if not image then return nil end
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        if c.g and c.lifted == false and c.model then c.lifted = true end
+      end
+    end
+    pass()
+    return image, out
+  end
+
   -- per battle state: the built scene, or false (keep the wallpaper)
   local built = setmetatable({}, { __mode = "k" })
   Scene.last = nil
@@ -599,13 +954,17 @@ return function(deps)
     local Player = req("src.core.game3.player")
     local NativeTileset = req("src.core.game3.tileset_native")
     if not (env and Player and NativeTileset) then return nil, "no map" end
-    -- whether a metatile is a tree's: a primary tileset's (Kanto's trees; Hoenn's are models, and
-    -- a town's own grassy rock is no tree) drawn as leaves (Emerald 3DS's foliage test: half its
-    -- drawn pixels green) with something over the player (a crown). They stand up as cards;
-    -- anything else no model rebuilds lies flat as drawn
+    -- Hoenn's games (Emerald 3DS's rules: nothing stands up but its models) or Kanto's
+    local Profile = req("src.core.game3.profile")
+    local okV, gameId = pcall(function() return Profile.active().id end)
+    local hoenn = okV and (gameId == "emerald" or gameId == "ruby" or gameId == "sapphire")
+    -- whether a metatile is a tree's that stands as a cut-out: in Kanto's games only (Hoenn's trees
+    -- are models, and nothing else stands there: Mossdeep's ledges, half grass, are no trees), a
+    -- primary tileset's drawn as leaves (Emerald 3DS's foliage test: half its drawn pixels green)
+    -- with something over the player (a crown). Anything else no model rebuilds lies flat as drawn
     local standsOf = {}
     function env.stands(mid, pair)
-      if mid == nil or mid >= 512 then return false end
+      if hoenn or mid == nil or mid >= 512 then return false end
       local key = tostring(pair) .. ":" .. tostring(mid)
       local t = standsOf[key]
       if t ~= nil then return t end
@@ -667,31 +1026,69 @@ return function(deps)
     local signs = {}
     if Signs and not env.indoor then
       local layerCache = {}
-      local okS, found = pcall(Signs.find, grid, {
-        isWall = env.isWall, stands = env.stands,
-        layers = function(mid, pair)
-          local k = tostring(pair) .. ":" .. tostring(mid)
-          local e = layerCache[k]
-          if e == nil then
-            e = false
-            local src = pixelSource(NativeTileset, pair)
-            if src and src.under(mid, 0, 0) ~= nil then
-              local lo, up = {}, {}
-              for y = 0, 15 do
-                for x = 0, 15 do
-                  local r0, g0, b0, a0 = src.under(mid, x, y)
-                  local r1, g1, b1, a1 = src.over(mid, x, y)
-                  if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
-                  if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
-                end
+      local function layersOf(mid, pair)
+        local k = tostring(pair) .. ":" .. tostring(mid)
+        local e = layerCache[k]
+        if e == nil then
+          e = false
+          local src = pixelSource(NativeTileset, pair)
+          if src and src.under(mid, 0, 0) ~= nil then
+            local lo, up = {}, {}
+            for y = 0, 15 do
+              for x = 0, 15 do
+                local r0, g0, b0, a0 = src.under(mid, x, y)
+                local r1, g1, b1, a1 = src.over(mid, x, y)
+                if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
+                if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
               end
-              e = { lo, next(up) and up or nil }
             end
-            layerCache[k] = e
+            e = { lo, next(up) and up or nil }
           end
-          if not e then return nil, nil end
-          return e[1], e[2]
-        end })
+          layerCache[k] = e
+        end
+        if not e then return nil, nil end
+        return e[1], e[2]
+      end
+      -- the game's sign metatiles, and their upper layers: a primary tileset's read through a
+      -- pair of the window with the same primary (the same drawing), a secondary's through its own
+      -- pair where the window has it
+      local okP, posts = pcall(signPosts, env)
+      posts = okP and posts or {}
+      local windowPairs, byPrimary = {}, {}
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local p = grid.rows[j][i].pair
+          if p and not windowPairs[p] then
+            windowPairs[p] = true
+            local primary = Signs.tilesets(p)
+            if primary and not byPrimary[primary] then byPrimary[primary] = p end
+          end
+        end
+      end
+      local uppers = {}
+      for _, f in pairs(posts) do
+        local mid, pair = f[1], f[2]
+        local via = mid < 512 and byPrimary[Signs.tilesets(pair) or ""] or (windowPairs[pair] and pair) or nil
+        if via then
+          local _, up = layersOf(mid, via)
+          if up then uppers[Signs.upperKey(up)] = true end
+        end
+      end
+      local okS, found = pcall(Signs.find, grid, {
+        isWall = env.isWall, stands = env.stands, layers = layersOf,
+        signAt = env.signAt, doorAt = env.doorAt, isHouseDoor = env.isHouseDoor,
+        postAt = function(mid, pair) return mid ~= nil and pair ~= nil and posts[postKey(mid, pair)] ~= nil end,
+        postUpper = function(k) return uppers[k] == true end,
+        mountainRock = hoenn,
+        -- (Emerald's maps: the cell's role in its own layout, src/scene/roles.lua)
+        signpostAt = World and function(c)
+          local d, lx, ly, id = env.where(c.cx, c.cy)
+          local L = d and id and World.layout(id)
+          local r = L and World.roles(L)
+          if not r then return nil end
+          return r.role(lx, ly) == "signpost"
+        end or nil,
+      })
       if okS then
         local at = {}
         for _, f in ipairs(found) do
@@ -714,6 +1111,31 @@ return function(deps)
       end
     end
     phase("signs")
+    -- the relief: each cell's heights and how high what stands on it is (src/scene/relief.lua)
+    local R = Relief and Scene.reliefData()
+    hd.stats.sceneReliefError = nil
+    if R then
+      local okR, maps = pcall(placeRelief, grid, env, R, px, py)
+      if okR then
+        local n, ids = 0, {}
+        for j = 0, grid.h - 1 do
+          for i = 0, grid.w - 1 do if grid.rows[j][i].g then n = n + 1 end end
+        end
+        for _, m in pairs(maps) do
+          if m.L then ids[#ids + 1] = m.L.id .. "@" .. (m.rel or 0) end
+        end
+        table.sort(ids)
+        hd.stats.sceneRelief = n .. " cells; layouts " .. table.concat(ids, " ")
+        for _, pl in ipairs(placed) do
+          local ref = pl.model.ref
+          local c = grid.at(pl.cx + math.floor((ref.w - 1) / 2), pl.cy + ref.h - 1)
+          pl.dy = c and c.dy or 0
+        end
+      else
+        hd.stats.sceneReliefError = tostring(maps)
+      end
+    end
+    phase("relief")
     local stage = Stage.search(Camera, grid, {
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
       void = env.indoor,
@@ -767,13 +1189,22 @@ return function(deps)
           else
             for y = 0, 15 do mask[y] = s.rows[y] end
           end
-          local wx, wz = s.cell.cx - px, s.cell.cy - py - (s.head and 1 or 0)
+          local sdy = s.cell.dy or 0
+          local wx, wz = s.cell.cx - px, s.cell.cy - py - (s.head and 1 or 0) + sdy
           local top = Signs.emit(mask, n, function(x, y, z, u, v, shade)
-            l[#l + 1] = { wx + x, y, wz + z, ((k - 1) * 16 + u) / (16 * #signs), (row0 + v) / 32,
+            l[#l + 1] = { wx + x, y + sdy, wz + z, ((k - 1) * 16 + u) / (16 * #signs), (row0 + v) / 32,
                           shade, shade, shade, 1 }
           end)
           s.cell.top = top
         end
+      end
+    end
+    if R then
+      local okE, image, l = pcall(emitRelief, grid, R, NativeTileset, px, py)
+      if okE and image then
+        lists.models[image] = l
+      elseif not okE then
+        hd.stats.sceneReliefError = tostring(image)
       end
     end
     local meshes = Render.meshes(G, lists)
@@ -786,7 +1217,8 @@ return function(deps)
     return {
       key = key, meshes = meshes, ox = px, oz = py, stage = stage, want = want, cards = cards,
       from = Camera.pose(px + 0.5, py + 0.5, Camera.FIELD_PITCH, Camera.FIELD_DIST),
-      to = Camera.pose(stage.tx, stage.tz),
+      -- (on lifted ground: as high as it, and as far south again, src/scene/relief.lua)
+      to = Camera.pose(stage.tx, stage.tz + (stage.ty or 0), nil, nil, stage.ty),
       progress = 0, frames = 0, haze = haze, fog = indoor and Scene.FOG.indoor or Scene.FOG.outdoor,
       shadows = shadows,
     }
