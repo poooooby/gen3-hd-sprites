@@ -1138,6 +1138,7 @@ return function(deps)
     end
     return blocks
   end
+  local bankManifests = {}
   local function roomIo()
     local cache = {}
     return { layout = function(name)
@@ -1163,8 +1164,48 @@ return function(deps)
         for i = 0, L.w * L.h - 1 do blocks[i] = grid:byte(i * 2 + 1) + grid:byte(i * 2 + 2) * 256 end
       end
       local A = Interiors.layoutOf({ name = name, w = L.w, h = L.h, blocks = blocks }, pair)
+      A.enginePair = L.pair
       cache[name] = A
       return A
+    end,
+    -- a metatile's upper layer in each frame of its tile animation: the engine's baked banks,
+    -- read off its files whether or not the field has the map bound (its manifest, then each
+    -- frame's metatiles as 256 palette bytes, 0 clear)
+    animOver = function(A, m)
+      local pair = A.enginePair
+      local Dataset = req("src.core.game3.dataset")
+      local cache = Dataset and Dataset.cache()
+      if not (pair and cache) then return nil end
+      local root = "data/generated/gba/native/" .. pair .. "/"
+      bankManifests[pair] = bankManifests[pair] or (function()
+        local src = cache:read(root .. "anim_manifest.lua")
+        local chunk = src and load(src, "=anim_manifest", "t", {})
+        local ok, man = pcall(chunk or error)
+        return ok and type(man) == "table" and man or false
+      end)()
+      local man = bankManifests[pair]
+      for _, row in ipairs(man and man.banks or {}) do
+        for k, mid in ipairs(row.overMids or {}) do
+          if mid == m and row.overFile then
+            local blob = cache:read(root .. row.overFile)
+            local n = #row.overMids
+            if not blob then return nil end
+            local out = {}
+            for f = 0, (row.frames or 1) - 1 do
+              local base = (f * n + (k - 1)) * 256
+              if #blob >= base + 256 then
+                out[f] = function(x, y)
+                  local b = blob:byte(base + y * 16 + x + 1)
+                  if b == 0 then return nil end
+                  return b
+                end
+              end
+            end
+            return out
+          end
+        end
+      end
+      return nil
     end }
   end
   -- (dev: the rooms read afresh, in order, up to and with `upto`: { { name, layout, pieces,

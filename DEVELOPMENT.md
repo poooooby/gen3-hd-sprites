@@ -574,12 +574,19 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   (own place, `placed`, `reused_at`, `bare_at`; a room's commonest floor and its own paint for
   a room nobody modelled) - pieces share cells, so a cell keeps the first piece's floor and the
   tallest top; a room read once per state of its doors (Petalburg's gym) finds another room's
-  piece once per state, and the same model on the same spot stands once. 54 rooms so far (their
-  order up to `petalburg_gym_door4`); not yet: the other 48, animated pieces (`anim`, `ribbon`),
-  a cache.
+  piece once per state, and the same model on the same spot stands once. Animated pieces
+  (`anim`: Mauville's beams) find their extent in any frame (`anim_box`) through
+  `io.animOver(layout, m)`, which reads the engine's baked tile-animation banks off their files
+  (`native/<pair>/anim_manifest.lua`, then each frame's metatiles as 256 palette bytes, 0
+  clear), whether or not the field has that map bound; their texels are the tiles as the map
+  shows them (a battle does not step the field's animations). 125 rooms so far (their order up to
+  `contest_stage_tough`; the later ones sit in a function of their own, `laterRooms`, as a chunk
+  holds 200 locals); not yet: the Frontier's battle rooms, the Trick House, the link rooms, the
+  S.S. Tidal, Trainer Hill, Sky Pillar, the Abandoned Ship and the hideouts, and a cache (reading
+  all 125 takes ~9 s; the warm-up does it a slice a frame).
   Checked against Emerald 3DS's own models: `tests/drivers/room_dump.lua` (`ROOM`: the last room
   read) writes every placement in each room's layout as their buildings.bin's dump does
-  (`bld_dump.py <bin> <layout number> out 0 0`); all 50 layouts of the 54 rooms match triangle
+  (`bld_dump.py <bin> <layout number> out 0 0`); all 120 layouts of the 125 rooms match triangle
   for triangle, colours and all, reuse included (a few texels a centroid reads just past a
   texture's edge are clear in both).
 - For an overworld view, unused by the battle scene: the deck tables (`Scene.decks(layout)`,

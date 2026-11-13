@@ -1431,10 +1431,9 @@ local function drawnAs(io, name, draw)
       local i = d[2] * layout.w + d[1]
       blocks[i] = blocks[i] - blocks[i] % 1024 + d[3]
     end
-    local copy = {}
-    for k, v in pairs(layout) do copy[k] = v end
-    copy.blocks = blocks
-    copy.metatile = function(x, y) return blocks[y * layout.w + x] % 1024 end
+    -- (the same layout read again over its new cells: every reader of them sees them)
+    local copy = I.layoutOf({ name = layout.id, w = layout.w, h = layout.h, blocks = blocks }, layout.pair)
+    copy.enginePair = layout.enginePair
     layout = copy
   end
   return layout
@@ -1681,6 +1680,36 @@ local function decalCells(art, cells, x0, y0, vOffset)
     end
   end
   return out, boxes
+end
+
+--- The pixels of the rectangle drawn from the upper layer's `tiles` (lo, hi) in any frame of
+--- their animation (anim_box), as their box { x0, y0, x1, y1 }, or nil. io.animOver(layout, m) ->
+--- the metatile's upper layer in each frame of its tile animation ({ [f] = function(x, y) ->
+--- colour or nil }), or nil.
+local function animBox(io, layout, x0, y0, x1, y1, tiles)
+  local lo, hi = tiles[1], tiles[2]
+  local bx0, by0, bx1, by1 = INF, INF, -INF, -INF
+  local framesOf = {}
+  for y = y0, y1 - 1 do
+    for x = x0, x1 - 1 do
+      local tile, pixel = layout.upperSource(x, y)
+      if lo <= tile and tile <= hi then
+        local drawn = layout.tilePixel(tile, pixel) ~= 0
+        if not drawn and io.animOver then
+          local m = layout.metatile(floor(x / 16), floor(y / 16))
+          if framesOf[m] == nil then framesOf[m] = io.animOver(layout, m) or false end
+          for _, f in pairs(framesOf[m] or {}) do
+            if f(x % 16, y % 16) ~= nil then drawn = true; break end
+          end
+        end
+        if drawn then
+          bx0, by0, bx1, by1 = min(bx0, x), min(by0, y), max(bx1, x), max(by1, y)
+        end
+      end
+    end
+  end
+  if bx0 == INF then return nil end
+  return { bx0, by0, bx1 + 1, by1 + 1 }
 end
 
 --- Under a piece put at `places`, the floor as drawn there where that is not `ground`'s - a
@@ -2341,11 +2370,32 @@ function I.room(spec, io, reg, tick)
         end
         back = pc.against == nil and pc.back or pc.against
         if back ~= nil then back = back - y0 * 16 - (pc.base or 0) end
-        local span
+        local span, liveMap
         if pc.anim then
-          error(("%s: piece %s: animated pieces are not ported yet"):format(spec.name, pc.name), 0)
+          -- what any frame of its animation draws: the card or the ribbon spans all of it, its
+          -- texels the tiles as the map shows them (live, ~live faces; a battle does not step the
+          -- field's animations)
+          local box = animBox(io, layout, x0 * 16, y0 * 16, x1 * 16, y1 * 16, pc.tiles)
+          if not box then error(("%s: piece %s: no pixel of its tiles"):format(spec.name, pc.name), 0) end
+          span = { box[1] - x0 * 16, box[3] - x0 * 16, box[2] - y0 * 16 }
+          local voff = 2 * h * 16 + sh + th
+          liveMap = {}
+          for v = box[2] - y0 * 16, box[4] - y0 * 16 - 1 do
+            for u = span[1], span[2] - 1 do
+              local tile = layout.upperSource(x0 * 16 + u, y0 * 16 + v)
+              if pc.tiles[1] <= tile and tile <= pc.tiles[2] then liveMap[#liveMap + 1] = { u, voff + v, u, v } end
+            end
+          end
         end
-        local liveTag = ""
+        local liveTag = pc.anim and "~live" or ""
+        -- its band of texels as its tiles draw them, clear where they draw nothing
+        local function layLive()
+          for _, e in ipairs(liveMap or {}) do
+            local tile, pixel, pal = layout.upperSource(x0 * 16 + e[3], y0 * 16 + e[4])
+            local index = layout.tilePixel(tile, pixel)
+            art.c[e[2] * art.w + e[1]] = index ~= 0 and layout.palette(pal)[index] or nil
+          end
+        end
         if pc.flat then
           local band = 2 * h * 16 + sh + th
           paste(art, obj, 0, band)
@@ -2357,9 +2407,15 @@ function I.room(spec, io, reg, tick)
           end
           parts = { K.Ribbon(pc.name .. "_lid", mnx, mxx + 1, mnz, ht, mxz + 1, ht, band + ht) }
         elseif pc.ribbon then
-          error(("%s: piece %s: ribbons (animated) are not ported yet"):format(spec.name, pc.name), 0)
+          -- running back across the plan, from one post to the next
+          paste(art, obj, 0, 2 * h * 16 + sh + th)
+          layLive()
+          local a, b = pc.ribbon[1], pc.ribbon[2]
+          parts = { K.Ribbon(pc.name .. liveTag, span[1], span[2], a[1] - y0 * 16, a[2], b[1] - y0 * 16, b[2],
+            2 * h * 16 + sh + th) }
         elseif pc.card then
           paste(art, obj, 0, 2 * h * 16 + sh + th)
+          if pc.anim then layLive() end
           parts = { K.Card(pc.name .. liveTag, toArt(obj), foot, 2 * h * 16 + sh + th, pc.base or 0, span) }
         elseif truthy(pc.run) then
           local ox, oz = x0 * 16, y0 * 16

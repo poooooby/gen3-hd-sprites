@@ -68,7 +68,8 @@ support_left, outline_trim, leg_split, plain_side, side_image, slab_side, table_
 table_parts, pick_side, ball_fit, lathe_fit, dome_fit, post_parts, decal_cells, floor_under, the
 reuse of a piece in every room that draws it again, and find_placements' rules for a room's
 pieces), the interior specs of voxel_building_specs.py (so far its rooms from the Pokemon
-Center through the Petalburg gym's doors, in its order) and voxel_building.py's ProjDome,
+Center through the coloured contest halls, in its order: every gym among them) and
+voxel_building.py's ProjDome,
 ProjLathe, ProjRun and Ribbon
 (src/scene/models/solids.lua). Changes: rewritten in Lua for LOVE and run in the game on the
 player's own cartridge, the rooms read once a session in the background; no proofs or lint;

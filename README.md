@@ -94,10 +94,14 @@ resolution, and the camera pulls back so even the biggest ones fit.
   from their own art: the Pokémon Centers and Poké Marts (the counter with its Poké Balls, the
   healing machine, stools, the escalator), the houses of Littleroot and the common houses of
   Hoenn (tables and chairs, kitchens, beds, TVs, plants, stairs set into the back wall),
-  Professor Birch's lab with its machine under its glass dome, Mr. Briney's house, the flower
-  shop, and the gyms of Rustboro, Dewford and Petalburg: Roxanne's stone maze, Brawly's rock
-  maze and Norman's rooms, their sliding doors standing shut or open as the game has them. The
-  walls close every room in, and the same furniture stands wherever another room draws it.
+  Professor Birch's lab with its machine under its glass dome, Lilycove's Department Store,
+  museum and contest halls, the Day Care, Devon's lobby, the Battle Tents, the Harbor, Stern's
+  Shipyard, the Weather Institute, the Game Corners, the Pokémon League's halls and the Elite
+  Four's rooms, the Battle Frontier's lobbies, and every gym: Roxanne's stone maze, Brawly's rock
+  maze, Norman's rooms with their sliding doors, Wattson's coils with their electric beams
+  standing lit or out as the switches leave them, Flannery's walls of brick, Winona's columns,
+  Tate and Liza's islands in the dark and Juan's tiers of ice. The walls close every room in, and
+  the same furniture stands wherever another room draws it.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
@@ -151,9 +155,9 @@ Open **OPTIONS → MODS → WoobleView**.
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or so while you walk, then stays on disk). Rocks in the other games, and the buildings
   not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on the ground
-  as the game draws them. Indoors, the rooms not yet rebuilt (the other gyms, the Department
-  Store, the museums, the hideouts, the ships) show their furniture flat, but for the pieces
-  they share with the rooms that are. A battle with no overworld around it, or no open ground near you,
+  as the game draws them. Indoors, the rooms not yet rebuilt (the Battle Frontier's battle
+  rooms, the Trick House, the S.S. Tidal, the Abandoned Ship, the hideouts) show their furniture
+  flat, but for the pieces they share with the rooms that are. A battle with no overworld around it, or no open ground near you,
   keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
