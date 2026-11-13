@@ -36,6 +36,19 @@ I.LOOSE_PIXELS = 64
 I.POST_WIDTH = 6
 I.SLAB_ROWS = 4
 
+-- (a long read yields to the frame from inside its heavy loops: I.room and I.placeReused set
+-- `stepTick` to their caller's tick, and every so much work calls it)
+local stepTick, stepCount = nil, 0
+local function step(n)
+  if not stepTick then return end
+  stepCount = stepCount + (n or 1)
+  if stepCount >= 20000 then
+    stepCount = 0
+    stepTick("step")
+  end
+end
+I.step = step
+
 -- Python's truthiness of a spec value: nil, false, 0, "" and an empty list are false
 local function truthy(v)
   if v == nil or v == false or v == 0 or v == "" then return false end
@@ -231,6 +244,7 @@ local function insideGrid(shape, W, H)
   g.x0, g.y0, g.x1, g.y1 = x0, y0, max(x0, x1), max(y0, y1)
   local set = g.set
   for y = y0, y1 - 1 do
+    step((x1 - x0) * #shape)
     for x = x0, x1 - 1 do
       if inside(shape, x, y) then set[y * W + x] = true end
     end
@@ -258,6 +272,7 @@ local function flood(seeds, allowed, W, H)
   while #todo > 0 do
     local k = todo[#todo]
     todo[#todo] = nil
+    step(8)
     local x, y = k % W, floor(k / W)
     local ns = { x + 1 < W and k + 1 or nil, x > 0 and k - 1 or nil, y + 1 < H and k + W or nil, y > 0 and k - W or nil }
     for i = 1, 4 do
@@ -278,6 +293,7 @@ local function fillHidden(pc, k, owner, fpx, walls, W, H)
   local period = pc.fill
   local out = {}
   for y = 0, H - 1 do
+    step(W)
     for x = 0, W - 1 do
       local o = owner[y * W + x]
       if o ~= nil and o < k and inside(pc.shape, x, y) then
@@ -325,6 +341,7 @@ end
 local function findSupports(pieces, grids, W, H)
   local out = {}
   for k, pc in ipairs(pieces) do
+    step(1000)
     if truthy(pc.base) then
       local g = grids[k]
       local last
@@ -369,6 +386,7 @@ local function autoLeave(pieces, grids, ground, hexes, supports, W, H)
   local roomy = {}
   local room = counter()
   for y = 0, H - 1 do
+    step(W * (#things + 1))
     for x = 0, W - 1 do
       local i = y * W + x
       local any = false
@@ -381,6 +399,7 @@ local function autoLeave(pieces, grids, ground, hexes, supports, W, H)
   local main = commonest(room)
   local out = {}
   for k, pc in ipairs(pieces) do
+    step(4 * (grids[k].x1 - grids[k].x0) * (grids[k].y1 - grids[k].y0) + 1000)
     if shell[k] or truthy(pc.fill) or pc.facet then
       out[k] = {}
     else
@@ -430,6 +449,7 @@ end
 --- from the piece's outline (support_left); never half the piece. `sibs`: the others standing on
 --- the same support.
 local function supportLeft(k, s, grids, hexes, W, H, sibs)
+  step(W * H)
   local set = grids[k].set
   local edge, ours = {}, {}
   for i in pairs(set) do
@@ -546,6 +566,7 @@ local function outlineTrim(cand, hexes, under, taken, W)
   for i in pairs(cand) do out[i] = true end
   local n = count(cand)
   if n == 0 then return out end
+  step(8 * n)
   local vals = {}
   local idx = sortedIdx(cand)
   -- (the mean in the order Python's set iterates them: an int's hash is itself)
@@ -671,6 +692,7 @@ I._around = around
 
 -- list(set(seq)) of (x, y) pairs as 64-bit CPython orders it (_set_order): seq { { x, y } }
 local function setOrderXY(seq)
+  step(#seq * 8)
   local keys = {}
   for i, p in ipairs(seq) do keys[i] = p[1] * 65536 + p[2] end
   local out = {}
@@ -1125,6 +1147,7 @@ end
 local function covers(part, pts)
   local hull = K.viewHull()
   part:emit(hull)
+  step(#pts * 20)
   for _, p in ipairs(pts) do
     if not hull.covers(p[1], p[2]) then return false end
   end
@@ -1214,6 +1237,7 @@ local function latheFit(obj, height, base, squash, bands, seg)
     for i, r in ipairs(radii) do parts[i + 1] = ("%.17g"):format(r) end
     local key = table.concat(parts, ",")
     if costs[key] then return costs[key] end
+    step(#ys * (foot - top + 4))
     local rs = {}
     for i, y in ipairs(ys) do rs[i] = { y, radius(radii, y) } end
     local c = 0
@@ -1540,6 +1564,7 @@ local function reusePieces(reg, io, layout)
   for _, exact in ipairs({ true, false }) do
     for _, p in ipairs(candidates) do
       if exact or p.loose then
+        step(layout.w * layout.h * (exact and 1 or 4))
         local w, h = p.size[1], p.size[2]
         local first = p.keys[0][0]
         if not (exact and not drawn[first]) then
@@ -1585,8 +1610,9 @@ end
 --- Stand the known furniture in `layout` (place_reused); -> the room pixels it draws, the cells
 --- it covers ({ [y * w + x] = true }). `ground` nil: a room nobody modelled. `pit`: the room's
 --- rectangles that draw the floor below it, where nothing of the room below is stood.
-function I.placeReused(reg, io, layout, ground, pit)
+function I.placeReused(reg, io, layout, ground, pit, tick)
   pit = pit or {}
+  if tick then stepTick, stepCount = tick, 0 end
   local pixels, cells = {}, {}
   local painted = {}
   for k = 0, layout.w * layout.h - 1 do painted[layout.blocks[k] % 1024] = true end
@@ -1622,6 +1648,7 @@ function I.placeReused(reg, io, layout, ground, pit)
   local rp = reg.reusedPixels[layout.id] or {}
   for k in pairs(pixels) do rp[k] = true end
   reg.reusedPixels[layout.id] = rp
+  if tick then stepTick = nil end
   return pixels, cells
 end
 
@@ -1633,6 +1660,7 @@ local function registerPiece(reg, pieceSpec, layout, art, hidden, loose, own)
   local keys = cellKeys(reg, layout)
   local pixels = {}
   for v = 0, h * 16 - 1 do
+    step(w * 16)
     for u = 0, w * 16 - 1 do
       local lk = v * 4096 + u
       if art.c[v * art.w + u] and not hidden[lk] and (own == nil or not loose or own[lk]) then
@@ -1672,6 +1700,7 @@ end
 local function decalCells(art, cells, x0, y0, vOffset)
   local out, boxes = {}, {}
   for _, c in ipairs(cells) do
+    step(512)
     local i, j = c[1] - x0, c[2] - y0
     local b = bbox(crop(art, i * 16, j * 16 + vOffset, i * 16 + 16, j * 16 + vOffset + 16))
     if b then
@@ -1776,7 +1805,14 @@ end
 --- w, h }, ground, art (an image), parts, owned, placed, placed_patches, when, found, interior },
 --- registered with `reg` for the rooms after it. tick(label) yields to the frame (optional).
 function I.room(spec, io, reg, tick)
-  tick = tick or function() end
+  local outer = tick or function() end
+  -- (its ticks name the room, and a step its last phase)
+  local phase = "start"
+  tick = function(label)
+    phase = label
+    outer(spec.name .. ":" .. label)
+  end
+  stepTick, stepCount = function() outer(spec.name .. ":" .. phase .. "+") end, 0
   local room = spec.interior
   local layout = drawnAs(io, room.layout, room.draw)
   if not layout then return nil, "no layout " .. tostring(room.layout) end
@@ -1796,11 +1832,12 @@ function I.room(spec, io, reg, tick)
   for i, m in ipairs(room.ground) do floors[i] = layout.cellImage(m) end
   local pieces = room.pieces
   local np = #pieces
-  tick("room")
+  tick("room1")
   -- floor: a pixel the floor metatile has there too - and, inside a piece's shape, one the open
   -- floor reaches through such pixels
   local match = {}
   for y = 0, H - 1 do
+    step(W * #floors)
     for x = 0, W - 1 do
       local c, k = fpx[y * W + x], (y % 16) * 16 + x % 16
       for _, f in ipairs(floors) do
@@ -1810,7 +1847,7 @@ function I.room(spec, io, reg, tick)
   end
   local grids = {}
   for k, pc in ipairs(pieces) do grids[k] = insideGrid(pc.shape, W, H) end
-  tick("room")
+  tick("room2")
   -- a piece of some tiles of the upper layer alone: its pixels only
   for k, pc in ipairs(pieces) do
     if pc.tiles then
@@ -1827,6 +1864,7 @@ function I.room(spec, io, reg, tick)
     for i in pairs(grids[k].set) do shaped[i] = true end
   end
   local ground = {}
+  step(W * H)
   for i = 0, W * H - 1 do
     if match[i] and not shaped[i] then ground[i] = true end
   end
@@ -1837,17 +1875,14 @@ function I.room(spec, io, reg, tick)
   while #todo > 0 do
     local i = todo[#todo]
     todo[#todo] = nil
+    step(8)
     local x, y = i % W, floor(i / W)
-    local ns = { x + 1 < W and i + 1 or nil, x > 0 and i - 1 or nil, y + 1 < H and i + W or nil, y > 0 and i - W or nil }
-    for n = 1, 4 do
-      local j = ns[n]
-      if j and match[j] and not ground[j] then
-        ground[j] = true
-        todo[#todo + 1] = j
-      end
-    end
+    if x + 1 < W and match[i + 1] and not ground[i + 1] then ground[i + 1] = true; todo[#todo + 1] = i + 1 end
+    if x > 0 and match[i - 1] and not ground[i - 1] then ground[i - 1] = true; todo[#todo + 1] = i - 1 end
+    if y + 1 < H and match[i + W] and not ground[i + W] then ground[i + W] = true; todo[#todo + 1] = i + W end
+    if y > 0 and match[i - W] and not ground[i - W] then ground[i - W] = true; todo[#todo + 1] = i - W end
   end
-  tick("room")
+  tick("room3")
   -- the floor's shaded variants: their colours are floor wherever they run on from the open floor
   local shade = {}
   for _, m in ipairs(room.shade or {}) do
@@ -1888,6 +1923,7 @@ function I.room(spec, io, reg, tick)
     for _, a in ipairs(places) do
       local dx, dy = (a[1] - x0) * 16, (a[2] - y0) * 16
       local key = {}
+      step(#aroundL + #rect)
       for n, p in ipairs(aroundL) do
         local X, Y = p[1] + dx, p[2] + dy
         local ownPx = false
@@ -1948,29 +1984,32 @@ function I.room(spec, io, reg, tick)
   -- the furniture an earlier room has modelled, standing here as it is
   local reused, reusedCells = I.placeReused(reg, io, layout, room.ground[1], room.pit)
   for i in pairs(reused) do owner[i] = -1 end
-  tick("room")
+  tick("room4")
   local supports = findSupports(pieces, grids, W, H)
   -- how many things' shapes hold each pixel (a room's walls hold them all)
   local shapesAt = {}
   for k, pc in ipairs(pieces) do
+    step(2000)
     if not (truthy(pc.fill) or pc.facet or truthy(pc.walls)) then
       for i in pairs(grids[k].set) do shapesAt[i] = (shapesAt[i] or 0) + 1 end
     end
   end
   local leaves = autoLeave(pieces, grids, ground, hexes, supports, W, H)
-  tick("room")
+  tick("room5")
   local partsOf = {}
   local function leaveParts(colours)
     local key = keyOfColours(colours)
     if partsOf[key] then return partsOf[key] end
     local seen, parts = {}, {}
     for i = 0, W * H - 1 do
+      if i % W == 0 then step(W) end
       if not seen[i] and colours[hexes[i]] then
         seen[i] = true
         local part, st = {}, { i }
         while #st > 0 do
           local p = st[#st]
           st[#st] = nil
+          step(8)
           part[#part + 1] = p
           local x, y = p % W, floor(p / W)
           local ns = { x + 1 < W and p + 1 or nil, x > 0 and p - 1 or nil, y + 1 < H and p + W or nil, y > 0 and p - W or nil }
@@ -1989,6 +2028,7 @@ function I.room(spec, io, reg, tick)
   for k, pc in ipairs(pieces) do
     local g = grids[k]
     local ins = g.set
+    step(4 * count(ins) + 1000)
     local isWallish = truthy(pc.fill) or pc.facet ~= nil
     local leave = setOf(pc.leave)
     if not isWallish then
@@ -2115,6 +2155,7 @@ function I.room(spec, io, reg, tick)
     tick("claims")
   end
   -- each piece's pixels
+  step(W * H)
   local ownedBy = {}
   for k = 1, np do ownedBy[k] = {} end
   for i = 0, W * H - 1 do
@@ -2159,6 +2200,7 @@ function I.room(spec, io, reg, tick)
     local fill = {}
     local period = pc.fill
     if standing[k] and not truthy(period) then
+      step(2000)
       for _, j in ipairs(standing[k]) do
         for i in pairs(ownedBy[j]) do
           if grids[k].set[i] then
@@ -2192,6 +2234,7 @@ function I.room(spec, io, reg, tick)
   end
   tick("fills")
   -- the room with what the pieces hide filled in: where hidden faces are dressed from
+  step(W * H)
   local filled = {}
   for i = 0, W * H - 1 do filled[i] = fpx[i] end
   for k = 1, np do
@@ -2228,9 +2271,10 @@ function I.room(spec, io, reg, tick)
     if v == nil then
       local found = {}
       v = false
-      for n, step in ipairs({ -1, 1 }) do
+      for n, dir in ipairs({ -1, 1 }) do
         local xx = x
-        while xx >= 0 and xx < W and owner[y * W + xx] ~= nil do xx = xx + step end
+        while xx >= 0 and xx < W and owner[y * W + xx] ~= nil do xx = xx + dir end
+        I.step(xx > x and xx - x or x - xx)
         if not (xx >= 0 and xx < W) or ground[y * W + xx] or opened[y * W + xx] then found = nil; break end
         found[n] = fpx[y * W + xx]
       end
@@ -2283,6 +2327,8 @@ function I.room(spec, io, reg, tick)
         for i in pairs(mine) do my = max(my, floor(i / W)) end
         footRow = my + 1
       end
+      phase = "pieces:side"
+      step(4 * count(mine))
       local sample
       if footRow ~= nil and not truthy(pc.run) then
         sample = sideImage(pc, mine, filled, fpx, shell, footRow, W, H)
@@ -2308,7 +2354,9 @@ function I.room(spec, io, reg, tick)
       if sample then paste(art, sample, 0, 2 * h * 16) end
       if lid then paste(art, cropFlat(filled, W, H, lid[1], lid[2], lid[3], lid[4]), 0, 2 * h * 16 + sh) end
       paste(art, obj, 0, 0)
+      phase = "pieces:cells"
       local cells = {}
+      step(4 * count(decalOf) + 4 * w * h * 256)
       for ck, o in pairs(decalOf) do
         if o == k then cells[#cells + 1] = { ck % 4096, floor(ck / 4096) } end
       end
@@ -2318,6 +2366,7 @@ function I.room(spec, io, reg, tick)
       end)
       for _, c in ipairs(cells) do
         local cx, cy = c[1], c[2]
+        step(256)
         for j = 0, 15 do
           for i = 0, 15 do
             local x, y = cx * 16 + i, cy * 16 + j
@@ -2335,6 +2384,8 @@ function I.room(spec, io, reg, tick)
           end
         end
       end
+      phase = "pieces:drawing"
+      step(1000)
       local drawing = art
       if legsOf[k] then
         drawing = imgCopy(art)
@@ -2344,6 +2395,8 @@ function I.room(spec, io, reg, tick)
           end
         end
       end
+      phase = "pieces:parts"
+      step(1000)
       local side
       if sample then
         side = K.Tile(0, 2 * h * 16, sw, 2 * h * 16 + sh)
@@ -2513,6 +2566,8 @@ function I.room(spec, io, reg, tick)
         end
         paste(art, marks, 0, h * 16)
       end
+      phase = "pieces:decal"
+      step(1000)
       local localCells, localBox = decalCells(art, cells, x0, y0, h * 16)
       if #localCells > 0 then
         parts[#parts + 1] = K.Decal(pc.name .. "_floor", localCells, h * 16, nil, localBox)
@@ -2570,6 +2625,8 @@ function I.room(spec, io, reg, tick)
           out[#out + 1] = m
         end
       end
+      phase = "pieces:register"
+      step(1000)
       if not (pc.alone or model.placed) then
         local hiddenL, ownL = {}, {}
         for i in pairs(fill) do hiddenL[(floor(i / W) - y0 * 16) * 4096 + (i % W - x0 * 16)] = true end
@@ -2580,6 +2637,7 @@ function I.room(spec, io, reg, tick)
       tick("pieces")
     end
   end
+  stepTick = nil
   return out
 end
 

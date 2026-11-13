@@ -133,6 +133,17 @@ return function(deps)
     return s
   end
 
+  --- Every layout's id, in order.
+  function World.layoutIds()
+    local s = load()
+    local out = {}
+    for id in pairs(s and s.layouts or {}) do
+      if type(id) == "number" then out[#out + 1] = id end
+    end
+    table.sort(out)
+    return out
+  end
+
   --- The layout of an Emerald map (EM_X), or of a layout id: { id, name, w, h, pair, warps,
   --- signs, outdoor, maps, grid }, or nil.
   function World.layout(key)

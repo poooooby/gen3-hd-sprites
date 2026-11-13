@@ -579,16 +579,27 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `io.animOver(layout, m)`, which reads the engine's baked tile-animation banks off their files
   (`native/<pair>/anim_manifest.lua`, then each frame's metatiles as 256 palette bytes, 0
   clear), whether or not the field has that map bound; their texels are the tiles as the map
-  shows them (a battle does not step the field's animations). 125 rooms so far (their order up to
-  `contest_stage_tough`; the later ones sit in a function of their own, `laterRooms`, as a chunk
-  holds 200 locals); not yet: the Frontier's battle rooms, the Trick House, the link rooms, the
-  S.S. Tidal, Trainer Hill, Sky Pillar, the Abandoned Ship and the hideouts, and a cache (reading
-  all 125 takes ~9 s; the warm-up does it a slice a frame).
+  shows them (a battle does not step the field's animations). All 193 of their rooms (the later
+  ones in functions of their own, `laterRooms` and `lastRooms`, as a chunk holds 200 locals; the
+  Sky Pillar's floors and their `_CLEAN` twins swap either way).
+  The job (`roomJob`): every room in order, then `reuse_everywhere` - the known furniture stood in
+  every indoor layout nobody modelled, in the layouts' order (`World.layoutIds`) - and it is
+  `ready` (`Scene.rooms()` runs it to there if a battle needs it first; ~15 s); then it builds
+  every piece's model and writes the cache (Scene Cache: `rooms.index`, every piece's facts and
+  places and the reused pixels per layout, as runs; `room_<name>.dat`, its pieces' triangles and
+  their textures' sizes; `room_<name>.rgba`, the textures; each compressed, `love.data` zlib,
+  "Z"/"R" prefixed). A battle then reads the index (~30 ms) and only the room files its layouts
+  stand pieces from. The cache is keyed by `Scene.ROOMS_CACHE` and the specs' signature (each
+  room's name and piece count). The reader yields from inside its heavy loops through a counted
+  `step` (`stepTick`, the job's tick): no stretch between ticks over ~30 ms
+  (`room_dump.lua` with `ROOM_CACHE=1` times the sliced build and the cache read, `ROOM_WATCH`
+  lists the long stretches by room and phase).
   Checked against Emerald 3DS's own models: `tests/drivers/room_dump.lua` (`ROOM`: the last room
   read) writes every placement in each room's layout as their buildings.bin's dump does
-  (`bld_dump.py <bin> <layout number> out 0 0`); all 120 layouts of the 125 rooms match triangle
+  (`bld_dump.py <bin> <layout number> out 0 0`); all 188 layouts of the 193 rooms match triangle
   for triangle, colours and all, reuse included (a few texels a centroid reads just past a
-  texture's edge are clear in both).
+  texture's edge are clear in both), and with `ROOM_EVERY=1` the furniture stood in the ten
+  indoor layouts nobody modelled matches too (`room_#<number>.txt`).
 - For an overworld view, unused by the battle scene: the deck tables (`Scene.decks(layout)`,
   export `sceneDecks`: `{ x, y, top, bottom, gate }` - Route 110's `Bridge.decks`, kept in its
   cache, and Fortree's `specs.decks`) and each model cell's shadow footprint

@@ -97,7 +97,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Professor Birch's lab with its machine under its glass dome, Lilycove's Department Store,
   museum and contest halls, the Day Care, Devon's lobby, the Battle Tents, the Harbor, Stern's
   Shipyard, the Weather Institute, the Game Corners, the Pokémon League's halls and the Elite
-  Four's rooms, the Battle Frontier's lobbies, and every gym: Roxanne's stone maze, Brawly's rock
+  Four's rooms, the Battle Frontier's lobbies and battle rooms, the Trick House's mazes, the
+  S.S. Tidal and the Abandoned Ship, the Sky Pillar, the Aqua and Magma Hideouts, the link rooms,
+  and every gym: Roxanne's stone maze, Brawly's rock
   maze, Norman's rooms with their sliding doors, Wattson's coils with their electric beams
   standing lit or out as the switches leave them, Flannery's walls of brick, Winona's columns,
   Tate and Liza's islands in the dark and Juan's tiers of ice. The walls close every room in, and
@@ -125,7 +127,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
-| **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings are built the first time you step into the world, one a frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive and dropped when the game closes. |
+| **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings and every furnished room are built the first time you step into the world, a little each frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive, the rooms read again each time the game starts, and both dropped when it closes. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
 ## 💾 Installation
@@ -155,9 +157,8 @@ Open **OPTIONS → MODS → WoobleView**.
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or so while you walk, then stays on disk). Rocks in the other games, and the buildings
   not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on the ground
-  as the game draws them. Indoors, the rooms not yet rebuilt (the Battle Frontier's battle
-  rooms, the Trick House, the S.S. Tidal, the Abandoned Ship, the hideouts) show their furniture
-  flat, but for the pieces they share with the rooms that are. A battle with no overworld around it, or no open ground near you,
+  as the game draws them. Indoors, the few rooms not rebuilt show their furniture flat, but for
+  the pieces they share with the rooms that are. A battle with no overworld around it, or no open ground near you,
   keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it

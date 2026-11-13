@@ -2297,6 +2297,905 @@ for _, kind in ipairs({ "beauty", "cool", "cute", "smart", "tough" }) do
   add("contest_stage_" .. kind, "LAYOUT_CONTEST_HALL_" .. kind:upper(), { 0x271, 0x225 }, ownShell({ stage[#stage] }))
 end
 
+
+-- the last rooms (a function of their own, for the locals): the Frontier's battle rooms, the
+-- Trick House, the link rooms, the S.S. Tidal, Trainer Hill, Sky Pillar, the Abandoned Ship, the
+-- hideouts
+local function lastRooms()
+
+-- (a text map's rows: its non-empty lines)
+local function rowsOf(text)
+  local rows = {}
+  for line in text:gmatch("[^\n]+") do
+    if line:match("%S") then rows[#rows + 1] = line:match("^%s*(.-)%s*$") end
+  end
+  return rows
+end
+-- the cells of a text map holding `ch`, its first row at `dy`
+local function cellsOf(rows, ch, dy)
+  local out = {}
+  for y, row in ipairs(rows) do
+    for x = 1, #row do
+      if row:sub(x, x) == ch then out[#out + 1] = { x - 1, y - 1 + (dy or 0) } end
+    end
+  end
+  return out
+end
+
+-- ── the Battle Frontier's battle rooms and corridors ─────────────────────────────
+
+local function pikePillar(x, y)
+  return piece(("pillar_%d_%d"):format(x, y), { { x * 16, y * 16 - 15, x * 16 + 16, y * 16 + 16 } }, 21)
+end
+
+local function towerBattleRoom()
+  local out = {}
+  for _, c in ipairs({ { 0, 2 }, { 9, 2 }, { 0, 8 }, { 9, 8 } }) do
+    out[#out + 1] = piece(("lamp_%d_%d"):format(c[1], c[2]), { { c[1] * 16, c[2] * 16 - 8, c[1] * 16 + 16, c[2] * 16 + 16 } }, 16)
+  end
+  return cat(out, roomShell(160, 144, 32))
+end
+
+local function domePreBattleRoom()
+  local side = { 64, 0, 80, 32 }
+  return {
+    piece("wall", { { 32, 0, 144, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("side_w", {}, 32, { side = side, walls = { { { 32, 128 }, { 32, 32 } } } }),
+    piece("side_e", {}, 32, { side = side, walls = { { { 144, 32 }, { 144, 128 } } } }),
+  }
+end
+
+local function domeBattleRoom()
+  local side = { 64, 48, 80, 64 }
+  return {
+    piece("wall_w", { { 0, 48, 160, 64 } }, 16, { fill = 8, foot = 64, side = side }),
+    piece("wall_e", { { 160, 48, 320, 64 } }, 16, { fill = 8, foot = 64, side = side }),
+    piece("side_w", {}, 16, { side = side, walls = { { { 0, 160 }, { 0, 64 } } } }),
+    piece("side_e", {}, 16, { side = side, walls = { { { 320, 64 }, { 320, 160 } } } }),
+  }
+end
+
+local function pikeThreePathRoom()
+  local out = {}
+  for _, c in ipairs({ { 0, 4 }, { 4, 4 }, { 8, 4 }, { 12, 4 }, { 3, 10 }, { 8, 10 } }) do out[#out + 1] = pikePillar(c[1], c[2]) end
+  return out
+end
+
+local function pikeWildMonsRoom()
+  local cells = cellRuns({ { 0, 6, 6 }, { 1, 6, 6 }, { 2, 6, 6 }, { 6, 6, 6 }, { 7, 6, 6 }, { 8, 6, 6 } })
+  for x = 0, 7 do cells[#cells + 1] = { x, 8 } end
+  for x = 1, 8 do cells[#cells + 1] = { x, 10 } end
+  for x = 0, 6 do cells[#cells + 1] = { x, 12 } end
+  cells[#cells + 1] = { 8, 12 }
+  cells[#cells + 1] = { 0, 14 }
+  for x = 2, 8 do cells[#cells + 1] = { x, 14 } end
+  for x = 0, 6 do cells[#cells + 1] = { x, 16 } end
+  for _, c in ipairs({ { 8, 16 }, { 0, 18 }, { 1, 18 }, { 7, 18 }, { 8, 18 } }) do cells[#cells + 1] = c end
+  local out = {}
+  for _, c in ipairs(cells) do out[#out + 1] = pikePillar(c[1], c[2]) end
+  return out
+end
+
+local function arenaCorridor()
+  local side = { 64, 0, 80, 48 }
+  local shoji = { 112, 128, 128, 192 }
+  return {
+    piece("wall_w", { { 0, 0, 96, 48 } }, 48, { fill = 16, foot = 48, side = side }),
+    piece("wall_e", { { 192, 0, 288, 48 } }, 48, { fill = 16, foot = 48, side = side }),
+    piece("block", { { 48, 128, 240, 192 } }, 64, { fill = 16, foot = 192, side = shoji }),
+    piece("block_sides", {}, 64, { side = shoji,
+      walls = { { { 96, 48 }, { 96, 80 } }, { { 48, 80 }, { 48, 192 } }, { { 192, 80 }, { 192, 48 } }, { { 240, 192 }, { 240, 80 } } } }),
+    piece("side_w", {}, 48, { side = side, walls = { { { 0, 224 }, { 0, 48 } } } }),
+    piece("side_e", {}, 48, { side = side, walls = { { { 288, 48 }, { 288, 224 } } } }),
+  }
+end
+
+local FRONTIER_ROOMS = {
+  { "frontier_tower_corridor", "LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_CORRIDOR", 0x229, function() return roomShell(272, 80, 32) end },
+  { "frontier_tower_multi_corridor", "LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_CORRIDOR", 0x229, function() return roomShell(272, 80, 32) end },
+  { "frontier_tower_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_BATTLE_ROOM", 0x23a, towerBattleRoom },
+  { "battle_elevator", "LAYOUT_BATTLE_ELEVATOR", 0x265, function() return roomShell(80, 112, 48) end },
+  { "frontier_tower_multi_partner_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM", 0x200,
+    function() return roomShell(336, 240, 32) end },
+  { "frontier_dome_corridor", "LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_CORRIDOR", 0x341, function() return roomShell(768, 112, 64) end },
+  { "frontier_dome_pre_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_PRE_BATTLE_ROOM", 0x346, domePreBattleRoom },
+  { "frontier_dome_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_BATTLE_ROOM", 0x309, domeBattleRoom },
+  { "frontier_palace_corridor", "LAYOUT_BATTLE_FRONTIER_BATTLE_PALACE_CORRIDOR", 0x201, function() return roomShell(272, 224, 64) end },
+  { "frontier_palace_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_PALACE_BATTLE_ROOM", 0x206, function() return roomShell(240, 160, 48) end },
+  { "frontier_factory_pre_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_FACTORY_PRE_BATTLE_ROOM", 0x202,
+    function() return roomShell(272, 224, 96) end },
+  { "frontier_factory_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_FACTORY_BATTLE_ROOM", 0x2f1, function() return roomShell(208, 192, 64) end },
+  { "frontier_pike_corridor", "LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_CORRIDOR", 0x2c1,
+    function() return cat({ pikePillar(3, 4), pikePillar(9, 4) }, roomShell(224, 128, 64)) end },
+  { "frontier_pike_three_path_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_THREE_PATH_ROOM", 0x2c1,
+    function() return cat(pikeThreePathRoom(), roomShell(208, 176, 64)) end },
+  { "frontier_pike_room_normal", "LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_NORMAL", 0x2c1, function() return roomShell(144, 128, 64) end },
+  -- its gold pillars at the room's edges are its own, named as its edge's
+  { "frontier_pike_room_final", "LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_FINAL", 0x340, function()
+      local out = {}
+      for _, c in ipairs({ { 0, 4 }, { 4, 4 }, { 0, 7 }, { 4, 7 } }) do
+        local p = pikePillar(c[1], c[2])
+        p.name = ("edge_pillar_%d_%d"):format(c[1], c[2])
+        out[#out + 1] = p
+      end
+      return cat(out, roomShell(80, 128, 64))
+    end, { shade = { 0x341 } } },
+  { "frontier_pike_room_wild_mons", "LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_WILD_MONS", 0x2c1,
+    function() return cat(pikeWildMonsRoom(), roomShell(144, 320, 64)) end, { shade = { 0x2da, 0x2d9 } } },
+  { "frontier_arena_corridor", "LAYOUT_BATTLE_FRONTIER_BATTLE_ARENA_CORRIDOR", 0x201, arenaCorridor },
+  { "frontier_arena_battle_room", "LAYOUT_BATTLE_FRONTIER_BATTLE_ARENA_BATTLE_ROOM", 0x202, function() return roomShell(256, 176, 48) end },
+}
+for _, r in ipairs(FRONTIER_ROOMS) do add(r[1], r[2], { r[3] }, ownShell(r[4]()), r[5]) end
+
+-- ── the Trick House's puzzle rooms ──────────────────────────────────────────────
+
+local TRICK_SIDE = { 16, 0, 32, 32 }
+-- '#' a partition's cell, 'o' a cell the room's script changes, which stays drawn; from row 2
+local TRICK_PUZZLES = {
+  [1] = { 12, [[
+############...
+..#...#.#..#...
+...........#...
+..#...#.#..#...
+.############.#
+....#......#...
+.#.............
+.#..#..##..#...
+###.##....#####
+..#..#..#..#...
+.....#..#......
+..#..#..#..#...
+..############.
+....#.#....#...
+...##..........
+....#......#...
+#############.#
+....#....#.....
+...............
+...............
+]] },
+  [2] = { 6, [[
+.........#.....
+...####..#.....
+o..#.....#.####
+####.###...#..o
+.....o.#####...
+.#...#.........
+.#..#########..
+.#..#.......#..
+.#..#.###...#..
+.##.#.#o#.####.
+..#.#.#.#.#o.#o
+#o#.#...#.#..#.
+..#######.#..##
+.......o..#..##
+.#.#########...
+.#....#..#.##..
+.#....#..#.....
+.#.#.....#..##.
+...#######.....
+...............
+]] },
+  [3] = { 12, [[
+#..#..#.o#..#..
+#oo#..#..#..#oo
+#oo#..o..o..#oo
+......o..o..o..
+#oo#oo#..#oo#..
+#ooooo#..#ooo..
+...o.....#..o..
+#oo####oo#..#oo
+#oo####oo#..#oo
+...o...........
+#oo#oo#..#oo#..
+#ooooo#..#oo#..
+#..oo.......#..
+####oo####..#oo
+###ooo###o..#oo
+...o..#..o.....
+#..#oo#..#oo#..
+#..#oo#..#oo#..
+...............
+...............
+]] },
+  [4] = { 6, [[
+....##.....#...
+.....#....##...
+..##.##.#.#....
+...#....#.#..##
+...#....#.##.#.
+###.....#......
+.....#..#......
+.....#...######
+.....#.........
+..########.....
+..#....#....###
+.##..#...#..#.#
+.#...#####.##..
+.#...#......#..
+.###.....#.....
+.#...#.........
+.##############
+...............
+...............
+...............
+]] },
+  [6] = { 6, [[
+##...#......#..
+#....#..#...#..
+#.......#.#.##.
+.....#..#.#.#..
+...###......#..
+...#.....#..#.#
+.....###.#..#..
+......#....##..
+#.#.#.#...#....
+###.#.#...#....
+....#..##.##...
+....##..#..#...
+###..#..#.###.#
+#....#......#.#
+#.#..#..#......
+..#..##........
+.........##.#..
+............#..
+....##....###..
+....#....##....
+]] },
+  [7] = { 6, [[
+#..#..#.......#
+#..#..#.....###
+#..#o.##o####.#
+#..#.##o#...#.#
+#.....o.###.#.#
+###..#......#.#
+....#######.#.#
+.####.......#.#
+.#...o.###..#.#
+.#.#####.##.o.#
+##.#..#o..#.###
+...#..##.##.o.#
+...#######....#
+............#.#
+###########.o.#
+#.....##..#.#o#
+###..###..#...#
+..####......#.#
+....##.#..#.#.#
+.......#..#####
+]] },
+}
+
+-- a puzzle room's walls (240 x 352): the back wall round its scroll's cell, a lintel over it,
+-- and the side walls in stretches round the cells the room's script changes along them
+local function trickHouseShell(drawn)
+  drawn = drawn or {}
+  local side = TRICK_SIDE
+  local out = {
+    piece("wall_w", { { 0, 0, 208, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("wall_e", { { 224, 0, 240, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("wall_lintel", { { 208, 0, 224, 16 } }, 32, { fill = 16, foot = 32, side = side }),
+  }
+  for _, sd in ipairs({ { "side_w", 0, 0 }, { "side_e", 240, 14 } }) do
+    local name, x, col = sd[1], sd[2], sd[3]
+    local cells = {}
+    for y = 2, 21 do
+      if not drawn[col * 4096 + y] then cells[#cells + 1] = { col, y } end
+    end
+    for _, r in ipairs(runsOf(cells)) do
+      local y0, y1 = r[2], r[3]
+      local a, b = { x, y0 * 16 }, { x, (y1 + 1) * 16 - (y1 < 21 and 1 or 0) }
+      out[#out + 1] = piece(name .. "_" .. y0, {}, 32, { side = side, walls = { col == 0 and { b, a } or { a, b } } })
+    end
+  end
+  return out
+end
+
+local function trickHousePuzzle(n)
+  local p = TRICK_PUZZLES[n]
+  local rows = rowsOf(p[2])
+  local drawn = {}
+  for _, c in ipairs(cellsOf(rows, "o", 2)) do drawn[c[1] * 4096 + c[2]] = true end
+  return cat(rectPieces("partition", runsOf(cellsOf(rows, "#", 2)), p[1]), trickHouseShell(drawn))
+end
+
+local TRICK_JAR_FLOOR = { "c59439", "d5a44a", "e6c562", "ffe67b", "fff6bd", "6a8b31", "83ac4a", "a4cd6a", "c5ffac" }
+local TRICK_JARS = [[
+...#..........#
+..###.#########
+....#.#........
+.#.............
+.......#......#
+.........#.....
+.............#.
+...##..#####.#.
+#.#######.#..#.
+.#....##.......
+....#.....#....
+....#.....#....
+....#.....#....
+....#.....#....
+.#........#....
+..........#....
+..........#....
+..###.#...#....
+..###.#...#....
+..##..#........
+]]
+
+local function trickHousePuzzle8()
+  local out = {}
+  for _, c in ipairs(cellsOf(rowsOf(TRICK_JARS), "#", 0)) do
+    local x, y = c[1], c[2]
+    out[#out + 1] = piece(("jar_%d_%d"):format(x, y + 2), { { x * 16 + 2, y * 16 + 33, x * 16 + 14, y * 16 + 47 } }, 9,
+      { round = "lathe", leave = TRICK_JAR_FLOOR })
+  end
+  return cat(out, trickHouseShell())
+end
+
+local function trickHouseCorridor()
+  local side = { 64, 0, 80, 32 }
+  return {
+    piece("wall", { { 48, 0, 240, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("wall_mid", { { 0, 96, 48, 128 } }, 32, { fill = 16, foot = 128, side = side }),
+    piece("wall_low", { { 48, 320, 96, 352 } }, 32, { fill = 16, foot = 352, side = side }),
+  }
+end
+
+for n = 1, 7 do
+  add("trick_house_puzzle" .. n, "LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE" .. n, { 0x208 },
+    ownShell(TRICK_PUZZLES[n] and trickHousePuzzle(n) or trickHouseShell()))
+end
+add("trick_house_puzzle8", "LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE8", { 0x26b }, ownShell(trickHousePuzzle8()))
+add("trick_house_corridor", "LAYOUT_ROUTE110_TRICK_HOUSE_CORRIDOR", { 0x229 }, ownShell(trickHouseCorridor()))
+
+-- ── the link rooms, and the truck ──────────────────────────────────────────────
+
+-- a link room: its back wall (x0 to x1, on `foot`) and its side walls along x0 and x1 to z1
+local function linkRoom(w, h, foot, x0, x1, z1, top)
+  top = top or 0
+  local side = { x0 + 16, top, x0 + 32, foot }
+  return {
+    piece("wall", { { x0 ~= 0 and x0 - 16 or 0, top, x1 < w and x1 + 16 or w, foot } }, foot - top,
+      { fill = 16, foot = foot, side = side }),
+    piece("side_w", {}, foot - top, { side = side, walls = { { { x0, z1 }, { x0, foot } } } }),
+    piece("side_e", {}, foot - top, { side = side, walls = { { { x1, foot }, { x1, z1 } } } }),
+  }
+end
+
+local function recordCorner()
+  return cat({
+    piece("seat_nw", { { 112, 53, 128, 79 } }, 14),
+    piece("seat_sw", { { 112, 85, 128, 111 } }, 14),
+    piece("seat_ne", { { 192, 53, 208, 79 } }, 14),
+    piece("seat_se", { { 192, 85, 208, 111 } }, 14),
+    piece("table", { { 128, 67, 192, 112 } }, 12),
+  }, linkRoom(320, 160, 32, 64, 256, 144))
+end
+
+local function insideOfTruck()
+  return {
+    piece("boxes_w", { { 0, 0, 16, 80 } }, 24),
+    piece("boxes_n", { { 16, 0, 64, 24 } }, 16),
+    piece("vent", { { 64, 0, 80, 16 } }, 12),
+    piece("boxes_s", { { 16, 48, 48, 80 } }, 24),
+    piece("boxes_se", { { 48, 64, 80, 80 } }, 12),
+  }
+end
+
+for _, r in ipairs({
+  { "battle_colosseum_2p", "LAYOUT_BATTLE_COLOSSEUM_2P", 0x255, function() return linkRoom(224, 144, 48, 16, 208, 128) end },
+  { "battle_colosseum_4p", "LAYOUT_BATTLE_COLOSSEUM_4P", 0x255, function() return linkRoom(224, 144, 48, 16, 208, 128) end },
+  { "trade_center", "LAYOUT_TRADE_CENTER", 0x208,
+    function() return cat({ piece("machine", { { 82, 68, 110, 104 } }, 16) }, linkRoom(192, 144, 48, 16, 176, 128)) end },
+  { "record_corner", "LAYOUT_RECORD_CORNER", 0x2c4, recordCorner },
+  { "union_room", "LAYOUT_UNION_ROOM", 0x213, function() return linkRoom(240, 192, 32, 0, 240, 176) end },
+  { "inside_of_truck", "LAYOUT_INSIDE_OF_TRUCK", 0x20a, insideOfTruck },
+}) do add(r[1], r[2], { r[3] }, ownShell(r[4]())) end
+
+-- ── the S.S. Tidal, and Trainer Hill's entrance ─────────────────────────────────────
+
+local function ssTidalCorridor()
+  local side = { 64, 0, 80, 32 }
+  return {
+    piece("block", { { 48, 57, 240, 159 } }, 26, { solid = true, side = { 48, 132, 64, 158 } }),
+    piece("wall", { { 16, 0, 288, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("side_w", {}, 32, { side = side, walls = { { { 16, 192 }, { 16, 32 } } } }),
+  }
+end
+
+-- rectPieces over runsOf(cells), each piece with its own options besides (extra[name])
+local function kwPieces(prefix, cells, height, extra)
+  local out = {}
+  for _, r in ipairs(runRects(runsOf(cells))) do
+    local x0, y0, x1, y1 = r[1], r[2], r[3], r[4]
+    local name = ("%s_%d_%d"):format(prefix, x0 / 16, y0 / 16)
+    out[#out + 1] = piece(name, { { x0, y0, x1, y1 } }, math.min(height, y1 - y0 - 4), extra[name])
+  end
+  return out
+end
+
+-- the lower deck's cargo, a piece to each rectangle of its cells, the crates' tops a cell above them
+local function crateStacks(cells)
+  local out = {}
+  for _, r in ipairs(runRects(runsOf(cells))) do
+    local x0, y0, x1, y1 = r[1], r[2], r[3], r[4]
+    out[#out + 1] = piece(("crates_%d_%d"):format(x0 / 16, y0 / 16), { { x0, y0 - 16, x1, y1 } }, 16,
+      y0 == 32 and { solid = true, side = { x0 + 4, y1 - 14, x0 + 10, y1 - 8 } } or nil)
+  end
+  return out
+end
+
+local SS_TIDAL_CARGO = cellRuns({ { 2, 2, 3 }, { 3, 2, 3 }, { 6, 2, 3 }, { 7, 2, 3 }, { 10, 2, 3 }, { 11, 2, 3 },
+  { 12, 2, 3 }, { 1, 6, 7 }, { 2, 6, 7 }, { 3, 6, 7 }, { 4, 6, 7 }, { 5, 6, 7 }, { 6, 6, 7 }, { 8, 6, 7 }, { 9, 6, 7 },
+  { 11, 6, 7 }, { 12, 6, 7 }, { 13, 6, 7 }, { 1, 11, 12 }, { 2, 11, 12 }, { 3, 11, 12 }, { 4, 11, 12 }, { 5, 11, 12 },
+  { 6, 11, 12 }, { 8, 11, 11 }, { 9, 11, 11 }, { 11, 11, 11 }, { 12, 11, 11 }, { 15, 10, 12 }, { 16, 10, 12 } })
+
+local SS_TIDAL_CABIN_X = { 1, 10, 19, 28 }
+local SS_TIDAL_BLANKET = { n0_1_2 = { 29, 41 }, n0_6_2 = { 102, 41 }, n1_10_2 = { 173, 41 }, n1_15_2 = { 246, 41 },
+                           n2_19_2 = { 317, 41 }, n3_33_2 = { 534, 41 }, s0_1_11 = { 29, 185 }, s0_6_11 = { 102, 185 },
+                           s2_24_11 = { 390, 185 } }
+local SS_TIDAL_FURNITURE_KW = { furniture_n1_10_5 = { leave = { "de7b52", "bd5a41", "bd7341", "dea462" } } }
+for k, xy in pairs(SS_TIDAL_BLANKET) do
+  SS_TIDAL_FURNITURE_KW["furniture_" .. k] = { solid = true, side = { xy[1], xy[2], xy[1] + 6, xy[2] + 6 } }
+end
+local SS_TIDAL_FURNITURE = {
+  n0 = "1,2 2,2 6,2 7,2 1,3 2,3 6,3 7,3 5,6 6,6 5,7 6,7 7,7",
+  s0 = "1,11 2,11 6,11 7,11 1,12 2,12 6,12 7,12",
+  n1 = "10,2 11,2 15,2 16,2 10,3 11,3 15,3 16,3 10,5 13,5 14,5 13,6 14,6",
+  s1 = "15,11 16,11 11,12 12,12 15,12 16,12 11,13 12,13 16,13",
+  n2 = "19,2 20,2 19,3 20,3 22,5 23,5 22,6 23,6 23,7",
+  s2 = "19,11 20,11 24,11 25,11 19,12 20,12 24,12 25,12",
+  n3 = "28,2 29,2 33,2 34,2 28,3 29,3 33,3 34,3 28,4 33,6 34,6 33,7 34,7",
+  s3 = "28,11 29,11 28,12 29,12 31,12 32,12 33,12 34,12 28,13 31,13 32,13 33,13 34,13",
+}
+
+local function ssTidalRooms()
+  local out = {}
+  for i, cx in ipairs(SS_TIDAL_CABIN_X) do
+    local x0, x1 = cx * 16, (cx + 7) * 16
+    for _, rw in ipairs({ { "n", 0, 32, 128 }, { "s", 144, 176, 272 } }) do
+      local row, top, foot, endZ = rw[1], rw[2], rw[3], rw[4]
+      local name = row .. (i - 1)
+      local cells = {}
+      for a, b in SS_TIDAL_FURNITURE[name]:gmatch("(%d+),(%d+)") do cells[#cells + 1] = { tonumber(a), tonumber(b) } end
+      local side = { x0, top, x0 + 16, foot }
+      out = cat(out, kwPieces("furniture_" .. name, cells, 12, SS_TIDAL_FURNITURE_KW), {
+        piece("wall_" .. name, { { x0, top, x1, foot } }, 32, { fill = 16, foot = foot, side = side }),
+        piece(("side_%s_w"):format(name), {}, 32, { side = side, walls = { { { x0, endZ }, { x0, foot } } } }),
+        piece(("side_%s_e"):format(name), {}, 32, { side = side, walls = { { { x1, foot }, { x1, endZ } } } }),
+      })
+    end
+  end
+  return out
+end
+
+local TRAINER_HILL_COUNTERS = cellRuns({ { 7, 4, 4 }, { 8, 4, 10 }, { 10, 4, 9 }, { 11, 4, 4 } })
+for x = 0, 18 do
+  if not (x >= 8 and x <= 11) then TRAINER_HILL_COUNTERS[#TRAINER_HILL_COUNTERS + 1] = { x, 8 } end
+end
+for _, c in ipairs({ { 11, 8 }, { 11, 9 }, { 11, 10 } }) do TRAINER_HILL_COUNTERS[#TRAINER_HILL_COUNTERS + 1] = c end
+for _, x in ipairs({ 0, 1, 2, 3, 6, 7, 15 }) do TRAINER_HILL_COUNTERS[#TRAINER_HILL_COUNTERS + 1] = { x, 9 } end
+for _, x in ipairs({ 0, 1, 2, 3, 4, 5, 6, 7, 12, 13, 14, 15, 16, 18 }) do
+  TRAINER_HILL_COUNTERS[#TRAINER_HILL_COUNTERS + 1] = { x, 10 }
+end
+
+local function trainerHillEntrance()
+  local shaft = { 128, 0, 144, 32 }
+  local lobby = { 48, 112, 64, 128 }
+  return cat(kwPieces("counter", TRAINER_HILL_COUNTERS, 12, { counter_8_4 = { solid = true, side = { 128, 64, 134, 70 } } }),
+    rectPieces("benches", runsOf(cellRuns({ { 1, 15, 15 }, { 2, 15, 15 }, { 3, 15, 15 }, { 15, 15, 15 }, { 16, 15, 15 },
+      { 17, 15, 15 } })), 12), {
+    piece("wall", { { 112, 0, 192, 32 } }, 32, { fill = 16, foot = 32, side = shaft }),
+    piece("side_shaft_w", {}, 32, { side = shaft, walls = { { { 112, 112 }, { 112, 32 } } } }),
+    piece("side_shaft_e", {}, 32, { side = shaft, walls = { { { 192, 32 }, { 192, 112 } } } }),
+    piece("wall_w", { { 0, 112, 112, 128 } }, 16, { fill = 8, foot = 128, side = lobby }),
+    piece("wall_e", { { 192, 112, 304, 128 } }, 16, { fill = 8, foot = 128, side = lobby }),
+    piece("side_w", {}, 16, { side = lobby, walls = { { { 0, 272 }, { 0, 128 } } } }),
+    piece("side_e", {}, 16, { side = lobby, walls = { { { 304, 128 }, { 304, 272 } } } }),
+  })
+end
+
+add("ss_tidal_corridor", "LAYOUT_SS_TIDAL_CORRIDOR", { 0x2ba }, ownShell(ssTidalCorridor()))
+add("ss_tidal_lower_deck", "LAYOUT_SS_TIDAL_LOWER_DECK", { 0x20d }, ownShell(cat(crateStacks(SS_TIDAL_CARGO), roomShell(272, 208, 32))))
+add("ss_tidal_rooms", "LAYOUT_SS_TIDAL_ROOMS", { 0x238 }, ownShell(ssTidalRooms()))
+add("trainer_hill_entrance_room", "LAYOUT_TRAINER_HILL_ENTRANCE", { 0x331 }, ownShell(trainerHillEntrance()))
+
+-- ── the Sky Pillar's floors ─────────────────────────────────────────────────────
+
+-- its rubble, a mound to each cell (`o` the boulder, `x` the stones, `O` the boulder under the back
+-- wall; `X` the stones there, found again by their pixels), from row 2
+local SKY_PILLAR_RUBBLE = {
+  ["1F"] = [[
+.......O....O.
+...x....ox....
+....x.........
+..............
+..o...........
+ox........o..x
+o..........ox.
+.............x
+...o.........o
+..x......o....
+..............
+x............o
+]],
+  ["2F"] = [[
+........X.....
+.....x.oo.....
+......o...x...
+..............
+xx............
+.............x
+..............
+..............
+..............
+...x.....x....
+..x...........
+.............x
+]],
+  ["3F"] = [[
+....X.....X...
+.....x...o....
+.x...o..x.....
+x.............
+...o......x...
+..x...........
+..x..........o
+..........o...
+...........x..
+o....x...x....
+.o............
+.......x....o.
+]],
+  ["4F"] = [[
+........O.....
+..oxxxoxxo...o
+Xx........o...
+.o............
+..............
+..x.........o.
+..o..........o
+x.o...........
+x.............
+.....o...o....
+..o...........
+.......o......
+]],
+  ["5F"] = [[
+.....O...X....
+..o.....x.....
+...........o..
+x..........o..
+.x...........x
+..............
+..............
+..o.........x.
+...........x..
+o.............
+.........x..o.
+.o...x........
+]],
+}
+local SKY_PILLAR_FLOORS = { "1F", "2F", "3F", "4F", "5F" }
+local SKY_PILLAR_GROUND = { ["1F"] = 0x2bd, ["2F"] = 0x234, ["3F"] = 0x2bd, ["4F"] = 0x234, ["5F"] = 0x2bd }
+
+-- a floor's walls, and its rubble of the tiles no floor before it has
+local function skyPillarFloor(floor)
+  local seen = {}
+  for _, f in ipairs(SKY_PILLAR_FLOORS) do
+    if not floor or f == floor then break end
+    for ch in SKY_PILLAR_RUBBLE[f]:gmatch("[^%.\n]") do seen[ch] = true end
+  end
+  local out = {}
+  if floor then
+    for y, row in ipairs(rowsOf(SKY_PILLAR_RUBBLE[floor])) do
+      for x = 1, #row do
+        local c = row:sub(x, x)
+        if (c == "o" or c == "x" or c == "O") and not seen[c] then
+          out[#out + 1] = piece(("rubble_%d_%d"):format(x - 1, y + 1), { { "ellipse", (x - 1) * 16 + 8, (y - 1) * 16 + 39.5, 8, 7.5 } },
+            9, { round = "dome" })
+        end
+      end
+    end
+  end
+  return cat(out, roomShell(224, 224, nil, { 0, 0, 16, 32 }))
+end
+
+for _, f in ipairs(SKY_PILLAR_FLOORS) do
+  for _, clean in ipairs({ "", "_CLEAN" }) do
+    add(("sky_pillar_%s%s"):format(f:lower(), clean:lower()), ("LAYOUT_SKY_PILLAR_%s%s"):format(f, clean),
+      { SKY_PILLAR_GROUND[f] }, ownShell(skyPillarFloor(clean == "" and f or nil)))
+  end
+end
+
+-- ── the Abandoned Ship ──────────────────────────────────────────────────────────
+
+-- a cabin `cells` wide from x0: its back wall from `top` on `foot` (round a passage broken through
+-- it: gap), and its side walls from it to `endZ`, open where a passage runs through them
+local function shipCabin(name, x0, top, foot, endZ, gap, sideGaps, cells)
+  cells = cells or 7
+  local x1 = x0 + 16 * cells
+  local side = { x0, top, x0 + 16, foot }
+  local out = {}
+  local spans = gap and { { x0, gap[1] }, { gap[2], x1 } } or { { x0, x1 } }
+  for i, ab in ipairs(spans) do
+    out[#out + 1] = piece("wall_" .. name .. (gap and ("_" .. (i - 1)) or ""), { { ab[1], top, ab[2], foot } }, 32,
+      { fill = 16, foot = foot, side = side })
+  end
+  for _, sx in ipairs({ { "w", x0 }, { "e", x1 } }) do
+    local s, x = sx[1], sx[2]
+    local cuts = {}
+    for _, g in ipairs(sideGaps or {}) do
+      if g[1] == s then cuts[#cuts + 1] = { g[2], g[3] } end
+    end
+    table.sort(cuts, function(a, b) return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2]) end)
+    local runs, z = {}, foot
+    for _, c in ipairs(cuts) do
+      runs[#runs + 1] = { z, c[1] }
+      z = c[2]
+    end
+    runs[#runs + 1] = { z, endZ }
+    for i, ab in ipairs(runs) do
+      local a, b = ab[1], ab[2]
+      out[#out + 1] = piece(("side_%s_%s%s"):format(name, s, #runs > 1 and ("_" .. (i - 1)) or ""), {}, 32,
+        { side = side, walls = { s == "w" and { { x, b }, { x, a } } or { { x, a }, { x, b } } } })
+    end
+  end
+  return out
+end
+
+local function shipCorridors1f()
+  local side = { 16, 0, 32, 32 }
+  return {
+    piece("block_w", { { 32, 57, 80, 159 } }, 26, { solid = true, side = { 32, 132, 48, 158 } }),
+    piece("block_e", { { 160, 57, 256, 159 } }, 26, { solid = true, side = { 160, 132, 176, 158 } }),
+    piece("wall_w", { { 0, 0, 112, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("wall_e", { { 128, 0, 288, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("side_div_w", {}, 32, { side = side, walls = { { { 112, 32 }, { 112, 192 } } } }),
+    piece("side_div_e", {}, 32, { side = side, walls = { { { 128, 192 }, { 128, 32 } } } }),
+    piece("bottles", { { 96, 35, 112, 53 } }, 12),
+    piece("bottles_e", { { 272, 35, 288, 53 } }, 12),
+  }
+end
+
+local function shipCorridorsB1f()
+  local side = { 0, 0, 16, 32 }
+  return {
+    piece("block_nw", { { 32, 0, 128, 79 } }, 26, { solid = true, side = { 32, 54, 48, 78 } }),
+    piece("block_ne_w", { { 160, 0, 176, 79 } }, 26, { solid = true, side = { 160, 54, 176, 78 } }),
+    piece("block_ne_lintel", { { 176, 0, 192, 64 } }, 26, { solid = true, foot = 79, side = { 160, 54, 176, 78 } }),
+    piece("block_ne_e", { { 192, 0, 208, 79 } }, 26, { solid = true, side = { 160, 54, 176, 78 } }),
+    piece("block_s", { { 64, 121, 208, 160 } }, 26, { solid = true, side = { 64, 121, 80, 147 } }),
+    piece("wall_w", { { 0, 0, 32, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+    piece("wall_mid", { { 128, 0, 160, 32 } }, 32, { fill = 16, foot = 32, side = side }),
+  }
+end
+
+local function shipHiddenCorridors()
+  local side = { 16, 0, 32, 32 }
+  local face = { 32, 117, 48, 142 }
+  local out = {}
+  for _, r in ipairs({ { 32, 57, 48, 143 }, { 48, 64, 64, 128 }, { 64, 57, 96, 143 }, { 96, 57, 112, 128 },
+                       { 112, 57, 144, 143 }, { 144, 64, 160, 143 }, { 160, 57, 176, 143 } }) do
+    out[#out + 1] = piece("block_" .. (r[1] / 16), { r }, 26, { solid = true, side = face, foot = r[4] < 143 and 143 or nil })
+  end
+  out[#out + 1] = piece("wall", { { 0, 0, 208, 32 } }, 32, { fill = 16, foot = 32, side = side })
+  return out
+end
+
+local function shipHiddenRooms()
+  local out = {}
+  for _, c in ipairs({ { 22, 2 }, { 40, 2 }, { 40, 10 } }) do
+    out[#out + 1] = piece(("desk_%d_%d"):format(c[1], c[2]), { { c[1] * 16, c[2] * 16 + 2, c[1] * 16 + 16, c[2] * 16 + 31 } }, 10)
+  end
+  for i, xn in ipairs({ { 16, 12 }, { 240, 13 }, { 480, 13 } }) do
+    local gapsN = i == 2 and { { "e", 48, 64 } } or i == 3 and { { "w", 48, 64 } } or {}
+    out = cat(out, shipCabin("n" .. (i - 1), xn[1], 0, 32, 112, nil, gapsN, xn[2]),
+      shipCabin("s" .. (i - 1), xn[1], 128, 160, 240, nil, nil, xn[2]))
+  end
+  return out
+end
+
+local SHIP_DECK_SEE = { "acb494", "839473", "dedec5", "6a7b41" }
+
+local function shipDeck()
+  local see = SHIP_DECK_SEE
+  local out = {}
+  for _, r in ipairs({ { "low_w", { 0, 192, 208, 208 } }, { "low_e", { 240, 192, 368, 208 } },
+                       { "mid_w", { 48, 112, 160, 128 } }, { "mid_e", { 192, 112, 224, 128 } },
+                       { "isle_n", { 0, 48, 32, 64 } }, { "isle_s", { 0, 112, 32, 128 } },
+                       { "bridge", { 112, 48, 224, 64 } }, { "top", { 144, 16, 192, 32 } }, { "east", { 224, 80, 368, 96 } } }) do
+    out[#out + 1] = piece("edge_rail_" .. r[1], { r[2] }, 12, { through = true, leave = see })
+  end
+  out[#out + 1] = piece("pilaster_7_4", { { 112, 64, 128, 99 } }, 35, { back = 96, leave = see })
+  for _, s in ipairs({ { 80, 0, 96, 64, 56 }, { 96, 0, 112, 80, 72 }, { 256, 32, 272, 80, 40 }, { 272, 16, 288, 80, 56 },
+                       { 320, 32, 336, 80, 40 } }) do
+    out[#out + 1] = piece("stack_" .. (s[1] / 16), { { s[1], s[2], s[3], s[4] } }, s[5])
+  end
+  return out
+end
+
+for _, r in ipairs({
+  { "abandoned_ship_corridors_1f", "LAYOUT_ABANDONED_SHIP_CORRIDORS_1F", 0x203, shipCorridors1f },
+  { "abandoned_ship_rooms_1f", "LAYOUT_ABANDONED_SHIP_ROOMS_1F", 0x238, function()
+      return cat(shipCabin("n0", 16, 0, 32, 128), shipCabin("n1", 160, 0, 32, 128),
+        shipCabin("s0", 16, 144, 176, 272, nil, { { "e", 208, 224 } }),
+        shipCabin("s1", 160, 144, 176, 272, { 208, 224 }, { { "w", 208, 224 } }))
+    end },
+  { "abandoned_ship_rooms2_1f", "LAYOUT_ABANDONED_SHIP_ROOMS2_1F", 0x238, function()
+      return cat(shipCabin("n0", 16, 0, 32, 128), shipCabin("s0", 16, 144, 176, 272, { 64, 80 }))
+    end },
+  { "abandoned_ship_corridors_b1f", "LAYOUT_ABANDONED_SHIP_CORRIDORS_B1F", 0x202, shipCorridorsB1f },
+  { "abandoned_ship_rooms_b1f", "LAYOUT_ABANDONED_SHIP_ROOMS_B1F", 0x238, function()
+      local out = {}
+      for i, x0 in ipairs({ 16, 160, 304 }) do out = cat(out, shipCabin("c" .. (i - 1), x0, 0, 32, 128)) end
+      return out
+    end },
+  { "abandoned_ship_rooms2_b1f", "LAYOUT_ABANDONED_SHIP_ROOMS2_B1F", 0x238, function()
+      return cat(shipCabin("w", 16, 0, 32, 128, nil, { { "e", 64, 80 } }), shipCabin("e", 160, 0, 32, 128, nil, { { "w", 64, 80 } }))
+    end },
+  { "abandoned_ship_room_b1f", "LAYOUT_ABANDONED_SHIP_ROOM_B1F", 0x238, function() return shipCabin("c", 16, 0, 32, 128) end },
+  { "abandoned_ship_hidden_floor_corridors", "LAYOUT_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS", 0x202, shipHiddenCorridors },
+  { "abandoned_ship_hidden_floor_rooms", "LAYOUT_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS", 0x238, shipHiddenRooms },
+  { "abandoned_ship_captains_office", "LAYOUT_ABANDONED_SHIP_CAPTAINS_OFFICE", 0x202, function()
+      return { piece("locker", { { 0, 47, 16, 80 } }, 20),
+               piece("wall", { { 0, 0, 144, 32 } }, 32, { fill = 16, foot = 32, side = { 32, 0, 48, 32 } }) }
+    end },
+  { "abandoned_ship_deck", "LAYOUT_ABANDONED_SHIP_DECK", 0x228, shipDeck },
+  { "abandoned_ship_underwater1", "LAYOUT_ABANDONED_SHIP_UNDERWATER1", 0x2c9, function()
+      return { piece("wall", { { 0, 0, 128, 32 } }, 32, { fill = 16, foot = 32, side = { 16, 0, 32, 32 } }) }
+    end },
+  { "abandoned_ship_underwater2", "LAYOUT_ABANDONED_SHIP_UNDERWATER2", 0x2cf, function()
+      return { piece("wall", { { 0, 0, 336, 32 } }, 32, { fill = 16, foot = 32, side = { 16, 0, 32, 32 } }) }
+    end },
+}) do add(r[1], r[2], { r[3] }, ownShell(r[4]())) end
+
+-- ── the Aqua Hideout ────────────────────────────────────────────────────────────
+
+local AQUA_TANKS = { ["1F"] = { { 2, 16 }, { 24, 19 }, { 2, 23 }, { 24, 24 } }, B2F = { { 17, 7 }, { 21, 8 }, { 25, 8 }, { 28, 8 } } }
+local AQUA_FLOOR = { "acb494", "839473", "dedec5", "6a7b41", "8bb4ac", "a4cdbd", "9c8b94", "628b83", "739c8b" }
+local AQUA_SEE = cat(AQUA_FLOOR, { "526ad5", "29418b", "39529c", "6a83d5", "acc5e6", "8ba4de" })
+-- `#` partition, `-` a long railing, `[` and `]` the west and east side railings
+local AQUA_MAPS = {
+  ["1F"] = [[
+.....######################.
+.....#################.####.
+.#####....................#.
+.#####....................#.
+.#........................#.
+.#......------------......#.
+.#......[..........]......#.
+.#......[..........]......#.
+.#......------------......#.
+.#........................#.
+.#........................#.
+.#...--------..--------...#.
+.#...[................]...#.
+.#...[................]...#.
+.#...[................]...#.
+.#...[................]...#.
+.#...-................-...#.
+.#........................#.
+.#........................#.
+.#...-................-...#.
+.#...[................]...#.
+.#...[................]...#.
+.#...[................]...#.
+.#...[................]...#.
+.#...-................-...#.
+.#........................#.
+.#........................#.
+.#........................#.
+.#........................#.
+............................
+]],
+  B1F = [[
+.......###########################......###########
+.......#####.#####.##########.####......###########
+########......#..........#.......#......#.........#
+###.####......#..........#.......#......#.........#
+#.............#..........#.......#......#.........#
+#.............#..........#.......#......#.........#
+#.............####################......#---------#
+#.............####################......#[.......]#
+#.............#..........#.......#......#---------#
+#.............#..........#.......#......#.........#
+#.............#..........#.......#......#---------#
+#.............#..........#.......#......#[.......]#
+##########################.......#......#---------#
+##########################.......#......#.........#
+#........................#########......#---------#
+#........................#########......#[.......]#
+#---------------.................#......#---------#
+#[.............].................#......#.........#
+#[.............].................#......#.........#
+#---------------.................#......###########
+#................................#......###########
+#................................#.................
+##################################.................
+##################################.................
+]],
+  B2F = [[
+......########################...#
+......######.#####.###############
+#######.......#..................#
+###.###.......#..................#
+#.....#.......#..................#
+#.....#.......#..................#
+#.....#.......#..................#
+#.....#.......#..................#
+#.....#.......#..................#
+#.....#.......#..................#
+###############..................#
+###############..................#
+#.............#..................#
+#.............#..................#
+#.............#.........##########
+#-------------#.........##########
+#..............---------.........#
+#......................].........#
+#......................-.........#
+#................................#
+#......................-.........#
+#......................].........#
+#......................-##########
+#-----------------------##########
+]],
+}
+
+local function aquaHideout(floor)
+  local rows = rowsOf(AQUA_MAPS[floor])
+  local out = rectPieces("partition", runsOf(cellsOf(rows, "#", 0)), 23, { leave = AQUA_FLOOR })
+  local longs = runRects(runsOf(cellsOf(rows, "-", 0)))
+  local x0, y0 = longs[1][1], longs[1][2]
+  local bars = { x0 + 2, y0, x0 + 14, y0 + 8 }
+  for _, r in ipairs(longs) do
+    out[#out + 1] = piece(("edge_rail_%d_%d"):format(r[1] / 16, r[2] / 16), { r }, 12, { through = true, leave = AQUA_SEE })
+  end
+  for _, cd in ipairs({ { "[", 0 }, { "]", 8 } }) do
+    local ch, dx = cd[1], cd[2]
+    for _, r in ipairs(runRects(runsOf(cellsOf(rows, ch, 0)))) do
+      local a, b, d = r[1], r[2], r[4]
+      if ch == "]" or d - b == 16 then
+        out[#out + 1] = piece(("edge_rail_%s_%d_%d"):format(ch == "[" and "w" or "e", a / 16, b / 16),
+          { { a + dx, b, a + dx + 8, d } }, 12, { through = true, leave = AQUA_SEE, side = bars })
+      end
+    end
+  end
+  for _, c in ipairs(AQUA_TANKS[floor] or {}) do
+    out[#out + 1] = piece(("block_tank_%d_%d"):format(c[1], c[2]), { { c[1] * 16, c[2] * 16, c[1] * 16 + 32, c[2] * 16 + 32 } }, 20,
+      { leave = AQUA_FLOOR })
+  end
+  return out
+end
+
+for _, f in ipairs({ "1F", "B1F", "B2F" }) do
+  add("aqua_hideout_" .. f:lower(), "LAYOUT_AQUA_HIDEOUT_" .. f, { 0x228 }, ownShell(aquaHideout(f)))
+end
+
+-- ── the Magma Hideout: its machines, each modelled in the room that has fewest of it ──
+
+local MAGMA_FLOOR = { "d59c8b", "bd8373", "9c6252" }
+for _, fm in ipairs({
+  { "3F_2R", { { "console", 3, 6, 2, 3, 24 }, { "console", 5, 6, 2, 3, 24 }, { "tank", 20, 3, 2, 3, 30 },
+               { "drill", 7, 1, 2, 2, 16 }, { "drill", 9, 1, 2, 2, 16 }, { "drill", 11, 1, 2, 2, 16 } } },
+  { "3F_3R", { { "robot", 18, 20, 2, 2, 16 } } },
+  { "2F_1R", { { "capsule", 16, 16, 2, 3, 32 }, { "dish_console", 14, 16, 2, 3, 24 } } },
+  { "4F", { { "drill_floor", 12, 2, 2, 2, 16 }, { "drill_floor", 14, 2, 2, 2, 16 }, { "drill_floor", 9, 3, 2, 2, 16 },
+            { "drill_floor", 47, 14, 2, 2, 16 } } },
+}) do
+  local pieces = {}
+  for _, m in ipairs(fm[2]) do
+    local k, x, y, w, h, ht = m[1], m[2], m[3], m[4], m[5], m[6]
+    pieces[#pieces + 1] = piece(("%s_%d_%d"):format(k, x, y), { { x * 16, y * 16, (x + w) * 16, (y + h) * 16 } }, ht,
+      { leave = MAGMA_FLOOR })
+  end
+  add("magma_hideout_" .. fm[1]:lower(), "LAYOUT_MAGMA_HIDEOUT_" .. fm[1], { 0x3a2 }, pieces)
+end
+
+end
+lastRooms()
 end
 laterRooms()
 
@@ -2354,6 +3253,36 @@ ROOMS.ids = {
   LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_LOBBY = 264, LAYOUT_ROUTE124_DIVING_TREASURE_HUNTERS_HOUSE = 301,
   LAYOUT_CONTEST_HALL_BEAUTY = 232, LAYOUT_CONTEST_HALL_TOUGH = 233, LAYOUT_CONTEST_HALL_COOL = 234,
   LAYOUT_CONTEST_HALL_SMART = 235, LAYOUT_CONTEST_HALL_CUTE = 236,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_CORRIDOR = 267, LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_CORRIDOR = 391,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_BATTLE_ROOM = 268, LAYOUT_BATTLE_ELEVATOR = 266,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_TOWER_MULTI_PARTNER_ROOM = 390, LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_CORRIDOR = 333,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_PRE_BATTLE_ROOM = 334, LAYOUT_BATTLE_FRONTIER_BATTLE_DOME_BATTLE_ROOM = 335,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_PALACE_CORRIDOR = 343, LAYOUT_BATTLE_FRONTIER_BATTLE_PALACE_BATTLE_ROOM = 344,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_FACTORY_PRE_BATTLE_ROOM = 347, LAYOUT_BATTLE_FRONTIER_BATTLE_FACTORY_BATTLE_ROOM = 348,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_CORRIDOR = 350, LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_THREE_PATH_ROOM = 351,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_NORMAL = 352, LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_FINAL = 353,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_WILD_MONS = 358, LAYOUT_BATTLE_FRONTIER_BATTLE_ARENA_CORRIDOR = 355,
+  LAYOUT_BATTLE_FRONTIER_BATTLE_ARENA_BATTLE_ROOM = 356,
+  LAYOUT_ROUTE110_TRICK_HOUSE_CORRIDOR = 246, LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE1 = 247,
+  LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE2 = 248, LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE3 = 249,
+  LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE4 = 250, LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE5 = 251,
+  LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE6 = 252, LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE7 = 253,
+  LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE8 = 254,
+  LAYOUT_BATTLE_COLOSSEUM_2P = 221, LAYOUT_TRADE_CENTER = 222, LAYOUT_RECORD_CORNER = 223, LAYOUT_BATTLE_COLOSSEUM_4P = 224,
+  LAYOUT_UNION_ROOM = 393, LAYOUT_INSIDE_OF_TRUCK = 237,
+  LAYOUT_SS_TIDAL_CORRIDOR = 277, LAYOUT_SS_TIDAL_LOWER_DECK = 278, LAYOUT_SS_TIDAL_ROOMS = 279,
+  LAYOUT_TRAINER_HILL_ENTRANCE = 414,
+  LAYOUT_SKY_PILLAR_1F = 322, LAYOUT_SKY_PILLAR_2F = 323, LAYOUT_SKY_PILLAR_3F = 324, LAYOUT_SKY_PILLAR_4F = 325,
+  LAYOUT_SKY_PILLAR_5F = 330, LAYOUT_SKY_PILLAR_1F_CLEAN = 433, LAYOUT_SKY_PILLAR_2F_CLEAN = 434,
+  LAYOUT_SKY_PILLAR_3F_CLEAN = 435, LAYOUT_SKY_PILLAR_4F_CLEAN = 436, LAYOUT_SKY_PILLAR_5F_CLEAN = 437,
+  LAYOUT_ABANDONED_SHIP_DECK = 186, LAYOUT_ABANDONED_SHIP_CORRIDORS_1F = 187, LAYOUT_ABANDONED_SHIP_ROOMS_1F = 188,
+  LAYOUT_ABANDONED_SHIP_CORRIDORS_B1F = 189, LAYOUT_ABANDONED_SHIP_ROOMS_B1F = 190, LAYOUT_ABANDONED_SHIP_ROOMS2_B1F = 191,
+  LAYOUT_ABANDONED_SHIP_UNDERWATER1 = 192, LAYOUT_ABANDONED_SHIP_ROOM_B1F = 193, LAYOUT_ABANDONED_SHIP_ROOMS2_1F = 194,
+  LAYOUT_ABANDONED_SHIP_CAPTAINS_OFFICE = 195, LAYOUT_ABANDONED_SHIP_UNDERWATER2 = 196,
+  LAYOUT_ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS = 289, LAYOUT_ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS = 310,
+  LAYOUT_AQUA_HIDEOUT_1F = 143, LAYOUT_AQUA_HIDEOUT_B1F = 144, LAYOUT_AQUA_HIDEOUT_B2F = 145,
+  LAYOUT_MAGMA_HIDEOUT_2F_1R = 337, LAYOUT_MAGMA_HIDEOUT_3F_2R = 340, LAYOUT_MAGMA_HIDEOUT_4F = 341,
+  LAYOUT_MAGMA_HIDEOUT_3F_3R = 379,
 }
 -- the layouts no map is drawn with, which a script swaps into the map of the room named
 -- (setmaplayoutindex): the lab once the starter is chosen
@@ -2361,5 +3290,11 @@ ROOMS.swaps = {
   LAYOUT_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB_WITH_TABLE = "LAYOUT_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB",
   LAYOUT_SOOTOPOLIS_CITY_MYSTERY_EVENTS_HOUSE_1F_STAIRS_UNBLOCKED = "LAYOUT_SOOTOPOLIS_CITY_MYSTERY_EVENTS_HOUSE_1F",
 }
+-- the Sky Pillar's floors and their `_CLEAN` twins (swapped in until Rayquaza has left): each
+-- found through the other, whichever the game's maps are drawn with
+for _, f in ipairs({ "1F", "2F", "3F", "4F", "5F" }) do
+  ROOMS.swaps["LAYOUT_SKY_PILLAR_" .. f .. "_CLEAN"] = "LAYOUT_SKY_PILLAR_" .. f
+  ROOMS.swaps["LAYOUT_SKY_PILLAR_" .. f] = "LAYOUT_SKY_PILLAR_" .. f .. "_CLEAN"
+end
 
 return ROOMS

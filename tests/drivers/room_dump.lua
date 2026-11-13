@@ -36,7 +36,36 @@ local function body(game, log)
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
   if not (hd and hd._rooms) then log("FAIL gen3-hd-sprites exports missing"); return end
   local clock = love.timer.getTime
+  if env("ROOM_CACHE") and hd._roomsJob then
+    -- the rooms' job as play runs it: a slice at a time (and the longest), the cache written at
+    -- its end; then read back from the cache
+    local worst, n, tb = 0, 0, clock()
+    local st = hd._roomsJob(0.004, "build", tonumber(env("ROOM_WATCH") or "") or nil)
+    local readyAt
+    while st and st.co do
+      local t = clock()
+      st = hd._roomsJob(0.004)
+      worst, n = math.max(worst, clock() - t), n + 1
+      if st.ready and not readyAt then readyAt = clock() - tb end
+    end
+    log(("rooms job: %d slices, longest %.1f ms, ready after %.0f ms, done after %.0f ms; %d pieces, error %s %s"):format(
+      n, worst * 1000, (readyAt or 0) * 1000, (clock() - tb) * 1000, #(st.pieces or {}), tostring(st.error),
+      table.concat(st.errors or {}, "; ")))
+    for _, g in ipairs(st and st.gaps or {}) do log("gap " .. g) end
+    local tc = clock()
+    st = hd._roomsJob(nil, true)
+    log(("from the cache: %.0f ms; cached %s, %d pieces"):format((clock() - tc) * 1000, tostring(st.cached),
+      #(st.pieces or {})))
+    return
+  end
   local t0 = clock()
+  local everywhere
+  if env("ROOM_EVERY") and hd._roomsJob then
+    -- the whole job as play runs it, to the end of its reuse in the rooms nobody modelled: the
+    -- pieces stood there are dumped too (their layouts "#<number>")
+    local st = hd._roomsJob(nil, "build")
+    everywhere = st
+  end
   local ok, rooms = xpcall(hd._rooms, debug.traceback, upto)
   if not ok or not rooms then log("FAIL rooms: " .. tostring(rooms)); return end
   log(("%d rooms read in %.0f ms"):format(#rooms, (clock() - t0) * 1000))
@@ -68,6 +97,23 @@ local function body(game, log)
           else
             log(("FAIL bare %s: %s"):format(pc.name, tostring(twin)))
           end
+        end
+      end
+    end
+  end
+  for _, pc in ipairs(everywhere and everywhere.pieces or {}) do
+    local needs = false
+    for _, p in ipairs(pc.reused_at or {}) do if tostring(p[1]):sub(1, 1) == "#" then needs = true end end
+    for _, p in ipairs(pc.bare_at or {}) do if tostring(p[1]):sub(1, 1) == "#" then needs = true end end
+    if needs then
+      local okB, md = xpcall(hd._roomBuild, debug.traceback, pc)
+      for _, p in ipairs(pc.reused_at or {}) do
+        if okB and tostring(p[1]):sub(1, 1) == "#" then at(p[1], p[2], p[3], p[4] or -1, pc, md) end
+      end
+      if pc.bare_at then
+        local okT, twin = xpcall(hd._roomBuild, debug.traceback, pc, true)
+        for _, p in ipairs(pc.bare_at) do
+          if okT and tostring(p[1]):sub(1, 1) == "#" then at(p[1], p[2], p[3], -1, pc, twin) end
         end
       end
     end

@@ -1223,11 +1223,233 @@ return function(deps)
   end
   function Scene._roomBuild(piece, bare) return Interiors.build(piece, bare) end
 
-  -- the rooms read once a session, in their order, a slice a frame (warm): { co, done, error,
-  -- io, reg, pieces (every room's, in order), byId = { [layout id] = room layout name },
-  -- everywhere = { [layout id] = true }, models, bares, ms }
+  -- the rooms read once a game, in their order, a slice a frame (warm), and kept in the model cache
+  -- (Scene Cache): { co, ready (read, and the known furniture stood in every room nobody
+  -- modelled: placeRooms may run), done (and cached), error, io, reg, pieces (every room's, in
+  -- order), byId = { [layout id] = room layout name }, everywhere = { [layout id] = true },
+  -- reusedPixels = { [layout key] = { [pixel] = true } }, models, bares, cached, ms }
   Scene.ROOM_SLICE = 0.004
+  Scene.ROOMS_CACHE = 1        -- bumps when what the rooms build or how they are kept changes
   local roomRun
+
+  -- ── the rooms' cache: rooms.index (every piece's facts and places, compressed Lua) and per room
+  -- room_<name>.dat (its pieces' triangles and their textures' sizes) and room_<name>.rgba (the
+  -- textures, one after another) ──
+  local function packData(text)
+    local ok, z = pcall(love.data.compress, "string", "zlib", text)
+    if ok and z then return "Z" .. z end
+    return "R" .. text
+  end
+  local function unpackData(blob)
+    if not blob or #blob < 1 then return nil end
+    local kind, body = blob:sub(1, 1), blob:sub(2)
+    if kind == "R" then return body end
+    if kind == "Z" then
+      local ok, text = pcall(love.data.decompress, "string", "zlib", body)
+      return ok and text or nil
+    end
+    return nil
+  end
+  -- a set of ints as runs: "start,length,..." (sorted)
+  local function runsOfSet(set)
+    local keys = {}
+    for k in pairs(set or {}) do keys[#keys + 1] = k end
+    table.sort(keys)
+    local out, i = {}, 1
+    while i <= #keys do
+      local j = i
+      while j < #keys and keys[j + 1] == keys[j] + 1 do j = j + 1 end
+      out[#out + 1] = keys[i]
+      out[#out + 1] = j - i + 1
+      i = j + 1
+    end
+    return "{" .. table.concat(out, ",") .. "}"
+  end
+  local function setOfRuns(runs)
+    local set = {}
+    for i = 1, #runs, 2 do
+      for k = runs[i], runs[i] + runs[i + 1] - 1 do set[k] = true end
+    end
+    return set
+  end
+  local function lit(v)
+    local t = type(v)
+    if t == "number" then
+      if v == math.floor(v) and math.abs(v) < 2 ^ 52 then return ("%d"):format(v) end
+      return ("%.17g"):format(v)
+    elseif t == "string" then
+      return ("%q"):format(v)
+    elseif t == "boolean" then
+      return tostring(v)
+    elseif t == "table" then
+      local parts, n = {}, #v
+      for i = 1, n do parts[#parts + 1] = v[i] == nil and "false" or lit(v[i]) end
+      for k, x in pairs(v) do
+        if not (type(k) == "number" and k >= 1 and k <= n and k == math.floor(k)) then
+          parts[#parts + 1] = "[" .. lit(k) .. "]=" .. lit(x)
+        end
+      end
+      return "{" .. table.concat(parts, ",") .. "}"
+    end
+    return "nil"
+  end
+  -- the signature of the specs a cache was built from
+  local function roomsSig()
+    local names = {}
+    for i, spec in ipairs(RoomSpecs or {}) do names[i] = spec.name .. "#" .. #spec.interior.pieces end
+    local text = table.concat(names, ",")
+    local ok, digest = pcall(love.data.hash, "md5", text)
+    local hex = ok and digest and love.data.encode("string", "hex", digest) or tostring(#text)
+    return ("rooms%d:%s"):format(Scene.ROOMS_CACHE, hex)
+  end
+  -- an image's RGBA bytes
+  local function rgbaOf(img)
+    local rows = {}
+    local ch = string.char
+    for y = 0, img.h - 1 do
+      local row = {}
+      for x = 0, img.w - 1 do
+        local c = img.c[y * img.w + x]
+        row[x + 1] = c and ch(math.floor(c / 65536), math.floor(c / 256) % 256, c % 256, 255) or "\0\0\0\0"
+      end
+      rows[y + 1] = table.concat(row)
+    end
+    return table.concat(rows)
+  end
+  -- a piece's facts for the index (its parts stay behind: the triangles are in its room's file)
+  local function pieceFacts(pc)
+    local patches
+    if pc.placed_patches then
+      patches = {}
+      for key, list in pairs(pc.placed_patches) do
+        local l = {}
+        for n, p in ipairs(list) do
+          local img = {}
+          for k = 0, 255 do img[k + 1] = p[3][k] end
+          l[n] = { p[1], p[2], img }
+        end
+        patches[key] = l
+      end
+    end
+    local reused = {}
+    for n, p in ipairs(pc.reused_at or {}) do reused[n] = { p[1], p[2], p[3], p[4] or false } end
+    local owned
+    if pc.owned then
+      owned = {}
+      for k in pairs(pc.owned) do owned[#owned + 1] = k end
+      table.sort(owned)
+    end
+    local parts = { "{name=", lit(pc.name), ",room=", lit(pc.room), ",layout=", lit(pc.layout), ",rect=", lit(pc.rect),
+                    ",ground=", lit(pc.ground), ",owned=", lit(owned), ",when=", lit(pc.when), ",placed=", lit(pc.placed),
+                    ",patches=", lit(patches), ",reused_at=", lit(reused), ",bare_at=", lit(pc.bare_at) }
+    if pc.bare_at then parts[#parts + 1] = ",own=" .. runsOfSet(pc.own) end
+    parts[#parts + 1] = "}"
+    return table.concat(parts)
+  end
+  local function writeRoomsCache(st, tick)
+    local c = Scene.cacheModels and Scene.modelCache
+    if not c then return end
+    -- each room's pieces, built
+    local byRoom, order = {}, {}
+    for i, pc in ipairs(st.pieces) do
+      if not byRoom[pc.room] then byRoom[pc.room] = {}; order[#order + 1] = pc.room end
+      local l = byRoom[pc.room]
+      l[#l + 1] = i
+    end
+    for _, room in ipairs(order) do
+      local dat, rgba, off = { "return {" }, {}, 0
+      for _, i in ipairs(byRoom[room]) do
+        local pc = st.pieces[i]
+        local entry = { "[", i, "]={" }
+        for _, bare in ipairs(pc.bare_at and { false, true } or { false }) do
+          local ok, built = pcall(Interiors.build, pc, bare)
+          if ok then
+            local tris = {}
+            for _, t in ipairs(built.tris) do
+              for k = 1, 3 do
+                local p = t[k]
+                tris[#tris + 1] = ("%.9g,%.9g,%.9g,%.9g,%.9g"):format(p[1], p[2], p[3], p[4], p[5])
+              end
+              tris[#tris + 1] = ("%.9g"):format(t.shade or 1)
+            end
+            local bytes = rgbaOf(built.art)
+            rgba[#rgba + 1] = bytes
+            entry[#entry + 1] = ("%s={w=%d,h=%d,off=%d,tris={%s}},"):format(bare and "bare" or "main", built.art.w,
+              built.art.h, off, table.concat(tris, ","))
+            off = off + #bytes
+          end
+          tick("cache " .. pc.name)
+        end
+        entry[#entry + 1] = "},"
+        dat[#dat + 1] = table.concat(entry)
+      end
+      dat[#dat + 1] = "}"
+      c.write("room_" .. room .. ".dat", packData(table.concat(dat)))
+      c.write("room_" .. room .. ".rgba", packData(table.concat(rgba)))
+      tick("cache write " .. room)
+    end
+    -- the index, last: a cache is whole once it is there
+    local idx = { "return {sig=", lit(roomsSig()), ",pieces={" }
+    for _, pc in ipairs(st.pieces) do idx[#idx + 1] = pieceFacts(pc) .. "," end
+    idx[#idx + 1] = "},reused={"
+    for key, set in pairs(st.reg.reusedPixels) do idx[#idx + 1] = "[" .. lit(key) .. "]=" .. runsOfSet(set) .. "," end
+    idx[#idx + 1] = "}}"
+    c.write("rooms.index", packData(table.concat(idx)))
+  end
+  local function readRoomsCache(st)
+    local c = Scene.cacheModels and Scene.modelCache
+    local text = c and unpackData(c.read("rooms.index"))
+    if not text then return false end
+    local chunk = load(text, "=rooms.index", "t", {})
+    local ok, idx = pcall(chunk or error)
+    if not (ok and type(idx) == "table" and idx.sig == roomsSig()) then return false end
+    for i, f in ipairs(idx.pieces) do
+      local pc = { name = f.name, room = f.room, layout = f.layout, rect = f.rect, ground = f.ground, when = f.when,
+                   placed = f.placed, bare_at = f.bare_at, idx = i }
+      if f.owned then
+        pc.owned = {}
+        for _, k in ipairs(f.owned) do pc.owned[k] = true end
+      end
+      if f.patches then
+        pc.placed_patches = {}
+        for key, list in pairs(f.patches) do
+          local l = {}
+          for n, p in ipairs(list) do
+            local img = {}
+            for k = 0, 255 do img[k] = p[3][k + 1] end
+            l[n] = { p[1], p[2], img }
+          end
+          pc.placed_patches[key] = l
+        end
+      end
+      if f.reused_at and #f.reused_at > 0 then
+        pc.reused_at = {}
+        for n, p in ipairs(f.reused_at) do pc.reused_at[n] = { p[1], p[2], p[3], p[4] or nil } end
+      end
+      if f.own then pc.own = setOfRuns(f.own) end
+      st.pieces[i] = pc
+    end
+    st.reusedPixels = {}
+    for key, runs in pairs(idx.reused or {}) do st.reusedPixels[key] = setOfRuns(runs) end
+    return true
+  end
+  -- a room's file, read once: { [piece index] = { main = { w, h, off, tris }, bare = ... } }, rgba
+  local function cachedRoom(st, room)
+    st.roomFiles = st.roomFiles or {}
+    local hit = st.roomFiles[room]
+    if hit ~= nil then return hit or nil end
+    st.roomFiles[room] = false
+    local c = Scene.modelCache
+    local text = c and unpackData(c.read("room_" .. room .. ".dat"))
+    local rgba = c and unpackData(c.read("room_" .. room .. ".rgba"))
+    local chunk = text and load(text, "=room", "t", {})
+    local ok, dat = pcall(chunk or error)
+    if not (ok and type(dat) == "table" and rgba) then return nil end
+    hit = { dat = dat, rgba = rgba }
+    st.roomFiles[room] = hit
+    return hit
+  end
+
   local function roomJob()
     if roomRun then return roomRun end
     local st = { pieces = {}, byId = {}, everywhere = {}, models = {}, bares = {}, errors = {} }
@@ -1235,74 +1457,159 @@ return function(deps)
     if not (Interiors and RoomSpecs and World) then st.error = "no rooms"; return st end
     local clock = love.timer and love.timer.getTime or os.clock
     st.t0 = clock()
-    st.io, st.reg = roomIo(), Interiors.registry()
-    local function tick()
-      if st.budget and clock() - st.sliceStart > st.budget then coroutine.yield() end
+    st.io = roomIo()
+    for _, spec in ipairs(RoomSpecs) do
+      local name = spec.interior.layout
+      local num = RoomSpecs.ids and RoomSpecs.ids[name]
+      local L = num and World.layout(num) or World.layout(name)
+      if L and L.id and not st.byId[L.id] then st.byId[L.id] = name end
+    end
+    local okC, hit = false, false
+    if not Scene.roomsBuildAfresh then okC, hit = pcall(readRoomsCache, st) end
+    if okC and hit then
+      st.cached, st.ready, st.done, st.all = true, true, true, true
+      st.ms = math.floor((clock() - st.t0) * 1000 + 0.5)
+      return st
+    end
+    st.pieces = {}
+    st.reg = Interiors.registry()
+    st.reusedPixels = st.reg.reusedPixels
+    local function tick(label)
+      local t = clock()
+      -- (dev: Scene.roomsWatch = seconds; every longer stretch between two ticks, with their labels)
+      if Scene.roomsWatch then
+        if st.lastTick and t - st.lastTick > Scene.roomsWatch then
+          st.gaps = st.gaps or {}
+          st.gaps[#st.gaps + 1] = ("%.0f ms %s -> %s"):format((t - st.lastTick) * 1000, tostring(st.lastLabel),
+            tostring(label))
+        end
+        st.lastTick, st.lastLabel = t, label
+      end
+      if st.budget and t - st.sliceStart > st.budget then
+        coroutine.yield()
+        st.lastTick = clock()
+      end
     end
     st.co = coroutine.create(function()
       for _, spec in ipairs(RoomSpecs) do
-        local name = spec.interior.layout
-        local num = RoomSpecs.ids and RoomSpecs.ids[name]
-        local L = num and World.layout(num) or World.layout(name)
-        if L and L.id and not st.byId[L.id] then st.byId[L.id] = name end
         local ok, pieces, err = pcall(Interiors.room, spec, st.io, st.reg, tick)
         if ok and pieces then
-          for _, pc in ipairs(pieces) do st.pieces[#st.pieces + 1] = pc end
+          for _, pc in ipairs(pieces) do
+            pc.room = spec.name
+            st.pieces[#st.pieces + 1] = pc
+            pc.idx = #st.pieces
+          end
         else
           st.errors[#st.errors + 1] = spec.name .. ": " .. tostring(ok and err or pieces)
         end
-        tick()
+        tick("room " .. spec.name)
       end
+      -- the known furniture in every indoor room nobody modelled (reuse_everywhere), in the
+      -- layouts' order
+      for _, id in ipairs(World.layoutIds and World.layoutIds() or {}) do
+        local L = World.layout(id)
+        if L and not L.outdoor and not st.byId[id] and not st.everywhere[id] then
+          st.everywhere[id] = true
+          local A = st.io.layout("#" .. id)
+          if A then pcall(Interiors.placeReused, st.reg, st.io, A, nil, nil, tick) end
+          tick("everywhere " .. id)
+        end
+      end
+      st.all = true
+      st.ready = true
+      st.ms = math.floor((clock() - st.t0) * 1000 + 0.5)
+      coroutine.yield()
+      -- and kept: the next game's battles read it back
+      local okW, err = pcall(writeRoomsCache, st, tick)
+      if not okW then st.errors[#st.errors + 1] = "cache: " .. tostring(err) end
     end)
     return st
   end
-  local function roomStep(budget)
+  local function roomStep(budget, untilReady)
     local st = roomJob()
     local clock = love.timer and love.timer.getTime or os.clock
     while st.co do
+      if untilReady and st.ready then break end
       st.budget, st.sliceStart = budget, clock()
       local ok, err = coroutine.resume(st.co)
       if not ok then
         st.error, st.co = tostring(err), nil
       elseif coroutine.status(st.co) == "dead" then
         st.co, st.done = nil, true
-        st.ms = math.floor((clock() - st.t0) * 1000 + 0.5)
       end
       if budget then break end
     end
     return st
   end
-  --- The rooms read, now if they are not yet: the job's state (st.done), or nil and why.
+  -- (dev: the rooms' job, afresh with `fresh`, run a slice of `budget` seconds: its state)
+  function Scene._roomsJob(budget, fresh, watch)
+    if fresh then roomRun = nil end
+    -- (fresh = "build": not read back from the cache)
+    Scene.roomsBuildAfresh = fresh == "build" or (not fresh and Scene.roomsBuildAfresh) or nil
+    if watch then Scene.roomsWatch = watch end
+    return roomStep(budget)
+  end
+  --- The rooms read, now if they are not yet (the cache is written later, in the warm-up): the
+  --- job's state, or nil and why.
   function Scene.rooms()
-    local st = roomStep(nil)
-    if st.done then return st end
+    local st = roomStep(nil, true)
+    if st.ready then return st end
     return nil, st.error
   end
 
-  -- a piece's model (its bare twin with `bare`), made once
+  -- a piece's model (its bare twin with `bare`), made once: off the cache, or built
   local function roomModel(st, pc, bare)
     local cache = bare and st.bares or st.models
     if cache[pc] ~= nil then return cache[pc] or nil end
     cache[pc] = false
-    local ok, built = pcall(Interiors.build, pc, bare)
-    if not ok then
-      hd.stats.sceneRoomError = pc.name .. ": " .. tostring(built)
-      return nil
-    end
-    local tex = built.tex
-    local image = imageOf(tex.w, tex.h, function(data)
-      local px = tex.px
-      for y = 0, tex.h - 1 do
-        for x = 0, tex.w - 1 do
-          local o = (y * tex.w + x) * 4
-          data:setPixel(x, y, px[o + 1], px[o + 2], px[o + 3], px[o + 4])
-        end
+    local tris, art, image, texW, texH
+    if st.cached then
+      local file = cachedRoom(st, pc.room)
+      local e = file and file.dat[pc.idx]
+      e = e and (bare and e.bare or e.main)
+      if not e then return nil end
+      texW, texH = e.w, e.h
+      local bytes = file.rgba:sub(e.off + 1, e.off + texW * texH * 4)
+      local okI, data = pcall(love.image.newImageData, texW, texH, "rgba8", bytes)
+      if not okI then return nil end
+      local okG, img = pcall(G.newImage, data)
+      if not okG then return nil end
+      img:setFilter("nearest", "nearest")
+      image = img
+      tris = {}
+      local f = e.tris
+      for i = 1, #f, 16 do
+        tris[#tris + 1] = { { f[i], f[i + 1], f[i + 2], f[i + 3], f[i + 4] },
+                            { f[i + 5], f[i + 6], f[i + 7], f[i + 8], f[i + 9] },
+                            { f[i + 10], f[i + 11], f[i + 12], f[i + 13], f[i + 14] }, shade = f[i + 15] }
       end
-    end)
-    if not image then return nil end
+      -- (its drawing, for the floor laid round it: drawn wherever a texel is)
+      art = { w = texW, h = texH, c = {} }
+      for k = 0, texW * texH - 1 do
+        if bytes:byte(k * 4 + 4) > 0 then art.c[k] = true end
+      end
+    else
+      local ok, built = pcall(Interiors.build, pc, bare)
+      if not ok then
+        hd.stats.sceneRoomError = pc.name .. ": " .. tostring(built)
+        return nil
+      end
+      local tex = built.tex
+      image = imageOf(tex.w, tex.h, function(data)
+        local px = tex.px
+        for y = 0, tex.h - 1 do
+          for x = 0, tex.w - 1 do
+            local o = (y * tex.w + x) * 4
+            data:setPixel(x, y, px[o + 1], px[o + 2], px[o + 3], px[o + 4])
+          end
+        end
+      end)
+      if not image then return nil end
+      tris, art, texW, texH = built.tris, built.art, tex.w, tex.h
+    end
     local md = { spec = { name = pc.name .. (bare and "_bare" or ""), owned = pc.owned }, piece = pc,
-                 ref = { w = pc.rect[3], h = pc.rect[4], template = {} }, core = { { 0, 0 } }, tris = built.tris,
-                 image = image, texW = tex.w, texH = tex.h, primaryOnly = true, art = built.art, room = true }
+                 ref = { w = pc.rect[3], h = pc.rect[4], template = {} }, core = { { 0, 0 } }, tris = tris,
+                 image = image, texW = texW, texH = texH, primaryOnly = true, art = art, room = true }
     cache[pc] = md
     return md
   end
@@ -1373,7 +1680,7 @@ return function(deps)
         end
         local key = name or layoutA.id
         local own = name or sameAs
-        if not name and not st.everywhere[lid] then
+        if not name and not st.all and not st.everywhere[lid] then
           st.everywhere[lid] = true
           pcall(Interiors.placeReused, st.reg, st.io, layoutA, nil)
         end
@@ -1411,7 +1718,7 @@ return function(deps)
           end
           commonFloor = best
         end
-        local others = st.reg.reusedPixels[key] or {}
+        local others = st.reusedPixels and st.reusedPixels[key] or {}
         local RW = layoutA.w * 16
         -- (a room read once for each state of its doors finds another room's piece once for each:
         -- the same model on the same spot stands once)
@@ -1492,7 +1799,8 @@ return function(deps)
             end
           end
         end
-        hd.stats.sceneRooms = ("%s: %d pieces"):format(tostring(name or layoutA.id), placed)
+        hd.stats.sceneRooms = ("%s: %d pieces%s"):format(tostring(name or layoutA.id), placed,
+          st.cached and ", from the cache" or "")
       end
     end
     if #st.errors > 0 then hd.stats.sceneRoomError = table.concat(st.errors, "; ") end
