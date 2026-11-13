@@ -523,11 +523,31 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   hut, `LeafRoof`, the bridge planks in the deck's end cells, all `Lifted` 28 px; the ladder a
   `ProjPoly`), the bridge cells and the palms (a card leaning 50 degrees, the trunk cells laid from
   their lower layer). `voxel_fortree.deck_table` (lifting walkers onto a deck) is not used: their
-  battle stage search counts a deck as a building's tall cells too. Not yet: bridges (Route 110's
-  cycling road), interiors. Every spec ported before the lantern builds the same triangles as the
+  battle stage search counts a deck as a building's tall cells too. Not yet: interiors. Every spec ported before the lantern builds the same triangles as the
   Python generator (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on
   the same synthetic drawing, their textures' checksums too; all 105 matched); the lantern,
   fountain, Fortree and props are checked in the game only.
+- `models/bridge.lua`: `voxel_bridge.py` whole (Route 110's Cycling Road): `Bridge.read(io,
+  conf, tick)` reads the road off the layout's drawing (pret's colours: `World.pretArt`, the
+  relief's `Art.pair` over the cache's tilesets; roles from `World.roles`; the curb component's
+  spec), builds its faces (`quads`: the deck, rails, front, piers, ramps in their slots, the five
+  kinds of corner, `merge`, `tileFlanks`, `cutCorners`), and `Bridge.blocks` cuts them into one
+  model per cell drawn alike (art: the cell, the flank band, the plain road band, a curb's
+  stones; `top` from the faces over the cell in the world; a patch of the drawing laid on the
+  ground). Pixels and cells are number keys (`P(u, v)`, `C(x, y)`). Where Python breaks a tie by
+  a set's order, the port takes a sorted order: the output still matches. `init.lua` builds it in
+  a coroutine (`bridgeStep`: `Scene.BRIDGE_SLICE` a frame from the warm-up, `warmAll` and
+  `warm` queue it; inside the relief's own build through `modelCells`, which gives the solver
+  the bridge's cells as Emerald 3DS's buildings.bin does; to its end if a battle needs it first),
+  keeps it in the model cache (`LAYOUT_ROUTE110.bridge`, text, and `.bridge.rgba`, one atlas of
+  18-texel columns, each block framed by a copy of its edge as their gutter) and `placeBridges`
+  stands a block on every cell of the layout the window shows, its ground the block's metatile
+  with the patch over it. Read: 1.5 s, slices at most ~22 ms; from the cache ~20 ms.
+  Checked against Emerald 3DS's own models: `tests/drivers/bridge_dump.lua` writes every
+  placement's triangles (pixels, shade, the colour at the centroid) as a dump of their
+  buildings.bin does; all 883 placements match (their file has more distinct models, 292 to
+  253, as their dedupe also keys on the shadow footprints). The relief rebuilt with the bridge's
+  cells is still byte for byte theirs.
 - `props.lua`: `voxel_props.py`'s objects (sea rock, sand boulder, sea stack, Fallarbor's boulder
   and stack) and finder, over a layout's upper layer in subtiles (`World.subtiles`: the raw
   `metatiles.bin` of its tilesets; `World.neighbours`: its maps' connections, for an object a
@@ -726,7 +746,8 @@ model with its cell, every component run with its triangles, every sign (cell, m
 the relief's lifted cells and layouts (`sceneRelief`) and the build time phase by phase
 (`scenePhases`);
 `SCENE_DUMP` for collision codes, `SCENE_SELFTEST` for the
-renderer on a synthetic field) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
+renderer on a synthetic field), `bridge_dump.lua` (the Cycling Road's triangles, its sliced build
+and its cache read; see `models/bridge.lua` above) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
 `voxel_cells.py` prints them, to diff). The relief is checked against Emerald 3DS's own scripts
 run locally: pret's pokeemerald at their pinned commit with its graphics built, their
 `3ds_port` overlaid, `romfs/voxel/buildings.bin` in place, Python 3.13 (their pinned version;

@@ -255,6 +255,39 @@ return function(deps)
     return L._subs
   end
 
+  --- A layout's tilesets as pret composes them (src/scene/relief_art.lua's Art.pair over its two
+  --- tilesets, read off the cache: subtiles(m, layer), cellImage(m), colours as 0xRRGGBB), or nil.
+  function World.pretArt(L)
+    local s = load()
+    local Art = deps.Art
+    if not (s and L and L.tilesets and Art) then return nil end
+    local key = tostring(L.tilesets[1]) .. "/" .. tostring(L.tilesets[2])
+    s.pretPairs = s.pretPairs or {}
+    if s.pretPairs[key] ~= nil then return s.pretPairs[key] or nil end
+    s.pretPairs[key] = false
+    local Dataset = req("src.core.game3.dataset")
+    local cache = Dataset and Dataset.cache()
+    if not cache then return nil end
+    s.pretTilesets = s.pretTilesets or {}
+    local function tileset(k)
+      local t = s.pretTilesets[k]
+      if t then return t end
+      local base = "data/generated/gba/map_tree/tilesets/" .. tostring(k) .. "/"
+      local tiles = cache:read(base .. "tiles.4bpp")
+      if not tiles then return nil end
+      t = { key = k, name = short(k), tiles = tiles, metatiles = cache:read(base .. "metatiles.bin") or "",
+            attributes = cache:read(base .. "attributes.bin") or "",
+            palettes = Art.palettes(cache:read(base .. "palettes.bin")) }
+      s.pretTilesets[k] = t
+      return t
+    end
+    local pt, st = tileset(L.tilesets[1]), tileset(L.tilesets[2])
+    if not (pt and st) then return nil end
+    local p = Art.pair(pt, st)
+    s.pretPairs[key] = p
+    return p
+  end
+
   --- A layout's roles (Roles.new over its adapter, cached), or nil.
   function World.roles(L)
     local s = load()

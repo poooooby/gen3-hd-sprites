@@ -168,6 +168,18 @@ return function(mod, hd, state)
     run.step()
     return run.state()
   end
+  -- (dev: a layout's bridge read afresh - its blocks, the curb's height, the read - and a block's
+  -- triangles)
+  exports._bridgeBlocks = function(name)
+    if not (hd.scene and hd.scene._bridgeBlocks) then return nil end
+    return hd.scene._bridgeBlocks(name)
+  end
+  exports._bridgeJob = function(name, budget, fresh, watch)
+    return hd.scene and hd.scene._bridgeJob and hd.scene._bridgeJob(name, budget, fresh, watch)
+  end
+  exports._bridgeMesh = function(block, curbHeight)
+    return hd.scene and hd.scene._bridgeMesh and hd.scene._bridgeMesh(block, curbHeight)
+  end
   -- (tests: the current battle scene alone, as image data w x h)
   exports._sceneShot = function(w, h)
     return hd.scene and hd.scene.snapshot and hd.scene.snapshot(w, h) or nil

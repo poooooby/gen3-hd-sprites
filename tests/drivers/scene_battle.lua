@@ -243,6 +243,7 @@ local function body(game, log)
     log(("%s relief: %s (error %s; build %s); models %s"):format(mapId, stat("sceneRelief"), stat("sceneReliefError"),
       stat("sceneReliefRun"), stat("sceneModels")))
     log(("%s live models: %s"):format(mapId, stat("sceneLive")))
+    log(("%s bridge: %s (error %s)"):format(mapId, stat("sceneBridge"), stat("sceneBridgeError")))
     log(("%s runs: %s (built in %s ms: %s)"):format(mapId, stat("sceneRuns"), stat("sceneMs"), stat("scenePhases")))
     hd.setScene(false)
     U.wait(6)

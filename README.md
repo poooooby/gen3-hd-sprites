@@ -86,8 +86,10 @@ resolution, and the camera pulls back so even the biggest ones fit.
   all, down to the round battle tents, the Space Center's domes, the boats in Slateport's harbour,
   the parasols on Route 109's beach, Slateport's stone lantern and Rustboro's fountain, its jet
   on its dish. Fortree's tree houses sit up in the treetops on their decks, joined by rope
-  bridges, with ladders down to the forest floor and palms leaning over the wood. Fences stand
-  post by post, and hedges, curbs, railings and walls stand as solid runs.
+  bridges, with ladders down to the forest floor and palms leaning over the wood. Route 110's
+  Seaside Cycling Road stands on its piers over the sea, rails, girders and all, with its ramps
+  coming down to the gatehouses. Fences stand post by post, and hedges, curbs, railings and walls
+  stand as solid runs.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle

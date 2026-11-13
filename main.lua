@@ -94,13 +94,19 @@ return function(mod)
       local okC, comps = pcall(componentsOf, sceneDeps.Kernel, fence)
       if okC and type(comps) == "table" then sceneDeps.Components = comps end
     end
+    -- (optional: Route 110's Cycling Road, read off the drawing the way the cartridge composes it)
+    local bridgeOf = loadSibling(mod, "src/scene/models/bridge.lua")
+    local okB, bridge = pcall(function() return type(bridgeOf) == "function" and bridgeOf(sceneDeps.Kernel) end)
+    if okB and type(bridge) == "table" then sceneDeps.Bridge = bridge end
   end
+  -- (the drawings as pret composes them: the relief's, the bridge's)
+  sceneDeps.Art = loadSibling(mod, "src/scene/relief_art.lua")
   local worldOf = loadSibling(mod, "src/scene/world.lua")
   local Post = loadSibling(mod, "src/scene/relief_post.lua")
   -- (JSON read with relief_post's own decoder: the engine's belongs to its link code)
   local json = Post and function(text) return (Post.json(text)) end or nil
   if type(worldOf) == "function" and sceneDeps.Roles and json then
-    local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles, json = json })
+    local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles, json = json, Art = sceneDeps.Art })
     if okW and type(world) == "table" then sceneDeps.World = world end
   end
   if SceneInit and sceneDeps.Camera and sceneDeps.Cells and sceneDeps.Stage and sceneDeps.Render then
@@ -116,7 +122,7 @@ return function(mod)
   -- without it only a cached relief is served) and the last passes (relief_post.lua)
   local reliefRun
   if Engine.Scene and sceneDeps.Relief and sceneDeps.Roles then
-    local Art, Input = loadSibling(mod, "src/scene/relief_art.lua"), loadSibling(mod, "src/scene/relief_input.lua")
+    local Art, Input = sceneDeps.Art or loadSibling(mod, "src/scene/relief_art.lua"), loadSibling(mod, "src/scene/relief_input.lua")
     local Solve = loadSibling(mod, "src/scene/relief_solve.lua")
     local parts = { loadSibling(mod, "src/scene/relief_drawn.lua"), loadSibling(mod, "src/scene/relief_shape.lua"),
                     loadSibling(mod, "src/scene/relief_cuts.lua"), loadSibling(mod, "src/scene/relief_world.lua") }

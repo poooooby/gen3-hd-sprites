@@ -723,5 +723,38 @@ do
   check(#B.find(grid, { md }) == 2, "...and at its repeat_at places")
 end
 
+-- ── the Cycling Road (src/scene/models/bridge.lua): its helpers, its merge and its dressing ──
+do
+  local K = dofile("src/scene/models/kernel.lua")
+  local Bridge = dofile("src/scene/models/bridge.lua")(K)
+  local r = Bridge.runs({ 1, 2, 3, 7, 8, 10 })
+  check(#r == 3 and r[1][1] == 1 and r[1][2] == 3 and r[3][1] == 10, "bridge: runs of sorted integers")
+  local s = Bridge.split(10, 40)
+  check(#s == 3 and s[1][2] == 16 and s[2][2] == 32 and s[3][2] == 40, "bridge: a span cut where cells end")
+  -- two drawn deck columns side by side, rows 0-15 at the deck's height: one face, the drawing's own uvs
+  local D = Bridge.DECK
+  local function top(u)
+    return { pts = { { u, D, D }, { u + 1, D, D }, { u + 1, D, D + 16 }, { u, D, D + 16 } },
+             uvs = { { u, 0 }, { u + 1, 0 }, { u + 1, 16 }, { u, 16 } }, tag = "deck.top", at = { u, 0 } }
+  end
+  local m = Bridge.merge({ top(2), top(3), top(4) })
+  -- (projected again, as a slanted wall would be: Emerald 3DS tags it so)
+  check(#m == 1 and m[1].pts[2][1] == 5 and m[1].uvs[2][1] == 5 and m[1].tag == "deck.top~proj",
+    "bridge: drawn columns of one face merge, exact")
+  -- (across a cell's edge they stay apart: a model is a cell)
+  check(#Bridge.merge({ top(15), top(16) }) == 2, "bridge: ...but never across a cell's edge")
+  -- a deck's side 32 px long dressed with the flank: cut where its 16 columns repeat, and at the rail's foot
+  local side = { pts = { { 0, D - 18, 0 }, { 0, D - 18, 32 }, { 0, D + 13, 32 }, { 0, D + 13, 0 } },
+                 uvs = { { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 } }, tag = "deck.flank_rail_w~depth", at = { 0, 0 } }
+  local t = Bridge.tileFlanks({ side })
+  local inBand = true
+  for _, f in ipairs(t) do
+    for _, uv in ipairs(f.uvs) do
+      if uv[1] < -1e-6 or uv[1] > 16 + 1e-6 or uv[2] < -1e-6 or uv[2] > 31 + 1e-6 then inBand = false end
+    end
+  end
+  check(#t == 4 and inBand, "bridge: a dressed side cut into the flank's pieces, each read off the flank")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

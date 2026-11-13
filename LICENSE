@@ -53,6 +53,13 @@ with owned cells stands only at its repeat_at places. Changes: rewritten in Lua 
 in the game; the deck table (who is lifted onto a deck) is not used, as its battle stage search
 does not use it either.
 
+Route 110's Seaside Cycling Road (src/scene/models/bridge.lua) adapts Emerald 3DS's
+3ds_port/scripts/voxel_bridge.py (the road read off its drawing, its faces, corners, merge,
+dressed sides and blocks) and its "cycling_road" spec in voxel_building_specs.py. Changes:
+rewritten in Lua for LOVE and read in the game from the player's own cartridge, a slice a frame,
+its blocks kept in the mod's cache on one texture; its deck table and shadow footprints are not
+used.
+
 The battle scene's rocks and boulders (src/scene/props.lua) adapt Emerald 3DS's
 3ds_port/scripts/voxel_props.py (its objects and their finder) and gen_voxel_buildings.py's
 prop_specs (a model per offset and variant, a Mound on the cells' own ground). Changes: found in

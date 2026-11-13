@@ -788,6 +788,342 @@ return function(deps)
     end
   end
 
+  -- ── Route 110's Cycling Road: a deck on piers read off its drawing (src/scene/models/bridge.lua) ──
+  -- Read once a game for the whole layout (a few seconds of work, run a few milliseconds a frame
+  -- from the warm-up, or inside the relief's own background build) and kept in the model cache:
+  -- one model per cell drawn alike, all of them on one texture (each block framed by a copy of its
+  -- edge, as Emerald 3DS's gutter: a face ending on a block's edge samples a hair past it).
+  local Bridge = deps.Bridge
+  local bridges = {}          -- layout name -> { co, done, at, models, image, error, ms }
+  Scene.BRIDGE_SLICE = 0.004
+  local BRIDGE_ROWS = 4096    -- the atlas's height: blocks in columns of 18 texels
+
+  local function bridgeIo(L)
+    local roles = World and World.roles(L)
+    local pair = World and World.pretArt(L)
+    if not (roles and pair and L.grid) then return nil end
+    local curb
+    for _, sp in ipairs(Components and Components.SPECS or {}) do if sp.name == "curb" then curb = sp end end
+    if not curb then return nil end
+    local grid, W, H = L.grid, L.w, L.h
+    local function cellAt(x, y)
+      local i = (y * W + x) * 2 + 1
+      return grid:byte(i) + grid:byte(i + 1) * 256
+    end
+    local function on(x, y) return x >= 0 and y >= 0 and x < W and y < H end
+    return {
+      w = W, h = H,
+      metatile = function(x, y) return cellAt(x, y) % 1024 end,
+      elevation = function(x, y) return on(x, y) and math.floor(cellAt(x, y) / 4096) % 16 or 0 end,
+      blocked = function(x, y) return on(x, y) and math.floor(cellAt(x, y) / 1024) % 4 ~= 0 end,
+      role = function(x, y) return roles.role(x, y) end,
+      subtiles = pair.subtiles, cellImage = pair.cellImage,
+      curb = { tiles = curb.tiles, fill = curb.fill, ground = curb.ground[1], height = curb.height },
+    }
+  end
+
+  -- the blocks as the scene's models, on one texture: { at = { [C] = md }, models, image, data }
+  local function bridgeModels(list, atlasW, atlasH, pixels)
+    local okD, data = pcall(love.image.newImageData, atlasW, atlasH, "rgba8", pixels)
+    if not okD then return nil, tostring(data) end
+    local okI, image = pcall(G.newImage, data)
+    if not okI then return nil, tostring(image) end
+    image:setFilter("nearest", "nearest")
+    local res = { at = {}, models = {}, image = image, data = data }
+    for _, b in ipairs(list) do
+      local md = { spec = { name = b.name, owned = { ["0,0"] = true }, ground = { b.ground } },
+                   ref = { w = 1, h = 1, template = {} }, core = { { 0, 0 } }, tris = b.tris, image = image,
+                   texW = atlasW, texH = atlasH, tops = { ["0,0"] = b.top / 16 }, primaryOnly = true,
+                   groundMid = b.ground, patch = b.patch, bridge = true }
+      res.models[#res.models + 1] = md
+      for _, p in ipairs(b.placed) do res.at[p[2] * 4096 + p[1]] = md end
+    end
+    return res
+  end
+
+  -- (the cache: one text file of the blocks, their triangles in the atlas's texels, and the atlas)
+  local function bridgeSerialize(list, atlasW, atlasH)
+    local out = { ("bridge 1 %d %d %d\n"):format(atlasW, atlasH, #list) }
+    local f = function(v) return ("%.9g"):format(v) end
+    for _, b in ipairs(list) do
+      local placed = {}
+      for _, p in ipairs(b.placed) do placed[#placed + 1] = p[1] .. " " .. p[2] end
+      out[#out + 1] = ("B %s %d %d %d %d %d %s %d\n"):format(b.name, b.ground, b.top, #b.placed,
+        b.patch and 1 or 0, #b.tris, table.concat(placed, " "), 0)
+      if b.patch then
+        local t = {}
+        for k = 0, 255 do t[k + 1] = b.patch[k] and tostring(b.patch[k]) or "-1" end
+        out[#out + 1] = table.concat(t, " ") .. "\n"
+      end
+      for _, t in ipairs(b.tris) do
+        local v = {}
+        for k = 1, 3 do for i = 1, 5 do v[#v + 1] = f(t[k][i]) end end
+        v[#v + 1] = f(t.shade or 1)
+        out[#out + 1] = table.concat(v, " ") .. "\n"
+      end
+    end
+    return table.concat(out)
+  end
+  local function bridgeParse(src)
+    local lines = src:gmatch("[^\n]+")
+    local head = lines()
+    local atlasW, atlasH, n = (head or ""):match("^bridge 1 (%d+) (%d+) (%d+)$")
+    if not atlasW then return nil end
+    local list = {}
+    for _ = 1, tonumber(n) do
+      local l = lines()
+      local fields = {}
+      for w in (l or ""):gmatch("%S+") do fields[#fields + 1] = w end
+      if fields[1] ~= "B" then return nil end
+      local b = { name = fields[2], ground = tonumber(fields[3]), top = tonumber(fields[4]), placed = {}, tris = {} }
+      local np, hasPatch, nt = tonumber(fields[5]), fields[6] == "1", tonumber(fields[7])
+      for i = 1, np do b.placed[i] = { tonumber(fields[7 + 2 * i - 1]), tonumber(fields[7 + 2 * i]) } end
+      if hasPatch then
+        b.patch = {}
+        local k = 0
+        for w in lines():gmatch("%S+") do
+          local v = tonumber(w)
+          if v >= 0 then b.patch[k] = v end
+          k = k + 1
+        end
+      end
+      for i = 1, nt do
+        local v, j = {}, 0
+        for w in lines():gmatch("%S+") do j = j + 1; v[j] = tonumber(w) end
+        b.tris[i] = { { v[1], v[2], v[3], v[4], v[5] }, { v[6], v[7], v[8], v[9], v[10] },
+                      { v[11], v[12], v[13], v[14], v[15] }, shade = v[16] }
+      end
+      list[#list + 1] = b
+    end
+    return list, tonumber(atlasW), tonumber(atlasH)
+  end
+
+  -- the whole build, inside a coroutine: tick() yields when its slice is spent
+  local function bridgeBuild(name, tick)
+    local conf = Bridge.BRIDGES[name]
+    local L = World.layout(name)
+    local io = L and bridgeIo(L)
+    if not io then return nil, "no layout data" end
+    local br = Bridge.read(io, conf, tick)
+    local blocks = Bridge.blocks(br, "cycling_road_" .. name:gsub("^LAYOUT_", ""):lower(), tick)
+    -- the atlas: each block at (ox + 1, oy + 1), framed by a copy of its edge
+    local cols, ox, oy = 1, 0, 0
+    local spots = {}
+    for i, b in ipairs(blocks) do
+      if oy + b.art.h + 2 > BRIDGE_ROWS then cols, ox, oy = cols + 1, ox + 18, 0 end
+      spots[i] = { ox, oy }
+      oy = oy + b.art.h + 2
+    end
+    local atlasW, atlasH = cols * 18, #blocks > 0 and (cols > 1 and BRIDGE_ROWS or oy) or 1
+    local bytes = {}
+    local pixels = {}
+    local function at(x, y) return (y * atlasW + x) * 4 end
+    for k = 0, atlasW * atlasH * 4 - 1 do pixels[k] = 0 end
+    local list = {}
+    for i, b in ipairs(blocks) do
+      local sx, sy = spots[i][1], spots[i][2]
+      local a = b.art
+      for y = -1, a.h do
+        for x = -1, 16 do
+          local cx, cy = math.max(0, math.min(15, x)), math.max(0, math.min(a.h - 1, y))
+          local o = (cy * 16 + cx) * 4
+          local d = at(sx + 1 + x, sy + 1 + y)
+          if a.px[o + 4] > 0 then
+            pixels[d], pixels[d + 1], pixels[d + 2], pixels[d + 3] = math.floor(a.px[o + 1] * 255 + 0.5),
+              math.floor(a.px[o + 2] * 255 + 0.5), math.floor(a.px[o + 3] * 255 + 0.5), 255
+          end
+        end
+      end
+      local mesh = Bridge.mesh(b, io.curb.height)
+      local tris = {}
+      for j, t in ipairs(mesh.tris) do
+        local nt = { shade = t.shade }
+        for k = 1, 3 do
+          local p = t[k]
+          nt[k] = { p[1], p[2], p[3], p[4] + sx + 1, p[5] + sy + 1 }
+        end
+        tris[j] = nt
+      end
+      list[i] = { name = b.name, ground = b.ground, top = b.top, placed = b.placed, patch = b.patch, tris = tris }
+      tick("atlas")
+    end
+    for k = 0, atlasW * atlasH * 4 - 1 do bytes[k + 1] = string.char(pixels[k]) end
+    return list, atlasW, atlasH, table.concat(bytes)
+  end
+
+  local function bridgeFinish(name, st, list, atlasW, atlasH, rgba, fromCache)
+    local res, why = bridgeModels(list, atlasW, atlasH, rgba)
+    if not res then st.error = why; return end
+    st.done, st.at, st.models, st.image = true, res.at, res.models, res.image
+    if not fromCache and Scene.cacheModels and Scene.modelCache then
+      Scene.modelCache.write(name .. ".bridge", bridgeSerialize(list, atlasW, atlasH))
+      Scene.modelCache.write(name .. ".bridge.rgba", rgba)
+    end
+  end
+
+  --- (internal) A layout's bridge job: started on first ask, read from the cache when it is
+  --- there.
+  local function bridgeJob(name)
+    local st = bridges[name]
+    if st then return st end
+    st = {}
+    bridges[name] = st
+    if not (Bridge and Bridge.BRIDGES[name] and World and Components) then st.error = "no bridge"; return st end
+    local c = Scene.cacheModels and Scene.modelCache
+    local src = c and c.read(name .. ".bridge")
+    local rgba = src and c.read(name .. ".bridge.rgba")
+    if src and rgba then
+      local okP, list, w, h = pcall(bridgeParse, src)
+      if okP and list and #rgba == w * h * 4 then
+        bridgeFinish(name, st, list, w, h, rgba, true)
+        st.cached = true
+        if st.done then return st end
+      end
+    end
+    local clock = love.timer and love.timer.getTime or os.clock
+    st.t0 = clock()
+    st.co = coroutine.create(function()
+      return bridgeBuild(name, function(label)
+        local t = clock()
+        -- (dev: Scene.bridgeWatch = seconds; every longer stretch between two ticks, the ticks'
+        -- labels either side of it)
+        if Scene.bridgeWatch then
+          if st.lastTick and t - st.lastTick > Scene.bridgeWatch then
+            st.gaps = st.gaps or {}
+            st.gaps[#st.gaps + 1] = ("%.0f ms %s -> %s"):format((t - st.lastTick) * 1000, tostring(st.lastLabel),
+              tostring(label))
+          end
+          st.lastTick, st.lastLabel = t, label
+        end
+        if st.budget and t - st.sliceStart > st.budget then
+          coroutine.yield()
+          st.lastTick = clock()
+        end
+      end)
+    end)
+    return st
+  end
+
+  --- (internal) Run a layout's bridge job for `budget` seconds (nil: to its end); `outer` is
+  --- called between slices (the relief's own tick, when it runs inside that build).
+  local function bridgeStep(name, budget, outer)
+    local st = bridgeJob(name)
+    local clock = love.timer and love.timer.getTime or os.clock
+    while st.co do
+      st.budget, st.sliceStart = budget or (outer and Scene.BRIDGE_SLICE) or nil, clock()
+      local ok, list, w, h, rgba = coroutine.resume(st.co)
+      if not ok then
+        st.error, st.co = tostring(list), nil
+      elseif coroutine.status(st.co) == "dead" then
+        st.co = nil
+        if list then
+          bridgeFinish(name, st, list, w, h, rgba, false)
+          st.ms = math.floor((clock() - st.t0) * 1000 + 0.5)
+        else
+          st.error = tostring(w)
+        end
+      elseif budget then
+        break
+      elseif outer then
+        outer()
+      end
+    end
+    return st
+  end
+
+  --- The bridge of a layout (LAYOUT_X) made ready, built now if it is not yet: { at = { [y * 4096
+  --- + x] = model }, models, image } or nil and why. tick (optional): the relief's, between slices.
+  function Scene.bridge(name, tick)
+    if not (Bridge and Bridge.BRIDGES[name]) then return nil, "no bridge" end
+    local st = bridgeStep(name, nil, tick)
+    if st.done then return st end
+    return nil, st.error
+  end
+  function Scene.hasBridge(name) return Bridge ~= nil and Bridge.BRIDGES[name] ~= nil end
+  --- (dev) A layout's bridge read afresh: its blocks (Bridge.blocks) and the curb's height, or nil.
+  function Scene._bridgeBlocks(name)
+    local L = World and World.layout(name)
+    local io = L and bridgeIo(L)
+    if not io then return nil end
+    local br = Bridge.read(io, Bridge.BRIDGES[name])
+    return Bridge.blocks(br, "cycling_road", nil), io.curb.height, br
+  end
+  function Scene._bridgeMesh(block, curbHeight) return Bridge.mesh(block, curbHeight) end
+  --- (dev) One slice of a layout's bridge job (budget seconds; nil: to its end); `fresh` starts it
+  --- over, the cache left unread ("cache": over, from the cache). Returns { done, cached, ms, error,
+  --- running, models }.
+  function Scene._bridgeJob(name, budget, fresh, watch)
+    if watch ~= nil then Scene.bridgeWatch = watch or nil end
+    if fresh then
+      bridges[name] = nil
+      local was = Scene.cacheModels
+      if fresh ~= "cache" then Scene.cacheModels = false end
+      bridgeJob(name)
+      Scene.cacheModels = was
+    end
+    local st = bridgeStep(name, budget)
+    return { done = st.done, cached = st.cached, ms = st.ms, error = st.error, running = st.co ~= nil,
+             models = st.models and #st.models or 0, gaps = st.gaps }
+  end
+
+  -- a placement's ground: its metatile, the drawing laid on it over it (one image per kind)
+  local bridgeGrounds = setmetatable({}, { __mode = "k" })
+  local function bridgeGround(md, src)
+    local per = bridgeGrounds[src]
+    if not per then per = {}; bridgeGrounds[src] = per end
+    local img = per[md]
+    if img ~= nil then return img or nil end
+    img = imageOf(16, 16, function(data)
+      for y = 0, 15 do
+        for x = 0, 15 do
+          local c = md.patch and md.patch[y * 16 + x]
+          local r, g, b
+          if c then
+            r, g, b = math.floor(c / 65536) / 255, math.floor(c / 256) % 256 / 255, c % 256 / 255
+          else
+            r, g, b = src.under(md.groundMid, x, y)
+            local r1, g1, b1, a1 = src.over(md.groundMid, x, y)
+            if a1 and a1 > 0.5 then r, g, b = r1, g1, b1 end
+          end
+          if r then data:setPixel(x, y, r, g, b, 1) end
+        end
+      end
+    end)
+    per[md] = img or false
+    return img
+  end
+
+  -- the bridges of the maps the window shows: every cell of one that has a block stands it
+  local function placeBridges(grid, NativeTileset, found, where)
+    hd.stats.sceneBridge, hd.stats.sceneBridgeError = nil, nil
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        if c.mid and not c.model then
+          local _, lx, ly, id = where(c.cx, c.cy)
+          local L = id and World.layout(id)
+          if L and L.name and Scene.hasBridge(L.name) then
+            local st, why = Scene.bridge(L.name)
+            if not st then
+              hd.stats.sceneBridgeError = L.name .. ": " .. tostring(why)
+            else
+              hd.stats.sceneBridge = ("%s: %d models%s"):format(L.name, #st.models,
+                st.cached and ", from the cache" or (st.ms and (", built in " .. st.ms .. " ms") or ""))
+              local md = st.at[ly * 4096 + lx]
+              local src = md and pixelSource(NativeTileset, c.pair)
+              if md and src then
+                local pl = { model = md, cx = c.cx, cy = c.cy, ground = bridgeGround(md, src) }
+                c.model = pl
+                c.top = md.tops["0,0"]
+                found[#found + 1] = pl
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+
   -- a pair that draws metatile m (of the given primary): a fence's reference metatile, which the
   -- run's own pair may not hold
   local refPairs
@@ -1054,6 +1390,11 @@ return function(deps)
       local okP, err = pcall(placeProps, grid, NativeTileset, found, where)
       if not okP then hd.stats.sceneBuildingError = "props: " .. tostring(err) end
     end
+    -- Route 110's Cycling Road (src/scene/models/bridge.lua)
+    if Bridge and World and where then
+      local okB, err = pcall(placeBridges, grid, NativeTileset, found, where)
+      if not okB then hd.stats.sceneBridgeError = tostring(err) end
+    end
     -- the objects of no fixed shape (hedges, fences, curbs, railings), found by their runs
     if Components then
       local okC, extra = pcall(placeComponents, grid, NativeTileset, found)
@@ -1147,6 +1488,16 @@ return function(deps)
         local L = World.layout(mapId)
         if L then World.roles(L) end
       end
+      -- (a bridge of this map or a neighbour's: read a slice a frame)
+      local L = World.layout(mapId)
+      local near = { L }
+      for _, nb in ipairs(L and World.neighbours(L) or {}) do near[#near + 1] = nb[1] end
+      for _, B in ipairs(near) do
+        if B and B.name and Scene.hasBridge(B.name) and not (bridges[B.name] and bridges[B.name].done) then
+          warmQueue[#warmQueue + 1] = { bridge = B.name }
+          n = n + 1
+        end
+      end
     end
     for _, spec in ipairs(Specs) do
       if spec._model == nil and not warmed[spec] then
@@ -1209,6 +1560,13 @@ return function(deps)
         end
       end
     end
+    -- (and a bridge's blocks, every cell of them)
+    if Scene.hasBridge(name) then
+      local st = Scene.bridge(name, tick)
+      for k in pairs(st and st.at or {}) do
+        out[(math.floor(k / 4096) + 4096) * 16384 + (k % 4096 + 4096)] = true
+      end
+    end
     modelCellsOf[name] = out
     return out
   end
@@ -1244,6 +1602,13 @@ return function(deps)
         n = n + 1
       end
     end
+    -- (and the bridges, a slice a frame)
+    for name in pairs(Bridge and Bridge.BRIDGES or {}) do
+      if not (bridges[name] and bridges[name].done) then
+        warmQueue[#warmQueue + 1] = { bridge = name }
+        n = n + 1
+      end
+    end
     return n
   end
   --- One model readied, from the frame hook. Returns how many are left.
@@ -1251,6 +1616,10 @@ return function(deps)
     local spec = table.remove(warmQueue, 1)
     if type(spec) == "function" then
       pcall(spec)
+    elseif type(spec) == "table" and spec.bridge then
+      -- (a bridge: a slice, and back to the head of the queue until it is done)
+      local ok, st = pcall(bridgeStep, spec.bridge, Scene.BRIDGE_SLICE)
+      if ok and st.co then table.insert(warmQueue, 1, spec) end
     elseif spec then
       local NativeTileset = req("src.core.game3.tileset_native")
       if NativeTileset then pcall(ready, spec, NativeTileset, layoutCtx()) end
