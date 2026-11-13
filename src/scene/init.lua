@@ -1112,6 +1112,32 @@ return function(deps)
   -- ── rooms: their walls and furniture (src/scene/models/interiors.lua) ──
   local Interiors, RoomSpecs = deps.Interiors, deps.RoomSpecs
   -- the layouts a room reader reads: io.layout(name) -> Interiors.layoutOf's, or nil
+  -- a layout no map is drawn with, which a script swaps into one (setmaplayoutindex): its cells
+  -- from the engine's own baked layout (metatile, collision, elevation), or nil
+  local function swappedBlocks(num, w, h)
+    local Dataset, NativePack = req("src.core.game3.dataset"), req("src.import.gba.native_pack")
+    local cache = Dataset and Dataset.cache()
+    if not (cache and NativePack and NativePack.decodeMidLayout) then return nil end
+    local root = "data/generated/gba/native"
+    local src = cache:read(root .. "/layout_files.lua")
+    local chunk = src and load(src, "=layout_files", "t", {})
+    local okF, files = pcall(chunk or error)
+    local key = okF and type(files) == "table" and files[num] or nil
+    local blob = key and cache:read(root .. "/layouts/" .. key .. ".mid")
+    local okD, d = pcall(NativePack.decodeMidLayout, blob)
+    -- (its grid padded past the layout's own size; its collision the engine's own code: blocked
+    -- or not is all a room reads of it)
+    local tw, th = d and (d.trueWidth or d.width), d and (d.trueHeight or d.height)
+    if not (okD and d and tw == w and th == h and d.width >= w and #d.cells >= d.width * h) then return nil end
+    local blocks = {}
+    for y = 0, h - 1 do
+      for x = 0, w - 1 do
+        local c = d.cells[y * d.width + x + 1]
+        blocks[y * w + x] = c.mid % 1024 + ((c.coll or 0) ~= 0 and 1024 or 0)
+      end
+    end
+    return blocks
+  end
   local function roomIo()
     local cache = {}
     return { layout = function(name)
@@ -1119,12 +1145,23 @@ return function(deps)
       cache[name] = false
       -- (a room nobody modelled by its number: "#61")
       local num = tonumber(tostring(name):match("^#(%d+)$"))
-      local L = World and (num and World.layout(num) or World.layout(name) or RoomSpecs.maps
-        and RoomSpecs.maps[name] and World.layout(RoomSpecs.maps[name]))
+      num = num or RoomSpecs.ids and RoomSpecs.ids[name]
+      local L = World and (num and World.layout(num) or World.layout(name))
+      local blocks
+      -- (a layout a script swaps into another's map: drawn with that map's tilesets)
+      local over = RoomSpecs.swaps and RoomSpecs.swaps[name]
+      if not L and over and num then
+        L = World.layout(RoomSpecs.ids[over] or over)
+        blocks = L and swappedBlocks(num, L.w, L.h)
+        if not blocks then return nil end
+      end
       local pair = L and World.pretArt(L)
       if not (L and pair and L.grid) then return nil end
-      local blocks, grid = {}, L.grid
-      for i = 0, L.w * L.h - 1 do blocks[i] = grid:byte(i * 2 + 1) + grid:byte(i * 2 + 2) * 256 end
+      if not blocks then
+        local grid = L.grid
+        blocks = {}
+        for i = 0, L.w * L.h - 1 do blocks[i] = grid:byte(i * 2 + 1) + grid:byte(i * 2 + 2) * 256 end
+      end
       local A = Interiors.layoutOf({ name = name, w = L.w, h = L.h, blocks = blocks }, pair)
       cache[name] = A
       return A
@@ -1164,7 +1201,8 @@ return function(deps)
     st.co = coroutine.create(function()
       for _, spec in ipairs(RoomSpecs) do
         local name = spec.interior.layout
-        local L = World.layout(name) or RoomSpecs.maps and RoomSpecs.maps[name] and World.layout(RoomSpecs.maps[name])
+        local num = RoomSpecs.ids and RoomSpecs.ids[name]
+        local L = num and World.layout(num) or World.layout(name)
         if L and L.id and not st.byId[L.id] then st.byId[L.id] = name end
         local ok, pieces, err = pcall(Interiors.room, spec, st.io, st.reg, tick)
         if ok and pieces then
@@ -1272,6 +1310,26 @@ return function(deps)
             end
           end
         end
+        -- (a map a script has swapped another layout into, its cells now that layout's: that room)
+        if name and RoomSpecs.swaps then
+          local function misses(A)
+            local n = 0
+            for k, c in pairs(e.at) do
+              local lx, ly = k % 4096, math.floor(k / 4096)
+              if lx < A.w and ly < A.h and c.mid ~= A.blocks[ly * A.w + lx] % 1024 then n = n + 1 end
+            end
+            return n
+          end
+          local here = misses(layoutA)
+          for swapName, base in pairs(RoomSpecs.swaps) do
+            if base == name and here > 0 then
+              local S = st.io.layout(swapName)
+              if S and S.w == layoutA.w and S.h == layoutA.h and misses(S) < here then
+                name, layoutA, here = swapName, S, misses(S)
+              end
+            end
+          end
+        end
         local key = name or layoutA.id
         local own = name or sameAs
         if not name and not st.everywhere[lid] then
@@ -1314,11 +1372,16 @@ return function(deps)
         end
         local others = st.reg.reusedPixels[key] or {}
         local RW = layoutA.w * 16
+        -- (a room read once for each state of its doors finds another room's piece once for each:
+        -- the same model on the same spot stands once)
+        local seen = {}
         for _, item in ipairs(list) do
           local pc, px, py, g, bare, patches = item[1], item[2], item[3], item[4], item[5], item[6]
           local w, h = pc.rect[3], pc.rect[4]
-          local stands = true
-          if pc.when then
+          local once = tostring(pc) .. (bare and "b" or "") .. ":" .. px .. ":" .. py
+          local stands = not seen[once]
+          seen[once] = true
+          if stands and pc.when then
             local wc = e.at[(py + pc.when[2]) * 4096 + px + pc.when[1]]
             stands = wc ~= nil and wc.mid == pc.when[3]
           end

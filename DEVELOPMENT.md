@@ -561,19 +561,27 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   art, tex }`. Images are `{ w, h, c = { [v * w + u] = colour } }` (nil clear); colours pret's
   (`World.pretArt`, the relief's `Art.pair`), so the specs' hex colours compare exactly. Python's
   ties are reproduced: Counter's order (first met), `_set_order` (`Art.setOrder` over tuple
-  hashes) and its compensated float sums (`Art.fsum`). A shared layout pret names for no map is
-  found by one map that uses it (`interior_specs.maps`); the engine keys a layout by pret's
-  number, which is what Emerald 3DS's file numbers them by. `init.lua`: `roomJob` reads every
+  hashes) and its compensated float sums (`Art.fsum`). The engine keys a layout by pret's number
+  (`data/layouts/layouts.json`'s order, which is also how Emerald 3DS's file numbers them), and a
+  layout many maps share is named for none of them, so `interior_specs.ids` gives each room's
+  number. A layout no map is drawn with, which a script swaps into one (`setmaplayoutindex`: the
+  lab with its table), is read off the engine's baked `native/layouts/<key>.mid`
+  (`interior_specs.swaps` names the map's own layout, for its tilesets), and `placeRooms` stands
+  it when the live cells match it better than the map's own layout. `init.lua`: `roomJob` reads every
   room in order in a coroutine (`Scene.ROOM_SLICE` a frame from the warm-up; `warm` queues it
   for an indoor map, `warmAll` always; to its end if a battle needs it first), `roomModel`
   builds a piece's model once, and `placeRooms` stands the pieces of the window's indoor layouts
   (own place, `placed`, `reused_at`, `bare_at`; a room's commonest floor and its own paint for
   a room nobody modelled) - pieces share cells, so a cell keeps the first piece's floor and the
-  tallest top. Not yet: the other 99 rooms, animated pieces (`anim`, `ribbon`), a cache.
+  tallest top; a room read once per state of its doors (Petalburg's gym) finds another room's
+  piece once per state, and the same model on the same spot stands once. 54 rooms so far (their
+  order up to `petalburg_gym_door4`); not yet: the other 48, animated pieces (`anim`, `ribbon`),
+  a cache.
   Checked against Emerald 3DS's own models: `tests/drivers/room_dump.lua` (`ROOM`: the last room
   read) writes every placement in each room's layout as their buildings.bin's dump does
-  (`bld_dump.py <bin> <layout number> out 0 0`); the Center's floors and the Mart match
-  triangle for triangle, colours and all (20, 23 and 11 placements, reuse included).
+  (`bld_dump.py <bin> <layout number> out 0 0`); all 50 layouts of the 54 rooms match triangle
+  for triangle, colours and all, reuse included (a few texels a centroid reads just past a
+  texture's edge are clear in both).
 - For an overworld view, unused by the battle scene: the deck tables (`Scene.decks(layout)`,
   export `sceneDecks`: `{ x, y, top, bottom, gate }` - Route 110's `Bridge.decks`, kept in its
   cache, and Fortree's `specs.decks`) and each model cell's shadow footprint
