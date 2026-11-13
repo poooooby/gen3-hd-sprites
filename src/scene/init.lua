@@ -300,7 +300,12 @@ return function(deps)
     local src = pixelSource(NativeTileset, ref.pair)
     if not src then return false end
     local art = Buildings.art(spec, ref, src)
-    local okM, mesh = pcall(Kernel.build, spec.parts())
+    -- (parts read off the drawing come with a texture of their own: the drawing and its bands)
+    local okM, mesh, tex = pcall(function()
+      local parts, t
+      if spec.parts_art then parts, t = spec.parts_art(art) else parts = spec.parts() end
+      return Kernel.build(parts), t
+    end)
     if not okM then
       hd.stats.sceneBuildingError = spec.name .. ": " .. tostring(mesh)
       return false
@@ -310,17 +315,18 @@ return function(deps)
     for _, c in ipairs(core) do
       if ref.template[c[2] * ref.w + c[1] + 1] >= 512 then primaryOnly = false end
     end
-    local image = imageOf(art.w, art.h, function(data)
-      local px = art.px
-      for y = 0, art.h - 1 do
-        for x = 0, art.w - 1 do
-          local o = (y * art.w + x) * 4
+    tex = tex or art
+    local image = imageOf(tex.w, tex.h, function(data)
+      local px = tex.px
+      for y = 0, tex.h - 1 do
+        for x = 0, tex.w - 1 do
+          local o = (y * tex.w + x) * 4
           data:setPixel(x, y, px[o + 1], px[o + 2], px[o + 3], px[o + 4])
         end
       end
     end)
     spec._model = { spec = spec, ref = ref, art = art, core = core, primaryOnly = primaryOnly,
-                    tris = mesh.tris, image = image }
+                    tris = mesh.tris, image = image, texW = tex.w, texH = tex.h }
     return spec._model
   end
 

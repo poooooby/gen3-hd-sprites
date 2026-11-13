@@ -847,7 +847,7 @@ local function planPyramidEmit(self, mesh)
     else
       local q = {}
       for k, p in ipairs({ a, b, c }) do q[k] = { p[1], p[2], p[3], p[1], 2 * az - p[3] - p[2] } end
-      mesh:tri(q[1], q[2], q[3], K.SHADE_BACK, self.name .. ".back")
+      mesh:tri(q[1], q[2], q[3], K.SHADE_BACK, self.name .. ".back~behind")
     end
   end
 end
@@ -884,7 +884,7 @@ local function platePrismEmit(self, mesh)
         for _, piece in ipairs(tilePieces(face, tile)) do
           local pts = {}
           for k, q in ipairs(piece) do pts[k] = { xa, ytop - q[2], z1 - q[1], q[3], q[4] } end
-          mesh:poly(pts, shade, self.name .. ".side")
+          mesh:poly(pts, shade, self.name .. ".side~behind")
         end
       end
     end
@@ -896,7 +896,7 @@ local function platePrismEmit(self, mesh)
     for _, piece in ipairs(tilePieces(flat, tile)) do
       local pts = {}
       for j, q in ipairs(piece) do pts[j] = { q[1], ytop - q[2], z0, q[3], q[4] } end
-      mesh:poly(pts, K.SHADE_BACK, self.name .. ".back")
+      mesh:poly(pts, K.SHADE_BACK, self.name .. ".back~behind")
     end
   end
 end
@@ -929,7 +929,7 @@ local function sectionPrismEmit(self, mesh)
       if nz < -0.05 and ny > 0.05 then
         local o = {}
         for k, p in ipairs(q) do o[k] = { p[1], p[2], p[3], p[1], 2 * zr - p[3] - p[2] } end
-        mesh:poly(o, K.SHADE_BACK, self.name .. ".back")
+        mesh:poly(o, K.SHADE_BACK, self.name .. ".back~behind")
       elseif ny + nz > 0.05 then
         projPoly(mesh, q, K.SHADE_ART, self.name)
       elseif ny > -0.5 then
@@ -941,7 +941,7 @@ local function sectionPrismEmit(self, mesh)
             local zz = abs(yb - ya) > 1e-6 and (za + (zb - za) * (yy - ya) / (yb - ya)) or za
             pts[k] = { t[1], yy, zz, t[3], t[4] }
           end
-          mesh:poly(pts, K.SHADE_BACK, self.name .. ".back")
+          mesh:poly(pts, K.SHADE_BACK, self.name .. ".back~behind")
         end
       end
     end
@@ -954,7 +954,7 @@ local function sectionPrismEmit(self, mesh)
       for _, piece in ipairs(tilePieces(flat, tile)) do
         local pts = {}
         for j, q in ipairs(piece) do pts[j] = { e[1], ytop - q[2], zf - q[1], q[3], q[4] } end
-        mesh:poly(pts, e[2], self.name .. ".side")
+        mesh:poly(pts, e[2], self.name .. ".side~behind")
       end
     end
   end
@@ -985,7 +985,7 @@ local function planHipEmit(self, mesh)
       mesh:poly(q, K.SHADE_ART, self.name)
     else
       for k, p in ipairs(f) do q[k] = { p[1], p[2], p[3], p[1], 2 * rz - p[3] - p[2] } end
-      mesh:poly(q, K.SHADE_BACK, self.name .. ".back")
+      mesh:poly(q, K.SHADE_BACK, self.name .. ".back~behind")
     end
   end
 end
@@ -1319,6 +1319,161 @@ function K.Decal(name, cells, vOffset, lift, boxes)
       mesh:poly(q, K.SHADE_ART, name .. ".decal")
     end
   end }
+end
+
+-- ── Parts read off the art ────────────────────────────────────────────────
+
+local function keyRGB(r, g, b) return floor(r * 255 + 0.5) * 65536 + floor(g * 255 + 0.5) * 256 + floor(b * 255 + 0.5) end
+
+--- The pixels of the ring's colours (keys, set) at a thing's foot: in each column, below its
+--- lowest pixel of another colour.
+function K.ringPixels(art, ring)
+  local out = {}
+  for x = 0, art.w - 1 do
+    local foot = -1
+    for y = 0, art.h - 1 do
+      local o = (y * art.w + x) * 4
+      if art.px[o + 4] >= 0.5 and not ring[keyRGB(art.px[o + 1], art.px[o + 2], art.px[o + 3])] then foot = y end
+    end
+    for y = foot + 1, art.h - 1 do
+      local o = (y * art.w + x) * 4
+      if art.px[o + 4] >= 0.5 and ring[keyRGB(art.px[o + 1], art.px[o + 2], art.px[o + 3])] then out[y * art.w + x] = true end
+    end
+  end
+  return out
+end
+
+--- The texture of a part read off its art, three bands of the drawing's size: the drawing without
+--- its ring; its ring alone; and the drawing grown past its outline with its own edge colours,
+--- which the faces no drawing shows are laid with, so no texel they read is a hole.
+function K.withRing(art, ring)
+  ring = ring or {}
+  local W, H = art.w, art.h
+  local out = { w = W, h = H * 3, px = {} }
+  for i = 1, W * H * 3 * 4 do out.px[i] = 0 end
+  local foam = K.ringPixels(art, ring)
+  local grown, order = {}, {}
+  for y = 0, H - 1 do
+    for x = 0, W - 1 do
+      local o = (y * W + x) * 4
+      if art.px[o + 4] >= 0.5 then
+        local idx = y * W + x
+        local dy = foam[idx] and H or 0
+        local d = ((y + dy) * W + x) * 4
+        for k = 1, 4 do out.px[d + k] = art.px[o + k] end
+        if not foam[idx] then
+          grown[idx] = { art.px[o + 1], art.px[o + 2], art.px[o + 3] }
+          order[#order + 1] = idx
+        end
+      end
+    end
+  end
+  local count = #order
+  local edge = order
+  while #edge > 0 and count < W * H do
+    local nxt = {}
+    for _, idx in ipairs(edge) do
+      local x, y = idx % W, floor(idx / W)
+      for _, n in ipairs({ { x + 1, y }, { x - 1, y }, { x, y + 1 }, { x, y - 1 } }) do
+        local i, j = n[1], n[2]
+        if i >= 0 and i < W and j >= 0 and j < H then
+          local nid = j * W + i
+          if not grown[nid] then
+            grown[nid] = grown[idx]
+            count = count + 1
+            nxt[#nxt + 1] = nid
+          end
+        end
+      end
+    end
+    edge = nxt
+  end
+  for idx, c in pairs(grown) do
+    local x, y = idx % W, floor(idx / W)
+    local d = ((y + 2 * H) * W + x) * 4
+    out.px[d + 1], out.px[d + 2], out.px[d + 3], out.px[d + 4] = c[1], c[2], c[3], 1
+  end
+  return out
+end
+
+--- A flat-faced part whose hidden faces ("~behind") read the texture `offset` rows down: the
+--- drawing's grown band (withRing).
+function K.Grown(part, offset)
+  return { name = part.name, emit = function(_, mesh)
+    local tmp = K.mesh()
+    part:emit(tmp)
+    for _, t in ipairs(tmp.tris) do
+      local a, b, c = t[1], t[2], t[3]
+      if t.tag and t.tag:find("~behind", 1, true) then
+        a = { a[1], a[2], a[3], a[4], a[5] + offset }
+        b = { b[1], b[2], b[3], b[4], b[5] + offset }
+        c = { c[1], c[2], c[3], c[4], c[5] + offset }
+      end
+      mesh:tri(a, b, c, t.shade, t.tag)
+    end
+  end }
+end
+
+--- A thing of leaves (a potted plant, bicycles) as a card at its foot facing the GBA camera, its
+--- drawing projected. `art` the piece's own image; `foot` the row it stands on; `voff` the rows
+--- below the model's drawing where the card's pixels are; `base` lifted onto what it stands on;
+--- `span` = { u0, u1, v0 } its extent where the art's own pixels are not all of it.
+function K.Card(name, art, foot, voff, base, span)
+  voff, base = voff or 0, base or 0
+  return { name = name, emit = function(_, mesh)
+    local u0, u1, v0
+    if span then
+      u0, u1, v0 = span[1], span[2], span[3]
+    else
+      local cmin, cmax, rmin = math.huge, -math.huge, math.huge
+      for v = 0, art.h - 1 do
+        for u = 0, art.w - 1 do
+          if art.px[(v * art.w + u) * 4 + 4] >= 0.5 then
+            cmin, cmax, rmin = min(cmin, u), max(cmax, u), min(rmin, v)
+          end
+        end
+      end
+      if cmin == math.huge then return end
+      u0, u1, v0 = cmin, cmax + 1, rmin
+    end
+    local f, b = foot, base
+    local h = f - v0
+    local q = {}
+    for k, p in ipairs({ { u0, b - 1, f + b }, { u1, b - 1, f + b }, { u1, b + h, f + b }, { u0, b + h, f + b } }) do
+      q[k] = { p[1], p[2], p[3], p[1], p[3] - p[2] + voff }
+    end
+    mesh:poly(q, K.SHADE_ART, name .. ".card")
+  end }
+end
+
+--- A superellipse plan polygon (x, z), its corners rounded.
+function K.roundedPlan(cx, cz, rx, rz, p, n)
+  p, n = p or 4, n or 32
+  local pts = {}
+  for k = 0, n - 1 do
+    local t = 2 * pi * k / n
+    local c, s_ = cos(t), sin(t)
+    local sc = c < 0 and -1 or 1
+    local ss = s_ < 0 and -1 or 1
+    pts[#pts + 1] = { cx + rx * sc * abs(c) ^ (2 / p), cz + rz * ss * abs(s_) ^ (2 / p) }
+  end
+  return pts
+end
+
+--- A plan polygon (x, z): the rectangle with its corners cut `cut`.
+function K.octagon(x0, x1, z0, z1, cut)
+  return { { x0 + cut, z0 }, { x1 - cut, z0 }, { x1, z0 + cut }, { x1, z1 - cut }, { x1 - cut, z1 },
+           { x0 + cut, z1 }, { x0, z1 - cut }, { x0, z0 + cut } }
+end
+
+--- A spec's flat-faced parts on the drawing with its grown band: parts_art(art) -> parts, texture.
+function K.flat(make)
+  return function(art)
+    local tex = K.withRing(art, {})
+    local parts = {}
+    for i, p in ipairs(make(art)) do parts[i] = K.Grown(p, 2 * art.h) end
+    return parts, tex
+  end
 end
 
 -- ── Model ─────────────────────────────────────────────────────────────────

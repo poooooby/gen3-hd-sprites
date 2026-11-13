@@ -258,11 +258,32 @@ do
   check(#mesh.tris == 2 and proj, "a wall the drawing shows is the drawing projected (u = X, v = Z - Y)")
   -- every spec builds (the same triangles as Emerald 3DS's generator: see DEVELOPMENT.md)
   local built, bad = 0, nil
-  for _, sp in ipairs(specs) do
-    local okB, m = pcall(K.build, sp.parts())
-    if okB and #m.tris > 0 then built = built + 1 else bad = sp.name end
+  -- (a spec read off its drawing gets a made-up one: opaque but for a clear top-left corner)
+  local function fakeArt(w, h)
+    local a = { w = w * 16, h = h * 16, px = {} }
+    for v = 0, a.h - 1 do
+      for u = 0, a.w - 1 do
+        local o = (v * a.w + u) * 4
+        a.px[o + 1], a.px[o + 2], a.px[o + 3], a.px[o + 4] = (u % 7) / 7, (v % 5) / 5, 0.5, (u + v > 6) and 1 or 0
+      end
+    end
+    return a
   end
-  check(built == #specs and #specs >= 40, "every building spec builds (" .. built .. "/" .. #specs .. ", " .. tostring(bad) .. ")")
+  local artSpecs = 0
+  for _, sp in ipairs(specs) do
+    local okB, m = pcall(function()
+      if sp.parts_art then
+        artSpecs = artSpecs + 1
+        local parts, tex = sp.parts_art(fakeArt(sp.rect[3], sp.rect[4]))
+        assert(not tex or (tex.w and tex.h))
+        return K.build(parts)
+      end
+      return K.build(sp.parts())
+    end)
+    if okB and #m.tris > 0 then built = built + 1 else bad = sp.name .. " " .. tostring(m) end
+  end
+  check(built == #specs and #specs >= 70 and artSpecs >= 20,
+    "every building spec builds (" .. built .. "/" .. #specs .. ", " .. tostring(bad) .. ")")
   local lh
   for _, sp in ipairs(specs) do if sp.name == "littleroot_house_w" then lh = K.build(sp.parts()) end end
   check(lh and #lh.tris == 614, "Littleroot's house: 614 triangles, as the generator makes it")

@@ -474,11 +474,17 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   0-based edge indices stay 0-based (`edges = { [0] = ... }`), `Strip`'s `repeat` is `rep`.
 - `models/specs.lua`: the 52 exterior specs built from explicit parts (`voxel_building_specs.py`),
   numbers unchanged: houses, Centers, Marts, gyms, Devon, the Safari Zone, Slateport's market,
-  museum and halls. Not yet: the specs read off their art (`parts_art`: tents, boats, Lilycove's
-  store, Fortree, Sootopolis, the Frontier), `components` (hedges, fences, walls, railings),
-  `props` (rocks), `kit` (Rustboro's blocks), bridges and interiors. Every ported spec builds the
-  same triangles as the Python generator (compare counts and coordinate sums with its
-  `vb.Mesh`; all 52 matched).
+  museum and halls; and 22 `parts_art` specs (`parts_art(art) -> parts, texture`) of flat faces
+  over the drawing (`K.flat`: the texture is `K.withRing`'s three bands, the hidden faces
+  `K.Grown` onto the grown band) or cards: Lilycove's store, museum, hall and harbour, the cable
+  car stations, the Mirage Tower, Trainer Hill, Cozmo's antenna, Rydel's bikes and most of the
+  Battle Frontier. Not yet: the parts_art specs built from HeightSolid/Volume, hulls, lathes or
+  voxel_fortree (tents, boats, lanterns, parasols, the Game Corner, Fortree, Sootopolis,
+  Pacifidlog, the League, the Space Center, Rustboro's fountain, the Dome and Pike), `props`
+  (rocks: found by raw upper-layer tile numbers, which the engine's atlases do not keep),
+  bridges and interiors. Every ported spec builds the same triangles as the Python generator
+  (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on the same
+  synthetic drawing; all 74 matched).
 - `buildings.lua`: in the game, per spec once per session: its reference template (the
   reference layout read through `Map.ensureMidLayout(Runtime._game, "EM_" .. name)`), its art
   from the reference pair's atlases (`imageData` = the lower layer, `overImageData` the upper;

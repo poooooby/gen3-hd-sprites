@@ -14,6 +14,8 @@
 --   keep = { { u0, v0, u1, v1 }, ... }   only these rectangles of the drawing are the model's
 --   owned = { [i .. "," .. j] = true }   only these cells of the rectangle are the model's
 --   ground_px = true   ground is told apart pixel by pixel (the ground painted into its blocks)
+--   parts_art = function(art) -> parts, texture   parts read off the drawing (a texture of its
+--                own: the drawing with its grown band, K.flat), instead of parts
 
 return function(K)
   local Prism, Proj, Tile, Band, Strip, HipRoof = K.Prism, K.Proj, K.Tile, K.Band, K.Strip, K.HipRoof
@@ -1097,6 +1099,243 @@ return function(K)
       parts = function() return { stall(56, 41.5, { { 24, 3, 39, 8 }, { 9, 12, 12, 20 }, { 44, 12, 53, 20 } }) } end },
   }
 
+  -- ── the third reading: parts read off the drawing (parts_art(art) -> parts, texture) ──
+
+  local PlanPrism, PlanPyramid, PlatePrism, SectionPrism, PlanHip = K.PlanPrism, K.PlanPyramid, K.PlatePrism,
+    K.SectionPrism, K.PlanHip
+  local rounded, octagon, flat, Card = K.roundedPlan, K.octagon, K.flat, K.Card
+
+  local function battle_factory()
+    local side = { 100, 108, 144 }
+    local parts = { PlanPrism("mid", octagon(87, 153, 101, 144, 8), 0, 101, side),
+                    PlanPrism("fence", { { 0, 60 }, { 8, 60 }, { 8, 144 }, { 0, 144 } }, 0, 14, { 0, 8, 144 }) }
+    for _, t in ipairs({ { 8, 64, 8 }, { 176, 232, 8 }, { 60, 92, 6 }, { 148, 180, 6 } }) do
+      parts[#parts + 1] = PlanPrism("tower", octagon(t[1], t[2], 96, 136, t[3]), 0, 80, side)
+    end
+    parts[#parts + 1] = PlanPrism("fence", { { 232, 60 }, { 240, 60 }, { 240, 144 }, { 232, 144 } }, 0, 14, { 232, 240, 144 })
+    return parts
+  end
+
+  local function battle_pyramid()
+    local parts = {}
+    for i = 0, 12 do
+      parts[#parts + 1] = PlanPrism("tier", { { 8 + 8 * i, 56 + 4 * i }, { 232 - 8 * i, 56 + 4 * i },
+        { 232 - 8 * i, 160 - 4 * i }, { 8 + 8 * i, 160 - 4 * i } }, 8 * i, 8 * i + 8, { 60, 76, 160 - 4 * i })
+    end
+    parts[#parts + 1] = PlanPrism("steps", { { 100, 160 }, { 140, 160 }, { 140, 176 }, { 100, 176 } }, 0, 4, { 104, 112, 176 })
+    parts[#parts + 1] = PlanPrism("portico", { { 40, 140 }, { 200, 140 }, { 200, 160 }, { 40, 160 } }, 0, 20, { 60, 76, 160 })
+    parts[#parts + 1] = PlanPrism("gate", { { 104, 120 }, { 136, 120 }, { 136, 160 }, { 104, 160 } }, 0, 40, { 60, 76, 160 })
+    return parts
+  end
+
+  -- drops the Battle Frontier sand's loose specks from a drawing
+  local function sand_specks(make)
+    local specks = {}
+    for _, c in ipairs({ { 238, 230, 164 }, { 213, 180, 106 } }) do
+      specks[math.floor(c[1] * 31 / 255 + 0.5) * 1024 + math.floor(c[2] * 31 / 255 + 0.5) * 32 + math.floor(c[3] * 31 / 255 + 0.5)] = true
+    end
+    return function(art)
+      for i = 0, art.w * art.h - 1 do
+        local o = i * 4
+        if art.px[o + 4] >= 0.5 then
+          local k = math.floor(art.px[o + 1] * 31 + 0.5) * 1024 + math.floor(art.px[o + 2] * 31 + 0.5) * 32
+            + math.floor(art.px[o + 3] * 31 + 0.5)
+          if specks[k] then art.px[o + 1], art.px[o + 2], art.px[o + 3], art.px[o + 4] = 0, 0, 0, 0 end
+        end
+      end
+      return make(art)
+    end
+  end
+
+  local HALL_FRONT, HALL_HIGH = 80, 38
+  local HALL_VAULT = { { { 40, 38 }, { 72, 38 }, { 71, 39 }, { 70, 41 }, { 69, 42 }, { 67, 44 }, { 66, 45 }, { 46, 45 },
+    { 44, 43 }, { 42, 41 } } }
+  local HALL_VAULT_PORCH = { HALL_VAULT[1], { { 38, 38 }, { 74, 38 }, { 74, 40 }, { 38, 40 } } }
+  local HALL_KEEP = { { 38, 9, 74, 16 }, { 0, 16, 112, 80 } }
+  local function frontier_hall(art, gate, vault)
+    vault = vault or HALL_VAULT
+    local side = { 14, 20, HALL_FRONT }
+    local back = HALL_FRONT - 26
+    local parts = {}
+    local whole = rounded(56, (back + HALL_FRONT) / 2, 56, 13, 12.0, 48)
+    if not gate then
+      parts[1] = PlanPrism("hall", whole, 0, HALL_HIGH, side)
+    else
+      local function cut(clamp)
+        local pts = {}
+        for k, p in ipairs(whole) do pts[k] = { clamp(p[1], p[2]) } end
+        local out = {}
+        for k, p in ipairs(pts) do
+          local prev = pts[(k - 2) % #pts + 1]
+          if not (p[1] == prev[1] and p[2] == prev[2]) then out[#out + 1] = p end
+        end
+        return out
+      end
+      parts[1] = PlanPrism("hall", cut(function(x, z) return math.min(x, 40), z end), 0, HALL_HIGH, side)
+      parts[2] = PlanPrism("hall", cut(function(x, z) return math.max(x, 72), z end), 0, HALL_HIGH, side)
+      parts[3] = PlanPrism("lintel", { { 40, back }, { 72, back }, { 72, HALL_FRONT }, { 40, HALL_FRONT } }, 24, HALL_HIGH, side)
+    end
+    for _, poly in ipairs(vault) do
+      parts[#parts + 1] = PlatePrism("vault", poly, back, HALL_FRONT, { 40, 46, HALL_FRONT })
+    end
+    return parts, art
+  end
+
+  local ARCH_FRONT, ARCH_DEPTH, ARCH_PILLAR = 80, 12, 44
+  local function frontier_arch(art)
+    local W = art.w
+    local side = { 2, 6, ARCH_FRONT }
+    local back = ARCH_FRONT - ARCH_DEPTH
+    local parts = {}
+    for _, x0 in ipairs({ 0, W - 16 }) do
+      parts[#parts + 1] = PlanPrism("pillar", { { x0, back }, { x0 + 16, back }, { x0 + 16, ARCH_FRONT }, { x0, ARCH_FRONT } },
+        0, ARCH_PILLAR, side)
+    end
+    local band = {}
+    for u = 8, W - 7, 2 do
+      local rows = {}
+      local rmin = math.huge
+      for _, x in ipairs({ u - 1, u }) do
+        for v = 0, ARCH_FRONT - 1 do
+          if art.px[(v * art.w + x) * 4 + 4] >= 0.5 then rows[#rows + 1] = v; rmin = math.min(rmin, v) end
+        end
+      end
+      local finish = -math.huge
+      for _, v in ipairs(rows) do if v < rmin + 40 then finish = math.max(finish, v) end end
+      band[u] = { back - rmin, math.max(0, ARCH_FRONT - finish - 1) }
+    end
+    for u = 8, W - 9, 2 do
+      local ta, ba, tb, bb = band[u][1], band[u][2], band[u + 2][1], band[u + 2][2]
+      parts[#parts + 1] = PlatePrism("arch", { { u, ba }, { u + 2, bb }, { u + 2, tb }, { u, ta } }, back, ARCH_FRONT, side)
+    end
+    return parts
+  end
+
+  local function cozmo_house(art)
+    local parts = pitched_house(64, { 16, 25 }, { 25, 29 }, { 29, 51 }, { 35, 43 }, { 51, 55 }, 78, { 10, 18 }, { 9, 17 }, { 3, 7 })
+    local roof = parts[2]
+    local mast = { w = art.w, h = art.h, px = {} }
+    for v = 0, art.h - 1 do
+      for u = 0, art.w - 1 do
+        local o = (v * art.w + u) * 4
+        local inside = u >= 32 and u < 57 and v >= 2 and v < 32
+        for k = 1, 4 do mast.px[o + k] = inside and art.px[o + k] or 0 end
+      end
+    end
+    local t = tan(rad(roof.pitch))
+    local z = (32 + roof.ye + roof.zf * t) / (1 + t)
+    parts[#parts + 1] = Card("antenna", mast, z)
+    return parts, art
+  end
+
+  local mirage = function()
+    local parts = {
+      PlanPrism("base", rounded(24, 80, 25.0, 16.6, 3.5, 40), 0, 24, { 2, 8, 96 }),
+      PlanPrism("mid", rounded(24, 80, 23.6, 14.4, 2.0, 40), 24, 47, { 2, 8, 72 }),
+      PlanPrism("top", rounded(24, 80, 18.4, 11.0, 2.0, 40), 47, 72, { 8, 14, 49 }, { shrink = 1.0 }),
+    }
+    local ks = { 0.97, 0.91, 0.84, 0.76, 0.68, 0.61, 0.55 }
+    for i, y in ipairs({ 72, 74, 76, 78, 80, 82, 84 }) do
+      parts[#parts + 1] = PlanPrism("crown", rounded(24, 80, 18.4 * ks[i], 11.0 * ks[i], 2.0, 40), y, y + 2, { 8, 14, 49 })
+    end
+    parts[#parts + 1] = PlanPyramid("tip", rounded(24, 80, 10.1, 6.05, 2.0, 24), 86, { 24, 92, 80 })
+    return parts
+  end
+
+  local function hall(o) return function(art) return frontier_hall(art, o and o.gate, o and o.vault) end end
+  local HALL_OWNED = {}
+  for j = 1, 4 do for i = 0, 6 do HALL_OWNED[i .. "," .. j] = true end end
+  for i = 2, 4 do HALL_OWNED[i .. ",0"] = true end
+  local FRONTIER_HOUSE_GROUND = { 0x001, 0x170, 0x005, 0x0E0, 0x002, 0x007, 0x101 }
+
+  local artSpecs = {
+    { name = "parked_bikes", layout = "LAYOUT_MAUVILLE_CITY", rect = { 26, 3, 3, 1 }, ground = { GRASS, 0x004 },
+      ground_px = true, parts_art = function(art) return { Card("bikes", art, 15) } end },
+    { name = "fallarbor_cozmo_house", layout = "LAYOUT_FALLARBOR_TOWN", rect = { 5, 13, 4, 5 }, ground = { 0x279 },
+      parts_art = cozmo_house },
+    { name = "mirage_tower", layout = "LAYOUT_ROUTE111", rect = { 18, 53, 3, 6 }, ground = { 0x251, 0x259, 0x121, 0x25A },
+      parts_art = flat(mirage) },
+    { name = "cable_car_station", layout = "LAYOUT_ROUTE112", rect = { 27, 23, 5, 5 }, ground = { 0x271, 0x210, 0x218, 0x21A },
+      parts_art = flat(function() return { PlatePrism("station", { { 0, 0 }, { 0, 34 }, { 56, 34 }, { 80.5, 9.5 }, { 80.5, 0 } },
+        34, 80, { 2, 10, 80 }) } end) },
+    { name = "cable_car_station_top", layout = "LAYOUT_MT_CHIMNEY", rect = { 14, 32, 6, 5 }, ground = { 0x271 },
+      parts_art = flat(function() return { PlatePrism("station", { { 96, 0 }, { 96, 34 }, { 40, 34 }, { 8.5, 2.5 }, { 8.5, 0 } },
+        34, 80, { 86, 94, 80 }) } end) },
+    { name = "trainer_hill_entrance", layout = "LAYOUT_ROUTE111", rect = { 29, 106, 5, 6 },
+      ground = { 0x070, 0x073, 0x071, 0x07B, 0x075, 0x089 }, keep = { { 0, 0, 80, 82 } },
+      parts_art = flat(function() return {
+        PlanPrism("hill", { { 0, 36 }, { 80, 36 }, { 80, 82 }, { 0, 82 } }, 0, 36, { 2, 10, 82 }),
+        PlanPyramid("lantern", { { 57, 56 }, { 48.5, 66 }, { 31.5, 66 }, { 23, 56 }, { 31.5, 46 }, { 48.5, 46 } }, 36, { 40, 48, 56 }) } end) },
+    { name = "department_store", layout = "LAYOUT_LILYCOVE_CITY", rect = { 23, 0, 9, 7 }, ground = { GRASS, 0x233, 0x22B },
+      parts_art = flat(function() return { PlanPrism("store", { { 0, 48 }, { 144, 48 }, { 144, 112 }, { 0, 112 } }, 0, 112,
+        { 2, 10, 112 }, { top = Tile(4, 4, 20, 20) }) } end) },
+    { name = "lilycove_museum", layout = "LAYOUT_LILYCOVE_CITY", rect = { 7, 1, 10, 6 }, ground = { GRASS, 0x002, 0x208, 0x207, 0x004 },
+      parts_art = flat(function() return {
+        PlanPrism("museum", { { 0, 52 }, { 160, 52 }, { 160, 96 }, { 0, 96 } }, 0, 44, { 2, 10, 96 }),
+        PlanPrism("museum_hall", { { 40, 60 }, { 120, 60 }, { 120, 94 }, { 40, 94 } }, 0, 68, { 42, 50, 94 }) } end) },
+    { name = "lilycove_contest_hall", layout = "LAYOUT_LILYCOVE_CITY", rect = { 20, 18, 7, 7 },
+      ground = { GRASS, 0x233, 0x22B, 0x23B }, ground_px = true,
+      parts_art = flat(function() return { PlanPrism("hall", { { 8, 38 }, { 104, 38 }, { 112, 46 }, { 112, 104 }, { 104, 112 },
+        { 8, 112 }, { 0, 104 }, { 0, 46 } }, 0, 30, { 16, 40, 112 }) } end) },
+    { name = "lilycove_harbor", layout = "LAYOUT_LILYCOVE_CITY", rect = { 9, 27, 7, 6 }, ground = { GRASS, 0x233, 0x22B, 0x23B },
+      parts_art = flat(function() return { SectionPrism("harbor", { { 96, 0 }, { 96, 34 }, { 98, 36 }, { 98, 44 }, { 56, 55 },
+        { 14, 44 }, { 14, 36 }, { 16, 34 }, { 16, 0 } }, 0, 112, { 2, 10, 96 }) } end) },
+    { name = "battle_factory", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 4, 30, 15, 9 },
+      ground = { 0x189, 0x170, 0x172, 0x19A, 0x198, 0x180, 0x181, 0x05E }, ground_px = true,
+      keep = { { 0, 4, 232, 144 }, { 88, 0, 152, 4 }, { 232, 44, 240, 144 } }, parts_art = flat(battle_factory) },
+    { name = "frontier_house", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 43, 2, 3, 4 },
+      ground = FRONTIER_HOUSE_GROUND, ground_px = true,
+      parts_art = flat(function() return { PlanPrism("house", rounded(24, 49.5, 24.6, 14.2, 10.0), 0, 36, { 10, 18, 63 }) } end) },
+    { name = "frontier_house_glass", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 52, 41, 3, 4 },
+      ground = FRONTIER_HOUSE_GROUND, ground_px = true, match_rows = { 1, 4 },
+      parts_art = flat(function() return { PlanPrism("house", rounded(24, 49.5, 24.6, 14.2, 10.0), 0, 36, { 20, 28, 63 }) } end) },
+    { name = "frontier_house_long", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 44, 41, 6, 4 },
+      ground = FRONTIER_HOUSE_GROUND, ground_px = true,
+      parts_art = flat(function() return { PlanPrism("house", rounded(48, 49.5, 48.6, 14.2, 14.0, 48), 0, 36, { 10, 18, 63 }) } end) },
+    { name = "frontier_hall", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 7, 24, 7, 5 },
+      ground = { 0x001, 0x079, 0x0C7, 0x016, 0x3B6 }, ground_px = true, owned = HALL_OWNED, keep = HALL_KEEP,
+      parts_art = hall() },
+    { name = "frontier_hall_porch", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 32, 8, 7, 5 },
+      ground = { 0x0C6, 0x0A9, 0x00F, 0x001 }, ground_px = true, owned = HALL_OWNED, keep = HALL_KEEP,
+      parts_art = hall({ vault = HALL_VAULT_PORCH }) },
+    { name = "frontier_hall_gate", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 23, 61, 7, 5 },
+      ground = { 0x05E, 0x05D, 0x055, 0x170 }, ground_px = true, owned = HALL_OWNED,
+      keep = { HALL_KEEP[1], { 0, 16, 112, 56 }, { 0, 56, 40, 80 }, { 72, 56, 112, 80 } },
+      parts_art = hall({ gate = true }) },
+    { name = "frontier_arch", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 24, 46, 5, 5 },
+      ground = { 0x05E, 0x05D, 0x05F }, ground_px = true,
+      parts_art = function(art) return flat(function() return frontier_arch(art) end)(art) end },
+    { name = "battle_tower", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 8, 0, 17, 16 },
+      ground = { 0x001, 0x201, 0x203, 0x202 }, ground_px = true,
+      keep = { { 0, 0, 272, 248 }, { 0, 248, 100, 256 }, { 172, 248, 272, 256 } },
+      parts_art = flat(function() return {
+        PlanPrism("wing", { { 0, 136 }, { 46, 136 }, { 46, 248 }, { 0, 248 } }, 0, 320, { 20, 40, 248 }, { top = Tile(20, 0, 40, 16) }),
+        PlanPrism("wing", { { 226, 136 }, { 272, 136 }, { 272, 248 }, { 226, 248 } }, 0, 320, { 232, 252, 248 }, { top = Tile(20, 0, 40, 16) }),
+        PlanPrism("shaft", { { 46, 136 }, { 226, 136 }, { 226, 232 }, { 46, 232 } }, 0, 320, { 60, 76, 196 }, { top = Tile(20, 0, 40, 16) }),
+        PlanPrism("lobby", { { 46, 232 }, { 226, 232 }, { 226, 248 }, { 46, 248 } }, 0, 36, { 60, 76, 248 }) } end) },
+    { name = "battle_pyramid", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 51, 5, 15, 11 },
+      ground = { 0x121, 0x129, 0x120, 0x128, 0x001, 0x003 }, ground_px = true,
+      keep = { { 0, 0, 240, 32 }, { 16, 32, 224, 48 }, { 8, 48, 232, 160 }, { 16, 160, 224, 176 } },
+      parts_art = sand_specks(flat(battle_pyramid)) },
+    { name = "battle_arena_gate", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 36, 36, 7, 4 },
+      ground = { 0x0C6, 0x001, 0x003, 0x00E, 0x1D9, 0x1D8, 0x1DA }, ground_px = true,
+      parts_art = flat(function() return {
+        PlanPrism("gate", { { 0, 36 }, { 32, 36 }, { 32, 64 }, { 0, 64 } }, 0, 36, { 10, 20, 64 }),
+        PlanPrism("gate", { { 80, 36 }, { 112, 36 }, { 112, 64 }, { 80, 64 } }, 0, 36, { 90, 100, 64 }),
+        PlanPrism("lintel", { { 32, 36 }, { 80, 36 }, { 80, 64 }, { 32, 64 } }, 24, 36, { 40, 48, 64 }) } end) },
+    { name = "battle_palace", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 43, 49, 5, 8 },
+      ground = { 0x004, 0x017, 0x00E, 0x0C6, 0x003 }, ground_px = true, keep = { { 0, 16, 80, 96 }, { 8, 96, 72, 128 } },
+      parts_art = flat(function() return {
+        PlanPrism("hall", { { 0, 40 }, { 80, 40 }, { 80, 104 }, { 0, 104 } }, 0, 18, { 72, 78, 104 }),
+        PlanPrism("eave", { { -2, 34 }, { 82, 34 }, { 82, 106 }, { -2, 106 } }, 18, 20, { 72, 78, 106 }),
+        PlanHip("hall_roof", -2, 82, 34, 106, 20, 23, 57, 71, 47),
+        PlanPrism("porch", { { 18, 88 }, { 62, 88 }, { 62, 128 }, { 18, 128 } }, 0, 42, { 20, 26, 128 }),
+        PlanPrism("plinth", { { 8, 116 }, { 18, 116 }, { 18, 128 }, { 8, 128 } }, 0, 32, { 10, 16, 128 }),
+        PlanPrism("plinth", { { 62, 116 }, { 72, 116 }, { 72, 128 }, { 62, 128 } }, 0, 32, { 64, 70, 128 }),
+        PlanPrism("porch_eave", { { 14, 90 }, { 66, 90 }, { 66, 130 }, { 14, 130 } }, 42, 44, { 20, 26, 130 }),
+        PlanHip("porch_roof", 14, 66, 90, 130, 44, 31, 49, 111, 55) } end) },
+  }
+
   -- kits: buildings of one kit, any size, found by their top-left corner, their top row, its end
   -- and the corner column's foot (Rustboro's stone and olive blocks), each modelled from its own
   -- drawing. parts(width, height, meta) in pixels; meta.unit: a ventilation unit on the roof
@@ -1106,5 +1345,6 @@ return function(K)
     { name = "rustboro_olive", secondary = "rustboro", corner = 0x220, top = { [0x221] = true, [0x222] = true },
       finish = { [0x223] = true, [0x23F] = true }, foot = 0x240, ground = { 0x2BB, 0x2C3, GRASS }, parts = olive_block },
   }
+  for _, sp in ipairs(artSpecs) do specs[#specs + 1] = sp end
   return specs
 end
