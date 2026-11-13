@@ -34,6 +34,11 @@
 --                          the four shades under the palette shader (DMG, CLASSIC, a custom
 --                          palette) is drawn as its shades for that shader to colour (spec.shades).
 --
+--   BattleState:draw        a state over a battle (a script's message): Gold draws the
+--                          stack again where the panel stands, the battle first. A battle this
+--                          frame filled the screen with is not drawn again, and what follows is
+--                          moved to where its UI went (hd.uiMap); Game2:draw counts the frames.
+--
 -- A battle with a black or world background is drawn the game's usual way (Game2 paints those
 -- around the panel after it is drawn).
 
@@ -103,6 +108,14 @@ function Gen2.prepare(Engine, hd)
   local okW, World = pcall(require, "src.world.gen2.World")
   local drawPeople = okW and type(World) == "table" and type(World.drawPeople) == "function"
     and World.drawPeople or nil
+  -- (optional: without them a state over a filled battle is drawn the game's own way, over the
+  -- battle drawn again where the panel stood)
+  local okG, Game2 = pcall(require, "src.core.Game2")
+  local gameDraw = okG and type(Game2) == "table" and type(Game2.draw) == "function" and Game2.draw or nil
+  local battleDraw = type(BattleState.draw) == "function" and BattleState.draw or nil
+  -- this frame (counted by Game2:draw), and where it showed a filled battle's UI
+  local frame = 0
+  local shown = { battle = nil, frame = -1, x = 0, y = 0, sx = 1, sy = 1 }
   -- (optional: without them those screens' Pokemon are drawn the game's own way)
   local screens = {}
   for _, name in ipairs({ "src.ui.gen2.SummaryMenu", "src.ui.gen2.PokedexMenu" }) do
@@ -224,7 +237,16 @@ function Gen2.prepare(Engine, hd)
       real.draw(cv, obx or bx, oby or by, 0, osx or scale, osy or scale)
       real.setScissor()
     end
+    local cur = hd.done[c]
     local okC, done = pcall(hd.composite, c, blit, bx, by, scale, scale, box, view)
+    -- a filled screen: where its UI went (a state drawn over the battle goes there too: over a
+    -- WIDE battle, where the game puts it, the 160-wide panel's place in the middle of its 304)
+    if okC and done and cur and hd.uiMap.cur == cur and gameDraw and battleDraw then
+      local m = hd.uiMap
+      local dx = (cw - 160) / 2
+      shown.battle, shown.frame, shown.x, shown.y, shown.sx, shown.sy = battle, frame, m.x + dx * m.sx, m.y,
+        m.sx, m.sy
+    end
     if not okC then
       hd.fail("composite: " .. tostring(done))
       local cur = hd.done[c]
@@ -241,6 +263,31 @@ function Gen2.prepare(Engine, hd)
   end
 
   return function()
+    if gameDraw and battleDraw and not ours[Game2.draw] then
+      Game2.draw = function(...)
+        frame = frame + 1
+        return gameDraw(...)
+      end
+      ours[Game2.draw] = true
+    end
+    -- A state over the battle (a script's message): Gold draws the stack again where the panel
+    -- stands, the battle first. A battle this frame filled the screen with is on it already, so
+    -- it is not drawn again; what is drawn over it is moved to where its UI went (its text box
+    -- over the battle's own).
+    if gameDraw and battleDraw and not ours[BattleState.draw] then
+      BattleState.draw = function(self, ...)
+        if shown.battle == self and shown.frame == frame then
+          local G = love.graphics
+          G.origin()
+          G.translate(shown.x, shown.y)
+          G.scale(shown.sx, shown.sy)
+          hd.stats.overBattle = (hd.stats.overBattle or 0) + 1
+          return
+        end
+        return battleDraw(self, ...)
+      end
+      ours[BattleState.draw] = true
+    end
     if not ours[drawWidescreen] then
       BattleState.drawWidescreen = function(self, winW, winH, ...)
         if self:wideLayout() or not hd.enabled.battle or hd.failed or not whitePaper(self) then

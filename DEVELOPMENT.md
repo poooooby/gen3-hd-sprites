@@ -108,7 +108,13 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   tile panel would stand): its field (`WideBattle.drawField`) in `drawScene`, the UI seam, then
   `drawTopHud` / `drawBottomHud` under the exit fade's palette; docked to the window
   (`WideBattle.docked`, the EXTENDED HUD) it is drawn the game's way. A black or world background
-  (`Game2:paintBattleSurround` paints those around the panel afterwards) is drawn the game's way. The field has no low-res canvas either: `World:draw` draws the map and
+  (`Game2:paintBattleSurround` paints those around the panel afterwards) is drawn the game's way.
+  A state over a battle (a script's message: the party, the PACK and the battle's other screens
+  are opaque and cover it) makes Gold draw the stack again where the panel stands, the battle
+  first (`BattleState:draw`). Once the adapter has filled the screen with the battle that frame
+  (`hd.uiMap` is this pass's; `Game2:draw` is wrapped to count frames), that draw is skipped and
+  the transform moved to where the battle's UI went, so the message box lands on the battle's
+  own (over a WIDE battle, 72 canvas pixels in, the 160-wide panel's place in its 304). The field has no low-res canvas either: `World:draw` draws the map and
   people straight to the window at its zoom, already at window resolution. So the adapter wraps
   `World:drawPeople` in a **direct** field pass (`hd.beginDirect("field")` / `hd.endDirect()`):
   a tagged image is drawn in place at its spec's `scale` about its pivot (`lowPivot`, or the

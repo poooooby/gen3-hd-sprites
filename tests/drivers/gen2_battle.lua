@@ -1,8 +1,9 @@
 -- Driver: a Gen 2 battle with WoobleView (Gold, Silver, Crystal). Puts the player on Route 29 with
 -- a small party, starts a wild battle (GEN2_FOE, default ONIX), waits for the FIGHT menu and
 -- screenshots it in each window size (HD_SIZES, default 1920x1080), with Fill Screen on and off,
--- logging WoobleView's stats; GEN2_LAYOUTS=og,wide shoots each battle layout. Run from the engine
--- root:
+-- logging WoobleView's stats; GEN2_LAYOUTS=og,wide shoots each battle layout. GEN2_MENUS=1 also
+-- opens the menus over the battle (PKMN: the party, then a summary; PACK; a text box) and shoots each with
+-- Fill Screen on and off. Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_IDENTITY=gold-dev POKEPORT_GAME=gold POKEPORT_TOUCH=0 \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen2_battle.lua love .
 
@@ -78,6 +79,63 @@ local function body(game, log)
           tostring(fill), stat("zoom"), stat("fill"), stat("uiScale"), stat("composites"), stat("failed")))
       end
       hd.setFill(true)
+    end
+  end
+  -- GEN2_MENUS=1: the menus over the battle, from its action menu (FIGHT PKMN / PACK RUN)
+  if env("GEN2_MENUS") then
+    local names = {}
+    for name, m in pairs(package.loaded) do
+      if type(m) == "table" and name:match("^src%.ui%.") then names[m] = name end
+    end
+    local function top()
+      local t = game.stack:top()
+      local mt = t and getmetatable(t)
+      return t and (names[mt] or (mt and names[mt.__index])) or tostring(t)
+    end
+    local function both(name)
+      for _, fill in ipairs({ true, false }) do
+        hd.setFill(fill)
+        U.wait(6)
+        U.shot(game, ("%s/menu_%s_%s.png"):format(dir, name, fill and "fill" or "nofill"))
+      end
+      hd.setFill(true)
+      log(("menu %s (%s, %d states): composites %s failed %s"):format(name, top(), #game.stack.states,
+        stat("composites"), stat("failed")))
+    end
+    local function back()
+      for _ = 1, 20 do
+        if game.stack:top() == battle and battle.phase == "menu" then return true end
+        U.tap(game, "b")
+        U.wait(10)
+      end
+      log("stuck at " .. top())
+      return false
+    end
+    local function press(btn, n)
+      for _ = 1, n or 1 do U.tap(game, btn); U.wait(8) end
+    end
+    -- PKMN
+    press("right"); press("a"); U.wait(30)
+    both("party")
+    press("a"); U.wait(10)
+    both("party_choice")
+    press("a"); U.wait(30)
+    both("summary")
+    if back() then
+      -- PACK
+      press("left"); press("down"); press("a"); U.wait(30)
+      both("pack")
+      back()
+    end
+    -- a text box over the battle (a state of its own, as a script's message is)
+    if game.say then
+      game:say("A message over\nthe battle.")
+      U.wait(40)
+      both("textbox")
+      for _ = 1, 6 do
+        if game.stack:top() == battle then break end
+        press("a")
+      end
     end
   end
   -- GEN2_MOVES=PSYCHIC,EARTHQUAKE: those moves' animations (the player's turn), shot at
