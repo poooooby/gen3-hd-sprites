@@ -154,8 +154,9 @@ Open **OPTIONS → MODS → WoobleView**.
   and railings stand in 3D too. Signs, street lamps and posts stand as little solids of their own
   pixels, and Kanto's trees as flat cut-outs of their overworld art. In Emerald the land has its
   shape too: cliffs, terraces, ledges, stairs and the rocks at sea rise as the map draws them,
-  read off your own cartridge the first time you play (it builds quietly in the background for a
-  minute or so while you walk, then stays on disk). Rocks in the other games, and the buildings
+  and the land past the map's edges carries on at their height (a cave's rock, a crater's rim),
+  all read off your own cartridge the first time you play (it builds quietly in the background
+  for a minute or so while you walk, then stays on disk). Rocks in the other games, and the buildings
   not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on the ground
   as the game draws them. Indoors, the few rooms not rebuilt show their furniture flat, but for
   the pieces they share with the rooms that are. A battle with no overworld around it, or no open ground near you,

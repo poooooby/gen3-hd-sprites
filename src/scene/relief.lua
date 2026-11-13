@@ -245,7 +245,8 @@ end
 
 --- A model as the renderer reads it: { layouts = { [id] = { id, base, w, h, drawn, belt, ease,
 --- easeRows, faceTile, cells, cuts = { [y * w + x] = { variant, foot, ground, wall, sides } } } },
---- variants } (ground and wall nil for none; sides with the record's flags in bits 8-15).
+--- variants, edges } (ground and wall nil for none; sides with the record's flags in bits 8-15;
+--- edges: the hand marks' edge fills, as Relief.read gives them).
 function Relief.view(M)
   local layouts = {}
   for id, t in pairs(M.layouts) do
@@ -279,7 +280,28 @@ function Relief.view(M)
     for _, w in ipairs(t.order) do if not best or t.n[w] > t.n[best] then best = w end end
     layouts[lay].faceTile = best
   end
-  return { layouts = layouts, variants = M.variants }
+  return { layouts = layouts, variants = M.variants, edges = M.edges or {} }
+end
+
+--- The edge fill past a map's edge at cell (lx, ly) of it (outside it), as Emerald 3DS's
+--- VoxelRelief_EdgeFillAt finds it: { metatile, water, hasTop, top (pixels over the map's base) },
+--- or nil. Which of the stretch's four metatiles: phased from the map's corner as the game's
+--- border block is; past a corner, the west or east edge's first, then the north or south one's.
+function Relief.edgeFillAt(edges, layoutId, w, h, lx, ly)
+  if not edges or #edges == 0 or w <= 0 or h <= 0 then return nil end
+  local cx = lx < 0 and 0 or lx >= w and w - 1 or lx
+  local cy = ly < 0 and 0 or ly >= h and h - 1 or ly
+  local index = band(lx, 1) + 2 * band(ly, 1)
+  local function fill(edge, along)
+    for _, e in ipairs(edges) do
+      if e[1] == layoutId and e[2] == edge and (e[4] < 0 or (along >= e[4] and along <= e[5])) then
+        return { metatile = e[7 + index], water = band(rshift(e[3], 4 + index), 1) ~= 0,
+                 hasTop = band(e[3], 2) ~= 0, top = e[6] }
+      end
+    end
+  end
+  return lx < 0 and fill(1, cy) or lx >= w and fill(2, cy) or ly < 0 and fill(4, cx)
+    or ly >= h and fill(8, cx) or nil
 end
 
 --- Read a relief.bin for the renderer (Relief.view of its model), or nil and why.

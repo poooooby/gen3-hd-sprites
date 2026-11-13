@@ -57,6 +57,10 @@ return function(deps)
     if not layout then return nil end
     local function inside(L, x, y) return x >= 0 and y >= 0 and x < (L.width or 0) and y < (L.height or 0) end
     local env = { def = def, indoor = INDOOR_KINDS[tostring(def.kind)] == true }
+    -- a room (Emerald 3DS's `indoor`: MAP_TYPE_INDOOR or MAP_TYPE_SECRET_BASE), ending in black
+    -- past its edges; a cave ends in its border as a route does
+    local mapType = tonumber(def.mapType)
+    if mapType then env.walled = mapType == 8 or mapType == 9 else env.walled = env.indoor end
     function env.mid(cx, cy) return Map.worldMidAt(cx, cy, def) end
     local W, H = layout.width or 0, layout.height or 0
     -- a connected map's cell, found as the engine finds its art (Map.worldMidAt's fromDir: the
@@ -2456,7 +2460,8 @@ return function(deps)
       for i = 0, grid.w - 1 do
         local c = grid.rows[j][i]
         if c.rmap then
-          c.mapLift = (c.rmap.rel - h0) / 16
+          c.rmap.lift = (c.rmap.rel - h0) / 16
+          c.mapLift = c.rmap.lift
           c.lifted = c.g ~= nil
           -- (for the stage search: its ground's height at its middle, tiles; rock or stairs)
           c.liftT = c.mapLift + Relief.centre(c.g) / 16
@@ -2803,14 +2808,16 @@ return function(deps)
       hd.stats.sceneReliefRun = st .. (why and (" (" .. tostring(why) .. ")") or "")
     end
     hd.stats.sceneModels = ("%d from the cache, %d built"):format(Scene.modelsFromCache, Scene.modelsBuilt)
+    local maps
     if R then
-      local okR, maps = pcall(placeRelief, grid, env, R, px, py)
+      local okR, placedMaps = pcall(placeRelief, grid, env, R, px, py)
+      maps = okR and placedMaps or nil
       if okR then
         local n, ids = 0, {}
         for j = 0, grid.h - 1 do
           for i = 0, grid.w - 1 do if grid.rows[j][i].g then n = n + 1 end end
         end
-        for _, m in pairs(maps) do
+        for _, m in pairs(placedMaps) do
           if m.L then ids[#ids + 1] = m.L.id .. "@" .. (m.rel or 0) end
         end
         table.sort(ids)
@@ -2821,46 +2828,85 @@ return function(deps)
           pl.dy = c and c.dy or 0
         end
       else
-        hd.stats.sceneReliefError = tostring(maps)
+        hd.stats.sceneReliefError = tostring(placedMaps)
       end
     end
-    -- the border round the battle map (Emerald 3DS's belt, voxel_mesh_builder.c VoxelMesh_EmitBorder):
-    -- a cell past every map stands two courses of the border block at the level of the map's
-    -- nearest edge cell; a border of water lies flat at the level of the map's sea nearest it
-    if not env.indoor then
+    -- the border round the battle map (Emerald 3DS's belt, voxel_mesh_builder.c VoxelMesh_EmitBorder,
+    -- BorderWaterLevel, VoxelMesh_BorderLevel): every cell past every map, but in a room (its
+    -- black filler; a cave has its border). Its metatile is the border block's, or where the map's
+    -- hand marks fill that edge (relief_fixes.json "edges"), the fill's. Levels and shifts in
+    -- tiles as the cells' (`base`: the battle map's base there):
+    --   a belt of water lies flat at the level of the map's sea nearest it along the edge (the
+    --     edge cell's when it is water), or at a fill's top;
+    --   a belt of land stands two courses at the level of the map's edge cell nearest it (`steps`),
+    --     or with its top at a fill's top (its shift the edge cell's still), or at the base past a
+    --     sea edge;
+    --   a map whose marks give its belt courses (a cave carved out of the rock, Lavaridge in its
+    --     crater) lays it as its drawing: `drawn` courses at the base, that many rows south.
+    if not env.walled then
       local W, H = env.W or 0, env.H or 0
-      local function edgeCell(cx, cy)
-        return grid.at(math.max(0, math.min(W - 1, cx)), math.max(0, math.min(H - 1, cy)))
+      local ring = R and maps and maps[env.def]
+      local RL = ring and ring.L
+      local base = ring and ring.lift or 0
+      local drawn = RL and RL.belt or 0
+      local edges = R and R.edges
+      local C = Render.BORDER_COURSES
+      local function inRing(cx, cy) return cx >= 0 and cy >= 0 and cx < W and cy < H end
+      local function fillAt(cx, cy)
+        return RL and Relief.edgeFillAt(edges, RL.id, W, H, cx, cy) or nil
       end
+      local function metatileAt(cx, cy)
+        local f = fillAt(cx, cy)
+        if f then return f.metatile end
+        return env.borderMid(cx, cy)
+      end
+      local function edgeOf(cx, cy)
+        return math.max(0, math.min(W - 1, cx)), math.max(0, math.min(H - 1, cy))
+      end
+      local function liftOf(o) return o and o.liftT or base end
       for j = 0, grid.h - 1 do
         for i = 0, grid.w - 1 do
           local c = grid.rows[j][i]
           if not c.rmap and c.coll == nil and not env.where(c.cx, c.cy) then
-            local m = env.borderMid(c.cx, c.cy)
-            local e = edgeCell(c.cx, c.cy)
+            local m = metatileAt(c.cx, c.cy)
+            local ex, ey = edgeOf(c.cx, c.cy)
+            local e = grid.at(ex, ey)
+            local f = fillAt(c.cx, c.cy)
             -- (mids[h]: the block's metatile h rows north, its courses drawn as the game tiles it)
-            local b = { mid = m, water = env.waterMid(m), level = 0,
-                        mids = { [0] = m, [1] = env.borderMid(c.cx, c.cy - 1) } }
+            local b = { mid = m, water = drawn == 0 and env.waterMid(m), level = base, shift = base,
+                        drawn = drawn, courses = drawn > 0 and drawn or C, base = base,
+                        mids = { [0] = m, [1] = metatileAt(c.cx, c.cy - 1) } }
             if b.water then
-              -- the map's sea nearest it along the edge
-              local w = e and e.kind == "water" and e or nil
-              if e and not w then
-                local alongY = c.cx < 0 or c.cx >= W
-                for k = 1, 12 do
-                  for _, sgn in ipairs({ -1, 1 }) do
-                    local o = alongY and grid.at(e.cx, e.cy + sgn * k) or grid.at(e.cx + sgn * k, e.cy)
-                    if not w and o and o.rmap and o.kind == "water" then w = o end
+              if f and f.hasTop then
+                b.level, b.shift = base + f.top / 16, liftOf(e)
+              else
+                -- the map's sea nearest it along the edge
+                local w = e and e.kind == "water" and e or nil
+                if e and not w then
+                  local alongY = c.cx < 0 or c.cx >= W
+                  for k = 1, 12 do
+                    local ax, ay = alongY and ex or ex - k, alongY and ey - k or ey
+                    local bx, by = alongY and ex or ex + k, alongY and ey + k or ey
+                    local a, bb = grid.at(ax, ay), grid.at(bx, by)
+                    if inRing(ax, ay) and a and a.kind == "water" then w = a
+                    elseif inRing(bx, by) and bb and bb.kind == "water" then w = bb end
+                    if w then break end
                   end
-                  if w then break end
                 end
+                if w then b.level, b.shift = liftOf(w), liftOf(w) end
               end
-              b.level = w and w.liftT or 0
-            elseif e and e.kind ~= "water" then
-              b.level = e.liftT or 0
+            elseif drawn == 0 then
+              if f and f.hasTop and not f.water then
+                b.level, b.shift, b.steps = base + f.top / 16 - C, liftOf(e), true
+              elseif e and e.kind ~= "water" then
+                b.level, b.shift, b.steps = liftOf(e), liftOf(e), true
+              end
             end
             c.border = b
+            -- (a fill's metatile is the cell's: the trees' pass reads it)
+            if f then c.mid = m end
             c.dy = b.level
-            c.lifted = not b.water
+            c.lifted = true
             -- (for the stage search: two courses tall, as Emerald 3DS counts a cell past the map)
             if not b.water then c.top = 2 end
           end
@@ -2870,7 +2916,7 @@ return function(deps)
     phase("relief")
     local stage = Stage.search(Camera, grid, {
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
-      void = env.indoor,
+      void = env.walled,
     })
     if not stage or stage.score < Stage.FLOOR then return nil, "no stage" end
     local cards = 0

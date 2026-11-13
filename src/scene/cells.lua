@@ -36,7 +36,12 @@ local MB_CYCLING_ROAD_PULL_DOWN_GRASS = 0xD1
 
 --- The kind of one cell.
 function Cells.kindOf(env, coll, beh)
-  if coll == nil then return env.indoor and "void" or "blocked" end
+  -- (past every map: a room's black filler, or the border - a cave's too)
+  if coll == nil then
+    local walled = env.walled
+    if walled == nil then walled = env.indoor end
+    return walled and "void" or "blocked"
+  end
   local b = tonumber(beh)
   if b == MB_TALL_GRASS or b == MB_LONG_GRASS or b == MB_CYCLING_ROAD_PULL_DOWN_GRASS then return "grass" end
   if b == MB_SAND or b == MB_DEEP_SAND or b == MB_SHALLOW_WATER then return "sand" end

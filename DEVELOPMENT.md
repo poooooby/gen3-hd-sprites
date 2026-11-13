@@ -683,14 +683,28 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `opt.models(layoutName)`, the cells the building models own (`Scene.modelCells`: every spec
   placed over the whole layout). The whole chain, export → terraces → the last passes → encode,
   equals Emerald 3DS's shipped relief.bin byte for byte.
-- The border round the battle map (Emerald 3DS's `VoxelMesh_EmitBorder`): `init.lua` marks
-  each cell past every map (`cell.border`: the border block's metatiles, tiled as the engine
-  tiles it, `env.borderMid`; water or not, `env.waterMid`; its level, the map's nearest edge
-  cell's, or for water the map's sea nearest it along the edge), and `render.lua` stands it
-  `Render.BORDER_COURSES` (2) courses tall: its top read from the row its courses rise over,
-  faces only where it meets the map or water, steps down to a lower border cell, a north wall
-  over a lower row behind. Water lies flat, trees are trees. The stage search counts it two
-  tall. Belts and edge fills (a map's own border height, caves) are not drawn yet.
+- The border round the battle map (Emerald 3DS's `VoxelMesh_EmitBorder`, `BorderWaterLevel`,
+  `VoxelMesh_BorderLevel`, `EmitBorderSteps`, `EmitBorderNorth`): `init.lua` marks each cell
+  past every map, but in a room (`env.walled`: Emerald 3DS's `indoor`, MAP_TYPE_INDOOR or
+  SECRET_BASE from `def.mapType`; a cave has its border, and past its edges the stage search
+  reads border, not void). `cell.border`: its metatile (the border block's, tiled as the engine
+  tiles it, `env.borderMid`, or where the map's hand marks fill that edge the fill's,
+  `Relief.edgeFillAt` over the relief's `edges`: phased from the map's corner, the west or east
+  edge first past a corner); water or not (`env.waterMid`); `level` and `shift` (tiles, the
+  cells' frame; `base` is the battle map's base there, `ring.lift`): water at the map's sea
+  nearest it along the edge or a fill's top; land at the map's nearest edge cell's level
+  (`steps`), a fill's top less two courses (its shift still the edge cell's), or the base past a
+  sea edge; and `drawn`/`courses`, a map's own belt (`L.belt`: Lavaridge 2, Rusturf Tunnel 3)
+  laid as its drawing, that many rows south, its top its own drawing and no faces.
+  `render.lua` draws it in Emerald 3DS's frame (heights and rows over the base, so a north
+  wall's bands and its run-on's rows fall where theirs do) and puts it in ours: water flat,
+  land `Render.BORDER_COURSES` (2) courses (its top read from the row they rise over, faces only
+  where it meets the map or water), steps down to a lower belt cell, the north wall up from the
+  row behind, a band a level, that row's top run on to it and capped down the courses beside the
+  map. `EmitSeamSkirt`'s belt cases: a map's edge cell under the belt north, west or east of it
+  hangs a wall of its own drawing, point by point of its lattice, up to the belt; south of it a
+  belt of trees has its drawing run on to the belt. Trees are trees. The stage search counts the
+  belt two tall. Not ported: the skirts between two maps at different levels.
 - The build's cost, measured in the engine at 3 ms slices: about 75 s for a whole cartridge.
   The solver's per-cell bookkeeping is kept as numbers (each canvas cell's counts packed, its
   commonest region worked out where counted; sub-tiles packed), not as tables: a million small

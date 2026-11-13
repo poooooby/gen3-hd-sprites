@@ -828,5 +828,102 @@ do
     "room: a piece drawn again tile for tile in a later room stands there, on that room's floor")
 end
 
+-- ------------------------------------------------------------- the border
+do
+  -- a cave ends in its border, a room in black
+  local cave = fakeEnv({ "..." }, true)
+  cave.walled = false
+  check(Cells.build(cave, -1, 0, 1, 1).at(-1, 0).kind == "blocked", "a cave (not walled): past the map, its border")
+  -- the hand marks' edge fills: { layout, edge, flags, first, last, top, m0..m3 }
+  local Relief = dofile("src/scene/relief.lua")
+  local edges = {
+    { 7, 1, 2, -1, -1, 32, 10, 11, 12, 13 },        -- west, all of it, top 32
+    { 7, 4, 2 + 16 * 2, 2, 3, -80, 20, 21, 22, 23 }, -- north, columns 2-3, metatile 1 water
+  }
+  local f = Relief.edgeFillAt(edges, 7, 6, 5, -1, 2)
+  check(f and f.metatile == 11 and f.hasTop and f.top == 32 and not f.water,
+    "edge fill: west of the map, phased from its corner as the border block is")
+  local g = Relief.edgeFillAt(edges, 7, 6, 5, 3, -2)
+  check(g and g.metatile == 21 and g.water and g.top == -80, "...north, in its stretch; its water bit")
+  check(Relief.edgeFillAt(edges, 7, 6, 5, 1, -1) == nil, "...north, past its stretch: none")
+  local h = Relief.edgeFillAt(edges, 7, 6, 5, -1, -1)
+  check(h and h.metatile == 13, "...past a corner: the west edge's first")
+  check(Relief.edgeFillAt(edges, 8, 6, 5, -1, 2) == nil, "...another map's: none")
+
+  -- the emitter: a 3x3 map in a window two rows deep north, one round the rest
+  local function img(name) return { name = name, getDimensions = function() return 256, 256 end } end
+  local under, over = img("under"), img("over")
+  local function q(x, y) return { getViewport = function() return x, y, 16, 16 end } end
+  local tiles = function()
+    return { image = under, overImage = over, slot = function(mid) return mid end,
+             quad = function() return q(0, 0) end, overQuad = function() return q(16, 0) end }
+  end
+  local function setup(make)
+    local grid = Cells.build(fakeEnv({ "...", "...", "..." }), -1, -2, 5, 6)
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        if c.coll == nil then
+          c.border = make(c)
+          c.lifted, c.dy, c.up = true, c.border.level, nil
+        end
+      end
+    end
+    return Render.vertices(grid, tiles, 0, 0).lower[under] or {}
+  end
+  local function land(level, shift, extra)
+    local b = { mid = 7, water = false, level = level, shift = shift, base = 0, drawn = 0, courses = 2,
+                steps = true, mids = { [0] = 7, [1] = 7 } }
+    for k, v in pairs(extra or {}) do b[k] = v end
+    return b
+  end
+  -- the quads (6 vertices) whose every vertex passes `p`
+  local function count(l, p)
+    local n = 0
+    for k = 1, #l, 6 do
+      local all = true
+      for v = k, k + 5 do if not p(l[v]) then all = false end end
+      if all then n = n + 1 end
+    end
+    return n
+  end
+  local S = Render.SHADE
+  local l1 = setup(function() return land(0, 0) end)
+  check(count(l1, function(v) return near(v[2], 2) and v[1] >= 1 and v[1] <= 2 and v[3] >= -1 and v[3] <= 0 end) == 1,
+    "border: a cell stands two courses at its level, its top two up")
+  check(count(l1, function(v) return near(v[6], S.south) and near(v[3], 0) and v[1] >= 1 and v[1] <= 2 end) == 2,
+    "...its south face, a course at a time, where it meets the map")
+  check(count(l1, function(v) return near(v[6], S.south) and near(v[3], -1) end) == 0,
+    "...none against the belt behind it")
+  -- a belt laid as the drawing: three courses, three rows south, no faces
+  local l2 = setup(function() return land(0, 0, { drawn = 3, courses = 3, steps = false }) end)
+  check(count(l2, function(v) return near(v[2], 3) and v[1] >= 1 and v[1] <= 2 and v[3] >= 2 and v[3] <= 3 end) == 1,
+    "a belt laid as drawn: its top its courses up, as many rows south")
+  check(count(l2, function(v) return v[6] < 0.99 end) == 0, "...and no faces: the map's own close the steps")
+  -- water at a fill's top, its shift the edge cell's
+  local l3 = setup(function(c)
+    return { mid = 9, water = true, level = 0.5, shift = 0, base = 0, drawn = 0, courses = 2, mids = { [0] = 9 } }
+  end)
+  check(count(l3, function(v) return near(v[2], 0.5) and v[1] >= 1 and v[1] <= 2 and v[3] >= -1 and v[3] <= 0 end) == 1,
+    "a belt of water lies flat at its level, its shift rows south")
+  check(count(l3, function(v) return v[6] < 0.99 and v[2] >= 0.5 end) == 0, "...and shows no faces")
+  -- steps, the north wall, the skirt: (1, -1) a level up, its west and north neighbours at 0
+  local l4 = setup(function(c)
+    if c.cx == 1 and c.cy == -1 then return land(1, 1) end
+    return land(0, 0)
+  end)
+  check(count(l4, function(v) return near(v[6], S.west) and near(v[1], 1) and v[2] >= 0 and v[2] <= 1
+    and v[3] >= 0 and v[3] <= 1 end) == 1, "border steps: a face down to the lower cell west of it")
+  check(count(l4, function(v) return near(v[6], S.north) and near(v[3], 0) and v[2] >= 2 and v[2] <= 3 end) == 1,
+    "...a north wall from the row behind's courses up to its own, a band a level")
+  check(count(l4, function(v) return near(v[6], 1) and near(v[2], 2) and v[1] >= 1 and v[1] <= 2
+    and v[3] >= -1 and v[3] <= 0 end) == 1, "...that row's top run on to it")
+  check(count(l4, function(v) return near(v[6], S.south) and v[1] >= 1 and v[1] <= 2 and near(v[3], 0)
+    and v[2] >= 0 and v[2] <= 1 end) == 4,
+    "skirt: the map's edge cell closes the step up to the belt over it, point by point of its lattice")
+  check(count(l1, function(v) return near(v[6], S.south) and near(v[3], 0) and v[2] <= 1.0001 and v[1] >= 1
+    and v[1] <= 2 end) == 1, "...none where the belt stands at the edge's level (only the belt's own course)")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

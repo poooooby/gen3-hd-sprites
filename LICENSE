@@ -99,8 +99,12 @@ The battle scene's terrain relief (src/scene/relief.lua) adapts Emerald 3DS's re
 and runtime (3ds_port/src/voxel/voxel_relief.c: lattices, cut tiles, seam steps) and how its mesh
 builder and atlas draw a lifted cell (voxel_mesh_builder.c: the cell's drawing on its lattice,
 cut tiles' flat layers and run-on ground, cliff walls, a back's north face; voxel_atlas.c: a cut
-tile's cleared background). Changes: rewritten in Lua for LOVE; no lighting; one texture of the
-drawings a battle's window lays.
+tile's cleared background), and the border round the map (src/scene/render.lua and init.lua:
+voxel_mesh_builder.c's VoxelMesh_EmitBorder, BorderWaterLevel, VoxelMesh_BorderLevel,
+EmitBorderSteps and EmitBorderNorth - its courses, steps and north walls, a belt laid as its
+map's drawing, the hand marks' edge fills in place of the border block - and the belt cases of
+EmitSeamSkirt, the walls from a map's edge up to it). Changes: rewritten in Lua for LOVE; no
+lighting; one texture of the drawings a battle's window lays.
 
 The relief solver (src/scene/relief_solve.lua, relief_art.lua, relief_input.lua,
 relief_drawn.lua, relief_shape.lua, relief_cuts.lua, relief_world.lua) adapts Emerald 3DS's
