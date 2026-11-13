@@ -1364,6 +1364,6 @@ return function(K)
   }
   for _, sp in ipairs(artSpecs) do specs[#specs + 1] = sp end
   -- for the specs of round things (src/scene/models/solid_specs.lua)
-  specs.helpers = { flat_block = flat_block, ProjLathe = ProjLathe, GRASS = GRASS }
+  specs.helpers = { flat_block = flat_block, ProjLathe = ProjLathe, ProjDome = ProjDome, GRASS = GRASS }
   return specs
 end

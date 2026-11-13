@@ -32,11 +32,28 @@ Props.OBJECTS = {
     grid = { { 88, 89 }, { 104, 105 } } },
   sea_stack_fallarbor = { tileset = "general", secondary = "fallarbor", palette = 11,
     grid = { { false, 65, 68, { 69, true, 11 } }, { 80, 81, 84, 85 }, { 128, 129, 132, 133 }, { 144, 145, 148, 149 } } },
+  -- the Battle Frontier's flags along its walls: the cloth three tiles across and two down (the
+  -- tiles the game animates, 218-223 of the secondary tileset), the pole two tiles under its west
+  -- end, each side's tileset its own copy of them
+  frontier_flag_east = { land = true, tileset = "general", secondary = "battlefrontieroutsideeast", palette = 11,
+    grid = { { 730, 731, 732 }, { 733, 734, 735 }, { 746, false, false }, { 762, false, false } } },
+  frontier_flag_west = { land = true, tileset = "general", secondary = "battlefrontieroutsidewest", palette = 11,
+    grid = { { 730, 731, 732 }, { 733, 734, 735 }, { 746, false, false }, { 762, false, false } } },
+  -- Slateport market's goods, each a cell of the secondary tileset's upper layer over whatever
+  -- paving it stands on
+  basket_green = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 518, 519 }, { 534, 535 } } },
+  basket_orange = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 516, 517 }, { 532, 533 } } },
+  basket_red = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 514, 515 }, { 530, 531 } } },
+  urn = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 614, 615 }, { 630, 631 } } },
+  fruit = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 736, 737 }, { 738, 739 } } },
 }
 
--- The props the scene models, in the specs' order: each a Mound (src/scene/models/solids.lua)
--- `rise` times as tall as deep, its lattice `step`, `ring` the colours round its foot on the
--- water (laid flat, never lifted), on the `ground` given.
+-- The props the scene models, in the specs' order. `shape`: a Mound (the default;
+-- src/scene/models/solids.lua) `rise` times as tall as deep, its lattice `step`, `ring` the
+-- colours round its foot on the water (laid flat, never lifted); "lathe" (ProjLathe, its centre
+-- moved by the variant's half-cell offset), "dome" (ProjDome, likewise) or "flag" (a card standing
+-- at the pole's foot over the whole grid, its cloth `live_tiles` following the game's animation).
+-- `clip_art`: every triangle cut to the drawing's box.
 Props.SPECS = {
   -- the grey rock in the sea: a low dome, as deep as it is drawn tall below its crest; the water
   -- round it stays the map's own; its foam on the water
@@ -51,6 +68,24 @@ Props.SPECS = {
     ring = { { 131, 131, 139 } } },
   -- the boulder in Fallarbor's beige, on the mountain's top
   { name = "sand_boulder_fallarbor", props = "sand_boulder_fallarbor", ground = { 0x241 }, rise = 1.0, step = 2 },
+  -- a pot, turned smooth: its foot, its belly, a neck under the lip round its dark mouth
+  { name = "urn", props = "urn", clip_art = true, ground = { 0x211 }, shape = "lathe",
+    lathe = { cx = 8, cz = 13, squash = 0.7, profile = { { 0, 6 }, { 3.5, 8.5 }, { 7, 7.5 }, { 9, 5.1 }, { 10, 5.5 } } } },
+  -- the baskets: an oval drawn round, its rim and goods on top, 5 rows of wicker in front; a
+  -- smooth drum under its drawing, cut to it
+  { name = "basket_green", props = "basket_green", ground = { 0x211 }, shape = "lathe", clip_art = true,
+    lathe = { cx = 8, cz = 11, squash = 0.7, seg = 16, profile = { { 0, 8.5 }, { 5, 8.5 } } } },
+  { name = "basket_orange", props = "basket_orange", ground = { 0x211 }, shape = "lathe", clip_art = true,
+    lathe = { cx = 8, cz = 11, squash = 0.7, seg = 16, profile = { { 0, 8.5 }, { 5, 8.5 } } } },
+  { name = "basket_red", props = "basket_red", ground = { 0x211 }, shape = "lathe", clip_art = true,
+    lathe = { cx = 8, cz = 11, squash = 0.7, seg = 16, profile = { { 0, 8.5 }, { 5, 8.5 } } } },
+  -- a pile of fruit: a smooth dome under its drawing
+  { name = "fruit", props = "fruit", clip_art = true, ground = { 0x211 }, shape = "dome",
+    dome = { cx = 8.5, cz = 9, rx = 8.5, rz = 7.5, h = 7 } },
+  -- the Battle Frontier's flags, on every wall they stand on: a pole and its cloth, flat - a card
+  -- standing at the pole's foot, facing the view; the wall or the cliff under them the map's own
+  { name = "frontier_flag_east", props = "frontier_flag_east", ground = { 0x170 }, shape = "flag", live_tiles = { 730, 736 } },
+  { name = "frontier_flag_west", props = "frontier_flag_west", ground = { 0x170 }, shape = "flag", live_tiles = { 730, 736 } },
 }
 
 local function short(name) return (tostring(name or ""):gsub("^gTileset_", ""):gsub("_", "")):lower() end

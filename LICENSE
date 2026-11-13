@@ -56,7 +56,8 @@ does not use it either.
 The battle scene's rocks and boulders (src/scene/props.lua) adapt Emerald 3DS's
 3ds_port/scripts/voxel_props.py (its objects and their finder) and gen_voxel_buildings.py's
 prop_specs (a model per offset and variant, a Mound on the cells' own ground). Changes: found in
-the game, map by map, around each battle; only the objects modelled as mounds so far.
+the game, map by map, around each battle; the flags' cloth follows the game's animation through
+the engine's own animation banks.
 
 The battle scene's hedges, fences, curbs, railings and walls (src/scene/models/components.lua,
 src/scene/models/fence.lua, the Relief and Decal primitives in src/scene/models/kernel.lua) and

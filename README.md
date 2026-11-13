@@ -90,6 +90,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   post by post, and hedges, curbs, railings and walls stand as solid runs.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
+  Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
+  Frontier's flags fly on their poles along its walls.
 - 🎥 **A camera that swoops in:** As the battle begins, the camera sweeps down from the
   overworld view to the battle, the houses and trees rising up as it goes.
 - 🎯 **A good spot every time:** Both Pokémon are placed on open ground of the kind you met

@@ -458,6 +458,38 @@ return function(deps)
   end
   Scene.modelsFromCache, Scene.modelsBuilt = 0, 0
 
+  -- a metatile's frames in the engine's tile animation banks (whole metatiles, or their upper
+  -- layer): frames[f](x, y) -> r, g, b, or nil where clear; nil if it does not move. `upper`:
+  -- only the banks of an upper layer (a cell over animated water animates its lower layer too)
+  local function animFramesOf(pair, mid, upper)
+    local TA = req("src.core.game3.tileset_anim")
+    local entry = TA and TA._pairs and TA._pairs[pair]
+    if not (mid and entry and entry.rse) then return nil end
+    for _, bank in ipairs(entry.banks or {}) do
+      local row = bank and bank.row
+      for li, layer in ipairs({ { "under", "mids", entry.lut }, { "over", "overMids", entry.lutOver } }) do
+        local blob, mids, lut = bank and bank[layer[1]], row and row[layer[2]], layer[3]
+        if upper and li == 1 then blob = nil end
+        for k, m in ipairs(blob and lut and mids or {}) do
+          if m == mid then
+            local frames, n = {}, #mids
+            for f = 0, (row.frames or 1) - 1 do
+              local base = (f * n + (k - 1)) * 256
+              if #blob < base + 256 then return nil end
+              frames[f] = function(x, y)
+                local c = lut[blob:byte(base + y * 16 + x + 1)]
+                if c:byte(4) == 0 then return nil end
+                return c:byte(1) / 255, c:byte(2) / 255, c:byte(3) / 255
+              end
+            end
+            return frames, row.frames or 1
+          end
+        end
+      end
+    end
+    return nil
+  end
+
   local function ready(spec, NativeTileset, ctx)
     if spec._model ~= nil then return spec._model end
     local ref = Buildings.reference(spec, ctx)
@@ -500,31 +532,7 @@ return function(deps)
     -- if it does not move
     animFrames = function(cx, cy)
       local mid = ref.template[cy * ref.w + cx + 1]
-      local TA = req("src.core.game3.tileset_anim")
-      local entry = TA and TA._pairs and TA._pairs[ref.pair]
-      if not (mid and entry and entry.rse) then return nil end
-      for _, bank in ipairs(entry.banks or {}) do
-        local row = bank and bank.row
-        for _, layer in ipairs({ { "under", "mids", entry.lut }, { "over", "overMids", entry.lutOver } }) do
-          local blob, mids, lut = bank and bank[layer[1]], row and row[layer[2]], layer[3]
-          for k, m in ipairs(blob and lut and mids or {}) do
-            if m == mid then
-              local frames, n = {}, #mids
-              for f = 0, (row.frames or 1) - 1 do
-                local base = (f * n + (k - 1)) * 256
-                if #blob < base + 256 then return nil end
-                frames[f] = function(x, y)
-                  local s = lut[blob:byte(base + y * 16 + x + 1)]
-                  if s:byte(4) == 0 then return nil end
-                  return s:byte(1) / 255, s:byte(2) / 255, s:byte(3) / 255
-                end
-              end
-              return frames
-            end
-          end
-        end
-      end
-      return nil
+      return mid and animFramesOf(ref.pair, mid) or nil
     end }
     local live
     local okM, mesh, tex = pcall(function()
@@ -620,8 +628,36 @@ return function(deps)
     local ring = {}
     for _, c in ipairs(sp.ring or {}) do ring[c[1] * 65536 + c[2] * 256 + c[3]] = true end
     local tex = Kernel.withRing(art, ring)
-    local mesh = Kernel.build({ Kernel.Mound("mound", tex, { rise = sp.rise, step = sp.step, ring = ring, rows = H }) })
-    local image = imageOf(tex.w, tex.h, function(data)
+    local helpers = Specs and Specs.helpers or {}
+    local dx, dz = (f.sx % 2) * 8, (f.sy % 2) * 8
+    local part
+    if sp.shape == "lathe" and helpers.ProjLathe then
+      -- a turned thing (a pot, a basket): smooth, its drawing projected, where this variant's
+      -- half-cell offset puts it
+      local c = sp.lathe
+      part = helpers.ProjLathe(sp.name, c.cx + dx, c.cz + dz, c.profile, { squash = c.squash or 1.0, seg = c.seg or 10 })
+    elseif sp.shape == "dome" and helpers.ProjDome then
+      -- a heap (fruit): a smooth dome, its drawing projected
+      local c = sp.dome
+      part = helpers.ProjDome(sp.name, c.cx + dx, c.cz + dz, c.rx, c.rz, c.h, { seg = c.seg or 12, rings = c.rings or 3 })
+    elseif sp.shape == "flag" then
+      -- a flag on its pole: a card standing at the pole's foot, over the whole grid (a frame of the
+      -- cloth's animation reaches where the first does not draw)
+      local grid0 = Props.OBJECTS[sp.props].grid
+      local foot = 0
+      for k in pairs(f.present) do
+        local _, j = k:match("(%d+),(%d+)")
+        foot = math.max(foot, dz + tonumber(j) * 8 + 8)
+      end
+      part = Kernel.Card("flag~live", art, foot, 0, 0, { dx, dx + #grid0[1] * 8, dz })
+    elseif not sp.shape then
+      part = Kernel.Mound("mound", tex, { rise = sp.rise, step = sp.step, ring = ring, rows = H })
+    end
+    if not part then return nil end
+    local mesh = Kernel.build({ part })
+    -- (cut to the drawing's box: the texel beside it is nothing of the object's)
+    if sp.clip_art and Kernel.clipToArt then Kernel.clipToArt(mesh, art) end
+    local image, imageData = imageOf(tex.w, tex.h, function(data)
       local px = tex.px
       for y = 0, tex.h - 1 do
         for x = 0, tex.w - 1 do
@@ -636,8 +672,45 @@ return function(deps)
       core[#core + 1] = { c[1] - cx0, c[2] - cy0 }
     end
     local md = { spec = { name = key, owned = owned, ground = sp.ground }, ref = { w = w, h = h, template = {} },
-                 core = core, art = art, tris = mesh.tris, image = image, texW = tex.w, texH = tex.h,
+                 core = core, art = art, tris = mesh.tris, image = image, _data = imageData, texW = tex.w, texH = tex.h,
                  primaryOnly = true, quads = quads }
+    -- a flag's cloth: every pixel of its tiles follows the game's animation of them (the
+    -- engine's bank for them is their upper layer, its colour 0 clear)
+    if sp.live_tiles then
+      local grid0 = Props.OBJECTS[sp.props].grid
+      local texels, lv = {}, nil
+      for k in pairs(f.present) do
+        local i, j = k:match("(%d+),(%d+)")
+        i, j = tonumber(i), tonumber(j)
+        local t = grid0[j + 1][i + 1]
+        t = type(t) == "table" and t[1] or t
+        if t and t >= sp.live_tiles[1] and t < sp.live_tiles[2] then
+          local sx, sy = f.sx + i, f.sy + j
+          local ci, cj = math.floor(sx / 2) - cx0, math.floor(sy / 2) - cy0
+          local qx, qy = sx % 2, sy % 2
+          local c = grid.at(gx0 + ci, gy0 + cj)
+          local frames, n = animFramesOf(c.pair, c.mid, true)
+          if frames and (not lv or lv.frames == n) then
+            lv = lv or { pair = c.pair, mid = c.mid, frames = n, texels = texels, upper = true }
+            for y = 0, 7 do
+              for x = 0, 7 do
+                local o = #texels
+                texels[o + 1], texels[o + 2] = ci * 16 + qx * 8 + x, cj * 16 + qy * 8 + y
+                for fr = 0, n - 1 do
+                  local r, g, b = frames[fr](qx * 8 + x, qy * 8 + y)
+                  local d = o + 3 + 4 * fr
+                  texels[d], texels[d + 1], texels[d + 2], texels[d + 3] = r or 0, g or 0, b or 0, r and 1 or 0
+                end
+              end
+            end
+          end
+        end
+      end
+      if lv and #texels > 0 then
+        md.live = lv
+        liveModels[#liveModels + 1] = md
+      end
+    end
     propModels[key] = md
     return md
   end
@@ -1730,6 +1803,8 @@ return function(deps)
     for _, md in ipairs(liveModels) do
       if md.image and lists.models[md.image] then md._liveFrame = nil; live[#live + 1] = md end
     end
+    -- (models whose texels follow a tile animation, in this scene)
+    hd.stats.sceneLive = #live
     local meshes = Render.meshes(G, lists)
     phase("render")
     hd.stats.scenePhases = table.concat(phases, ", ")
@@ -1817,7 +1892,7 @@ return function(deps)
       bank = nil
       for _, b in ipairs(entry.banks) do
         local row = b and b.row
-        for _, m in ipairs(row and row.mids or {}) do if m == lv.mid then bank = b end end
+        for _, m in ipairs(not lv.upper and row and row.mids or {}) do if m == lv.mid then bank = b end end
         for _, m in ipairs(row and row.overMids or {}) do if m == lv.mid then bank = b end end
       end
       md._bank, md._bankOf = bank, entry

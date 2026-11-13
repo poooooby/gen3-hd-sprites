@@ -534,9 +534,14 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   seam cuts). `init.lua`'s `placeProps` runs it on each map the window shows (`env.where`: map
   id and origin), then per variant (offset in its cells and what is drawn of it), once a
   session, builds the art from the cells' upper layer quarters (`World.art`), `K.withRing` with
-  the spec's `ring`, and a `Mound` (`rise`, `step`). Its cells lay their own drawing for ground,
-  the object's quarters of the upper layer left out (the lower layer there). The flags, baskets,
-  urn and fruit (card, cylinder, lathe and dome props) are not modelled yet.
+  the spec's `ring`, and its part by `shape`: a `Mound` (`rise`, `step`; the default), a
+  `ProjLathe` (the urn, the baskets) or `ProjDome` (the fruit) moved by the variant's half-cell
+  offset, or a `Card` (the Battle Frontier's flags), `clip_art` cutting it to the drawing's box.
+  Its cells lay their own drawing for ground, the object's quarters of the upper layer left out
+  (the lower layer there). The flags' cloth is `live` (every pixel of its `live_tiles`), its
+  frames read from the engine's upper-layer bank for it (`animFramesOf(pair, mid, true)`: those
+  cells sit over animated water too, whose bank holds whole metatiles); `hd.stats.sceneLive`
+  counts the live models in a scene.
 - `buildings.lua`: in the game, per spec once per session: its reference template (the
   reference layout read through `Map.ensureMidLayout(Runtime._game, "EM_" .. name)`), its art
   from the reference pair's atlases (`imageData` = the lower layer, `overImageData` the upper;
