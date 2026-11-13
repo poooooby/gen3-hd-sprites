@@ -90,7 +90,7 @@ local function occlusion(Camera, grid, pose, foot, rect)
     for cx = foot.cx - 5, foot.cx + 5 do
       local c = grid.at(cx, cy)
       local y0, y1, z
-      if c and (c.model or c.sign) then
+      if c and (c.model or c.sign or c.border) then
         -- a model: as tall as it stands over the cell, from the cell's southern edge
         if (c.top or 0) > 0 then y0, y1, z = 0, c.top, cy + 1 end
       elseif c and c.up then

@@ -413,9 +413,9 @@ return function(S)
         for cx = 0, prep.CW - 1 do
           local st = prep.stats[cy][cx]
           if st ~= nil then
-            local n, _, ground, counts = st[1], st[2], st[3], st[4]
-            if ground >= FOOTPRINT * n and #counts.order > 0 then
-              local best = Solve.mostCommon(counts.n, counts.order)
+            local n, ground = st % 512, math.floor(st / 262144)
+            local best = prep.statsBest[cy][cx]
+            if ground >= FOOTPRINT * n and best ~= nil then
               got.add(regions[g][best])
             end
           end

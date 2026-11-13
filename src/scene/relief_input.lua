@@ -162,6 +162,7 @@ function Input.build(io, palettesOf)
     if alt and own and alt.w == base.w and alt.h == base.h and own.w == base.w and own.h == base.h then
       local learned = {}
       for y = 0, base.h - 1 do
+        if tick then tick() end
         for x = 0, base.w - 1 do
           local mid, coll = own.at(x, y)
           local bits = math.floor(base.blocks[y * base.w + x] / 1024) % 4
@@ -173,6 +174,7 @@ function Input.build(io, palettesOf)
       end
       local blocks = {}
       for y = 0, base.h - 1 do
+        if tick then tick() end
         for x = 0, base.w - 1 do
           local i = y * base.w + x
           local mid, coll, elev = alt.at(x, y)

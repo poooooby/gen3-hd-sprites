@@ -188,7 +188,10 @@ end
 --- alike(md, cell, i, j) (optional): whether the cell's metatile, another than the template's,
 --- draws the pixels the model owns in its cell (i, j) - the same building in a town's own tiles
 --- (Rustboro's Center and Mart on its paving). Not asked of the anchor cell.
-function Buildings.find(grid, models, alike)
+--- A spec with `owned` cells stands only where it was drawn, or at its `repeat_at` places (its
+--- map's own cells { x, y }; Fortree's houses): at(cx, cy) -> the cell's place in its map (the
+--- grid's own cells if nil).
+function Buildings.find(grid, models, alike, at)
   local byAnchor = {}
   for _, md in ipairs(models) do
     local a = md.core[1]
@@ -227,6 +230,17 @@ function Buildings.find(grid, models, alike)
           local a = md.core[1]
           local ox, oy = cell.cx - a[1], cell.cy - a[2]
           local ok = true
+          if md.spec.owned then
+            local lx, ly = ox, oy
+            if at then
+              local ax, ay = at(cell.cx, cell.cy)
+              lx, ly = ax and ax - a[1], ay and ay - a[2]
+            end
+            ok = false
+            for _, p in ipairs(md.spec.repeat_at or { md.spec.rect }) do
+              if p[1] == lx and p[2] == ly then ok = true end
+            end
+          end
           for _, c in ipairs(md.core) do
             local o = grid.at(ox + c[1], oy + c[2])
             if not o or not matches(md, o, c[1], c[2]) then ok = false; break end

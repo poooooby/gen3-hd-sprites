@@ -323,6 +323,7 @@ do
   dofile("src/scene/models/solids.lua")(K)
   local specs = dofile("src/scene/models/specs.lua")(K)
   local solidSpecs = dofile("src/scene/models/solid_specs.lua")(K, specs)
+  local fortreeSpecs = dofile("src/scene/models/fortree.lua")(K, specs)
   local B = dofile("src/scene/buildings.lua")
   -- the kernel: clipping keeps the coordinates it carries exact
   local half = K.clip({ { 0, 0, 10 }, { 4, 0, 14 }, { 4, 4, 18 }, { 0, 4, 14 } }, 1, 2, true)
@@ -360,13 +361,28 @@ do
   end
   local artSpecs = 0
   -- (a spec reading another building's drawing gets a made-up one too)
-  local artCtx = { layoutArt = function(_, _, _, w, h) return fakeArt(w, h) end }
+  -- (and a tile animation's two frames, a metatile's lower layer)
+  local artCtx = { layoutArt = function(_, _, _, w, h) return fakeArt(w, h) end,
+    animFrames = function()
+      return { [0] = function(x, y) return x / 16, y / 16, 0.25 end, [1] = function(x, y) return y / 16, x / 16, 0.75 end }
+    end,
+    lowerOf = function() return function(x, y) return x / 16, y / 16, 0.5 end end }
   for _, sp in ipairs(specs) do
     local okB, m = pcall(function()
       if sp.parts_art then
         artSpecs = artSpecs + 1
         K.HEIGHTSOLID_LOD = sp.lod
-        local okA, parts, tex = pcall(sp.parts_art, fakeArt(sp.rect[3], sp.rect[4]), artCtx)
+        local art = fakeArt(sp.rect[3], sp.rect[4])
+        if sp.name:find("^fortree_bridge") then
+          -- (a bridge is read off its planks' colours: a plank across the cell)
+          for v = 1, 15 do
+            for u = 2, 13 do
+              local o = (v * art.w + u) * 4
+              art.px[o + 1], art.px[o + 2], art.px[o + 3], art.px[o + 4] = 238 / 255, 246 / 255, 189 / 255, 1
+            end
+          end
+        end
+        local okA, parts, tex = pcall(sp.parts_art, art, artCtx)
         K.HEIGHTSOLID_LOD = nil
         assert(okA, parts)
         assert(not tex or (tex.w and tex.h))
@@ -636,6 +652,75 @@ do
   Post.applyFixes(M, world, fixes, ord)
   check(M.layouts[5].base == 16 and M.layouts[5].cells[2][12] == 48, "the hand marks: a map's base, a cell's level")
   check(Relief.decode(Relief.encode(M)).layouts[5].cells[2][0] == 48, "...and written as relief.bin")
+end
+
+-- ---------------------------------------------------------------- props, repeat_at
+do
+  local Props = dofile("src/scene/props.lua")
+  -- a 4x4-cell layout's upper layer in subtiles: a sea rock at an odd offset (subtile 3, 1), a
+  -- sea stack at (0, 4) without its optional corner
+  local at, order = {}, {}
+  local function put(sx, sy, tile, pal)
+    local k = sy * 4096 + sx
+    at[k] = tile + pal * 1024
+    order[#order + 1] = k
+  end
+  put(3, 1, 141, 1); put(4, 1, 142, 1); put(3, 2, 157, 1); put(4, 2, 158, 1)
+  local stack = { { false, 65, 68, false }, { 80, 81, 84, 85 }, { 128, 129, 132, 133 }, { 144, 145, 148, 149 } }
+  for j, row in ipairs(stack) do
+    for i, t in ipairs(row) do if t then put(i - 1, 4 + j - 1, t, 3) end end
+  end
+  table.sort(order)
+  local L = { w = 4, h = 4, primary = "general", secondary = "petalburg" }
+  local found = Props.find(L, function() return { at = at, order = order } end, function() return {} end)
+  local rock, st
+  for _, f in ipairs(found) do
+    if f.name == "sea_rock" then rock = f elseif f.name == "sea_stack" then st = f end
+  end
+  check(#found == 2 and rock and rock.sx == 3 and rock.sy == 1 and st and st.sx == 0 and st.sy == 4
+    and not st.present["3,0"] and st.present["1,0"], "props: a sea rock at an odd offset, a stack without its corner")
+  local cells, x0, y0, w, h = Props.cellsOf("sea_rock", 3, 1)
+  check(#cells == 4 and x0 == 1 and y0 == 0 and w == 2 and h == 2, "...the odd rock lies over four cells")
+  local fal = Props.find({ w = 4, h = 4, primary = "general", secondary = "fallarbor" },
+    function() return { at = at, order = order } end, function() return {} end)
+  local falStack = false
+  for _, f in ipairs(fal) do if f.name == "sea_stack_fallarbor" then falStack = true end end
+  check(#fal == 2 and not falStack,
+    "...the General's objects in any town; Fallarbor's own stack only in its palette 11")
+  -- a mound off a drawn disc: lifted, every point still on its drawing at 45 degrees
+  local K = dofile("src/scene/models/kernel.lua")
+  dofile("src/scene/models/solids.lua")(K)
+  local art = { w = 16, h = 16, px = {} }
+  for v = 0, 15 do
+    for u = 0, 15 do
+      local o = (v * 16 + u) * 4
+      local inside = (u - 7.5) ^ 2 + (v - 7.5) ^ 2 < 40
+      art.px[o + 1], art.px[o + 2], art.px[o + 3], art.px[o + 4] = 0.5, 0.5, 0.5, inside and 1 or 0
+    end
+  end
+  local m = K.build({ K.Mound("mound", K.withRing(art, {}), { rise = 1.0, step = 2, rows = 16 }) })
+  local top, onDrawing = 0, true
+  for _, t in ipairs(m.tris) do
+    for k = 1, 3 do
+      local p = t[k]
+      top = math.max(top, p[2])
+      if not t.tag:find("behind", 1, true) and math.abs((p[3] - p[2]) - p[5]) > 1e-6 then onDrawing = false end
+    end
+  end
+  check(#m.tris > 0 and top > 3 and onDrawing, "a mound stands up off its drawing, its front where the drawing is")
+  -- repeat_at: a spec with owned cells stands only where it is drawn or at its places
+  local B = dofile("src/scene/buildings.lua")
+  local rows = {}
+  for j = 0, 3 do
+    rows[j] = {}
+    for i = 0, 7 do rows[j][i] = { cx = i, cy = j, mid = (i % 4 == 1 and j == 1) and 7 or 1, pair = "p" } end
+  end
+  local grid = { w = 8, h = 4, rows = rows, at = function(x, y) return rows[y] and rows[y][x] end }
+  local md = { spec = { name = "t", rect = { 1, 1, 1, 1 }, owned = { ["0,0"] = true } }, core = { { 0, 0 } },
+               ref = { w = 1, h = 1, template = { 7 }, pair = "p" } }
+  check(#B.find(grid, { md }) == 1, "an owned spec stands only at its own rect")
+  md.spec.repeat_at = { { 1, 1 }, { 5, 1 } }
+  check(#B.find(grid, { md }) == 2, "...and at its repeat_at places")
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))

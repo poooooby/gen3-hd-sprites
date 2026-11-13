@@ -37,10 +37,12 @@ local EDGE_TOP, EDGE_WATER_SHIFT = 2, 4
 
 -- ── JSON, its objects' key order kept ────────────────────────────────────────
 
---- Decode JSON text: value, order (order[object] = its keys as written).
-function Post.json(text)
+--- Decode JSON text: value, order (order[object] = its keys as written). tick (optional) is
+--- called every few thousand values.
+function Post.json(text, tick)
   local order = setmetatable({}, { __mode = "k" })
   local pos = 1
+  local nv = 0
   local function ws()
     pos = text:find("[^ \t\r\n]", pos) or #text + 1
   end
@@ -70,6 +72,10 @@ function Post.json(text)
     return table.concat(out)
   end
   function value()
+    if tick then
+      nv = nv + 1
+      if nv % 4096 == 0 then tick() end
+    end
     ws()
     local c = text:sub(pos, pos)
     if c == "{" then
@@ -344,7 +350,7 @@ end
 
 --- The hand marks (relief_fixes.json, decoded by Post.json: fixes, order) over a model, in place.
 --- Returns a line per map changed.
-function Post.applyFixes(M, world, fixes, order)
+function Post.applyFixes(M, world, fixes, order, tick)
   local pieces = fixes.pieces or {}
   local specs, names = {}, {}
   for _, name in ipairs(order[fixes.layouts] or {}) do
@@ -425,7 +431,8 @@ function Post.applyFixes(M, world, fixes, order)
             end
           end
         end
-        for _, key in ipairs(cellOrder) do
+        for ci, key in ipairs(cellOrder) do
+          if tick and ci % 256 == 0 then tick() end
           local fix = cellsFix[key]
           local x, y = key:match("^(%-?%d+),(%-?%d+)$")
           x, y = tonumber(x), tonumber(y)

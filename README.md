@@ -83,8 +83,13 @@ resolution, and the camera pulls back so even the biggest ones fit.
   trees and houses of the spot where it started, laid out in 2.5D and fading into the distance.
 - 🏠 **Real buildings:** In Emerald, houses, Pokémon Centers, Marts, gyms and the big buildings
   of Hoenn's towns stand in 3D, rebuilt from their own overworld art: walls, roofs, porches and
-  all, down to the round battle tents, the Space Center's domes, the boats in Slateport's harbour
-  and the parasols on Route 109's beach. Fences stand post by post, and hedges, curbs, railings and walls stand as solid runs.
+  all, down to the round battle tents, the Space Center's domes, the boats in Slateport's harbour,
+  the parasols on Route 109's beach, Slateport's stone lantern and Rustboro's fountain, its jet
+  on its dish. Fortree's tree houses sit up in the treetops on their decks, joined by rope
+  bridges, with ladders down to the forest floor and palms leaning over the wood. Fences stand
+  post by post, and hedges, curbs, railings and walls stand as solid runs.
+- 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
+  peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
 - 🎥 **A camera that swoops in:** As the battle begins, the camera sweeps down from the
   overworld view to the battle, the houses and trees rising up as it goes.
 - 🎯 **A good spot every time:** Both Pokémon are placed on open ground of the kind you met
@@ -162,7 +167,7 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** is adapted from the 3D battles of
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its battle
   camera, its entrance sweep, how it picks where the battle stands, its trees, drawn by its
-  artists, its buildings, fences, hedges and signs, each one rebuilt from its own overworld art,
+  artists, its buildings, fences, hedges, signs and rocks, each one rebuilt from its own overworld art,
   and the shape of the land: how it reads cliffs, terraces and stairs off the map's own drawing,
   with the corrections its team made by hand, map by map.
 

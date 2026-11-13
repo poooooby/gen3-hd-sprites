@@ -155,6 +155,26 @@ return function(deps)
     end
     for _, e in ipairs(Map.world or {}) do addEvents(e.def, e.id, e.ox or 0, e.oy or 0) end
     function env.signAt(cx, cy) return signsAt[cx .. "," .. cy] == true end
+    -- the border block's metatile at any cell, tiled as the engine tiles it past the map's edges,
+    -- and whether a metatile of the battle map's tilesets is water (Emerald 3DS's water shapes)
+    function env.borderMid(cx, cy)
+      local bw, bh = layout.borderWidth or 1, layout.borderHeight or 1
+      local mids = layout.borderMids
+      if not mids then return nil end
+      return mids[(cy % bh) * bw + (cx % bw) + 1]
+    end
+    local IS = req("src.core.game3.scripting.interaction_scripts")
+    local behaviorsOf = IS and IS.behaviors and IS.behaviors[layout.pair or def.pair] or nil
+    local waterIds = {}
+    local MBw = req("src.core.game3.mb")
+    for _, n in ipairs(deps.Roles and deps.Roles.WATER_NAMES or {}) do
+      local v = MBw and MBw.id((n:gsub("^MB_", "")))
+      if v then waterIds[v] = true end
+    end
+    function env.waterMid(m)
+      return m ~= nil and behaviorsOf ~= nil and waterIds[behaviorsOf[m] or -1] == true
+    end
+    env.W, env.H = W, H
     function env.doorAt(cx, cy) return warpsAt[cx .. "," .. cy] == true end
     -- a house door's behaviour (Emerald 3DS's HOUSE_DOORS), in the engine's behaviour ids
     local MB = req("src.core.game3.mb")
@@ -365,14 +385,16 @@ return function(deps)
     local okI, img = pcall(G.newImage, data)
     if not okI then return nil end
     img:setFilter("nearest", "nearest")
-    return img
+    return img, data
   end
 
   -- a spec made ready to place: its reference, art (image), core cells and triangles (once)
   -- a model's cache (Scene Cache): its triangles, core cells and texture as bytes, under the
   -- game's key (Scene.modelCache, set by main.lua; Scene.MODELS_VERSION bumps when the specs or
   -- the kernel change what they build)
-  Scene.MODELS_VERSION = 5
+  Scene.MODELS_VERSION = 6
+  -- the models with texels a tile animation redraws (md.live), made ready so far
+  local liveModels = {}
   local function serialize(md)
     local out = { "return {primaryOnly=", md.primaryOnly and "true" or "false", ",texW=", md.texW, ",texH=", md.texH,
                   ",core={" }
@@ -387,7 +409,15 @@ return function(deps)
       end
       out[#out + 1] = "{" .. parts[1] .. "," .. parts[2] .. "," .. parts[3] .. ",shade=" .. f(t.shade or 1) .. "},"
     end
-    out[#out + 1] = "}}"
+    out[#out + 1] = "}"
+    local lv = md.live
+    if lv then
+      -- (texels the game's tile animation redraws: their frames' colours, flat)
+      out[#out + 1] = (",live={pair=%q,mid=%d,frames=%d,texels={"):format(lv.pair, lv.mid, lv.frames)
+      for i, v in ipairs(lv.texels) do out[#out + 1] = (i > 1 and "," or "") .. f(v) end
+      out[#out + 1] = "}}"
+    end
+    out[#out + 1] = "}"
     return table.concat(out)
   end
   local function cachedModel(spec)
@@ -399,14 +429,15 @@ return function(deps)
     local chunk = load(src, "=model", "t", {})
     local ok, md = pcall(chunk or error)
     if not (ok and type(md) == "table" and md.tris and md.texW and #rgba == md.texW * md.texH * 4) then return nil end
-    local okI, img = pcall(function()
+    local okI, img, data = pcall(function()
       local data = love.image.newImageData(md.texW, md.texH, "rgba8", rgba)
       local i = G.newImage(data)
       i:setFilter("nearest", "nearest")
-      return i
+      return i, data
     end)
     if not okI then return nil end
-    md.image = img
+    md.image, md._data = img, data
+    if md.live then liveModels[#liveModels + 1] = md end
     return md
   end
   local function keepModel(spec, md, tex)
@@ -450,16 +481,67 @@ return function(deps)
       local oref = Buildings.reference(other, ctx)
       local osrc = oref and pixelSource(NativeTileset, oref.pair)
       return osrc and Buildings.art(other, oref, osrc) or nil
+    end,
+    -- a metatile's lower layer alone (its colour-index-0 pixels as the engine's lower atlas
+    -- draws them): lower(x, y) -> r, g, b
+    lowerOf = function(m)
+      local wa = World and World.art(ref.pair)
+      local px = wa and wa.pixels(m, 0)
+      if not (px and src.ts.midToSlot[m]) then return nil end
+      return function(x, y)
+        local p = px[y * 16 + x]
+        if p then return p[1] / 255, p[2] / 255, p[3] / 255 end
+        local r, g, b = src.under(m, x, y)
+        return r, g, b
+      end
+    end,
+    -- the rect's cell (cx, cy) in each frame of its tile animation (the engine's own banks:
+    -- whole metatiles, or their upper layer): frames[f](x, y) -> r, g, b, or nil where clear; nil
+    -- if it does not move
+    animFrames = function(cx, cy)
+      local mid = ref.template[cy * ref.w + cx + 1]
+      local TA = req("src.core.game3.tileset_anim")
+      local entry = TA and TA._pairs and TA._pairs[ref.pair]
+      if not (mid and entry and entry.rse) then return nil end
+      for _, bank in ipairs(entry.banks or {}) do
+        local row = bank and bank.row
+        for _, layer in ipairs({ { "under", "mids", entry.lut }, { "over", "overMids", entry.lutOver } }) do
+          local blob, mids, lut = bank and bank[layer[1]], row and row[layer[2]], layer[3]
+          for k, m in ipairs(blob and lut and mids or {}) do
+            if m == mid then
+              local frames, n = {}, #mids
+              for f = 0, (row.frames or 1) - 1 do
+                local base = (f * n + (k - 1)) * 256
+                if #blob < base + 256 then return nil end
+                frames[f] = function(x, y)
+                  local s = lut[blob:byte(base + y * 16 + x + 1)]
+                  if s:byte(4) == 0 then return nil end
+                  return s:byte(1) / 255, s:byte(2) / 255, s:byte(3) / 255
+                end
+              end
+              return frames
+            end
+          end
+        end
+      end
+      return nil
     end }
+    local live
     local okM, mesh, tex = pcall(function()
       local parts, t
       if spec.parts_art then
         -- (the spec's level of detail: the least steps of its height fields)
         Kernel.HEIGHTSOLID_LOD = spec.lod
-        local ok, p, tt = pcall(spec.parts_art, art, artCtx)
+        local ok, p, tt, lv = pcall(spec.parts_art, art, artCtx)
         Kernel.HEIGHTSOLID_LOD = nil
         if not ok then error(p, 0) end
         parts, t = p, tt
+        -- (texels a tile animation redraws: { cell = { cx, cy }, frames, texels }, the cell's
+        -- metatile found here)
+        if lv then
+          live = { pair = ref.pair, mid = ref.template[lv.cell[2] * ref.w + lv.cell[1] + 1], frames = lv.frames,
+                   texels = lv.texels }
+        end
       else
         parts = spec.parts()
       end
@@ -477,7 +559,7 @@ return function(deps)
       if ref.template[c[2] * ref.w + c[1] + 1] >= 512 then primaryOnly = false end
     end
     tex = tex or art
-    local image = imageOf(tex.w, tex.h, function(data)
+    local image, imageData = imageOf(tex.w, tex.h, function(data)
       local px = tex.px
       for y = 0, tex.h - 1 do
         for x = 0, tex.w - 1 do
@@ -487,13 +569,151 @@ return function(deps)
       end
     end)
     spec._model = { spec = spec, ref = ref, art = art, core = core, primaryOnly = primaryOnly,
-                    tris = mesh.tris, image = image, texW = tex.w, texH = tex.h }
+                    tris = mesh.tris, image = image, _data = imageData, texW = tex.w, texH = tex.h, live = live }
+    if live then liveModels[#liveModels + 1] = spec._model end
     Scene.modelsBuilt = Scene.modelsBuilt + 1
     keepModel(spec, spec._model, tex)
     return spec._model
   end
 
   local Components = deps.Components
+
+  -- ── props: objects found by their upper-layer subtiles (src/scene/props.lua) ──
+  local Props = deps.Props
+  local propModels, propFinds = {}, {}
+  local function propSpec(name)
+    for _, sp in ipairs(Props.SPECS) do if sp.props == name then return sp end end
+  end
+  -- a variant's model (its offset in its cells and what is drawn of it), once a session: the
+  -- object's subtiles as the map draws them, a Mound off them
+  local function propModel(sp, f, cells, gx0, gy0, w, h, grid)
+    local key = ("%s:%d%d:%s"):format(sp.name, f.sx % 2, f.sy % 2, f.key)
+    if propModels[key] ~= nil then return propModels[key] or nil end
+    propModels[key] = false
+    local cx0, cy0 = math.floor(f.sx / 2), math.floor(f.sy / 2)
+    local W, H = w * 16, h * 16
+    local art = { w = W, h = H, px = {} }
+    for i = 1, W * H * 4 do art.px[i] = 0 end
+    -- which quarter of which cell each drawn subtile is: what the ground leaves out under it
+    local quads = {}
+    for k in pairs(f.present) do
+      local i, j = k:match("(%d+),(%d+)")
+      local sx, sy = f.sx + tonumber(i), f.sy + tonumber(j)
+      local ci, cj = math.floor(sx / 2) - cx0, math.floor(sy / 2) - cy0
+      local qx, qy = sx % 2, sy % 2
+      local c = grid.at(gx0 + ci, gy0 + cj)
+      local wa = c and c.mid and World.art(c.pair)
+      local upper = wa and wa.pixels(c.mid, 1)
+      if not upper then return nil end
+      for y = 0, 7 do
+        for x = 0, 7 do
+          local p = upper[(qy * 8 + y) * 16 + qx * 8 + x]
+          if p then
+            local o = ((cj * 16 + qy * 8 + y) * W + ci * 16 + qx * 8 + x) * 4
+            art.px[o + 1], art.px[o + 2], art.px[o + 3], art.px[o + 4] = p[1] / 255, p[2] / 255, p[3] / 255, 1
+          end
+        end
+      end
+      local qk = ci .. "," .. cj
+      quads[qk] = (quads[qk] or 0) + 2 ^ (qy * 2 + qx)
+    end
+    local ring = {}
+    for _, c in ipairs(sp.ring or {}) do ring[c[1] * 65536 + c[2] * 256 + c[3]] = true end
+    local tex = Kernel.withRing(art, ring)
+    local mesh = Kernel.build({ Kernel.Mound("mound", tex, { rise = sp.rise, step = sp.step, ring = ring, rows = H }) })
+    local image = imageOf(tex.w, tex.h, function(data)
+      local px = tex.px
+      for y = 0, tex.h - 1 do
+        for x = 0, tex.w - 1 do
+          local o = (y * tex.w + x) * 4
+          data:setPixel(x, y, px[o + 1], px[o + 2], px[o + 3], px[o + 4])
+        end
+      end
+    end)
+    local owned, core = {}, {}
+    for _, c in ipairs(cells) do
+      owned[(c[1] - cx0) .. "," .. (c[2] - cy0)] = true
+      core[#core + 1] = { c[1] - cx0, c[2] - cy0 }
+    end
+    local md = { spec = { name = key, owned = owned, ground = sp.ground }, ref = { w = w, h = h, template = {} },
+                 core = core, art = art, tris = mesh.tris, image = image, texW = tex.w, texH = tex.h,
+                 primaryOnly = true, quads = quads }
+    propModels[key] = md
+    return md
+  end
+
+  -- every prop of the maps the window shows, stood where it is drawn: its cells (no building's)
+  -- lay their own drawing for ground, the object's subtiles left out
+  local function placeProps(grid, NativeTileset, found, where)
+    local maps = {}
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        local _, _, _, id, ox, oy = where(c.cx, c.cy)
+        if id and not maps[id] then maps[id] = { ox, oy } end
+      end
+    end
+    local ids = {}
+    for id in pairs(maps) do ids[#ids + 1] = id end
+    table.sort(ids)
+    for _, id in ipairs(ids) do
+      local L = World.layout(id)
+      local list = L and propFinds[L.id]
+      if L and not list then
+        list = Props.find(L, World.subtiles, World.neighbours)
+        propFinds[L.id] = list
+      end
+      for _, f in ipairs(list or {}) do
+        local sp = propSpec(f.name)
+        local cells, x0, y0, w, h = Props.cellsOf(f.name, f.sx, f.sy)
+        local gx0, gy0 = x0 + maps[id][1], y0 + maps[id][2]
+        local ok = sp ~= nil
+        for _, c in ipairs(cells) do
+          local g = grid.at(gx0 + c[1] - x0, gy0 + c[2] - y0)
+          if not g or not g.mid or g.model then ok = false end
+        end
+        local md = ok and propModel(sp, f, cells, gx0, gy0, w, h, grid)
+        if md then
+          local pl = { model = md, cx = gx0, cy = gy0 }
+          local tops = Buildings.tops(md)
+          for _, c in ipairs(cells) do
+            local i, j = c[1] - x0, c[2] - y0
+            local g = grid.at(gx0 + i, gy0 + j)
+            g.model = pl
+            g.top = tops[i .. "," .. j] or 0
+          end
+          -- the ground: each cell's own drawing, the object's quarters of its upper layer left out
+          pl.ground = imageOf(w * 16, h * 16, function(data)
+            for _, c in ipairs(cells) do
+              local i, j = c[1] - x0, c[2] - y0
+              local g = grid.at(gx0 + i, gy0 + j)
+              local src = pixelSource(NativeTileset, g.pair)
+              local wa = World.art(g.pair)
+              local lower = wa and wa.pixels(g.mid, 0)
+              local q = md.quads[i .. "," .. j] or 0
+              for y = 0, 15 do
+                for x = 0, 15 do
+                  local r, gg, b
+                  local bit = 2 ^ ((y >= 8 and 2 or 0) + (x >= 8 and 1 or 0))
+                  local mine = math.floor(q / bit) % 2 == 1
+                  local p = mine and lower and lower[y * 16 + x]
+                  if p then
+                    r, gg, b = p[1] / 255, p[2] / 255, p[3] / 255
+                  elseif src then
+                    r, gg, b = src.under(g.mid, x, y)
+                    local r1, g1, b1, a1 = src.over(g.mid, x, y)
+                    if a1 and a1 > 0.5 and not mine then r, gg, b = r1, g1, b1 end
+                  end
+                  if r then data:setPixel(i * 16 + x, j * 16 + y, r, gg, b, 1) end
+                end
+              end
+            end
+          end)
+          found[#found + 1] = pl
+        end
+      end
+    end
+  end
 
   -- a pair that draws metatile m (of the given primary): a fence's reference metatile, which the
   -- run's own pair may not hold
@@ -646,7 +866,7 @@ return function(deps)
     end
   end
   -- the buildings standing in the grid: placements, their cells marked (cell.model)
-  local function placeBuildings(grid, NativeTileset, signCell)
+  local function placeBuildings(grid, NativeTileset, signCell, where)
     if not (Buildings and Kernel and Specs) then return {} end
     local ctx = layoutCtx()
     local mids = {}
@@ -671,7 +891,10 @@ return function(deps)
         if md then models[#models + 1] = md end
       end
     end
-    local found = Buildings.find(grid, models, alikeOf(NativeTileset, signCell))
+    local found = Buildings.find(grid, models, alikeOf(NativeTileset, signCell), where and function(cx, cy)
+      local _, lx, ly = where(cx, cy)
+      return lx, ly
+    end)
     -- the kits' blocks (Rustboro's), each modelled from its own drawing where it stands
     local secondaryOf = function(pair)
       if not Components then return nil end
@@ -751,6 +974,12 @@ return function(deps)
           end
         end)
       end
+    end
+    -- the objects drawn as a block of upper-layer subtiles wherever they land (sea rocks,
+    -- boulders, sea stacks: src/scene/props.lua)
+    if Props and World and where then
+      local okP, err = pcall(placeProps, grid, NativeTileset, found, where)
+      if not okP then hd.stats.sceneBuildingError = "props: " .. tostring(err) end
     end
     -- the objects of no fixed shape (hedges, fences, curbs, railings), found by their runs
     if Components then
@@ -863,9 +1092,10 @@ return function(deps)
   end
   --- The cells the building models own in a layout (LAYOUT_X), as the relief solver asks them
   --- (Emerald 3DS reads them off its buildings.bin): { [(y + 4096) * 16384 + (x + 4096)] = true },
-  --- or nil. Every spec is readied first.
+  --- or nil. Every spec is readied first; tick (optional) is called after each (the relief's build
+  --- runs sliced in a coroutine).
   local modelCellsOf = {}
-  function Scene.modelCells(name)
+  function Scene.modelCells(name, tick)
     if modelCellsOf[name] ~= nil then return modelCellsOf[name] or nil end
     modelCellsOf[name] = false
     local NativeTileset = req("src.core.game3.tileset_native")
@@ -876,6 +1106,7 @@ return function(deps)
     for _, spec in ipairs(Specs) do
       local md = ready(spec, NativeTileset, ctx)
       if md then models[#models + 1] = md end
+      if tick then tick() end
     end
     local rows = {}
     for y = 0, L.h - 1 do
@@ -1255,7 +1486,8 @@ return function(deps)
     local function signCell(c)
       return roleOf(c.cx, c.cy) == "signpost" or roleOf(c.cx, c.cy + 1) == "signpost"
     end
-    local okB, placed = pcall(placeBuildings, grid, NativeTileset, World and signCell or nil)
+    -- (a cell's place in its own map: a spec with owned cells stands only where it is drawn)
+    local okB, placed = pcall(placeBuildings, grid, NativeTileset, World and signCell or nil, env.where)
     if not okB then
       hd.stats.sceneBuildingError = tostring(placed)
       placed = {}
@@ -1379,6 +1611,49 @@ return function(deps)
         hd.stats.sceneReliefError = tostring(maps)
       end
     end
+    -- the border round the battle map (Emerald 3DS's belt, voxel_mesh_builder.c VoxelMesh_EmitBorder):
+    -- a cell past every map stands two courses of the border block at the level of the map's
+    -- nearest edge cell; a border of water lies flat at the level of the map's sea nearest it
+    if not env.indoor then
+      local W, H = env.W or 0, env.H or 0
+      local function edgeCell(cx, cy)
+        return grid.at(math.max(0, math.min(W - 1, cx)), math.max(0, math.min(H - 1, cy)))
+      end
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local c = grid.rows[j][i]
+          if not c.rmap and c.coll == nil and not env.where(c.cx, c.cy) then
+            local m = env.borderMid(c.cx, c.cy)
+            local e = edgeCell(c.cx, c.cy)
+            -- (mids[h]: the block's metatile h rows north, its courses drawn as the game tiles it)
+            local b = { mid = m, water = env.waterMid(m), level = 0,
+                        mids = { [0] = m, [1] = env.borderMid(c.cx, c.cy - 1) } }
+            if b.water then
+              -- the map's sea nearest it along the edge
+              local w = e and e.kind == "water" and e or nil
+              if e and not w then
+                local alongY = c.cx < 0 or c.cx >= W
+                for k = 1, 12 do
+                  for _, sgn in ipairs({ -1, 1 }) do
+                    local o = alongY and grid.at(e.cx, e.cy + sgn * k) or grid.at(e.cx + sgn * k, e.cy)
+                    if not w and o and o.rmap and o.kind == "water" then w = o end
+                  end
+                  if w then break end
+                end
+              end
+              b.level = w and w.liftT or 0
+            elseif e and e.kind ~= "water" then
+              b.level = e.liftT or 0
+            end
+            c.border = b
+            c.dy = b.level
+            c.lifted = not b.water
+            -- (for the stage search: two courses tall, as Emerald 3DS counts a cell past the map)
+            if not b.water then c.top = 2 end
+          end
+        end
+      end
+    end
     phase("relief")
     local stage = Stage.search(Camera, grid, {
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
@@ -1451,6 +1726,10 @@ return function(deps)
         hd.stats.sceneReliefError = tostring(image)
       end
     end
+    local live = {}
+    for _, md in ipairs(liveModels) do
+      if md.image and lists.models[md.image] then md._liveFrame = nil; live[#live + 1] = md end
+    end
     local meshes = Render.meshes(G, lists)
     phase("render")
     hd.stats.scenePhases = table.concat(phases, ", ")
@@ -1464,7 +1743,7 @@ return function(deps)
       -- (on lifted ground: as high as it, and as far south again, src/scene/relief.lua)
       to = Camera.pose(stage.tx, stage.tz + (stage.ty or 0), nil, nil, stage.ty),
       progress = 0, frames = 0, haze = haze, fog = indoor and Scene.FOG.indoor or Scene.FOG.outdoor,
-      shadows = shadows,
+      shadows = shadows, live = live,
     }
   end
 
@@ -1526,9 +1805,39 @@ return function(deps)
 
   --- hd.sceneRenderer: the world item for a screen rect `box` with the scene's mapping (canvas
   --- pixels -> screen: bx + u * bsx). Returns the canvas and where it goes, or nil.
+  -- a model's texels the game's tile animation redraws (Rustboro's fountain's jet): repainted
+  -- when the engine's bank for that metatile turns to another frame
+  local function stepLive(md)
+    local lv = md.live
+    local TA = req("src.core.game3.tileset_anim")
+    local entry = TA and TA._pairs and TA._pairs[lv.pair]
+    if not (entry and entry.banks and md._data and md.image) then return end
+    local bank = md._bank
+    if not bank or md._bankOf ~= entry then
+      bank = nil
+      for _, b in ipairs(entry.banks) do
+        local row = b and b.row
+        for _, m in ipairs(row and row.mids or {}) do if m == lv.mid then bank = b end end
+        for _, m in ipairs(row and row.overMids or {}) do if m == lv.mid then bank = b end end
+      end
+      md._bank, md._bankOf = bank, entry
+      if not bank then return end
+    end
+    local f = (bank.frame or 0) % lv.frames
+    if f == md._liveFrame then return end
+    md._liveFrame = f
+    local t, stride = lv.texels, 2 + 4 * lv.frames
+    for i = 1, #t, stride do
+      local o = i + 2 + 4 * f
+      md._data:setPixel(t[i], t[i + 1], t[o], t[o + 1], t[o + 2], t[o + 3])
+    end
+    pcall(md.image.replacePixels, md.image, md._data)
+  end
+
   function Scene.render(item, bx, by, bsx, bsy, box)
     local s = item.scene
     if not (s and s.meshes) then return nil end
+    for _, md in ipairs(s.live or {}) do stepLive(md) end
     local rec = item.rec
     -- the background's shake (a move scrolling it), in canvas pixels
     local shx, shy = rec.tx + (rec.x or 0) * rec.tsx, rec.ty + (rec.y or 0) * rec.tsy

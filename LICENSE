@@ -42,7 +42,21 @@ game on the player's own tilesets instead of offline; no proofs, previews or tex
 exact template matches only; a placement's ground chosen from the ground round it; only the
 specs built from explicit parts, from flat faces over their drawing (with_ring, Grown, Card)
 and from solids cut to their drawing (Volume, HeightSolid, own_bands, ProjSection, ProjHull,
-ProjCanopy: src/scene/models/solids.lua and solid_specs.lua) so far.
+ProjCanopy, Mound, VoxelLathe and BakedLathe: src/scene/models/solids.lua and solid_specs.lua)
+so far. Rustboro's fountain's jet follows the game's tile animation as gen_voxel_buildings.py's
+"live" texels do, its frames read from the engine's own animation banks.
+
+Fortree's tree houses, bridges and palms (src/scene/models/fortree.lua) adapt Emerald 3DS's
+3ds_port/scripts/voxel_fortree.py (treehouse, LeafRoof, ProjPoly, bridge_planks, bridge_cell,
+palm) and their specs in voxel_building_specs.py, with gen_voxel_buildings.py's rule that a spec
+with owned cells stands only at its repeat_at places. Changes: rewritten in Lua for LOVE and run
+in the game; the deck table (who is lifted onto a deck) is not used, as its battle stage search
+does not use it either.
+
+The battle scene's rocks and boulders (src/scene/props.lua) adapt Emerald 3DS's
+3ds_port/scripts/voxel_props.py (its objects and their finder) and gen_voxel_buildings.py's
+prop_specs (a model per offset and variant, a Mound on the cells' own ground). Changes: found in
+the game, map by map, around each battle; only the objects modelled as mounds so far.
 
 The battle scene's hedges, fences, curbs, railings and walls (src/scene/models/components.lua,
 src/scene/models/fence.lua, the Relief and Decal primitives in src/scene/models/kernel.lua) and

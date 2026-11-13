@@ -68,6 +68,8 @@ return function(mod)
     Relief = loadSibling(mod, "src/scene/relief.lua"),
     -- (Emerald 3DS's cell roles, over the game's own layouts: src/scene/world.lua)
     Roles = loadSibling(mod, "src/scene/roles.lua"),
+    -- (optional: without it sea rocks and boulders lie flat)
+    Props = loadSibling(mod, "src/scene/props.lua"),
     path = mod.path,
     hd = hd,
   }
@@ -77,12 +79,15 @@ return function(mod)
   -- (optional: the solids round things are read off, and their specs)
   local solidsOf = loadSibling(mod, "src/scene/models/solids.lua")
   local solidSpecsOf = loadSibling(mod, "src/scene/models/solid_specs.lua")
+  -- (optional: Fortree's tree houses, bridges and palms)
+  local fortreeOf = loadSibling(mod, "src/scene/models/fortree.lua")
   if type(specsOf) == "function" and sceneDeps.Kernel then
     local okS = type(solidsOf) == "function" and pcall(solidsOf, sceneDeps.Kernel)
     local ok, specs = pcall(specsOf, sceneDeps.Kernel)
     if ok and type(specs) == "table" then
       sceneDeps.Specs = specs
       if okS and type(solidSpecsOf) == "function" then pcall(solidSpecsOf, sceneDeps.Kernel, specs) end
+      if type(fortreeOf) == "function" then pcall(fortreeOf, sceneDeps.Kernel, specs) end
     end
     local okF, fence = pcall(fenceOf, sceneDeps.Kernel)
     if okF and type(fence) == "table" and type(componentsOf) == "function" then
@@ -140,7 +145,7 @@ return function(mod)
           return okC and c and c:read(rel) or nil
         end,
         onReady = function(bytes) Engine.Scene.setReliefBytes(bytes) end,
-        models = function(name) return Engine.Scene.modelCells(name) end,
+        models = function(name, tick) return Engine.Scene.modelCells(name, tick) end,
         onFrame = function() Engine.Scene.warmStep() end,
       })
       if okR and type(run) == "table" then

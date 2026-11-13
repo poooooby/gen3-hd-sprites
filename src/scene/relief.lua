@@ -71,7 +71,7 @@ Relief.DRAWN, Relief.UNIT2 = 0x8000, 0x4000
 local LEVEL_BIT, WIDE_BIT, HEIGHT_MASK = 0x8000, 0x4000, 0x03FF
 
 --- Read a relief.bin ("VXL4", Emerald 3DS's format) into a model, or nil and why.
-function Relief.decode(s)
+function Relief.decode(s, tick)
   if type(s) ~= "string" or #s < 16 or s:sub(1, 4) ~= "VXL4" or u16(s, 6) ~= SIDE then
     return nil, "not a relief file"
   end
@@ -88,6 +88,7 @@ function Relief.decode(s)
                 level = band(w, LEVEL_BIT) ~= 0, cells = {} }
     local stride = wide and 52 or 27
     for c = 0, count - 1 do
+      if tick and c % 256 == 0 then tick() end
       local o = off + c * stride
       local x, y = s:byte(o + 1), s:byte(o + 2)
       local g = {}
@@ -146,8 +147,9 @@ local function p16(v) v = v % 65536; return string.char(v % 256, floor(v / 256))
 local function p32(v) return p16(v % 65536) .. p16(floor(v / 65536)) end
 
 --- A model as relief.bin's bytes (voxel_relief_fixes.pack). eases = { [layout id] = ease, 8 px
---- units } (seam_eases: pack recomputes every map's), nil for none.
-function Relief.encode(M, eases)
+--- units } (seam_eases: pack recomputes every map's), nil for none; tick (optional) is called now
+--- and then (the build runs sliced in a coroutine).
+function Relief.encode(M, eases, tick)
   local ids = {}
   for id in pairs(M.layouts) do ids[#ids + 1] = id end
   table.sort(ids)
@@ -197,7 +199,8 @@ function Relief.encode(M, eases)
     idx[#idx + 1] = p16(lid) .. p16(#keys)
       .. p16(t.w + (t.level and LEVEL_BIT or 0) + (wide and WIDE_BIT or 0) + lshift(t.ease or 0, 10))
       .. p16(t.h + flags + lshift(t.belt or 0, 10)) .. p32(offset + blen) .. p16(t.base)
-    for _, k in ipairs(keys) do
+    for ki, k in ipairs(keys) do
+      if tick and ki % 256 == 0 then tick() end
       local g = t.cells[k]
       local parts = { string.char(k % t.w, floor(k / t.w)) }
       for i = 0, 24 do

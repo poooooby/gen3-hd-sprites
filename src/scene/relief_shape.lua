@@ -23,7 +23,7 @@ return function(S)
     local prep = S.drawnPrepare(name)
     local members, at, layouts, CW, CH = prep.members, prep.at, prep.layouts, prep.CW, prep.CH
     local side, flat = prep.side, prep.flat
-    local stats, freeMid, faceLow = prep.stats, prep.freeMid, prep.faceLow
+    local stats, statsBest, freeMid, faceLow = prep.stats, prep.statsBest, prep.freeMid, prep.faceLow
     local level = S.worldLevels().regions[name]
     local metatileAt = prep.metatileAt
     local cell = grid2(CW, CH)
@@ -41,7 +41,8 @@ return function(S)
       for cx = 0, CW - 1 do
         local st = stats[cy][cx]
         if st ~= nil then
-          local n, top, ground, counts = st[1], st[2], st[3], st[4]
+          local n, top, ground = st % 512, math.floor(st / 512) % 512, math.floor(st / 262144)
+          local best = statsBest[cy][cx]
           void[cy][cx] = false
           local m = metatileAt(cx, cy)
           local boulder = BOULDER[m or -1] == true
@@ -54,15 +55,15 @@ return function(S)
               if not lfn[K(cx, cy)] then lfn[K(cx, cy)] = true; lfnList[#lfnList + 1] = K(cx, cy) end
               soil[cy][cx] = true
             elseif (f == "water" or f == "signpost") and not footprint then
-              if #counts.order > 0 then
-                cell[cy][cx] = level[Solve.mostCommon(counts.n, counts.order)]
+              if best ~= nil then
+                cell[cy][cx] = level[best]
               else
                 if not lfn[K(cx, cy)] then lfn[K(cx, cy)] = true; lfnList[#lfnList + 1] = K(cx, cy) end
               end
               soil[cy][cx] = true
             elseif boulder or footprint then
-              if #counts.order > 0 then
-                cell[cy][cx] = level[Solve.mostCommon(counts.n, counts.order)]
+              if best ~= nil then
+                cell[cy][cx] = level[best]
                 soil[cy][cx] = not boulder and top < FOOTPRINT * n
               elseif top >= FOOTPRINT * n then
                 if not thin[K(cx, cy)] then thin[K(cx, cy)] = true; thinList[#thinList + 1] = K(cx, cy) end

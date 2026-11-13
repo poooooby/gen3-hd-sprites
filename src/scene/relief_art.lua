@@ -54,9 +54,15 @@ Art.hashTuple = hashTuple
 
 local rgbTmp = {}
 --- hash((r, g, b)) of a colour key.
+-- (a colour's hash, once: there are few colours, and every 64-bit operation allocates)
+local rgbHashes = {}
 function Art.hashRGB(c)
+  local h = rgbHashes[c]
+  if h then return h end
   rgbTmp[1], rgbTmp[2], rgbTmp[3] = floor(c / 65536), floor(c / 256) % 256, c % 256
-  return hashTuple(rgbTmp, 3)
+  h = hashTuple(rgbTmp, 3)
+  rgbHashes[c] = h
+  return h
 end
 
 local function insertClean(tbl, mask, key, h)
@@ -82,8 +88,14 @@ end
 
 --- list(set(seq)) as 64-bit CPython orders it; hashOf(key) -> its hash (unsigned 64-bit).
 function Art.setOrder(seq, hashOf)
-  local mask, tbl, used = 7, {}, 0
+  -- (only the distinct keys, in the order they first come: a key met again finds its own slot and
+  -- changes nothing, so the table, and the order, are the same - without hashing every repeat)
+  local distinct, seen = {}, {}
   for _, key in ipairs(seq) do
+    if not seen[key] then seen[key] = true; distinct[#distinct + 1] = key end
+  end
+  local mask, tbl, used = 7, {}, 0
+  for _, key in ipairs(distinct) do
     local h = hashOf(key)
     local perturb = h
     local i = tonumber(band(perturb, 0ULL + mask))

@@ -1008,4 +1008,574 @@ function K.ProjCanopy(name, cx, cz, r, y_rim, y_top, o)
   end }
 end
 
+-- ── Mound: a rounded thing (a rock in the sea) lifted pixel by pixel off its drawing ──
+
+--- Every point (u, v) of the drawing goes to (u, h, v + h), which the GBA's 45 degrees see as
+--- that same point whatever h is: h is only how round it is. Each column of the drawing is a cut
+--- through a dome: an ellipse half `rise` times as tall as it is deep, standing on the water, its
+--- foot where the column's drawing ends and its top as far up as the column is drawn. Behind the
+--- grazing point the ellipse goes on down to the water: the back, laid with the texels in front
+--- of it (the grown band), closed at both ends. `step`: the lattice in pixels across the columns.
+--- `ring` (a set of keyRGB colours): what the drawing puts round its foot on the water (foam, a
+--- shadow), laid flat on the water from the band below `rows` that holds it alone (K.withRing).
+--- `art` the texture K.withRing makes.
+function K.Mound(name, art, o)
+  o = o or {}
+  local rise, step, backSteps = o.rise or 1.0, o.step or 4, o.back_steps or 3
+  local rows = o.rows or art.h
+  local ring = o.ring or {}
+  local W = art.w
+  local apx = art.px
+  local foam = K.ringPixels({ w = W, h = rows, px = apx }, ring)
+  local function bodyAt(u, v)
+    return apx[(v * W + u) * 4 + 4] >= 0.5 and not foam[v * W + u]
+  end
+  local backBand = art.h >= 3 * rows and 2 * rows or 0
+  local hasRing = next(ring) ~= nil
+
+  local function spans()
+    local runs = {}
+    for u = 0, W - 1 do
+      local a, b
+      for v = 0, rows - 1 do
+        if bodyAt(u, v) then
+          if not a then a = v end
+          b = v
+        end
+      end
+      runs[u] = a and { a, b + 1 } or false
+    end
+    local u0, u1
+    for u = 0, W - 1 do
+      if runs[u] then
+        if not u0 then u0 = u end
+        u1 = u + 1
+      end
+    end
+    if not u0 then return {} end
+    for u = u0, u1 - 1 do
+      if not runs[u] then runs[u] = runs[u - 1] end   -- a gap down the middle: bridged
+    end
+    local lines = { { u0, runs[u0][1], runs[u0][2] } }
+    for u = u0, u1 - 1 do lines[#lines + 1] = { u + 0.5, runs[u][1], runs[u][2] } end
+    lines[#lines + 1] = { u1, runs[u1 - 1][1], runs[u1 - 1][2] }
+    local function straight(i, j)
+      local xa, ta, fa = lines[i][1], lines[i][2], lines[i][3]
+      local xb, tb, fb = lines[j][1], lines[j][2], lines[j][3]
+      for k = i + 1, j - 1 do
+        local x, t, f = lines[k][1], lines[k][2], lines[k][3]
+        local g = (x - xa) / (xb - xa)
+        if abs(ta + (tb - ta) * g - t) > 0.5 or abs(fa + (fb - fa) * g - f) > 0.5 then return false end
+      end
+      return true
+    end
+    local keep, i = { 1 }, 1
+    while i < #lines do
+      local j = i + 1
+      while j + 1 <= #lines and lines[j + 1][1] - lines[i][1] <= step and straight(i, j + 1) do j = j + 1 end
+      keep[#keep + 1] = j
+      i = j
+    end
+    local out = {}
+    for n, k in ipairs(keep) do out[n] = lines[k] end
+    return out
+  end
+
+  local function tri(mesh, a, b, c, shade, tag, outward)
+    local nx, ny, nz = cross(a, b, c)
+    if nx * nx + ny * ny + nz * nz < 1e-12 then return end
+    if not outward then
+      -- drawn: it faces the 45-degree view
+      if ny + nz < 0 then b, c = c, b end
+    else
+      local gx = (a[1] + b[1] + c[1]) / 3.0 - outward[1]
+      local gy = (a[2] + b[2] + c[2]) / 3.0 - outward[2]
+      local gz = (a[3] + b[3] + c[3]) / 3.0 - outward[3]
+      if nx * gx + ny * gy + nz * gz < 0 then b, c = c, b end
+    end
+    mesh:tri(a, b, c, shade, tag)
+  end
+  local function quad(mesh, p, q, r, s, shade, tag, outward)
+    tri(mesh, p, q, r, shade, tag, outward)
+    tri(mesh, p, r, s, shade, tag, outward)
+  end
+  local function behind(p) return { p[1], p[2], p[3], p[4], p[5] + backBand } end
+
+  return { name = name, emit = function(_, mesh)
+    local k = rise
+    local sp = spans()
+    if #sp == 0 then return end
+    local widest = 0
+    for _, s in ipairs(sp) do widest = max(widest, s[3] - s[2]) end
+    local n = max(4, math.ceil(widest / step))
+    local cols = {}
+    for _, s in ipairs(sp) do
+      local x, vt, vb = s[1], s[2], s[3]
+      local L = vb - vt
+      local a = L / (1.0 + sqrt(1.0 + k * k))
+      local b = k * a
+      local zc = vb - a
+      local front = {}
+      for i = 0, n do
+        local v = vt + L * i / n
+        -- ((v + t - zc) / a)^2 + (t / b)^2 = 1, the root nearest the eye
+        local A = 1.0 / (a * a) + 1.0 / (b * b)
+        local B = 2.0 * (v - zc) / (a * a)
+        local C = (v - zc) ^ 2 / (a * a) - 1.0
+        local disc = max(0.0, B * B - 4 * A * C)
+        local t = max(0.0, (-B + sqrt(disc)) / (2 * A))
+        front[#front + 1] = { x, t, v + t, x, v }
+      end
+      local back = {}
+      local th0 = pi - atan2(b, a)
+      for i = 1, backSteps do
+        local th = th0 + (pi - th0) * i / backSteps
+        local z, y = zc + a * cos(th), b * sin(th)
+        if i == backSteps then y = 0.0 end
+        back[#back + 1] = { x, y, z, x, min(vb - 1e-3, max(vt, z - y)) + backBand }
+      end
+      cols[#cols + 1] = { front, back, zc }
+    end
+    for c = 1, #cols - 1 do
+      local fa, ba, za = cols[c][1], cols[c][2], cols[c][3]
+      local fb, bb, zb = cols[c + 1][1], cols[c + 1][2], cols[c + 1][3]
+      for i = 1, n do
+        quad(mesh, fa[i], fb[i], fb[i + 1], fa[i + 1], SHADE_ART, name .. "~proj")
+      end
+      local ra, rb = { behind(fa[1]) }, { behind(fb[1]) }
+      for _, p in ipairs(ba) do ra[#ra + 1] = p end
+      for _, p in ipairs(bb) do rb[#rb + 1] = p end
+      local centre = { (fa[1][1] + fb[1][1]) / 2.0, 0.0, (za + zb) / 2.0 }
+      for i = 1, #ra - 1 do
+        quad(mesh, ra[i], rb[i], rb[i + 1], ra[i + 1], K.SHADE_WOUND, name .. ".back~behind~proj", centre)
+      end
+    end
+    -- the ring round its foot, flat on the water
+    if hasRing then
+      local x0, y0, x1, y1
+      for v = rows, min(art.h, 2 * rows) - 1 do
+        for u = 0, W - 1 do
+          if apx[(v * W + u) * 4 + 4] > 0 then
+            local r = v - rows
+            x0, x1 = x0 and min(x0, u) or u, x1 and max(x1, u + 1) or u + 1
+            y0, y1 = y0 and min(y0, r) or r, y1 and max(y1, r + 1) or r + 1
+          end
+        end
+      end
+      if x0 then
+        local e = 0.05
+        local q = {}
+        for i, c in ipairs({ { x0, y0 }, { x1, y0 }, { x1, y1 }, { x0, y1 } }) do
+          q[i] = { c[1], e, c[2] + e, c[1], c[2] + rows }
+        end
+        quad(mesh, q[1], q[2], q[3], q[4], SHADE_ART, name .. ".ring~proj")
+      end
+    end
+    -- the two ends, closed by the column's own cut
+    for _, e in ipairs({ { cols[1], -1 }, { cols[#cols], 1 } }) do
+      local front, back, zc = e[1][1], e[1][2], e[1][3]
+      local rg = {}
+      for i = #front, 1, -1 do rg[#rg + 1] = behind(front[i]) end
+      for _, p in ipairs(back) do rg[#rg + 1] = p end
+      if #rg >= 3 then
+        local centre = { rg[1][1] - e[2], 0.0, zc }
+        for i = 2, #rg - 1 do
+          tri(mesh, rg[1], rg[i], rg[i + 1], K.SHADE_WOUND, name .. ".end~behind~proj", centre)
+        end
+      end
+    end
+  end }
+end
+
+-- ── VoxelLathe / BakedLathe: a turned thing (Slateport's stone lantern) ───────
+
+local VX_TOP, VX_SOUTH, VX_WEST, VX_EAST = 0, 1, 3, 4
+local VX_SPREAD = 0.5
+
+-- Python's round(): halves to even
+local function pyRound(x)
+  local f = floor(x)
+  local d = x - f
+  if d > 0.5 then return f + 1 elseif d < 0.5 then return f end
+  return f % 2 == 0 and f or f + 1
+end
+local function trunc(x) return x >= 0 and floor(x) or -floor(-x) end
+local function copysign(a, b) return (b < 0 or (b == 0 and 1 / b < 0)) and -abs(a) or abs(a) end
+
+--- A drawn round thing as true 1-pixel cubes: the volume a lathe (`profile` of { y, radius }, its
+--- plan an ellipse `squash` times as deep as wide, `power(y)` for a squarer plan), voxelized,
+--- then carved until the GBA's 45-degree view of its cubes is the drawing exactly (a cube showing
+--- an undrawn pixel goes, a drawn pixel nothing shows gets a cube resting on the solid). Only its
+--- cubes and colours are used here: BakedLathe bakes its texture off them. `drawn(u, v)`: the
+--- pixel is this thing's.
+function K.VoxelLathe(name, art, drawnFn, cx, cz, profile, squash, ymax, power)
+  local self = { name = name, art = art, drawn = drawnFn, cx = cx, cz = cz, profile = profile,
+                 squash = squash, W = art.w, H = art.h, ymax = ymax or 64,
+                 power = power or function() return 2.0 end }
+  local W, H, YM = self.W, self.H, self.ymax
+  local SI, SJ = W + 8, YM + 8
+  local function ck(i, j, k) return ((k + 4) * SJ + (j + 4)) * SI + (i + 4) end
+  local function unck(c)
+    local i = c % SI
+    local r = (c - i) / SI
+    local j = r % SJ
+    return i - 4, j - 4, (r - j) / SJ - 4
+  end
+  local PO = 512
+  local function pk(u, v) return (v + PO) * 1024 + u end
+  self.ck = ck
+
+  function self.radius(y)
+    local p = profile
+    if y < p[1][1] or y > p[#p][1] then return 0.0 end
+    for n = 1, #p - 1 do
+      local ya, ra, yb, rb = p[n][1], p[n][2], p[n + 1][1], p[n + 1][2]
+      if ya <= y and y <= yb then
+        if yb == ya then return ra end
+        return ra + (rb - ra) * (y - ya) / (yb - ya)
+      end
+    end
+    return 0.0
+  end
+  local radius, powerOf = self.radius, self.power
+  function self.inside(x, y, z)
+    local r = radius(y)
+    if not (r > 0) then return false end
+    local p = powerOf(y)
+    return abs((x - cx) / r) ^ p + abs((z - cz) / (squash * r)) ^ p <= 1.0
+  end
+  local px = art.px
+  function self.px(u, v)
+    u = min(W - 1, max(0, trunc(u)))
+    v = min(H - 1, max(0, trunc(v)))
+    local o = (v * W + u) * 4
+    return px[o + 1], px[o + 2], px[o + 3]
+  end
+
+  -- pixel -> { key, cube, face } the 45-degree view sees there
+  local function facesOf(occ)
+    local seen = {}
+    for c in pairs(occ) do
+      local i, j, k = unck(c)
+      if not occ[ck(i, j + 1, k)] then
+        local p, key = pk(i, k - j - 1), j + 1.0
+        local s = seen[p]
+        if not s or s[1] < key then seen[p] = { key, c, VX_TOP } end
+      end
+      if not occ[ck(i, j, k + 1)] then
+        local p, key = pk(i, k - j), j + 0.5
+        local s = seen[p]
+        if not s or s[1] < key then seen[p] = { key, c, VX_SOUTH } end
+      end
+    end
+    return seen
+  end
+
+  local D, Dlist = {}, {}
+  for v = 0, H - 1 do
+    for u = 0, W - 1 do
+      if drawnFn(u, v) then D[pk(u, v)] = true; Dlist[#Dlist + 1] = { u, v } end
+    end
+  end
+  local zmax = H + YM
+  local occ = {}
+  for j = 0, YM - 1 do
+    if radius(j + 0.5) > 0 then
+      for k = 0, zmax - 1 do
+        for i = 0, W - 1 do
+          if self.inside(i + 0.5, j + 0.5, k + 0.5) then occ[ck(i, j, k)] = true end
+        end
+      end
+    end
+  end
+  -- carve: a cube showing an undrawn pixel goes; new ones show behind
+  while true do
+    local seen = facesOf(occ)
+    local bad = {}
+    local any = false
+    for p, s in pairs(seen) do
+      if not D[p] then bad[s[2]] = true; any = true end
+    end
+    if not any then break end
+    for c in pairs(bad) do occ[c] = nil end
+  end
+  -- fill: a drawn pixel nothing shows gets a cube, as high as it can stand touching the solid,
+  -- showing nothing undrawn (what the view sees only ever grows by the new cube's own faces: a
+  -- face it hides is covered by one further up the same ray)
+  for _ = 1, 8 do
+    local seen = facesOf(occ)
+    local missing = {}
+    for _, d in ipairs(Dlist) do if not seen[pk(d[1], d[2])] then missing[#missing + 1] = d end end
+    if #missing == 0 then break end
+    -- (Dlist is in (v, u) order already)
+    for _, m in ipairs(missing) do
+      local u, v = m[1], m[2]
+      if not seen[pk(u, v)] then
+        local best, bestA, bestB
+        for j = 0, YM - 1 do
+          for t = 0, 1 do
+            local i, jj, k = u, j, v + j + t
+            local c = ck(i, jj, k)
+            if not occ[c] and k >= 0 then
+              if occ[ck(i - 1, jj, k)] or occ[ck(i + 1, jj, k)] or occ[ck(i, jj - 1, k)] or occ[ck(i, jj + 1, k)]
+                or occ[ck(i, jj, k - 1)] or occ[ck(i, jj, k + 1)] then
+                local topP = not occ[ck(i, jj + 1, k)] and pk(i, k - jj - 1) or nil
+                local southP = not occ[ck(i, jj, k + 1)] and pk(i, k - jj) or nil
+                local want = pk(u, v)
+                if (topP == want or southP == want) and (not topP or D[topP]) and (not southP or D[southP]) then
+                  local a = ((occ[ck(i, jj - 1, k)] or jj == 0) and 0 or 1)
+                  if best == nil or a < bestA or (a == bestA and jj < bestB) then
+                    best, bestA, bestB = c, a, jj
+                  end
+                end
+              end
+            end
+          end
+        end
+        if best then
+          occ[best] = true
+          local i, jj, k = unck(best)
+          if not occ[ck(i, jj + 1, k)] then seen[pk(i, k - jj - 1)] = true end
+          if not occ[ck(i, jj, k + 1)] then seen[pk(i, k - jj)] = true end
+        end
+      end
+    end
+  end
+  self.occ = occ
+  local seen = facesOf(occ)
+  -- (a speck drawn over a clear pixel: no cube can show it; the baked lathe never reads those)
+  self.visible = {}
+  for p, s in pairs(seen) do
+    local u = p % 1024
+    self.visible[s[2] * 8 + s[3]] = { u, (p - u) / 1024 - PO }
+  end
+  return setmetatable(self, { __index = K.VoxelLatheMethods })
+end
+
+K.VoxelLatheMethods = {}
+local VL = K.VoxelLatheMethods
+
+--- The drawn pixel nearest (u, v) along its row, then its column.
+function VL:nearestDrawn(u, v)
+  u, v = pyRound(u), pyRound(v)
+  for d = 0, 39 do
+    for _, ab in ipairs({ { u - d, v }, { u + d, v }, { u, v - d }, { u, v + d } }) do
+      local a, b = ab[1], ab[2]
+      if a >= 0 and a < self.W and b >= 0 and b < self.H and self.drawn(a, b) then
+        local o = (b * self.W + a) * 4
+        return self.art.px[o + 1], self.art.px[o + 2], self.art.px[o + 3]
+      end
+    end
+  end
+  return 128 / 255, 128 / 255, 128 / 255
+end
+
+--- A cube face's colour: the pixel the view sees it as; a step's side its face's; the back the
+--- front opposite it; elsewhere the ring of its height turned round the axis.
+function VL:colour(i, j, k, f)
+  local c = self.ck(i, j, k)
+  local vis = self.visible[c * 8 + f]
+  if vis then return self.px(vis[1], vis[2]) end
+  if f == VX_WEST or f == VX_EAST then
+    vis = self.visible[c * 8 + VX_SOUTH]
+    if vis then return self.px(vis[1], vis[2]) end
+  end
+  local x, y, z = i + 0.5, j + 0.5, k + 0.5
+  if f == VX_TOP or f == VX_SOUTH or f == 2 then
+    local zm = 2 * self.cz - z
+    local km = floor(zm)
+    local v = f == VX_TOP and km - j - 1 or km - j
+    if self.drawn(i, v) then return self.px(i, v) end
+  end
+  local th = atan2(x - self.cx, (z - self.cz) / self.squash)
+  if abs(th) > pi / 2 then th = copysign(pi - abs(th), th) end
+  local r = self.radius(y)
+  if r == 0 then r = 1.0 end
+  local v = self.cz + self.squash * r - y
+  local vi = trunc(v)
+  local lo, hi
+  for u = 0, self.W - 1 do
+    if self.drawn(u, vi) then
+      if not lo then lo = u end
+      hi = u
+    end
+  end
+  if lo then
+    local l, h2 = lo + 1.5, hi - 0.5
+    local u = (l + h2) / 2 + (h2 - l) / 2 * VX_SPREAD * th / (pi / 2)
+    return self:nearestDrawn(u, v)
+  end
+  return self:nearestDrawn(x, v)
+end
+
+local function area3(a, b, c)
+  local e1x, e1y, e1z = b[1] - a[1], b[2] - a[2], b[3] - a[3]
+  local e2x, e2y, e2z = c[1] - a[1], c[2] - a[2], c[3] - a[3]
+  return e1y * e2z - e1z * e2y, e1z * e2x - e1x * e2z, e1x * e2y - e1y * e2x
+end
+
+--- A turned thing as a game draws a prop: a low-poly lathe (`sides` round, a ring at each point
+--- of the profile) with its texture baked off the true-cube model (`cubes`, a VoxelLathe), every
+--- texel the colour of the cube face under it, the drawing's where the GBA's view sees it. u runs
+--- round it by angle (the back the seam), v up the profile by its slant length. `shift_z`: stood
+--- that far north of where it is drawn. :texture() gives the drawing with the baked band under it.
+function K.BakedLathe(name, cubes, sides, shift_z)
+  local self = { name = name, cubes = cubes, sides = sides or 24, shift_z = shift_z or 0.0 }
+  local vl = cubes
+  local rings = {}
+  for n, pr in ipairs(vl.profile) do rings[n] = { pr[1] + 0.0, pr[2] + 0.0 } end
+  local vs = { 0.0 }
+  for n = 1, #rings - 1 do
+    local y0, r0, y1, r1 = rings[n][1], rings[n][2], rings[n + 1][1], rings[n + 1][2]
+    vs[n + 1] = vs[n] + sqrt((y1 - y0) ^ 2 + (r1 - r0) ^ 2)
+  end
+  local rmax = 0
+  for _, rg in ipairs(rings) do rmax = max(rmax, rg[2]) end
+  local a, b = rmax, rmax * vl.squash
+  self.ulen = math.ceil(pi * (3 * (a + b) - sqrt((3 * a + b) * (a + 3 * b))))
+  self.rings, self.vs, self.v0 = rings, vs, vl.H
+  local FACING = 0.45
+
+  -- the ring's point at angle th (0 the front, south)
+  local function point(ring, th)
+    local y, r = rings[ring + 1][1], rings[ring + 1][2]
+    local p = vl.power(y)
+    local c, s_ = cos(th), sin(th)
+    local e = 2.0 / p
+    local px_ = copysign(abs(s_) ^ e, s_)
+    local pz = copysign(abs(c) ^ e, c)
+    return { vl.cx + r * px_, y, vl.cz + vl.squash * r * pz }
+  end
+  local function theta(k) return -pi + 2.0 * pi * k / self.sides end
+  -- whether the GBA's 45-degree view sees the surface at pt: nothing of the solid up its ray
+  local function seenAt(x, y, z)
+    local t = 0.75
+    while t < 80.0 do
+      if vl.inside(x, y + t, z + t) then return false end
+      t = t + 0.5
+    end
+    return true
+  end
+  local function drawnPx(x, y, z)
+    local u, v = floor(x), floor(z - y)
+    if vl.drawn(u, v) then return vl.px(u, v) end
+  end
+  local function colourAt(pt, nrm)
+    local x, y, z = pt[1], pt[2], pt[3]
+    local zm = 2 * vl.cz - z
+    if nrm[2] > 0.7 and z < vl.cz then
+      -- a top's back half: the front half opposite it (its far edge is drawn as an outline)
+      if seenAt(x, y, zm) then
+        local r, g, b2 = drawnPx(x, y, zm)
+        if r then return r, g, b2 end
+      end
+    end
+    if seenAt(x, y, z) then
+      local r, g, b2 = drawnPx(x, y, z)
+      if r then return r, g, b2 end
+    end
+    if seenAt(x, y, zm) then
+      local r, g, b2 = drawnPx(x, y, zm)
+      if r then return r, g, b2 end
+    end
+    local ci, cj, ckk = floor(x - nrm[1] * 0.5), floor(y - nrm[2] * 0.5), floor(z - nrm[3] * 0.5)
+    local face = nrm[1] > 0 and VX_EAST or VX_WEST
+    if abs(nrm[2]) > max(abs(nrm[1]), abs(nrm[3])) then face = VX_TOP end
+    return vl:colour(ci, cj, ckk, face)
+  end
+
+  function self.texture()
+    local W = max(vl.W, self.ulen)
+    local V = math.ceil(vs[#vs]) + 1
+    local H = vl.H
+    local tex = { w = W, h = H + V, px = {} }
+    local tp = tex.px
+    for i = 1, W * (H + V) * 4 do tp[i] = 0 end
+    local ap = vl.art.px
+    for y = 0, H - 1 do
+      for x = 0, vl.W - 1 do
+        local s, d = (y * vl.W + x) * 4, (y * W + x) * 4
+        for c = 1, 4 do tp[d + c] = ap[s + c] end
+      end
+    end
+    local n = #rings
+    for iv = 0, V - 1 do
+      local sv = iv + 0.5
+      local j = 0
+      while j < n - 2 and vs[j + 2] < sv do j = j + 1 end
+      local g = min(1.0, max(0.0, (sv - vs[j + 1]) / max(1e-6, vs[j + 2] - vs[j + 1])))
+      for iu = 0, self.ulen - 1 do
+        local th = -pi + 2.0 * pi * (iu + 0.5) / self.ulen
+        local A, B = point(j, th), point(j + 1, th)
+        local pt = { A[1] + (B[1] - A[1]) * g, A[2] + (B[2] - A[2]) * g, A[3] + (B[3] - A[3]) * g }
+        local e = 1e-3
+        local t1, t2 = point(j, th + e), point(j + 1, th + e)
+        local tg = { (t1[1] - A[1]) * (1 - g) + (t2[1] - B[1]) * g, (t1[2] - A[2]) * (1 - g) + (t2[2] - B[2]) * g,
+                     (t1[3] - A[3]) * (1 - g) + (t2[3] - B[3]) * g }
+        local up = { B[1] - A[1], B[2] - A[2], B[3] - A[3] }
+        local nn = { tg[2] * up[3] - tg[3] * up[2], tg[3] * up[1] - tg[1] * up[3], tg[1] * up[2] - tg[2] * up[1] }
+        local L = sqrt(nn[1] ^ 2 + nn[2] ^ 2 + nn[3] ^ 2)
+        if L == 0 then L = 1.0 end
+        nn[1], nn[2], nn[3] = nn[1] / L, nn[2] / L, nn[3] / L
+        local ox, oz = pt[1] - vl.cx, pt[3] - vl.cz
+        if nn[1] * ox + nn[3] * oz < 0 or (abs(ox) + abs(oz) < 1e-6 and nn[2] < 0) then
+          nn[1], nn[2], nn[3] = -nn[1], -nn[2], -nn[3]
+        end
+        local r, gg, bb = colourAt(pt, nn)
+        local d = ((H + iv) * W + iu) * 4
+        tp[d + 1], tp[d + 2], tp[d + 3], tp[d + 4] = r, gg, bb, 1
+      end
+    end
+    return tex
+  end
+
+  function self.emit(_, mesh)
+    local n = #rings
+    local dz = self.shift_z
+    for j = 0, n - 2 do
+      for k = 0, self.sides - 1 do
+        local t0, t1 = theta(k), theta(k + 1)
+        local u0, u1 = self.ulen * k / self.sides, self.ulen * (k + 1) / self.sides
+        local va, vb = self.v0 + vs[j + 1], self.v0 + vs[j + 2]
+        local p0, p1, p2, p3 = point(j, t0), point(j, t1), point(j + 1, t1), point(j + 1, t0)
+        p0[4], p0[5], p1[4], p1[5] = u0, va, u1, va
+        p2[4], p2[5], p3[4], p3[5] = u1, vb, u0, vb
+        for _, tri in ipairs({ { p0, p1, p2 }, { p0, p2, p3 } }) do
+          local ax, ay, az = area3(tri[1], tri[2], tri[3])
+          if ax * ax + ay * ay + az * az >= 1e-9 then
+            local mx = (tri[1][1] + tri[2][1] + tri[3][1]) / 3.0
+            local mz = (tri[1][3] + tri[2][3] + tri[3][3]) / 3.0
+            local ox, oz = mx - vl.cx, mz - vl.cz
+            if ax * ox + az * oz < 0 or (ay < 0 and abs(ax) + abs(az) < 1e-9) then
+              tri = { tri[1], tri[3], tri[2] }
+              ax, ay, az = -ax, -ay, -az
+            end
+            local shade = (ay + az >= 0) and SHADE_ART or SHADE_BACK
+            local L = sqrt(ax * ax + ay * ay + az * az)
+            local facing = (ay + az) / (L * sqrt(2.0))
+            local topBack = ay / L > 0.7 and mz < vl.cz
+            local out = {}
+            if facing > FACING and not topBack and seenAt(tri[1][1], tri[1][2], tri[1][3])
+              and seenAt(tri[2][1], tri[2][2], tri[2][3]) and seenAt(tri[3][1], tri[3][2], tri[3][3]) then
+              -- turned to the GBA's view: the drawing itself, projected
+              for m = 1, 3 do
+                local p = tri[m]
+                out[m] = { p[1], p[2], p[3] + dz, p[1], p[3] - p[2] }
+              end
+              mesh:tri(out[1], out[2], out[3], shade, self.name .. ".front~proj")
+            else
+              for m = 1, 3 do
+                local p = tri[m]
+                out[m] = { p[1], p[2], p[3] + dz, p[4], p[5] }
+              end
+              mesh:tri(out[1], out[2], out[3], shade, self.name .. ".baked~clamp")
+            end
+          end
+        end
+      end
+    end
+  end
+  return self
+end
+
 end

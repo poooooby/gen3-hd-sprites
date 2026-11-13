@@ -69,6 +69,9 @@ return function(deps)
     return a
   end
 
+  -- a tileset's short name (voxel_props compares them): "battle_frontier" -> "battlefrontier"
+  local function short(name) return (tostring(name or ""):gsub("^gTileset_", ""):gsub("_", "")):lower() end
+
   -- every Emerald map by its slot: layouts by id, their maps' events joined
   local function load()
     local maps = gameData()
@@ -77,7 +80,7 @@ return function(deps)
     local Dataset, Rse = req("src.core.game3.dataset"), req("src.core.game3.rse")
     local cache = Dataset and Dataset.cache()
     if not (cache and Rse and json) then return nil end
-    local s = { maps = maps, layouts = {}, byName = {}, byMap = {}, arts = {}, roles = {} }
+    local s = { maps = maps, layouts = {}, byName = {}, byMap = {}, bySlot = {}, arts = {}, roles = {} }
     for id, def in pairs(maps) do
       if type(id) == "string" and id:match("^EM_") then
         local okG, g, n = pcall(Rse.mapGroupNum, id)
@@ -88,11 +91,20 @@ return function(deps)
           local L = s.layouts[h.layoutId]
           if not L then
             L = { id = h.layoutId, w = h.width, h = h.height, pair = def.pair, warps = {}, signs = {},
-                  outdoor = false, maps = {},
+                  outdoor = false, maps = {}, links = {},
+                  tilesets = { h.primaryTileset, h.secondaryTileset },
+                  primary = short(select(1, Roles.pairTilesets(def.pair))),
+                  secondary = short(select(2, Roles.pairTilesets(def.pair))),
                   grid = cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/grid.bin") }
             s.layouts[h.layoutId] = L
           end
           L.maps[#L.maps + 1] = id
+          s.bySlot[slot] = L
+          -- (its maps' connections: { direction, the neighbour's slot, offset })
+          for _, c in ipairs(h.connections or {}) do
+            L.links[#L.links + 1] = { c.dir or c.direction, tostring(c.mapGroup) .. "_" .. tostring(c.mapNum),
+                                      tonumber(c.offset) or 0 }
+          end
           L.outdoor = L.outdoor or Dataset.isOutdoorMapType(h.mapType)
           local rawE = cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/events.json")
           local okE, e = pcall(function() return rawE and json(rawE) end)
@@ -179,6 +191,68 @@ return function(deps)
       s.posts, s.postDrawings = Roles.posts(all)
     end
     return s.posts, s.postDrawings
+  end
+
+  --- A layout's neighbours: { { L2, dx, dy } } where each neighbour's origin lies in the layout's
+  --- cells, from its maps' connections (voxel_props.connections).
+  local DIRS = { north = "up", south = "down", west = "left", east = "right", up = "up", down = "down",
+                 left = "left", right = "right" }
+  function World.neighbours(L)
+    local s = load()
+    if not (s and L) then return {} end
+    if L._neighbours then return L._neighbours end
+    local out = {}
+    for _, c in ipairs(L.links or {}) do
+      local B = s.bySlot[c[2]]
+      local d, off = DIRS[tostring(c[1]):lower()], c[3]
+      if B and B ~= L and d then
+        local at = d == "down" and { off, L.h } or d == "up" and { off, -B.h } or d == "right" and { L.w, off }
+          or { -B.w, off }
+        out[#out + 1] = { B, at[1], at[2] }
+      end
+    end
+    L._neighbours = out
+    return out
+  end
+
+  --- A layout's upper layer in subtiles (voxel_props.upper_subtiles), off the raw metatiles:
+  --- { at = { [sy * 4096 + sx] = tile + palette * 1024 + flips * 16384 }, order = { keys, row by
+  --- row } }, or nil.
+  function World.subtiles(L)
+    local s = load()
+    if not (s and L and L.grid and L.tilesets) then return nil end
+    if L._subs ~= nil then return L._subs or nil end
+    L._subs = false
+    local Dataset = req("src.core.game3.dataset")
+    local cache = Dataset and Dataset.cache()
+    if not cache then return nil end
+    local function metatiles(key)
+      return key and cache:read("data/generated/gba/map_tree/tilesets/" .. tostring(key) .. "/metatiles.bin") or ""
+    end
+    local pt, st = metatiles(L.tilesets[1]), metatiles(L.tilesets[2])
+    local grid, W = L.grid, L.w
+    local at, order = {}, {}
+    for y = 0, L.h - 1 do
+      for x = 0, W - 1 do
+        local i = (y * W + x) * 2 + 1
+        local m = (grid:byte(i) + grid:byte(i + 1) * 256) % 1024
+        local ts, k = pt, m
+        if m >= 512 then ts, k = st, m - 512 end
+        if (k + 1) * 16 <= #ts then
+          for q = 0, 3 do
+            local o = k * 16 + (4 + q) * 2 + 1
+            local en = ts:byte(o) + ts:byte(o + 1) * 256
+            if en % 1024 ~= 0 then
+              local key = (y * 2 + math.floor(q / 2)) * 4096 + x * 2 + q % 2
+              at[key] = en % 1024 + (math.floor(en / 4096) % 16) * 1024 + (math.floor(en / 1024) % 4) * 16384
+              order[#order + 1] = key
+            end
+          end
+        end
+      end
+    end
+    L._subs = { at = at, order = order }
+    return L._subs
   end
 
   --- A layout's roles (Roles.new over its adapter, cached), or nil.

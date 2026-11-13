@@ -428,6 +428,7 @@ return function(S)
       end
       for y = 0, art.h - 1 do
         for x = 0, art.w - 1 do
+          tickN()
           local cell = K(x + ox, y + oy)
           if not self.src[cell] then
             self.src[cell] = { lid, x, y }
@@ -845,6 +846,7 @@ return function(S)
     local runs = {}
     for x = c.xs.start, c.xs.stop - 1 do
       for y = c.ys.start, c.ys.stop - 1 do
+        tickN()
         local nxt = K(x, y + 1)
         local hi = K(x, y)
         while onTop(hi) do hi = K(x, KY(hi) - 1) end
@@ -860,6 +862,7 @@ return function(S)
     end
     for y = c.ys.start, c.ys.stop - 1 do
       for x = c.xs.start, c.xs.stop - 1 do
+        tickN()
         local nxt = K(x + 1, y)
         if flat(K(x, y)) and c.band[nxt] then
           local side = c.band[nxt]
@@ -894,6 +897,7 @@ return function(S)
       t[b] = true
     end
     for _, r in ipairs(runs) do
+      tickN()
       apartAdd(r[2], r[4])
       apartAdd(r[4], r[2])
     end
@@ -975,10 +979,11 @@ return function(S)
       if p[2] ~= q[2] then return cmpXY(p[2], q[2]) end
       return cmpXY(p[3], q[3])
     end)
-    for _, e in ipairs(edges) do join(e[2], e[3]) end
+    for _, e in ipairs(edges) do tickN(); join(e[2], e[3]) end
     c.tree_ground = {}
     local comp, compOrder = {}, {}
     for _, cell in ipairs(ufOrder) do
+      tickN()
       if c.kind[cell] == UNKNOWN then
         c.tree_ground[cell] = find(cell)
       else
@@ -993,6 +998,7 @@ return function(S)
   local function steps(c, cells, direction)
     local out, n = {}, 0
     for i, cell in ipairs(cells) do
+      tickN()
       if direction == "S" and i > 1 and UPPER_END[c:role_id(cells[i - 1])] and LOWER_END[c:role_id(cell)]
           and out[i - 1] == n - 1 then
         out[i] = out[i - 1]

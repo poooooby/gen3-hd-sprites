@@ -91,10 +91,26 @@ local function body(game, log)
   -- a slice a frame, and log its phases
   if env("RELIEF_BUILD") and hd._reliefStep then
     local t0, st, why, phases = love.timer.getTime(), nil, nil, nil
+    local worstStep, longSteps = 0, 0
     for _ = 1, 200000 do
-      st, why, phases = hd._reliefStep()
+      local ts = love.timer.getTime()
+      st, why, phases = hd._reliefStep(tonumber(env("RELIEF_WATCH") or ""))
+      local spent = love.timer.getTime() - ts
+      worstStep = math.max(worstStep, spent)
+      if spent > 0.05 then longSteps = longSteps + 1 end
       if st ~= "running" and st ~= "idle" then break end
       U.wait(1)
+    end
+    log(("relief build: longest slice %.0f ms, %d slices over 50 ms"):format(worstStep * 1000, longSteps))
+    -- RELIEF_WATCH=seconds: the stretches without a tick longer than that, where they ended
+    local run = hd.scene and hd.scene.reliefRun
+    if run and run.gaps then
+      table.sort(run.gaps, function(a, b) return a[1] > b[1] end)
+      for i = 1, math.min(12, #run.gaps) do
+        local g = run.gaps[i]
+        local where = g[2]:gsub("%c%s*", " | ")
+        log(("gap %4.0f ms heap %4.0f MB after %s at%s"):format(g[1], g[3], g[4], where:sub(1, 700)))
+      end
     end
     log(("relief build: %s (%s) in %.1f s: %s"):format(tostring(st), tostring(why), love.timer.getTime() - t0,
       table.concat(phases or {}, ", ")))

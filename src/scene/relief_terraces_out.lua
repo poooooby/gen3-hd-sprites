@@ -1115,7 +1115,7 @@ return function(S)
   function T.apply(M, reference, layouts)
     if reference == nil then
       local Relief = S.opt.Relief
-      reference = Relief.decode(Relief.encode(M))
+      reference = Relief.decode(Relief.encode(M, nil, S.tick), S.tick)
     end
     local done = {}
     local report = {}

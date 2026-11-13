@@ -158,9 +158,11 @@ return function(mod, hd, state)
     local r1, g1, b1, a1 = src.over(mid, x, y)
     return r0, g0, b0, a0, r1, g1, b1, a1
   end
-  exports._reliefStep = function()
+  exports._reliefStep = function(watch)
     local run = hd.scene and hd.scene.reliefRun
     if not run then return nil end
+    -- (dev: watch = seconds, the stretches between ticks longer than that, in run.gaps)
+    if watch and not run.watch then run.watch, run.gaps = watch, {} end
     local st = run.state()
     if st == "idle" then run.start() end
     run.step()

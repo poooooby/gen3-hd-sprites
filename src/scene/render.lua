@@ -17,6 +17,8 @@
 local Render = {}
 
 Render.CARD_SHADE = 0.82
+Render.BORDER_COURSES = 2   -- how tall the border round the map stands (Emerald 3DS's two courses)
+Render.SHADE = { south = 0.60, north = 0.50, west = 0.65, east = 0.55 }
 Render.UV_INSET = 0.02      -- texels kept off a tile's edge (no neighbour bleeding at an angle)
 Render.FLAT_MARK = 0.5      -- the vertex alpha of a standing cell's ground copy
 Render.HIDE_AT = 2          -- the rise past which those copies are gone (above 1: never; a wide
@@ -112,6 +114,70 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
     quad(list("trees", timg), rel(a), rel(b), rel(c), rel(d),
       (u0 + e) / dim, (v0 + e) / dim, (u1 - e) / dim, (v1 - e) / dim, 1, 1)
   end
+  -- the border round the battle map (Emerald 3DS's belt, voxel_mesh_builder.c VoxelMesh_EmitBorder):
+  -- each cell past every map (cell.border, src/scene/init.lua: its level, its block's metatiles)
+  -- stands BORDER_COURSES courses of the border block at its level; its faces only where it meets
+  -- the map or water beside it, steps where the next cell stands lower, and its north wall over
+  -- a lower row behind. Water lies flat (the ground pass), trees are trees.
+  local C = Render.BORDER_COURSES
+  local function borderAt(x, y)
+    local o = grid.at(x, y)
+    return o and o.border or nil
+  end
+  local function block(cell, t, part)
+    local b = cell.border
+    if b.water or part then return end
+    local x0, x1 = cell.cx - ox, cell.cx - ox + 1
+    local lv = b.level
+    local z0 = cell.cy - oz + lv
+    local z1 = z0 + 1
+    local function face(m, a, bb, c, d, shade)
+      local slot = m and t.slot(m)
+      if not slot then return end
+      put("lower", t.image, t.quad(slot), a, bb, c, d, shade)
+      put("upper", t.overImage, t.overQuad(slot), a, bb, c, d, shade)
+    end
+    -- steps down to a lower border cell beside it (south, east, west)
+    for _, d in ipairs({ { 0, 1, "s" }, { 1, 0, "e" }, { -1, 0, "w" } }) do
+      local o = borderAt(cell.cx + d[1], cell.cy + d[2])
+      if o and o.level < lv - 0.05 then
+        local yb, yt = o.level, lv
+        if d[3] == "s" then
+          face(b.mid, { x0, yt, z1 }, { x1, yt, z1 }, { x1, yb, z1 }, { x0, yb, z1 }, Render.SHADE.south)
+        elseif d[3] == "e" then
+          face(b.mid, { x1, yt, z1 }, { x1, yt, z0 }, { x1, yb, z0 }, { x1, yb, z1 }, Render.SHADE.east)
+        else
+          face(b.mid, { x0, yt, z0 }, { x0, yt, z1 }, { x0, yb, z1 }, { x0, yb, z0 }, Render.SHADE.west)
+        end
+      end
+    end
+    -- the north wall over a lower row behind, and that row's top run on to it
+    local n = borderAt(cell.cx, cell.cy - 1)
+    if n then
+      local low = n.water and n.level or n.level + C
+      local top = lv + C
+      local za = cell.cy - oz + n.level
+      if top - low >= 1 / 16 and z0 > za then
+        face(b.mids[1], { x1, top, z0 }, { x0, top, z0 }, { x0, low, z0 }, { x1, low, z0 }, Render.SHADE.north)
+        face(n.mids and n.mids[1] or b.mid, { x0, low, za }, { x1, low, za }, { x1, low, z0 }, { x0, low, z0 }, 1)
+      end
+    end
+    -- its top, read from the row its courses rise over
+    face(b.mids[1], { x0, lv + C, z0 }, { x1, lv + C, z0 }, { x1, lv + C, z1 }, { x0, lv + C, z1 }, 1)
+    local function open(dx, dy)
+      local o = grid.at(cell.cx + dx, cell.cy + dy)
+      return o ~= nil and (not o.border or o.border.water)
+    end
+    local south, east, west = open(0, 1), open(1, 0), open(-1, 0)
+    for h = 0, C - 1 do
+      local m = b.mids[h] or b.mid
+      local yb, yt = lv + h, lv + h + 1
+      if south then face(m, { x0, yt, z1 }, { x1, yt, z1 }, { x1, yb, z1 }, { x0, yb, z1 }, Render.SHADE.south) end
+      if east then face(m, { x1, yt, z1 }, { x1, yt, z0 }, { x1, yb, z0 }, { x1, yb, z1 }, Render.SHADE.east) end
+      if west then face(m, { x0, yt, z0 }, { x0, yt, z1 }, { x0, yb, z1 }, { x0, yb, z0 }, Render.SHADE.west) end
+    end
+  end
+
   for j = 0, grid.h - 1 do
     local row = grid.rows[j]
     for i = 0, grid.w - 1 do
@@ -147,6 +213,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
           put("lower", t.image, t.quad(slot), a, b, c, d, 1, flat)
           put("upper", t.overImage, t.overQuad(slot), a, b, c, d, 1, flat)
         end
+        if cell.border then block(cell, t, part) end
         if part then
           Trees.emit(putTree, sec, cell.mid, cell.cx, cell.cy, part, function(x, y)
             local o = grid.at(x, y)

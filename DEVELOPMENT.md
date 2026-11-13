@@ -502,24 +502,50 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   (appended to them, with `specs.helpers`): `Volume` (dome, drum, tube, slab, plate, lathe,
   profile, pyramid, prism, hip, box, hollow), `HeightSolid` (the volume cut to the drawing column
   by column; `K.HEIGHTSOLID_LOD` is the spec's `lod` while its `parts_art` runs), `ownBands`,
-  `ProjSection`, `ProjHull`, `ProjCanopy`, `clipToArt`; 31 specs: the battle tents, Slateport's
-  boats, Route 109's parasols, loungers and mats, Route 108's wreck, the Game Corner, Verdanturf's
-  flower box, Lavaridge's sand bath, Pacifidlog's hut, Sootopolis's houses, posts and the Cave of
-  Origin's doorway, the League and its bushes, the Battle Dome and Pike, the Space Center. Spec
-  fields: `lod`, `ground_rgb` (cleared at 5 bits a channel), `clip_art`; `parts_art(art, ctx)`
-  with `ctx.layoutArt(layout, x, y, w, h, ground)` for another building's reference drawing.
-  Not yet: the lathes (Slateport's lantern), Rustboro's fountain, Fortree (`voxel_fortree`),
-  `props` (rocks: found by raw upper-layer tile numbers, which the engine's atlases do not keep),
-  bridges, interiors, relief. Every ported spec builds the same triangles as the Python
-  generator (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on the
-  same synthetic drawing, their textures' checksums too; all 105 matched).
+  `ProjSection`, `ProjHull`, `ProjCanopy`, `clipToArt`, `Mound` (a rock lifted pixel by pixel off
+  its drawing), `VoxelLathe` / `BakedLathe` (true cubes carved to the drawing, then a 32-sided
+  lathe wearing a texture baked off them; the fill pass grows what the view sees by the new
+  cube's own faces only, so it skips the full re-scan per trial); 33 specs: the battle tents,
+  Slateport's boats, Route 109's parasols, loungers and mats, Route 108's wreck, the Game Corner,
+  Verdanturf's flower box, Lavaridge's sand bath, Pacifidlog's hut, Sootopolis's houses, posts and
+  the Cave of Origin's doorway, the League and its bushes, the Battle Dome and Pike, the Space
+  Center, Slateport's lantern, Rustboro's fountain (`PlanRing`, `Shade`, `Jet`). Spec fields:
+  `lod`, `ground_rgb` (cleared at 5 bits a channel), `clip_art`; `parts_art(art, ctx) -> parts,
+  texture[, live]` with `ctx.layoutArt(layout, x, y, w, h, ground)` for another building's
+  reference drawing, `ctx.animFrames(cx, cy)` (the rect cell's frames in the engine's tile
+  animation banks, `TilesetAnim._pairs[pair].banks`: whole metatiles or their upper layer) and
+  `ctx.lowerOf(m)` (a metatile's lower layer alone, off the atlas blobs). `live = { cell, frames,
+  texels }`: texels a tile animation redraws (the fountain's jet), kept with the model (and in its
+  cache) and repainted by `stepLive` when that metatile's bank turns to another frame. In a
+  battle the engine does not step the field's animations, so the jet holds the frame the field was
+  on, as the water does.
+- `models/fortree.lua` (appended to the specs after solid_specs): Fortree's tree houses (deck,
+  hut, `LeafRoof`, the bridge planks in the deck's end cells, all `Lifted` 28 px; the ladder a
+  `ProjPoly`), the bridge cells and the palms (a card leaning 50 degrees, the trunk cells laid from
+  their lower layer). `voxel_fortree.deck_table` (lifting walkers onto a deck) is not used: their
+  battle stage search counts a deck as a building's tall cells too. Not yet: bridges (Route 110's
+  cycling road), interiors. Every spec ported before the lantern builds the same triangles as the
+  Python generator (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on
+  the same synthetic drawing, their textures' checksums too; all 105 matched); the lantern,
+  fountain, Fortree and props are checked in the game only.
+- `props.lua`: `voxel_props.py`'s objects (sea rock, sand boulder, sea stack, Fallarbor's boulder
+  and stack) and finder, over a layout's upper layer in subtiles (`World.subtiles`: the raw
+  `metatiles.bin` of its tilesets; `World.neighbours`: its maps' connections, for an object a
+  seam cuts). `init.lua`'s `placeProps` runs it on each map the window shows (`env.where`: map
+  id and origin), then per variant (offset in its cells and what is drawn of it), once a
+  session, builds the art from the cells' upper layer quarters (`World.art`), `K.withRing` with
+  the spec's `ring`, and a `Mound` (`rise`, `step`). Its cells lay their own drawing for ground,
+  the object's quarters of the upper layer left out (the lower layer there). The flags, baskets,
+  urn and fruit (card, cylinder, lathe and dome props) are not modelled yet.
 - `buildings.lua`: in the game, per spec once per session: its reference template (the
   reference layout read through `Map.ensureMidLayout(Runtime._game, "EM_" .. name)`), its art
   from the reference pair's atlases (`imageData` = the lower layer, `overImageData` the upper;
   exact for NORMAL and SPLIT metatiles, COVERED ones read their composite as the lower layer),
   ground quarters (and with `ground_px` ground pixels) clear, `keep` applied. Only specs one of
   whose template metatiles the window draws are read. `find` places a spec wherever its core
-  cells (match rows, drawn cells) repeat (a primary-only core: any pair with the same primary;
+  cells (match rows, drawn cells) repeat, but a spec with `owned` cells only where it is drawn or
+  at its `repeat_at` places (the cell's place in its own map, `env.where`; gen_voxel_buildings's
+  rule) (a primary-only core: any pair with the same primary;
   else the same pair; WoobleView's own entries: `gym_sootopolis`, the shared `gym` parts over
   Sootopolis's rect, its roof in the town's own tiles; `ever_grande_gate`, the gateway on the path
   up to the League, an `Awning` on its stone legs): the anchor exactly, the others exactly or by a look-alike metatile that
@@ -569,6 +595,22 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `opt.models(layoutName)`, the cells the building models own (`Scene.modelCells`: every spec
   placed over the whole layout). The whole chain, export → terraces → the last passes → encode,
   equals Emerald 3DS's shipped relief.bin byte for byte.
+- The border round the battle map (Emerald 3DS's `VoxelMesh_EmitBorder`): `init.lua` marks
+  each cell past every map (`cell.border`: the border block's metatiles, tiled as the engine
+  tiles it, `env.borderMid`; water or not, `env.waterMid`; its level, the map's nearest edge
+  cell's, or for water the map's sea nearest it along the edge), and `render.lua` stands it
+  `Render.BORDER_COURSES` (2) courses tall: its top read from the row its courses rise over,
+  faces only where it meets the map or water, steps down to a lower border cell, a north wall
+  over a lower row behind. Water lies flat, trees are trees. The stage search counts it two
+  tall. Belts and edge fills (a map's own border height, caves) are not drawn yet.
+- The build's cost, measured in the engine at 3 ms slices: about 75 s for a whole cartridge.
+  The solver's per-cell bookkeeping is kept as numbers (each canvas cell's counts packed, its
+  commonest region worked out where counted; sub-tiles packed), not as tables: a million small
+  tables made every collection pause 100-250 ms. `Art.setOrder` hashes only distinct keys (a
+  repeat changes nothing in CPython's set), colour hashes are memoised, flood fills keep their
+  stacks by index. `relief_dump.lua` has `RELIEF_FULL` (the terraces too), `RELIEF_GAPS` (every
+  gap between yield points over 30 ms, where, and the heap across it), `RELIEF_BIG` (the
+  reachable tables by path) and `RELIEF_GC` (the collector's pacing, to compare).
 - `relief_post.lua`: the solver's last passes, after the terraces: `seaRamps`, `cutFeet`,
   `seamEases` (`gen_voxel_relief.py`) and `applyFixes` (`voxel_relief_fixes.py`) over a model,
   with `Post.json` (a JSON decoder that keeps object key order: the marks' edge fills are written

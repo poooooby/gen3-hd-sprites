@@ -484,7 +484,9 @@ function Solve.run(input, opt)
             local en = e[4 + q]
             if en % 1024 ~= 0 then
               local k = K(x * 2 + q % 2, y * 2 + floor(q / 2))
-              s[k] = { en % 1024, floor(en / 4096) % 16, floor(en / 1024) % 4 }
+              -- (one number a subtile: tile + palette * 1024 + flips * 16384 - a table each was a
+              -- hundred thousand of them for the collector to walk all build long)
+              s[k] = en % 1024 + (floor(en / 4096) % 16) * 1024 + (floor(en / 1024) % 4) * 16384
               order[#order + 1] = k
             end
           end
@@ -528,7 +530,7 @@ function Solve.run(input, opt)
         end
         for _, k in ipairs(subs.order) do
           local sub = subs.at[k]
-          if sub[1] == at and sub[2] == obj.palette and sub[3] == 0 then
+          if sub == at + obj.palette * 1024 then
             local x0, y0 = KX(k) - ai, KY(k) - aj
             local ok = true
             for j, row in ipairs(grid) do
@@ -538,7 +540,7 @@ function Solve.run(input, opt)
                   if type(t) == "table" then want, optional, pal = t[1], t[2], t[3]
                   else want, optional, pal = t, false, obj.palette end
                   local got = subAt(x0 + i - 1, y0 + j - 1)
-                  if not (got and got[1] == want and got[2] == pal and got[3] == 0) and not optional then
+                  if got ~= want + pal * 1024 and not optional then
                     ok = false
                     break
                   end

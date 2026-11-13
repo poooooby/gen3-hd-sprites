@@ -51,19 +51,103 @@ local function body(game, log)
   local slice = (tonumber(env("RELIEF_SLICE") or "4") or 4) / 1000
   local phases, t0, tp = {}, clock(), clock()
   local worst, sliceStart, frames, ticks = 0, clock(), 0, 0
+  -- (RELIEF_GC=pause:stepmul: the collector's pacing during the build, to compare)
+  if env("RELIEF_GC") then
+    local p, m = env("RELIEF_GC"):match("(%d+):(%d+)")
+    collectgarbage("setpause", tonumber(p))
+    collectgarbage("setstepmul", tonumber(m))
+    log("gc pause " .. p .. " stepmul " .. m)
+  end
+  local gaps = env("RELIEF_GAPS") and {} or nil
+  local lastTick, lastKb
   local co = coroutine.create(function()
-    return WorldMaps.solve({
-      regionTies = ties and function(g) return ties[g] end or nil,
+    -- (RELIEF_FULL=1: the terraces too, their parts joined to the solve; no building cells, so the
+    -- bytes differ from the scene's build where a wall stands in a model's corner - for timing)
+    local full = env("RELIEF_FULL") ~= nil
+    local fixes, order
+    if full then
+      local fh = io.open("mods/gen3-hd-sprites/assets/scene/relief_fixes.json", "rb")
+      fixes, order = Post.json(fh and fh:read("*a") or "{}")
+      if fh then fh:close() end
+    end
+    local function finish(model, S)
+      -- (RELIEF_BIG=1: the solve state's tables over 100k entries, by path - what the collector
+      -- traverses in one step)
+      if env("RELIEF_BIG") and S then
+        local seen, found = {}, {}
+        local walk
+        local tables, byPre = 0, {}
+        local function visitFn(f, path, depth)
+          if seen[f] or depth > 8 then return end
+          seen[f] = true
+          for i = 1, 200 do
+            local name, v = debug.getupvalue(f, i)
+            if not name then break end
+            if type(v) == "table" then walk(v, path .. "^" .. name, depth + 1)
+            elseif type(v) == "function" then visitFn(v, path .. "^" .. name, depth + 1) end
+          end
+        end
+        function walk(t, path, depth)
+          if seen[t] or depth > 8 then return end
+          seen[t] = true
+          local n = 0
+          for _ in pairs(t) do n = n + 1 end
+          tables = tables + 1
+          local pre = path:match("^([^%.%^]*[%.%^][^%.%^]*[%.%^][^%.%^]*[%.%^]?[^%.%^]*)") or path
+          byPre[pre] = (byPre[pre] or 0) + 1
+          if n > 20000 then found[#found + 1] = { n, path } end
+          local i = 0
+          for k, v in pairs(t) do
+            i = i + 1
+            if i > 3000 then break end
+            if type(v) == "table" then walk(v, path .. "." .. tostring(k), depth + 1)
+            elseif type(v) == "function" then visitFn(v, path .. "." .. tostring(k), depth + 1) end
+          end
+        end
+        walk(S, "S", 0)
+        log("walked " .. tables .. " tables")
+        local pl = {}
+        for k, v in pairs(byPre) do pl[#pl + 1] = { v, k } end
+        table.sort(pl, function(a, b) return a[1] > b[1] end)
+        for i = 1, math.min(20, #pl) do log(string.format("tables %8d under %s", pl[i][1], pl[i][2])) end
+        table.sort(found, function(a, b) return a[1] > b[1] end)
+        for i = 1, math.min(30, #found) do log(string.format("big %9d %s", found[i][1], found[i][2])) end
+      end
+      if full and model and S and S.T then
+        S.T.apply(model)
+        phases[#phases + 1] = string.format("terraces %.0f ms", (clock() - tp) * 1000)
+        tp = clock()
+      end
+      return model, S
+    end
+    return finish(WorldMaps.solve({
+      parts = full and { mod("relief_terraces"), mod("relief_terraces_fit"), mod("relief_terraces_out") } or nil,
+      fixes = fixes, fixesOrder = order, jsonNull = Post.NULL, Relief = Relief,
+      regionTies = (not full and ties) and function(g) return ties[g] end or nil,
       tick = function()
         ticks = ticks + 1
-        if slice > 0 and clock() - sliceStart >= slice then coroutine.yield() end
+        -- (RELIEF_GAPS=1: every gap between two ticks over 30 ms, where it ended and what the
+        -- heap did across it - a drop is a collection finishing)
+        if gaps then
+          local t, kb = clock(), collectgarbage("count")
+          if lastTick and t - lastTick > 0.03 then
+            local info = debug.getinfo(2, "Sl")
+            gaps[#gaps + 1] = { (t - lastTick) * 1000, (info and info.short_src or "?") .. ":" .. (info and info.currentline or 0),
+                                (kb - lastKb) / 1024, phases[#phases] or "-" }
+          end
+          lastTick, lastKb = t, kb
+        end
+        if slice > 0 and clock() - sliceStart >= slice then
+          coroutine.yield()
+          if gaps then lastTick, lastKb = clock(), collectgarbage("count") end
+        end
       end,
       phase = function(name)
         local t = clock()
         phases[#phases + 1] = string.format("%s %.0f ms", name, (t - tp) * 1000)
         tp = t
       end,
-    })
+    }))
   end)
   local model, why
   while true do
@@ -96,6 +180,14 @@ local function body(game, log)
   log(string.format("relief: %d layouts, %d variants, %d bytes; %.1f s over %d frames (%d ticks), longest slice %.0f ms; %s",
     n, model.nVariants, #bytes, total, frames, ticks, worst * 1000, table.concat(phases, ", ")))
   log(string.format("heap %.0f MB", collectgarbage("count") / 1024))
+  if gaps then
+    table.sort(gaps, function(a, b) return a[1] > b[1] end)
+    for i = 1, math.min(40, #gaps) do
+      local g = gaps[i]
+      log(string.format("gap %4.0f ms  heap %+6.0f MB  at %s  (after phase %s)", g[1], g[3], g[2], g[4]))
+    end
+    log(#gaps .. " gaps over 30 ms")
+  end
 end
 
 return function(game)

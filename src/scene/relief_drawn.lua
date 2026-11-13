@@ -274,17 +274,20 @@ return function(S)
       for _, start in ipairs(plankList) do
         local ks = K(start[1], start[2])
         if not seen[ks] then
-          local run, stack = {}, { start }
+          local run, stack, sp = {}, { start }, 1
           seen[ks] = true
-          while #stack > 0 do
-            local c = table.remove(stack)
+          while sp > 0 do
+            local c = stack[sp]
+            stack[sp] = nil
+            sp = sp - 1
             run[#run + 1] = c
             for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
               local q = { c[1] + d[1], c[2] + d[2] }
               local kq = K(q[1], q[2])
               if planks[kq] and not seen[kq] then
                 seen[kq] = true
-                stack[#stack + 1] = q
+                sp = sp + 1
+                stack[sp] = q
               end
             end
           end
@@ -748,30 +751,32 @@ return function(S)
         local k = byte(s, x + 1)
         if (k == GROUND or k == TOP) and rrow[x] < 0 then
           local n = nRegions
-          local stack, count = { x, y }, 0
+          -- (the stack by its top index: popped as table.remove pops it, last in first out, a
+          -- builtin call less a pixel over canvases of millions)
+          local stack, sp, count = { x, y }, 2, 0
           rrow[x] = n
-          while #stack > 0 do
-            local b = table.remove(stack)
-            local a = table.remove(stack)
+          while sp > 0 do
+            local b, a = stack[sp], stack[sp - 1]
+            sp = sp - 2
             count = count + 1
             tickEvery(50000)
             local ra, ka = region[b], kind[b]
             if a + 1 < W and ra[a + 1] < 0 and byte(ka, a + 2) == k and ((a + 1) % 16 ~= 0 or crosses(a, b, a + 1, b)) then
               ra[a + 1] = n
-              stack[#stack + 1] = a + 1; stack[#stack + 1] = b
+              stack[sp + 1] = a + 1; stack[sp + 2] = b; sp = sp + 2
             end
             if a > 0 and ra[a - 1] < 0 and byte(ka, a) == k and (a % 16 ~= 0 or crosses(a, b, a - 1, b)) then
               ra[a - 1] = n
-              stack[#stack + 1] = a - 1; stack[#stack + 1] = b
+              stack[sp + 1] = a - 1; stack[sp + 2] = b; sp = sp + 2
             end
             if b + 1 < H and region[b + 1][a] < 0 and byte(kind[b + 1], a + 1) == k
                 and ((b + 1) % 16 ~= 0 or crosses(a, b, a, b + 1)) then
               region[b + 1][a] = n
-              stack[#stack + 1] = a; stack[#stack + 1] = b + 1
+              stack[sp + 1] = a; stack[sp + 2] = b + 1; sp = sp + 2
             end
             if b > 0 and region[b - 1][a] < 0 and byte(kind[b - 1], a + 1) == k and (b % 16 ~= 0 or crosses(a, b, a, b - 1)) then
               region[b - 1][a] = n
-              stack[#stack + 1] = a; stack[#stack + 1] = b - 1
+              stack[sp + 1] = a; stack[sp + 2] = b - 1; sp = sp + 2
             end
           end
           sizes[n] = count
@@ -955,10 +960,12 @@ return function(S)
     local seenWalk = {}
     for _, start in ipairs(walkOrder) do
       if not seenWalk[start] then
-        local comp, stack = {}, { start }
+        local comp, stack, sp = {}, { start }, 1
         seenWalk[start] = true
-        while #stack > 0 do
-          local c = table.remove(stack)
+        while sp > 0 do
+          local c = stack[sp]
+          stack[sp] = nil
+          sp = sp - 1
           comp[#comp + 1] = c
           local x, y = KX(c), KY(c)
           for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
@@ -968,7 +975,8 @@ return function(S)
               local fa, fb = flat[qy][qx], flat[y][x]
               if not ((fa == "bridge" and fb == "water") or (fa == "water" and fb == "bridge")) then
                 seenWalk[q] = true
-                stack[#stack + 1] = q
+                sp = sp + 1
+                stack[sp] = q
               end
             end
           end
@@ -994,7 +1002,10 @@ return function(S)
       tiesOrdered[#tiesOrdered + 1] = { floor(kk / 1000000), kk % 1000000 }
     end
     -- per cell: how much of it is drawn, as top, as ground, and which terraces it is drawn in
-    local stats, freeMid = grid2(CW, CH), grid2(CW, CH, false)
+    -- (a cell's counts as one number, n + top * 512 + ground * 262144, and the region most of it
+    -- is drawn in, as its readers ask it - Solve.mostCommon over the counts, which never change
+    -- after: four tables a cell were most of what the collector walked all build long)
+    local stats, statsBest, freeMid = grid2(CW, CH), grid2(CW, CH), grid2(CW, CH, false)
     for cy = 0, CH - 1 do
       tick()
       for cx = 0, CW - 1 do
@@ -1016,7 +1027,10 @@ return function(S)
             end
           end
         end
-        if n > 0 then stats[cy][cx] = { n, top, ground, counts } end
+        if n > 0 then
+          stats[cy][cx] = n + top * 512 + ground * 262144
+          if #counts.order > 0 then statsBest[cy][cx] = Solve.mostCommon(counts.n, counts.order) end
+        end
         freeMid[cy][cx] = kd(cx * 16 + 8, cy * 16 + 8) == FREE
       end
     end
@@ -1051,7 +1065,7 @@ return function(S)
       mid[cy] = row
     end
     local prep = { members = members, at = g.at, layouts = layouts, CW = CW, CH = CH, side = side, flat = flat,
-                   sizes = sizes, big = big, runs = runs, tiesOrdered = tiesOrdered, stats = stats,
+                   sizes = sizes, big = big, runs = runs, tiesOrdered = tiesOrdered, stats = stats, statsBest = statsBest,
                    freeMid = freeMid, faceLow = faceLow, regionMid = mid, edges = edges, nRegions = nRegions,
                    metatileAt = metatileAt }
     if S.opt.keepRegion then prep.region = region end

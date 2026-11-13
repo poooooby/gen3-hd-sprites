@@ -20,6 +20,7 @@ return function(K, specs)
   local Volume, HeightSolid, ownBands, withRing, Grown = K.Volume, K.HeightSolid, K.ownBands, K.withRing, K.Grown
   local PlanPrism, PlanPyramid, Tile, octagon = K.PlanPrism, K.PlanPyramid, K.Tile, K.octagon
   local ProjSection, ProjHull, ProjCanopy = K.ProjSection, K.ProjHull, K.ProjCanopy
+  local abs = math.abs
   local floor, min, max, sqrt, sin, cos, tan, rad, pi = math.floor, math.min, math.max, math.sqrt,
     math.sin, math.cos, math.tan, math.rad, math.pi
   local SHADE_ART, SHADE_WEST, SHADE_EAST = K.SHADE_ART, K.SHADE_WEST, K.SHADE_EAST
@@ -686,6 +687,172 @@ return function(K, specs)
     return parts, tex
   end
 
+  -- The stone lantern in Slateport's square (art 32x64, its foot at v 63): a turned thing on a
+  -- plan 0.7 as deep as wide (the GBA draws its rings as flat ellipses) - a bell for a base with
+  -- the keyhole, a neck, a drum with its windows, a capped top. The profile is fitted to the
+  -- drawing's outline row by row; the cubes are carved to it. Stood half a cell north of where it
+  -- is drawn, in the middle of its lawn. A low-poly lathe (32 sides) with its texture baked off
+  -- the true-cube model: its faces turned to the GBA's view read the drawing itself.
+  local LANTERN = { { 0, 12.5 }, { 2, 14 }, { 5, 16 }, { 7, 16 }, { 8, 14 }, { 10, 14 }, { 11, 12 }, { 13, 10 },
+                    { 21, 10 }, { 22, 12.5 }, { 24, 14 }, { 26, 16 }, { 30, 16 }, { 32, 14 }, { 33, 12 },
+                    { 41, 12 }, { 42, 9.5 }, { 44, 8 }, { 45, 6.5 }, { 45.5, 0 } }
+  local LANTERN_Z, LANTERN_SQUASH, LANTERN_BACK = 55.3, 0.7, 8
+  local function lantern(art)
+    local W, H = art.w, art.h
+    local function isDrawn(u, v) return u >= 0 and u < W and v >= 0 and v < H and drawn(art, u, v) end
+    local cubes = K.VoxelLathe("lantern", art, isDrawn, 16.0, LANTERN_Z, LANTERN, LANTERN_SQUASH, 64,
+      function(y) return y >= 33.0 and 4.0 or 2.0 end)
+    local baked = K.BakedLathe("lantern", cubes, 32, -LANTERN_BACK)
+    return { baked }, baked.texture()
+  end
+
+  -- Rustboro's fountain (48 x 48), as its drawing tells it: the basin's outer wall 5 px (the
+  -- plan below its foot, the outline drawn round it); the rim's top at that height, in to the
+  -- pool's edge; the pool's water 2 px lower; the dish in the middle, its top 5 px over the water,
+  -- its edge 2 px, on a stem the dish hides; the grey under it its shadow on the water; the jet
+  -- standing on the dish, rows 8-16 - the only thing that moves.
+  local FOUNTAIN_FOOT = { { 11, 7 }, { 37, 7 }, { 47, 17 }, { 47, 34 }, { 35, 46 }, { 13, 46 }, { 1, 34 }, { 1, 17 } }
+  local FOUNTAIN_POOL = { { 15, 10 }, { 33, 10 }, { 40, 17 }, { 40, 32 }, { 32, 40 }, { 16, 40 }, { 8, 32 }, { 8, 17 } }
+  local FOUNTAIN_RIM, FOUNTAIN_WATER, FOUNTAIN_DISH = 5, 3, 8
+  local DISH_AT, DISH_R, DISH_EDGE, STEM_R = { 24.0, 25.0 }, { 9.0, 6.0 }, 2, { 3.0, 2.2 }
+  -- the jet: columns 19-28 of rows 8-16, drawn with Rustboro's animated upper-layer tiles
+  local JET_COLUMNS, JET_ROWS = { 19, 29 }, { 8, 17 }
+  local JET_BAND = 48       -- the texture's row the jet's first row is laid on
+
+  --- A flat ring at height `y` between two plan polygons of as many corners (a basin's rim), or
+  --- with `inner` nil the whole of `outer` (its water). Projected: the drawing at 45 degrees.
+  local function PlanRing(name, outer, inner, y)
+    return { name = name, emit = function(_, mesh)
+      local function pt(p) return { p[1], y, p[2], p[1], p[2] - y } end
+      if not inner then
+        local poly = {}
+        for i, p in ipairs(outer) do poly[i] = pt(p) end
+        mesh:poly(poly, SHADE_ART, name .. "~proj")
+        return
+      end
+      for k = 1, #outer do
+        local k1 = k % #outer + 1
+        mesh:poly({ pt(outer[k]), pt(outer[k1]), pt(inner[k1]), pt(inner[k]) }, SHADE_ART, name .. "~proj")
+      end
+    end }
+  end
+
+  --- A flat ellipse at height `y` of one colour, the drawing's texel `texel`: a dish's shadow
+  --- under the dish (the water there, projected, would read the dish's own pixels).
+  local function Shade(name, cx, cz, rx, rz, y, texel, sides)
+    sides = sides or 24
+    return { name = name, emit = function(_, mesh)
+      local u, v = texel[1] + 0.5, texel[2] + 0.5
+      local ring = {}
+      for k = 0, sides - 1 do
+        ring[k + 1] = { cx + rx * cos(2 * pi * k / sides), y, cz + rz * sin(2 * pi * k / sides), u, v }
+      end
+      mesh:poly(ring, SHADE_ART, name .. "~behind~clamp")
+    end }
+  end
+
+  --- The fountain's jet: a card standing across the dish at depth `z`, from the dish's top `y0`
+  --- up, over the drawing's columns, each point reading the pixel it covers at 45 degrees moved
+  --- down `band` rows to where the jet is laid alone.
+  local function Jet(name, columns, z, y0, band)
+    local y1 = z - JET_ROWS[1]
+    assert(abs((z - JET_ROWS[2]) - y0) < 1e-6, name .. ": the card's foot is not the dish's top")
+    return { name = name, emit = function(_, mesh)
+      local x0, x1 = columns[1], columns[2]
+      local quad = { { x0, y0, z }, { x1, y0, z }, { x1, y1, z }, { x0, y1, z } }
+      local pts = {}
+      for i, p in ipairs(quad) do pts[i] = { p[1], p[2], p[3], p[1], p[3] - p[2] + band } end
+      mesh:poly(pts, SHADE_ART, name .. "~live")
+    end }
+  end
+
+  --- The fountain in 3D, and its texture: the drawing with the jet taken out of it (the pool and
+  --- the dish as they lie behind it), and the jet alone on a band below, read by a card standing
+  --- on the dish. The jet's two frames come from the game's own tile animation.
+  local function fountain(art, ctx)
+    local W = art.w
+    -- the jet's pixels in each frame
+    local frames = { [0] = {}, [1] = {} }
+    local cellsF = {}
+    for y = JET_ROWS[1], JET_ROWS[2] - 1 do
+      for x = JET_COLUMNS[1], JET_COLUMNS[2] - 1 do
+        local cx, cy = floor(x / 16), floor(y / 16)
+        local key = cx .. "," .. cy
+        if cellsF[key] == nil then cellsF[key] = (ctx.animFrames and ctx.animFrames(cx, cy)) or false end
+        local fr = cellsF[key]
+        if not (fr and fr[0] and fr[1]) then error("rustboro_fountain: the jet's cell " .. key .. " does not move", 0) end
+        for f = 0, 1 do
+          local r, g, b = fr[f](x % 16, y % 16)
+          if not r then error(("rustboro_fountain: the jet's pixel %d,%d is clear in frame %d"):format(x, y, f), 0) end
+          frames[f][y * W + x] = { r, g, b }
+        end
+      end
+    end
+    local function same(a, b) return key5(a[1], a[2], a[3]) == key5(b[1], b[2], b[3]) end
+    -- what lies behind the jet: above the dish the pool's own lines; on the dish its water,
+    -- wherever the two frames differ or draw the jet's white and blue (down its middle)
+    local jet = {}
+    for f = 0, 1 do
+      for _, x in ipairs({ 23, 24 }) do
+        for y = 9, JET_ROWS[2] - 1 do
+          local c = frames[f][y * W + x]
+          jet[key5(c[1], c[2], c[3])] = true
+        end
+      end
+    end
+    local dishWater = frames[0][11 * W + 21]
+    local rows = JET_ROWS[2] - JET_ROWS[1]
+    local tex = blank(W, JET_BAND + rows)
+    paste(tex, art, 0, 0, 0, 0, art.w, art.h)
+    local tp = tex.px
+    -- the band's texels in each frame (the game redraws them: `live`)
+    local texels = {}
+    for y = JET_ROWS[1], JET_ROWS[2] - 1 do
+      for x = JET_COLUMNS[1], JET_COLUMNS[2] - 1 do
+        local a, b = frames[0][y * W + x], frames[1][y * W + x]
+        local bg
+        if y < 11 then
+          bg = frames[0][y * W + JET_COLUMNS[1]]
+        else
+          bg = (same(a, b) and not jet[key5(a[1], a[2], a[3])]) and a or dishWater
+        end
+        local o = (y * W + x) * 4
+        tp[o + 1], tp[o + 2], tp[o + 3], tp[o + 4] = bg[1], bg[2], bg[3], 1
+        local d = ((JET_BAND + y - JET_ROWS[1]) * W + x) * 4
+        if not same(a, bg) then
+          tp[d + 1], tp[d + 2], tp[d + 3], tp[d + 4] = a[1], a[2], a[3], 1
+        end
+        local t = #texels
+        texels[t + 1], texels[t + 2] = x, JET_BAND + y - JET_ROWS[1]
+        for f = 0, 1 do
+          local c = frames[f][y * W + x]
+          local o2 = t + 3 + 4 * f
+          if same(c, bg) then
+            texels[o2], texels[o2 + 1], texels[o2 + 2], texels[o2 + 3] = 0, 0, 0, 0
+          else
+            texels[o2], texels[o2 + 1], texels[o2 + 2], texels[o2 + 3] = c[1], c[2], c[3], 1
+          end
+        end
+      end
+    end
+    local parts = {
+      PlanPrism("basin", FOUNTAIN_FOOT, 0, FOUNTAIN_RIM, { 14, 34, 46 }, { open_top = true }),
+      PlanRing("rim", FOUNTAIN_FOOT, FOUNTAIN_POOL, FOUNTAIN_RIM),
+      PlanPrism("pool", FOUNTAIN_POOL, FOUNTAIN_WATER, FOUNTAIN_RIM, { 16, 32, 7 }, { open_top = true, inward = true }),
+      PlanRing("water", FOUNTAIN_POOL, nil, FOUNTAIN_WATER),
+      K.Cylinder("dish", DISH_AT[1], DISH_AT[2], DISH_R[1], DISH_R[2], FOUNTAIN_DISH - DISH_EDGE, FOUNTAIN_DISH,
+        Tile(21, 23, 27, 25), { sides = 24 }),
+      K.Cylinder("stem", DISH_AT[1], DISH_AT[2], STEM_R[1], STEM_R[2], FOUNTAIN_WATER, FOUNTAIN_DISH - DISH_EDGE,
+        Tile(18, 25, 30, 28), { sides = 12, proj = false }),
+      -- under the dish, a little over the water: inside what the dish hides at 45 degrees, its
+      -- shadow's grey
+      Shade("dish_shadow", DISH_AT[1], DISH_AT[2] - (FOUNTAIN_DISH - FOUNTAIN_WATER) + 1.25,
+        DISH_R[1] - 0.5, DISH_R[2] + 0.5, FOUNTAIN_WATER + 0.25, { 24, 25 }),
+      Jet("jet", JET_COLUMNS, DISH_AT[2], FOUNTAIN_DISH, JET_BAND - JET_ROWS[1]),
+    }
+    return parts, tex, { cell = { floor(JET_COLUMNS[1] / 16), floor(JET_ROWS[1] / 16) }, frames = 2, texels = texels }
+  end
+
   -- ── the specs ─────────────────────────────────────────────────────────────
 
   local SOOTO_GROUND = SOOTOPOLIS_GROUND
@@ -760,6 +927,10 @@ return function(K, specs)
     { name = "battle_pike", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 40, 17, 5, 13 },
       ground = { GRASS, 0x204, 0x017, 0x004, 0x003 }, ground_px = true, lod = { 8, 8, 3 },
       keep = { { 16, 0, 80, 208 }, { 0, 36, 16, 208 } }, parts_art = battle_pike },
+    { name = "rustboro_fountain", layout = "LAYOUT_RUSTBORO_CITY", rect = { 27, 38, 3, 3 }, ground = { 0x2BB, 0x2C3, GRASS },
+      parts_art = fountain },
+    { name = "slateport_lantern", layout = "LAYOUT_SLATEPORT_CITY", rect = { 32, 51, 2, 4 }, ground = { GRASS, 0x202 },
+      ground_px = true, keep = { { 4, 8, 28, 15 }, { 0, 15, 32, 64 } }, parts_art = lantern },
     { name = "space_center", layout = "LAYOUT_MOSSDEEP_CITY", rect = { 60, 2, 9, 14 }, ground = { 0x170, GRASS, 0x002, 0x004 },
       ground_px = true, lod = { 4, 4, 2 }, parts_art = space_center },
   }

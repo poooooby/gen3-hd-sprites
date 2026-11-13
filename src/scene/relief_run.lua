@@ -60,20 +60,31 @@ return function(deps)
   -- the whole pipeline, run inside the coroutine
   local function pipeline()
     local tick = function()
-      if clock() - Run._sliceStart >= Run.SLICE then coroutine.yield() end
+      local t = clock()
+      -- (dev: Run.watch = seconds; every stretch between two ticks longer than that, where it
+      -- ended and the heap then, in Run.gaps)
+      if Run.watch then
+        if t - Run._lastTick > Run.watch then
+          Run.gaps[#Run.gaps + 1] = { (t - Run._lastTick) * 1000, debug and debug.traceback("", 2) or "?",
+                                      collectgarbage and collectgarbage("count") / 1024 or 0,
+                                      phases[#phases] or "-" }
+        end
+        Run._lastTick = t
+      end
+      if t - Run._sliceStart >= Run.SLICE then coroutine.yield() end
     end
     local function phase(name)
       local t = clock()
       phases[#phases + 1] = ("%s %.0f ms"):format(name, (t - Run._phaseAt) * 1000)
       Run._phaseAt = t
     end
-    local fixes, order = Post.json(deps.fixes or "{}")
+    local fixes, order = Post.json(deps.fixes or "{}", tick)
     local model, S = WorldMaps.solve({
       tick = tick, phase = phase,
       -- (the terraces: their three parts join the solve; the hand marks, the buildings' cells)
       parts = Terraces,
       fixes = fixes, fixesOrder = order, jsonNull = Post.NULL, Relief = Relief,
-      models = deps.models,
+      models = deps.models and function(name) return deps.models(name, tick) end or nil,
     })
     if not model then return nil, S end
     phase("export")
@@ -108,9 +119,9 @@ return function(deps)
     tick()
     Post.cutFeet(model)
     tick()
-    Post.applyFixes(model, world, fixes, order)
+    Post.applyFixes(model, world, fixes, order, tick)
     phase("post")
-    local bytes = Relief.encode(model, Post.seamEases(model, world))
+    local bytes = Relief.encode(model, Post.seamEases(model, world), tick)
     phase("encode")
     return bytes
   end
@@ -142,6 +153,7 @@ return function(deps)
   function Run.step()
     if state ~= "running" or not co then return end
     Run._sliceStart = clock()
+    Run._lastTick = Run._sliceStart
     local ok, bytes, why = coroutine.resume(co)
     if not ok then
       state, detail = "failed", tostring(bytes)
