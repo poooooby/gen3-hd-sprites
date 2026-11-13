@@ -87,8 +87,15 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   spots: over a filled screen the adapter draws them where the UI went (`Engine.overUi` with
   `hd.uiMap`, which a card and a filled battle record: an upright battle's top band moved up) and
   empties the Renderer's list. The Renderer may blit the UI canvas more than once a frame (a
-  docked text box apart): a card is drawn on the first and the rest are taken as done. No
-  Pokédex or summary passes yet.
+  docked text box apart): a card is drawn on the first and the rest are taken as done. The
+  Pokédex entry and the summary (`src.ui.DexEntryMenu`, `src.ui.SummaryMenu`) are the adapter's
+  `Engine.dexModules`: a dex pass, or with Fill Screen the screen pass already running. Both draw
+  their pic mirrored (`sx = -1`), which the full frame follows. Outside the ADVANCED colours a
+  sprite mod's pic is in the four shades for the palette to colour, so it is tagged with
+  `shades` (below). Through the zones the palette shader keeps a pixel's alpha but not
+  premultiplied, so the Renderer's blit of a layer of ours (mostly clear) is done with plain
+  alpha blending there (`src/engine.lua`), or each clear pixel would add its zone's darkest
+  colour.
 - **`src/gen2.lua`:** Gold, Silver and Crystal. Gold composites its own frame (`Game2`), never
   through the Renderer, and its battle draws the 160×144 panel straight to the window
   (`Chrome.withPanel`). The adapter wraps `BattleState:drawWidescreen` (ORIGINAL layout, white
@@ -106,7 +113,11 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   `World:drawPeople` in a **direct** field pass (`hd.beginDirect("field")` / `hd.endDirect()`):
   a tagged image is drawn in place at its spec's `scale` about its pivot (`lowPivot`, or the
   quad's feet with `anchor = "feet"`), the way a draw past a pass's cap is; nothing is recorded,
-  layered or composited, and the draw order (Crystal's grass over the feet) is the game's.
+  layered or composited, and the draw order (Crystal's grass over the feet) is the game's. The
+  summary and the Pokédex (`SummaryMenu:drawPanel`, `PokedexMenu:drawPanel`, which both their
+  `draw` and `drawWidescreen` call) are direct dex passes the same way. Under the GbcPalette shader
+  (DMG, CLASSIC, a custom palette) a `shades` frame is drawn as its shades for that shader to
+  colour.
 
 **Battle layouts.** The battle screen's canvas numbers (`fit.focus`, the HP-box rects, the
 enemy's feet, the pads, the side shift's spots, the wallpaper rows...) are a layout:
@@ -450,11 +461,12 @@ end
 | `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
 | `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
 | `flip` | `true`: the `texture`/`quad` frame is drawn mirrored about its `pivot` (a stand-in the mod drew mirrored; `lowPivot` is in the stand-in as drawn). Check `features.flip` |
+| `shades` | a shader: the stand-in is in the Game Boy's four shades, made by this shader from the frame's colours. The `texture`/`quad` frame is drawn through it and then coloured as the stand-in is: in Gen 1 into a canvas a whole number of times the pass's size, then through the Renderer's blit (its SGB zones); in Gen 2 (a direct pass) 1:1 into a canvas, then drawn under the palette shader in force. Without it a tagged frame under a shader falls back to the stand-in. Check `features.shades` |
 
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,
@@ -467,6 +479,7 @@ image itself a real low-res picture: it is what shows whenever a frame falls bac
 exact path in `.modkitignore`. The drivers in `tests/drivers/` run in the game
 (`POKEPORT_DRIVER`, each file's header says how) and screenshot what they check; for the Game
 Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT` and `GEN1_COLORS`), `gen2_battle.lua`,
-`field_gb.lua` (Field HD with Vivid Worlds: OG) and `screens_gb.lua` (Red's whole screens).
+`field_gb.lua` (Field HD with Vivid Worlds: OG), `screens_gb.lua` (Red's whole screens) and
+`dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off).
 
 Keep [README.md](README.md) describing the mod as it is now (players read it).

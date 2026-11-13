@@ -155,14 +155,24 @@ function Engine.install(hd)
           -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
           -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels; zk:
           -- the canvas's pixels per game pixel, for the UI drawn larger to scale it sharply)
+          -- Through zones (Red's SGB palettes) the shader maps each pixel's shade to a colour and
+          -- keeps its alpha, un-premultiplied: a layer of ours (mostly clear) is blitted with
+          -- plain alpha blending there, or each clear pixel would add the zone's darkest colour
+          local zoned = zoneList ~= nil and zoneList[1] ~= nil
           local function blit(c, obx, oby, osx, osy, obox, zk)
             local kx, ky = (osx or sx) / sx * (zk or 1), (osy or sy) / sy * (zk or 1)
             local b = obox or { boxX, boxY, boxW, boxH }
             local b1, b2 = b[1], b[2]
             if not obox and b1 then b1, b2 = b1 - ox, b2 - oy end
-            return blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx and zsx * kx, zsy and zsy * ky,
-                              (obx or bx) - (obx and 0 or ox), (oby or by) - (oby and 0 or oy),
-                              b1, b2, b[3], b[4], dpiX, dpiY)
+            local mode, alpha
+            if zoned then
+              mode, alpha = love.graphics.getBlendMode()
+              if alpha == "premultiplied" then love.graphics.setBlendMode(mode, "alphamultiply") end
+            end
+            blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx and zsx * kx, zsy and zsy * ky,
+                       (obx or bx) - (obx and 0 or ox), (oby or by) - (oby and 0 or oy),
+                       b1, b2, b[3], b[4], dpiX, dpiY)
+            if alpha == "premultiplied" then love.graphics.setBlendMode(mode, alpha) end
           end
           local box = boxX and { boxX - ox, boxY - oy, boxW, boxH } or nil
           -- the whole screen area (Battle Fit's fill): the Renderer's view rect (inside a

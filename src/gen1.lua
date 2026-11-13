@@ -29,6 +29,13 @@
 --                          the seam, so they stay with the UI. With the EXTENDED HUD (its HUD
 --                          drawn in window space) the battle is drawn the game's usual way.
 --
+--   DexEntryMenu.draw, SummaryMenu.draw   the Pokedex entry and the summary (the status screen):
+--                          a dex pass (src/engine.lua's wrapDex), so a sprite mod's tagged pic is
+--                          drawn at window resolution; with Fill Screen they are screen passes
+--                          already. Both draw their pic mirrored (sx -1), which the HD frame
+--                          follows; a pic in the four shades (every colour mode but ADVANCED) is
+--                          coloured by the screen's palettes as the cart's is (spec.shades).
+--
 -- A battle another mod draws over a world of its own (Terrarium's 3D arena: its
 -- BattleState:draw sets the Renderer's world override before the game's draw runs) is drawn the
 -- game's usual way, as is any battle whose drawClassic another mod replaced before this one was
@@ -98,7 +105,8 @@ function Gen1.prepare(Engine, hd)
   for name, L in pairs(Gen1.LAYOUTS) do hd.layouts[name] = L end
   hd.useLayout("gen1_og")
   Engine.fullScreen, Engine.fieldBusy = nil, nil
-  Engine.dexModules = {}
+  -- the Pokedex entry (also shown over a battle after a catch) and the summary
+  Engine.dexModules = { "src.ui.DexEntryMenu", "src.ui.SummaryMenu" }
 
   -- a whole screen (optional: without it every screen keeps the game's framing)
   local okG, Game = pcall(require, "src.core.Game")

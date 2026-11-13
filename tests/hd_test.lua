@@ -63,7 +63,8 @@ local function fakeGraphics()
     local q = ...
     local vp = type(q) == "table" and q.getViewport and { q:getViewport() } or nil
     G.log[#G.log + 1] = { op = "draw", target = st.canvas, image = img, args = { ... },
-                          blend = st.blend[2], uniforms = u, vp = vp, scissor = st.scissor }
+                          blend = st.blend[2], mode = st.blend[1], uniforms = u, vp = vp,
+                          scissor = st.scissor, shader = st.shader }
   end
   function G.rectangle(mode, x, y, w, h)
     G.log[#G.log + 1] = { op = "rect", target = st.canvas, args = { mode, x, y, w, h } }
@@ -262,6 +263,69 @@ do
   hd.endDirect()
   check(G.log[1] and G.log[1].image == atlas and near(G.log[1].args[5], -0.5) and near(G.log[1].args[6], 0.5),
     "...drawn in place, mirrored too")
+end
+
+-- ------ shades: a stand-in in the Game Boy's shades (Red's Pokedex, Gold's DMG palette)
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 160, 144)
+  local pic, atlas = canvas("pic", 56, 56), canvas("atlas", 1024, 1024)
+  local frame = quad(100, 0, 80, 90)
+  local shades, palette = G.newShader("shades"), G.newShader("palette")
+  hd.tag(pic, { texture = atlas, quad = frame, pivot = { 40, 90 }, lowPivot = { 28, 56 }, scale = 0.5,
+                shades = shades })
+  -- a dex pass, the pic drawn mirrored as Red's Pokedex entry draws it; composited at 4.5x
+  G.setCanvas(base)
+  hd.beginPass("dex", base)
+  G.draw(pic, 8 + 56, 8, 0, -1, 1)
+  hd.endPass()
+  G.log = {}
+  local blits = {}
+  hd.composite(base, function(c, ...) blits[#blits + 1] = { c = c, ... } end, 0, 0, 4.5, 4.5, nil)
+  local e
+  for _, x in ipairs(G.log) do if x.image == atlas then e = x end end
+  -- k = 5: the pivot stood at (64 - 28, 8 + 56) = (36, 64), x5 in the shaded canvas
+  check(e and e.target and e.target ~= base and e.shader == shades and near(e.args[2], 36 * 5)
+    and near(e.args[3], 64 * 5) and near(e.args[5], -2.5) and near(e.args[6], 2.5),
+    "a shaded frame is drawn through its shades shader, mirrored, into a canvas 5x the pass's")
+  local b = blits[#blits]
+  check(b and e and b.c == e.target and near(b[3], 0.9) and near(b[4], 0.9) and b[6] == 5,
+    "...which goes through the game's blit at 1/5 the scale, its zones 5x (zk)")
+  check(hd.stats.shaded == 1, "...counted")
+  hd.endFrame()
+
+  -- in place (Gold: a direct pass, under the palette shader the stand-in is drawn with)
+  hd.beginDirect("dex")
+  G.log = {}
+  G.setShader(palette)
+  G.draw(pic, 10, 20)
+  G.setShader()
+  hd.endDirect()
+  local into, out
+  for _, x in ipairs(G.log) do
+    if x.image == atlas then into = x elseif x.op == "draw" and x.target == base then out = x end
+  end
+  check(into and into.target and into.shader == shades and into.mode == "replace" and into.args[1] == frame
+    and near(into.args[2], 0) and near(into.args[3], 0), "in place: the frame is shaded 1:1 into a canvas")
+  check(out and into and out.image == into.target and out.shader == palette and near(out.args[2], 38)
+    and near(out.args[3], 76) and near(out.args[5], 0.5) and out.args[7] == 40 and out.args[8] == 90
+    and out.vp and out.vp[3] == 80 and out.vp[4] == 90,
+    "...then drawn at its size about its pivot, under the palette shader")
+  -- without shades, under a shader: the stand-in (its colours would be wrong)
+  hd.tagOf(pic).shades = nil
+  hd.beginDirect("dex")
+  G.log = {}
+  G.setShader(palette)
+  G.draw(pic, 10, 20)
+  G.setShader()
+  hd.endDirect()
+  check(#G.log == 1 and G.log[1].image == pic, "...a full-colour frame under a shader: the stand-in")
+  local api = assert(loadfile("src/api.lua"))
+  local mod = {}
+  api()(mod, hd, { active = true })
+  check(mod.exports.features.shades == true, "features.shades is advertised")
 end
 
 -- ---------------------- a quad of its own stands on its own pivot (quadPivots)

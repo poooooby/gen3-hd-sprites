@@ -331,7 +331,10 @@ function HD.new(G, opts)
   --- spec: { texture = img|nil, quad = q|nil, pivot = {x, y}|nil, lowPivot = {x, y}|nil,
   ---         scale = k (default 1), anchor = "feet"|nil, filter = "nearest"|"linear"|nil,
   ---         quadPivots = { [quad] = {x, y, scale?} }|nil,
-  ---         flip = true|nil (texture's frame mirrored about its pivot) }  (read at draw time)
+  ---         flip = true|nil (texture's frame mirrored about its pivot),
+  ---         shades = shader|nil (the stand-in is in the Game Boy's shades, made by this shader
+  ---           from the frame's colours: the frame is drawn through it, then coloured by the
+  ---           game as the stand-in would be) }  (read at draw time)
   function self.tag(image, spec)
     if image == nil then return end
     spec = spec or {}
@@ -629,6 +632,47 @@ function HD.new(G, opts)
   -- the low-res image) is drawn as it is, and so is a full-resolution frame under a shader (its
   -- uniforms are in the low-res image's pixels: a battle effect's mask or mosaic).
   -- Returns false when it drew nothing
+  -- A frame in the Game Boy's shades (spec.shades), at 1:1 in a canvas of ours: the frame drawn
+  -- through the sprite mod's shader, kept as it comes out (replace), so whatever colours it next
+  -- (Gold's palette shader, under which the stand-in was drawn) reads the shade the stand-in has.
+  -- -> the canvas and a quad of the frame in it, or nil
+  local shadeCanvas, shadeQuad, shadeCW, shadeCH = nil, nil, 0, 0
+  local function shadedFrame(spec)
+    local tex, quad = spec.texture, spec.quad
+    if not (real.newCanvas and real.newQuad and tex and tex.getWidth) then return nil end
+    local qx, qy, qw, qh = 0, 0, tex:getWidth(), tex:getHeight()
+    if quad then qx, qy, qw, qh = quad:getViewport() end
+    local w, h = math.ceil(qw), math.ceil(qh)
+    if w < 1 or h < 1 or w > 1024 or h > 1024 then return nil end
+    if not shadeCanvas or shadeCW < w or shadeCH < h then
+      if shadeCanvas and shadeCanvas.release then pcall(shadeCanvas.release, shadeCanvas) end
+      shadeCW, shadeCH = math.max(w, shadeCW, 128), math.max(h, shadeCH, 128)
+      shadeCanvas = real.newCanvas(shadeCW, shadeCH, { dpiscale = 1 })
+    end
+    local f = spec.filter or "nearest"
+    if shadeCanvas.setFilter then shadeCanvas:setFilter(f, f) end
+    real.push("all")
+    real.setCanvas(shadeCanvas)
+    real.origin()
+    real.setScissor()
+    real.clear(0, 0, 0, 0)
+    real.setShader(spec.shades)
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("replace", "alphamultiply")
+    if quad then
+      real.draw(tex, quad, 0, 0)
+    else
+      real.draw(tex, 0, 0)
+    end
+    real.pop()
+    if shadeQuad and shadeQuad.setViewport then
+      shadeQuad:setViewport(0, 0, qw, qh, shadeCW, shadeCH)
+    else
+      shadeQuad = real.newQuad(0, 0, qw, qh, shadeCW, shadeCH)
+    end
+    return shadeCanvas, shadeQuad
+  end
+
   local function drawAtScale(shaded, image, spec, a, b, c, d, e, f, g, h)
     local quad, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
@@ -637,7 +681,9 @@ function HD.new(G, opts)
       x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
     end
     if type(x) ~= "number" then return false end
-    if spec.texture and (quad or shaded) then return false end
+    -- (a frame in the game's shades is drawn as its shades, so a shader over it colours it)
+    if spec.texture and quad then return false end
+    if spec.texture and shaded and not spec.shades then return false end
     y, r, sx, ox, oy = y or 0, r or 0, sx or 1, ox or 0, oy or 0
     sy = sy or sx
     local qp = spec.quadPivots and quad and spec.quadPivots[quad]
@@ -660,10 +706,15 @@ function HD.new(G, opts)
     if spec.texture then
       -- (flip: the full-resolution frame mirrored about its pivot)
       local fsx = spec.flip and -sx * k or sx * k
-      if spec.quad then
-        real.draw(spec.texture, spec.quad, px, py, r, fsx, sy * k, hpx, hpy)
+      local tex, tq = spec.texture, spec.quad
+      if spec.shades then
+        tex, tq = shadedFrame(spec)
+        if not tex then return false end
+      end
+      if tq then
+        real.draw(tex, tq, px, py, r, fsx, sy * k, hpx, hpy)
       else
-        real.draw(spec.texture, px, py, r, fsx, sy * k, hpx, hpy)
+        real.draw(tex, px, py, r, fsx, sy * k, hpx, hpy)
       end
     elseif quad then
       real.draw(image, quad, px, py, r, sx * k, sy * k, hpx, hpy)
@@ -1295,8 +1346,9 @@ function HD.new(G, opts)
 
   -- pinTo (screen y, optional): the frame's bottom is put exactly there (a trainer cut off by
   -- the text box stands on it, so it still reads as a whole sprite behind the box)
+  -- shader (optional): drawn through it instead of the draw's own
   local cutQuad
-  local function hdDraw(rec, bx, by, bsx, bsy, pinTo)
+  local function hdDraw(rec, bx, by, bsx, bsy, pinTo, shader)
     local X, Y, hpx, hpy, k, tex, quad, cut = place(rec)
     -- a part of the pic: only that part of the HD frame, about the same pivot
     if cut and real.newQuad and tex.getWidth then
@@ -1312,7 +1364,7 @@ function HD.new(G, opts)
       hpx, hpy = hpx - (cut[1] - fx), hpy - (cut[2] - fy)
     end
     local flip = rec.spec.flip and rec.spec.texture ~= nil
-    local m = rec.uniforms and not flip and texMap(rec, X, Y, hpx, hpy, k, tex, quad)
+    local m = rec.uniforms and not flip and not shader and texMap(rec, X, Y, hpx, hpy, k, tex, quad)
     if pinTo then
       local fh
       if quad then
@@ -1327,7 +1379,7 @@ function HD.new(G, opts)
       end
     end
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
-    useShader(rec, m)
+    if shader then real.setShader(shader) else useShader(rec, m) end
     real.setBlendMode(rec.blend[1], rec.blend[2])
     local SX, SY = bx + X * bsx, by + Y * bsy
     local ssx, ssy = rec.sx * k * rec.tsx * bsx, rec.sy * k * rec.tsy * bsy
@@ -1338,6 +1390,38 @@ function HD.new(G, opts)
     else
       real.draw(tex, SX, SY, rec.r, ssx, ssy, hpx, hpy)
     end
+  end
+
+  -- A tagged draw at window resolution, mapped by (bx, by, bsx, bsy) and clipped to box (nil: the
+  -- blit's own). One in the game's shades (spec.shades) is drawn through that shader into a canvas
+  -- k times the pass's size, then through the game's blit (zk = k), which colours it with the
+  -- screen as it does the stand-in (Red's SGB palettes, zone by zone). Its art is kept to the pass
+  -- canvas's bounds (the Pokedex and summary pics are well inside them).
+  local shadeK, shadeKW, shadeKH = nil, 0, 0
+  local function tagDraw(rec, cur, blit, bx, by, bsx, bsy, box, pinTo)
+    local sh = rec.spec.shades
+    if not (sh and blit and real.newCanvas) then return hdDraw(rec, bx, by, bsx, bsy, pinTo) end
+    local k = math.max(1, math.min(16, math.ceil(math.max(math.abs(bsx), math.abs(bsy)) - 1e-6)))
+    local w, h = cur.w * k, cur.h * k
+    if not shadeK or shadeKW ~= w or shadeKH ~= h then
+      if shadeK and shadeK.release then pcall(shadeK.release, shadeK) end
+      shadeK = real.newCanvas(w, h, { dpiscale = 1 })
+      if shadeK.setFilter then shadeK:setFilter("linear", "linear") end
+      shadeKW, shadeKH = w, h
+    end
+    real.push("all")
+    real.setCanvas(shadeK)
+    real.origin()
+    real.setScissor()
+    real.clear(0, 0, 0, 0)
+    hdDraw(rec, 0, 0, k, k, pinTo and (pinTo - by) / bsy * k, sh)
+    real.pop()
+    real.setShader()
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("alpha", "premultiplied")
+    blit(shadeK, bx, by, bsx / k, bsy / k, box, k)
+    real.setBlendMode("alpha", "alphamultiply")
+    self.stats.shaded = (self.stats.shaded or 0) + 1
   end
 
   -- a recorded plain image (a pad) at window resolution, mapped by (bx, by, bsx, bsy)
@@ -2139,7 +2223,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       elseif not (inScene and hidden) then
         real.setScissor(box[1], box[2], box[3], box[4])
         if item.kind == "hd" then
-          hdDraw(item.rec, ubx, uby, U, Uy)
+          tagDraw(item.rec, cur, blit, ubx, uby, U, Uy, box)
         elseif item.kind == "stage" then
           imageDraw(item.rec, ubx, uby, U, Uy)
         elseif item.kind == "backdrop" or item.kind == "band" then
@@ -2440,13 +2524,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           end
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
           local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy + fit.sceneUp * Uy) or nil
-          hdDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, pin)
+          tagDraw(item.rec, cur, blit, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, sceneBox, pin)
         elseif banded and item.rec.ty + item.rec.y * item.rec.tsy < split then
           scissor(topBox)
-          hdDraw(item.rec, ubx, topBy, U, Uy)
+          tagDraw(item.rec, cur, blit, ubx, topBy, U, Uy, topBox)
         else
           if banded then scissor(lowBox) end
-          hdDraw(item.rec, ubx, uby, U, Uy)
+          tagDraw(item.rec, cur, blit, ubx, uby, U, Uy, banded and lowBox or uiBox)
         end
       else
         real.setScissor()

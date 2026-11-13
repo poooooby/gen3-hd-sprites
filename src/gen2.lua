@@ -27,6 +27,13 @@
 --                          drawBottomHud) come after the UI seam. With its HUD docked to the window
 --                          (the EXTENDED HUD) it is drawn the game's usual way.
 --
+--   SummaryMenu:drawPanel, PokedexMenu:drawPanel   the summary and the Pokedex (src/ui/gen2/;
+--                          both their draw and their drawWidescreen draw the panel through it):
+--                          drawn straight to the window too, so each is a direct dex pass, in which a
+--                          sprite mod's tagged pic is drawn at its spec's size in place. A pic in
+--                          the four shades under the palette shader (DMG, CLASSIC, a custom
+--                          palette) is drawn as its shades for that shader to colour (spec.shades).
+--
 -- A battle with a black or world background is drawn the game's usual way (Game2 paints those
 -- around the panel after it is drawn).
 
@@ -96,6 +103,12 @@ function Gen2.prepare(Engine, hd)
   local okW, World = pcall(require, "src.world.gen2.World")
   local drawPeople = okW and type(World) == "table" and type(World.drawPeople) == "function"
     and World.drawPeople or nil
+  -- (optional: without them those screens' Pokemon are drawn the game's own way)
+  local screens = {}
+  for _, name in ipairs({ "src.ui.gen2.SummaryMenu", "src.ui.gen2.PokedexMenu" }) do
+    local okS, M = pcall(require, name)
+    if okS and type(M) == "table" and type(M.drawPanel) == "function" then screens[#screens + 1] = M end
+  end
   for name, L in pairs(Gen2.LAYOUTS) do hd.layouts[name] = L end
   hd.useLayout("gen2_og")
   Engine.fullScreen, Engine.fieldBusy = nil, nil
@@ -264,6 +277,19 @@ function Gen2.prepare(Engine, hd)
         if not ok then error(err, 0) end
       end
       ours[World.drawPeople] = true
+    end
+    for _, M in ipairs(screens) do
+      local draw = M.drawPanel
+      if not ours[draw] then
+        M.drawPanel = function(...)
+          if not hd.beginDirect("dex") then return draw(...) end
+          hd.stats.dexPasses = (hd.stats.dexPasses or 0) + 1
+          local ok, err = pcall(draw, ...)
+          hd.endDirect()
+          if not ok then error(err, 0) end
+        end
+        ours[M.drawPanel] = true
+      end
     end
     hd.fit.available = true
   end
