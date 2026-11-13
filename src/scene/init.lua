@@ -189,6 +189,7 @@ return function(deps)
   -- ── buildings (src/scene/buildings.lua) ──
 
   local Buildings, Kernel, Specs = deps.Buildings, deps.Kernel, deps.Specs
+  local Signs = deps.Signs
   local placeComponents
 
   -- a reference layout, by its id (LAYOUT_X is the game's map EM_X)
@@ -476,7 +477,31 @@ return function(deps)
         if md then models[#models + 1] = md end
       end
     end
-    local found = Buildings.find(grid, models)
+    -- (a town's own metatile drawing the pixels the model owns in that cell stands for it: all but
+    -- an eighth of them, the bits of ground drawn round a corner - Rustboro's paving where the
+    -- reference town has grass)
+    local mf = math.floor
+    local key5 = function(r, g, b) return mf(r * 31 + 0.5) * 1024 + mf(g * 31 + 0.5) * 32 + mf(b * 31 + 0.5) end
+    local found = Buildings.find(grid, models, function(md, cell, i, j)
+      local src = pixelSource(NativeTileset, cell.pair)
+      if not src or src.under(cell.mid, 0, 0) == nil then return false end
+      local art, owned, bad = md.art, 0, 0
+      for y = 0, 15 do
+        for x = 0, 15 do
+          local o = ((j * 16 + y) * art.w + i * 16 + x) * 4
+          if art.px[o + 4] >= 0.5 then
+            owned = owned + 1
+            local r, g, b, a = src.over(cell.mid, x, y)
+            if not (a and a > 0.5) then r, g, b = src.under(cell.mid, x, y) end
+            if key5(r, g, b) ~= key5(art.px[o + 1], art.px[o + 2], art.px[o + 3]) then
+              bad = bad + 1
+              if bad > 32 then return false end
+            end
+          end
+        end
+      end
+      return owned > 0 and bad * 8 <= owned
+    end)
     -- the kits' blocks (Rustboro's), each modelled from its own drawing where it stands
     local secondaryOf = function(pair)
       if not Components then return nil end
@@ -574,29 +599,46 @@ return function(deps)
     local Player = req("src.core.game3.player")
     local NativeTileset = req("src.core.game3.tileset_native")
     if not (env and Player and NativeTileset) then return nil, "no map" end
-    -- whether a metatile draws anything on the layer over the player (what stands up)
-    local tallOf = {}
-    function env.tall(mid, pair)
-      if mid == nil then return true end
+    -- whether a metatile is a tree's: a primary tileset's (Kanto's trees; Hoenn's are models, and
+    -- a town's own grassy rock is no tree) drawn as leaves (Emerald 3DS's foliage test: half its
+    -- drawn pixels green) with something over the player (a crown). They stand up as cards;
+    -- anything else no model rebuilds lies flat as drawn
+    local standsOf = {}
+    function env.stands(mid, pair)
+      if mid == nil or mid >= 512 then return false end
       local key = tostring(pair) .. ":" .. tostring(mid)
-      local t = tallOf[key]
+      local t = standsOf[key]
       if t ~= nil then return t end
       local src = pixelSource(NativeTileset, pair)
-      t = src == nil
-      if src then
+      t = false
+      if src and src.under(mid, 0, 0) ~= nil then
+        local n, green, over = 0, 0, false
         for y = 0, 15 do
           for x = 0, 15 do
-            local _, _, _, a = src.over(mid, x, y)
-            if a and a > 0.5 then t = true; break end
+            local r, g, b, a = src.over(mid, x, y)
+            if a and a > 0.5 then over = true else r, g, b, a = src.under(mid, x, y) end
+            if a and a > 0.5 then
+              n = n + 1
+              r, g, b = r * 255, g * 255, b * 255
+              if g > 64 and g > r + 16 and g > b + 16 then green = green + 1 end
+            end
           end
-          if t then break end
         end
+        t = over and n > 0 and green / n >= 0.5
       end
-      tallOf[key] = t
+      standsOf[key] = t
       return t
     end
     local px, py = tonumber(Player.cellX) or 0, tonumber(Player.cellY) or 0
     if Player.moving and Player.targetX then px, py = Player.targetX, Player.targetY end
+    -- (each phase's time, for the stats)
+    local clock = love.timer and love.timer.getTime or os.clock
+    local t0, phases = clock(), {}
+    local function phase(name)
+      local t = clock()
+      phases[#phases + 1] = name .. " " .. math.floor((t - t0) * 1000 + 0.5)
+      t0 = t
+    end
     local grid = Cells.build(env, px - Scene.WEST, py - Scene.NORTH,
       Scene.WEST + Scene.EAST + 1, Scene.NORTH + Scene.SOUTH + 1)
     local here = grid.at(px, py)
@@ -614,11 +656,64 @@ return function(deps)
     else
       want.enemy = hereKind
     end
+    phase("cells")
     local okB, placed = pcall(placeBuildings, grid, NativeTileset)
     if not okB then
       hd.stats.sceneBuildingError = tostring(placed)
       placed = {}
     end
+    phase("buildings")
+    -- the signposts: signs, lamps, posts and boulders as thin solids of their own pixels
+    local signs = {}
+    if Signs and not env.indoor then
+      local layerCache = {}
+      local okS, found = pcall(Signs.find, grid, {
+        isWall = env.isWall, stands = env.stands,
+        layers = function(mid, pair)
+          local k = tostring(pair) .. ":" .. tostring(mid)
+          local e = layerCache[k]
+          if e == nil then
+            e = false
+            local src = pixelSource(NativeTileset, pair)
+            if src and src.under(mid, 0, 0) ~= nil then
+              local lo, up = {}, {}
+              for y = 0, 15 do
+                for x = 0, 15 do
+                  local r0, g0, b0, a0 = src.under(mid, x, y)
+                  local r1, g1, b1, a1 = src.over(mid, x, y)
+                  if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
+                  if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
+                end
+              end
+              e = { lo, next(up) and up or nil }
+            end
+            layerCache[k] = e
+          end
+          if not e then return nil, nil end
+          return e[1], e[2]
+        end })
+      if okS then
+        local at = {}
+        for _, f in ipairs(found) do
+          at[#at + 1] = string.format("%d,%d:%03X%s", f.cell.cx, f.cell.cy, f.cell.mid or 0, f.head and "+head" or "")
+        end
+        hd.stats.sceneSigns = #found .. " " .. table.concat(at, " ")
+      end
+      if okS then
+        signs = found
+        for _, s in ipairs(signs) do
+          s.cell.sign, s.cell.up, s.cell.base = true, nil, nil
+          s.cell.groundMid = s.ground
+          if s.head then
+            local h = grid.at(s.cell.cx, s.cell.cy - 1)
+            if h then h.groundMid = s.headGround end
+          end
+        end
+      else
+        hd.stats.sceneSignError = tostring(found)
+      end
+    end
+    phase("signs")
     local stage = Stage.search(Camera, grid, {
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
       void = env.indoor,
@@ -634,10 +729,56 @@ return function(deps)
     local names = {}
     for _, pl in ipairs(placed) do names[#names + 1] = pl.model.spec.name .. "@" .. pl.cx .. "," .. pl.cy end
     hd.stats.sceneBuildings = table.concat(names, " ")
+    phase("stage")
     local lists = Render.vertices(grid, tilesFor(NativeTileset), px, py,
       { Trees = Trees, image = treesArt(), outdoor = not env.indoor },
       { Buildings = Buildings, placements = placed })
+    -- the signs' solids, from one texture of their drawings (16 x 32 each)
+    if #signs > 0 then
+      local src = {}
+      local image = imageOf(16 * #signs, 32, function(data)
+        for k, s in ipairs(signs) do
+          local ps = pixelSource(NativeTileset, s.cell.pair)
+          if ps then
+            local ox0 = (k - 1) * 16
+            for y = 0, 15 do
+              for x = 0, 15 do
+                if s.head then
+                  local r, g, b, a = ps.over(grid.at(s.cell.cx, s.cell.cy - 1).mid, x, y)
+                  if a and a > 0.5 then data:setPixel(ox0 + x, y, r, g, b, 1) end
+                end
+                local r, g, b, a = ps.over(s.cell.mid, x, y)
+                if not (a and a > 0.5) then r, g, b, a = ps.under(s.cell.mid, x, y) end
+                if r then data:setPixel(ox0 + x, 16 + y, r, g, b, 1) end
+              end
+            end
+          end
+          src[k] = ps
+        end
+      end)
+      if image then
+        local l = {}
+        lists.models[image] = l
+        for k, s in ipairs(signs) do
+          local mask, n, row0 = {}, 16, 16
+          if s.head then
+            for y = 0, 15 do mask[y], mask[16 + y] = s.head[y], s.rows[y] end
+            n, row0 = 32, 0
+          else
+            for y = 0, 15 do mask[y] = s.rows[y] end
+          end
+          local wx, wz = s.cell.cx - px, s.cell.cy - py - (s.head and 1 or 0)
+          local top = Signs.emit(mask, n, function(x, y, z, u, v, shade)
+            l[#l + 1] = { wx + x, y, wz + z, ((k - 1) * 16 + u) / (16 * #signs), (row0 + v) / 32,
+                          shade, shade, shade, 1 }
+          end)
+          s.cell.top = top
+        end
+      end
+    end
     local meshes = Render.meshes(G, lists)
+    phase("render")
+    hd.stats.scenePhases = table.concat(phases, ", ")
     if not meshes or #meshes == 0 then return nil, "no meshes" end
     shadows = shadows or { enemy = shadow(Scene.SHADOW.enemy), player = shadow(Scene.SHADOW.player) }
     local indoor = env.indoor

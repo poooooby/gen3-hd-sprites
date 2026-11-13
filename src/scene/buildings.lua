@@ -181,7 +181,10 @@ end
 --- Where the specs' buildings stand in a grid (src/scene/cells.lua). models: { { spec, ref,
 --- core, primaryOnly } } (prepared by Buildings.prepare). Returns placements { model, cx, cy }
 --- (the rectangle's top-left map cell), the first found keeping its cells.
-function Buildings.find(grid, models)
+--- alike(md, cell, i, j) (optional): whether the cell's metatile, another than the template's,
+--- draws the pixels the model owns in its cell (i, j) - the same building in a town's own tiles
+--- (Rustboro's Center and Mart on its paving). Not asked of the anchor cell.
+function Buildings.find(grid, models, alike)
   local byAnchor = {}
   for _, md in ipairs(models) do
     local a = md.core[1]
@@ -189,11 +192,31 @@ function Buildings.find(grid, models)
     byAnchor[m] = byAnchor[m] or {}
     table.insert(byAnchor[m], md)
   end
+  -- the look-alike check, once per model, cell of it, metatile and pair
+  local memo = {}
+  local function matches(md, o, i, j)
+    local want = md.ref.template[j * md.ref.w + i + 1]
+    if o.mid == want then return true end
+    if not alike or md.spec.owned or not o.mid then return false end
+    local m1 = memo[md]
+    if not m1 then m1 = {}; memo[md] = m1 end
+    local m2 = m1[j * 64 + i]
+    if not m2 then m2 = {}; m1[j * 64 + i] = m2 end
+    local m3 = m2[o.pair or false]
+    if not m3 then m3 = {}; m2[o.pair or false] = m3 end
+    local r = m3[o.mid]
+    if r == nil then
+      r = alike(md, o, i, j) == true
+      m3[o.mid] = r
+    end
+    return r
+  end
   local taken, found = {}, {}
   for j = 0, grid.h - 1 do
     local row = grid.rows[j]
     for i = 0, grid.w - 1 do
       local cell = row[i]
+      -- (the anchor, the first core cell, must be the template's own metatile)
       local list = cell.mid and byAnchor[cell.mid]
       if list then
         for _, md in ipairs(list) do
@@ -202,7 +225,7 @@ function Buildings.find(grid, models)
           local ok = true
           for _, c in ipairs(md.core) do
             local o = grid.at(ox + c[1], oy + c[2])
-            if not o or o.mid ~= md.ref.template[c[2] * md.ref.w + c[1] + 1] then ok = false; break end
+            if not o or not matches(md, o, c[1], c[2]) then ok = false; break end
             if md.primaryOnly then
               if primaryOf(o.pair) ~= primaryOf(md.ref.pair) then ok = false; break end
             elseif o.pair ~= md.ref.pair then
@@ -287,13 +310,26 @@ function Buildings.groundOf(grid, pl, has)
     if (count[g] or 0) > bestN then best, bestN = g, count[g] end
   end
   if best then return best end
+  -- none of its own grounds round it (Rustboro's paving): the open ground the map lays round it
+  local open = {}
+  for y = pl.cy - 1, pl.cy + h do
+    for x = pl.cx - 1, pl.cx + w do
+      if x < pl.cx or y < pl.cy or x >= pl.cx + w or y >= pl.cy + h then
+        local c = grid.at(x, y)
+        if c and c.mid and c.kind ~= "blocked" and c.kind ~= "water" and c.kind ~= "void" and has(c.mid) then
+          open[c.mid] = (open[c.mid] or 0) + 1
+        end
+      end
+    end
+  end
+  for m, n in pairs(open) do
+    if n > bestN or (n == bestN and best and m < best) then best, bestN = m, n end
+  end
+  if best then return best end
   for _, g in ipairs(md.spec.ground or {}) do
     if has(g) then return g end
   end
-  for m, n in pairs(count) do
-    if n > bestN and has(m) then best, bestN = m, n end
-  end
-  return best
+  return nil
 end
 
 --- How tall the model stands over each of its cells, in tiles: { [i .. "," .. j] = top } (the

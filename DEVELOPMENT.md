@@ -451,10 +451,19 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
 - `cells.lua`: once per battle (a new `Battle._st`), a 61x65 window of cells around the player
   (`Map.worldMidAt` for art; collision and behaviour through the cell's own map: the primary
   layout, a connection found as `fromDir` finds it, `Map.world`). Kinds: floor, grass, sand,
-  water, blocked (`CollPermissions.isWall`), void (off every map indoors). Each column's runs of
-  blocked cells stand as cards on the run's southern edge, at most 6 high, if one of its
-  metatiles draws on the layer over the player (`env.tall`: a roof, a crown, a sign's top); a
-  cliff's or terrace's edge, drawn on the ground layer alone, lies flat until relief is ported.
+  water, blocked (`CollPermissions.isWall`), void (off every map indoors); each keeps its
+  `coll` and `beh`. Nothing without a model stands up (Emerald 3DS's rule), but trees: each
+  column's run of blocked cells with a tree's metatile (`env.stands`: a primary tileset's, half
+  its drawn pixels leaves, something on its upper layer - Kanto's; Hoenn's are models) stands as
+  cards on the run's southern edge, at most 6 high. Rocks, cliffs, unmodelled buildings lie flat.
+- `signs.lua`: signposts (Emerald 3DS's `voxel_sign_mask.py`, `gen_voxel_sign_masks.py`,
+  `voxel_sign.c`): a blocked cell open west, east and south (not a model's nor beside one, no
+  tree, not a column run); one drawn as such a post (metatile or upper layer) with walkable ground
+  south; a lamp drawn as a free one against a wall. Its silhouette (upper layer, lower-layer
+  pixels the clean ground beside it does not draw, closed off from the border), a head from the
+  north cell's upper layer (a lantern), the ground its cell and its head's are laid with
+  (`cell.groundMid`); `Signs.emit` builds each 8-connected piece 2 px thick standing on its own
+  bottom. Their drawings go in one texture (16 x 32 each), their solids in the model layer.
 - `camera.lua`: the camera in the battle canvas's own pixels (35 degree vertical field over 160
   rows, target on the canvas centre), so the world meets the battle's sprites through whatever
   mapping puts the canvas on the screen. The stage pose (30 degrees, 7 tiles) and the glide
@@ -502,10 +511,13 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   exact for NORMAL and SPLIT metatiles, COVERED ones read their composite as the lower layer),
   ground quarters (and with `ground_px` ground pixels) clear, `keep` applied. Only specs one of
   whose template metatiles the window draws are read. `find` places a spec wherever its core
-  cells (match rows, drawn cells) repeat exactly (a primary-only core: any pair with the same
-  primary; else the same pair). A placed model's cells (`cell.model`) draw its ground image
-  (the commonest spec ground round it, the map's own drawing where the map paints otherwise
-  and the model draws nothing) and stand no card, tree or tile; `cell.top` (its height there)
+  cells (match rows, drawn cells) repeat (a primary-only core: any pair with the same primary;
+  else the same pair): the anchor exactly, the others exactly or by a look-alike metatile that
+  draws the model's pixels in that cell, all but an eighth (Emerald 3DS's same_building_pixels,
+  with that slack for the ground drawn round a corner: Rustboro's Center and Mart on its paving).
+  A placed model's cells (`cell.model`) draw its ground image (the commonest spec ground round
+  it, else the commonest open ground the map lays round it; the map's own drawing where the map
+  paints otherwise and the model draws nothing) and stand no card, tree or tile; `cell.top` (its height there)
   feeds the stage search like a card.
 - `models/components.lua` and `models/fence.lua`: the `components` specs (hedges, fences, curbs,
   railings, Sootopolis's walls, Lavaridge's spring, Slateport's crates), found at runtime as
@@ -587,10 +599,11 @@ Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT` and `GEN1_COLORS`), `gen2_b
 `field_gb.lua` (Field HD with Vivid Worlds: OG), `screens_gb.lua` (Red's whole screens) and
 `dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off). Battle Scene:
 `luajit tests/scene_test.lua` (camera, cells, stage search, vertices, trees, the building kernel,
-specs and placement, component runs, fences, kits) and the driver
+specs and placement, look-alike cells, solids, component runs, fences, kits, signs) and the driver
 `scene_battle.lua` (`SCENE_SPOTS`, `SCENE_LOOK` for shots aimed elsewhere, each also saved as the
 scene alone through the test hooks `exports._sceneLook` / `_sceneShot`; it logs every placed
-model with its cell, every component run with its triangles, and the build time;
+model with its cell, every component run with its triangles, every sign (cell, metatile, head)
+and the build time phase by phase (`scenePhases`);
 `SCENE_DUMP` for collision codes, `SCENE_SELFTEST` for the
 renderer on a synthetic field).
 

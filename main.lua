@@ -63,6 +63,8 @@ return function(mod)
     -- (optional: without them buildings stand as cut-outs)
     Buildings = loadSibling(mod, "src/scene/buildings.lua"),
     Kernel = loadSibling(mod, "src/scene/models/kernel.lua"),
+    -- (optional: without it signs, lamps and boulders lie flat)
+    Signs = loadSibling(mod, "src/scene/signs.lua"),
     path = mod.path,
     hd = hd,
   }

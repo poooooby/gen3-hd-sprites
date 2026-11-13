@@ -127,10 +127,11 @@ Open **OPTIONS → MODS → WoobleView**.
 
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's trees stand as
   real trees with leafy crowns, and in Emerald most of its town buildings, fences, hedges, curbs
-  and railings stand in 3D too. Signs, rocks, the buildings not yet rebuilt (and in Ruby,
-  Sapphire, FireRed and LeafGreen all of them) and Kanto's trees stand up as flat cut-outs of
-  their overworld art; cliff and terrace edges lie flat as drawn. A battle with no overworld around it, or no open ground near you, keeps the
-  game's own background.
+  and railings stand in 3D too. Signs, street lamps and posts stand as little solids of their own
+  pixels, and Kanto's trees as flat cut-outs of their overworld art. Cliffs, rocks and the
+  buildings not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on
+  the ground as the game draws them. A battle with no overworld around it, or no open ground near
+  you, keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
   to your screen.
@@ -157,7 +158,7 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** is adapted from the 3D battles of
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its battle
   camera, its entrance sweep, how it picks where the battle stands, its trees, drawn by its
-  artists, and its buildings, fences and hedges, each one rebuilt from its own overworld art.
+  artists, and its buildings, fences, hedges and signs, each one rebuilt from its own overworld art.
 
 ---
 

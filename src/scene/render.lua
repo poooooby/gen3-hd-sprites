@@ -126,7 +126,8 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
             mid = Trees.groundMetatile(sec, mid)
           end
         end
-        local slot = t.slot(mid)
+        -- (a sign's cell, and a lamp's head's, lay the ground round them: src/scene/signs.lua)
+        local slot = t.slot(cell.groundMid or mid)
         local x0, z0 = cell.cx - ox, cell.cy - oz
         local x1, z1 = x0 + 1, z0 + 1
         -- on the ground: north-west corner first (the tile's top left). A standing cell's ground

@@ -53,6 +53,11 @@ Relief primitive (voxel_building.py) and its fence builder (voxel_fence.py). Cha
 game on the window around the battle; a run built whole instead of cut into repeating blocks;
 colours compared at the GBA's 5 bits a channel.
 
+The battle scene's signposts (src/scene/signs.lua) adapt Emerald 3DS's sign masks and sign
+solids (3ds_port/scripts/voxel_sign_mask.py, gen_voxel_sign_masks.py, src/voxel/voxel_sign.c,
+the signpost role of voxel_cells.py). Changes: found in the game over the window around the
+battle by their shape alone (no sign events), drawn from a texture of their own.
+
 Pokemon is (c) Nintendo, Game Freak and Creatures. WoobleView contains none of their content.
 
 ========================================================================================

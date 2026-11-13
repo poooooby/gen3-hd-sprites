@@ -98,13 +98,13 @@ do
     "a column's blocked run stands from its southern cell up")
   check(grid.at(1, 2).up == 0 and grid.at(1, 1).up == 1 and grid.at(1, 1).base == 2, "...each column on its own")
   check(grid.at(5, 5).up == nil, "open ground stands nothing up")
-  -- with env.tall: a run drawing nothing over the player (a cliff's edge) lies flat
+  -- with env.stands: only a run drawn as leaves stands; a rock, a cliff's edge lies flat
   local env2 = fakeEnv(map)
   env2.mid = function(cx, cy) return cx, "p" end
-  env2.tall = function(mid) return mid ~= 6 end
+  env2.stands = function(mid) return mid ~= 6 end
   local g2 = Cells.build(env2, 0, 0, 10, 7)
   check(g2.at(6, 4).up == nil and g2.at(6, 4).kind == "blocked" and g2.at(1, 2).up == 0,
-    "a blocked run with nothing over the player lies flat; one with a roof or crown stands")
+    "a blocked run not drawn as leaves lies flat; a tree's stands")
   check(grid.at(20, 20) == nil, "outside the window: nil")
   local out = Cells.build(fakeEnv(map), -2, 0, 3, 1)
   check(out.at(-1, 0).kind == "blocked", "outside every map, outdoors: blocked (the border stands up)")
@@ -235,6 +235,50 @@ do
   Trees.emit(put, sec, 0x0C6, 3, 3, Trees.SMALL, function() return nil end)
   check(#quads == 2 and quads[1][5] == 48 and quads[1][6] == 32 and quads[2][5] == 32 and quads[2][8] == 64,
     "a small tree: its trunk plate (48, 32) and crown (32, 32)-(48, 64)")
+end
+
+-- ---------------------------------------------------------------- signs
+do
+  local Signs = dofile("src/scene/signs.lua")
+  -- a 4x4 square in the middle, and a ring with a hole: the hole is the sign's (closed off)
+  local solid = {}
+  for y = 6, 9 do for x = 6, 9 do solid[y * 16 + x] = true end end
+  local rows = Signs.cutout(solid)
+  check(rows[6] == 2 ^ 6 + 2 ^ 7 + 2 ^ 8 + 2 ^ 9 and rows[5] == 0, "a sign's mask: its pixels, row by row")
+  local ring = {}
+  for y = 2, 5 do for x = 2, 5 do if x == 2 or x == 5 or y == 2 or y == 5 then ring[y * 16 + x] = true end end end
+  check(Signs.cutout(ring)[3] == 2 ^ 2 + 2 ^ 3 + 2 ^ 4 + 2 ^ 5, "...a hole closed off from the border is the sign's too")
+  -- a map: a post open on three sides (2, 2), one of the same drawing against a wall (5, 2), and a
+  -- wall (4, 2) beside it; ground plain sand, posts drawn grey on their lower layer's middle
+  local map = { ".....", ".....", "..P.WP", "......" }
+  local grid = { x0 = 0, y0 = 0, w = 6, h = 4, rows = {} }
+  for j = 0, 3 do
+    grid.rows[j] = {}
+    for i = 0, 5 do
+      local ch = map[j + 1]:sub(i + 1, i + 1)
+      grid.rows[j][i] = { cx = i, cy = j, pair = "p", kind = (ch == "P" or ch == "W") and "blocked" or "floor",
+        coll = (ch == "P" or ch == "W") and 1 or 0, mid = ch == "P" and 7 or ch == "W" and 8 or 1 }
+    end
+  end
+  function grid.at(x, y) return grid.rows[y] and grid.rows[y][x] end
+  local found = Signs.find(grid, { isWall = function(c) return c == 1 end, layers = function(mid)
+    local lo = {}
+    for k = 0, 255 do
+      local x, y = k % 16, math.floor(k / 16)
+      local post = mid == 7 and x >= 6 and x < 10 and y >= 4
+      lo[k] = post and { 0.5, 0.5, 0.5 } or (mid == 8 and { 0.6, 0.3, 0.2 }) or { 0.8, 0.7, 0.4 }
+    end
+    return lo, nil
+  end })
+  local at = {}
+  for _, f in ipairs(found) do at[f.cell.cx .. "," .. f.cell.cy] = f end
+  check(#found == 2 and at["2,2"] and at["5,2"] and not at["4,2"],
+    "signs: a post open on three sides, and one drawn alike against a wall; not the wall")
+  check(at["2,2"].rows[4] == 2 ^ 6 + 2 ^ 7 + 2 ^ 8 + 2 ^ 9 and at["2,2"].rows[3] == 0 and at["2,2"].ground == 1,
+    "...its silhouette is what the ground round it does not draw; its cell laid with that ground")
+  local quads, top = 0, 0
+  top = Signs.emit(at["2,2"].rows, 16, function() quads = quads + 1 end)
+  check(quads > 0 and quads % 6 == 0 and near(top, 12 / 16), "...a solid of its pixels, as tall as it is drawn")
 end
 
 -- ---------------------------------------------------------------- buildings
@@ -369,6 +413,13 @@ do
   md.primaryOnly = false
   check(#B.find(grid, { md }) == 0, "...a building of a secondary tileset stands only over its own pair")
   md.primaryOnly = true
+  -- a town's own metatile drawing the building's pixels stands for the template's (not the anchor)
+  grid.rows[4][6].mid = 99
+  md.art = art
+  check(#B.find(grid, { md }) == 0, "a cell drawn otherwise: no building")
+  local alike = B.find(grid, { md }, function(m, cell, i, j) return cell.mid == 99 and i == 1 and j == 1 end)
+  check(#alike == 1 and alike[1].cx == 5, "...unless that cell draws what the model owns there")
+  grid.rows[4][6].mid = 13
   check(B.groundOf(grid, found[1], function() return true end) == 1, "...on the ground round it")
   local tops = B.tops(md)
   check(near(tops["0,1"], 1) and tops["1,1"] ~= nil, "a model's height over its cells, in tiles (the wall: 16 px)")

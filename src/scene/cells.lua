@@ -6,11 +6,12 @@
 -- water), "blocked" (a wall, a tree, a house, a fence, a rock: anything that blocks a step and is
 -- not water) and "void" (outside every map, indoors: black on the cart).
 --
--- What stands up: the overworld's art is drawn in an oblique view, a house's roof above its
--- walls, a tree's crown above its trunk. So each column's run of blocked cells, read from the
--- south up, stands as a stack of cards on the run's southern edge: the run's first cell at
--- height 0, the next one north at height 1, and so on (at most RUN_MAX). A tree stands two tall,
--- a house as its facade, a fence or a sign one tall.
+-- What stands up: nothing without a model, as in Emerald 3DS - a rock, a cliff, a sign or a house
+-- no model rebuilds lies flat as the game draws it - but trees (Kanto's: Hoenn's are models,
+-- src/scene/trees.lua). The overworld's art is drawn in an oblique view, a crown above its trunk,
+-- so each column's run of blocked cells drawn as leaves (env.stands), read from the south up,
+-- stands as a stack of cards on the run's southern edge: the run's first cell at height 0, the
+-- next one north at height 1, and so on (at most RUN_MAX).
 --
 -- The game's data comes in through `env` (src/scene/init.lua reads the engine), so this file
 -- is plain Lua:
@@ -19,6 +20,8 @@
 --                         every map
 --   env.isWall(coll), env.isWater(coll), env.isSurfable(behavior)
 --   env.indoor        the battle's map is indoors (or underground): outside the maps is void
+--   env.stands(mid, pair)   whether a metatile is a tree's (leaves, a crown over the player); without
+--                     it every blocked run stands
 
 local Cells = {}
 
@@ -48,8 +51,8 @@ end
 --- The window x0..x0+w-1, y0..y0+h-1 (map cells). Returns a grid:
 ---   grid.x0, grid.y0, grid.w, grid.h
 ---   grid.at(cx, cy) -> the cell, or nil outside the window
---- each cell: { cx, cy, mid, pair, kind, up (height in its upright run, or nil), base (the run's
---- southern row) }
+--- each cell: { cx, cy, mid, pair, coll, beh, kind, up (height in its upright run, or nil), base
+--- (the run's southern row) }
 function Cells.build(env, x0, y0, w, h)
   local rows = {}
   for j = 0, h - 1 do
@@ -59,13 +62,12 @@ function Cells.build(env, x0, y0, w, h)
       local cx = x0 + i
       local mid, pair = env.mid(cx, cy)
       local coll, beh = env.cell(cx, cy)
-      row[i] = { cx = cx, cy = cy, mid = mid, pair = pair, kind = Cells.kindOf(env, coll, beh) }
+      row[i] = { cx = cx, cy = cy, mid = mid, pair = pair, coll = coll, beh = beh,
+                 kind = Cells.kindOf(env, coll, beh) }
     end
     rows[j] = row
   end
-  -- the upright runs, column by column from the south; with env.tall, only a run that draws
-  -- something over the player stands (a roof, a crown, a sign's top): a cliff's or a terrace's
-  -- edge, drawn on the ground layer alone, lies flat as drawn
+  -- the upright runs, column by column from the south: only a run with a cell env.stands stands
   for i = 0, w - 1 do
     local j = h - 1
     while j >= 0 do
@@ -73,12 +75,12 @@ function Cells.build(env, x0, y0, w, h)
       if c.kind == "blocked" then
         local base = c.cy
         local n = 0
-        local run, stands = {}, not env.tall
+        local run, stands = {}, not env.stands
         while j >= 0 and rows[j][i].kind == "blocked" and n < Cells.RUN_MAX do
           local r = rows[j][i]
           run[#run + 1] = r
           r.up, r.base = n, base
-          if not stands and env.tall(r.mid, r.pair) then stands = true end
+          if not stands and env.stands(r.mid, r.pair) then stands = true end
           n = n + 1
           j = j - 1
         end
