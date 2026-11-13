@@ -121,6 +121,21 @@ function Buildings.art(spec, ref, src)
       end
     end
   end
+  if spec.ground_rgb then
+    -- colours the building never has: the ground painted in its own cells (a parasol's shadow on
+    -- the sand), compared as the game stores them (5 bits a channel)
+    local set = {}
+    for _, c in ipairs(spec.ground_rgb) do
+      set[floor(c[1] * 31 / 255 + 0.5) * 1024 + floor(c[2] * 31 / 255 + 0.5) * 32 + floor(c[3] * 31 / 255 + 0.5)] = true
+    end
+    for i = 0, W * H - 1 do
+      local o = i * 4
+      if px[o + 4] >= 0.5 and set[floor(px[o + 1] * 31 + 0.5) * 1024 + floor(px[o + 2] * 31 + 0.5) * 32
+          + floor(px[o + 3] * 31 + 0.5)] then
+        px[o + 1], px[o + 2], px[o + 3], px[o + 4] = 0, 0, 0, 0
+      end
+    end
+  end
   if spec.keep then
     for Y = 0, H - 1 do
       for X = 0, W - 1 do

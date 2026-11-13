@@ -15,8 +15,8 @@
 -- Ported from Emerald 3DS's scripts/voxel_building.py (by Zallax and contributors, CC BY-NC-SA
 -- 4.0, https://github.com/ZallaxDev/emerald-3ds; see LICENSE): the same primitives and the same
 -- arithmetic, run in the game on its own tilesets instead of offline. Left out: the proofs
--- (ortho_check, density_check), the preview rasteriser, and the primitives read off the art
--- (Relief, Mound, HeightSolid, the lathes, Card) - see DEVELOPMENT.md.
+-- (ortho_check, density_check), the preview rasteriser, Mound and the lathes. The solids read off
+-- a drawing (Volume, HeightSolid, the Proj* surfaces) are in solids.lua - see DEVELOPMENT.md.
 
 local K = {}
 

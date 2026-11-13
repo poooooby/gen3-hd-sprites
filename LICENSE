@@ -40,8 +40,9 @@ reading of a building's drawing, its numbers unchanged), and how gen_voxel_build
 a building's art and finds where it stands. Changes: rewritten in Lua for LOVE and run in the
 game on the player's own tilesets instead of offline; no proofs, previews or texture pages;
 exact template matches only; a placement's ground chosen from the ground round it; only the
-specs built from explicit parts and from flat faces over their drawing (with_ring, Grown, Card)
-so far.
+specs built from explicit parts, from flat faces over their drawing (with_ring, Grown, Card)
+and from solids cut to their drawing (Volume, HeightSolid, own_bands, ProjSection, ProjHull,
+ProjCanopy: src/scene/models/solids.lua and solid_specs.lua) so far.
 
 The battle scene's hedges, fences, curbs, railings and walls (src/scene/models/components.lua,
 src/scene/models/fence.lua, the Relief and Decal primitives in src/scene/models/kernel.lua) and

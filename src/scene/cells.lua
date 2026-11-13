@@ -63,7 +63,9 @@ function Cells.build(env, x0, y0, w, h)
     end
     rows[j] = row
   end
-  -- the upright runs, column by column from the south
+  -- the upright runs, column by column from the south; with env.tall, only a run that draws
+  -- something over the player stands (a roof, a crown, a sign's top): a cliff's or a terrace's
+  -- edge, drawn on the ground layer alone, lies flat as drawn
   for i = 0, w - 1 do
     local j = h - 1
     while j >= 0 do
@@ -71,10 +73,17 @@ function Cells.build(env, x0, y0, w, h)
       if c.kind == "blocked" then
         local base = c.cy
         local n = 0
+        local run, stands = {}, not env.tall
         while j >= 0 and rows[j][i].kind == "blocked" and n < Cells.RUN_MAX do
-          rows[j][i].up, rows[j][i].base = n, base
+          local r = rows[j][i]
+          run[#run + 1] = r
+          r.up, r.base = n, base
+          if not stands and env.tall(r.mid, r.pair) then stands = true end
           n = n + 1
           j = j - 1
+        end
+        if not stands then
+          for _, r in ipairs(run) do r.up, r.base = nil, nil end
         end
       else
         j = j - 1

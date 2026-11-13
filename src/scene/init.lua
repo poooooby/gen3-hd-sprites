@@ -300,11 +300,30 @@ return function(deps)
     local src = pixelSource(NativeTileset, ref.pair)
     if not src then return false end
     local art = Buildings.art(spec, ref, src)
-    -- (parts read off the drawing come with a texture of their own: the drawing and its bands)
+    -- (parts read off the drawing come with a texture of their own: the drawing and its bands; a
+    -- few read another building's drawing too, by its reference)
+    local artCtx = { layoutArt = function(layout, x, y, w, h, ground)
+      local other = { name = spec.name .. "/ref", layout = layout, rect = { x, y, w, h }, ground = ground,
+                      ground_px = true }
+      local oref = Buildings.reference(other, ctx)
+      local osrc = oref and pixelSource(NativeTileset, oref.pair)
+      return osrc and Buildings.art(other, oref, osrc) or nil
+    end }
     local okM, mesh, tex = pcall(function()
       local parts, t
-      if spec.parts_art then parts, t = spec.parts_art(art) else parts = spec.parts() end
-      return Kernel.build(parts), t
+      if spec.parts_art then
+        -- (the spec's level of detail: the least steps of its height fields)
+        Kernel.HEIGHTSOLID_LOD = spec.lod
+        local ok, p, tt = pcall(spec.parts_art, art, artCtx)
+        Kernel.HEIGHTSOLID_LOD = nil
+        if not ok then error(p, 0) end
+        parts, t = p, tt
+      else
+        parts = spec.parts()
+      end
+      local m = Kernel.build(parts)
+      if spec.clip_art and Kernel.clipToArt then Kernel.clipToArt(m, t or art) end
+      return m, t
     end)
     if not okM then
       hd.stats.sceneBuildingError = spec.name .. ": " .. tostring(mesh)
@@ -555,6 +574,27 @@ return function(deps)
     local Player = req("src.core.game3.player")
     local NativeTileset = req("src.core.game3.tileset_native")
     if not (env and Player and NativeTileset) then return nil, "no map" end
+    -- whether a metatile draws anything on the layer over the player (what stands up)
+    local tallOf = {}
+    function env.tall(mid, pair)
+      if mid == nil then return true end
+      local key = tostring(pair) .. ":" .. tostring(mid)
+      local t = tallOf[key]
+      if t ~= nil then return t end
+      local src = pixelSource(NativeTileset, pair)
+      t = src == nil
+      if src then
+        for y = 0, 15 do
+          for x = 0, 15 do
+            local _, _, _, a = src.over(mid, x, y)
+            if a and a > 0.5 then t = true; break end
+          end
+          if t then break end
+        end
+      end
+      tallOf[key] = t
+      return t
+    end
     local px, py = tonumber(Player.cellX) or 0, tonumber(Player.cellY) or 0
     if Player.moving and Player.targetX then px, py = Player.targetX, Player.targetY end
     local grid = Cells.build(env, px - Scene.WEST, py - Scene.NORTH,

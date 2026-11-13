@@ -98,6 +98,13 @@ do
     "a column's blocked run stands from its southern cell up")
   check(grid.at(1, 2).up == 0 and grid.at(1, 1).up == 1 and grid.at(1, 1).base == 2, "...each column on its own")
   check(grid.at(5, 5).up == nil, "open ground stands nothing up")
+  -- with env.tall: a run drawing nothing over the player (a cliff's edge) lies flat
+  local env2 = fakeEnv(map)
+  env2.mid = function(cx, cy) return cx, "p" end
+  env2.tall = function(mid) return mid ~= 6 end
+  local g2 = Cells.build(env2, 0, 0, 10, 7)
+  check(g2.at(6, 4).up == nil and g2.at(6, 4).kind == "blocked" and g2.at(1, 2).up == 0,
+    "a blocked run with nothing over the player lies flat; one with a roof or crown stands")
   check(grid.at(20, 20) == nil, "outside the window: nil")
   local out = Cells.build(fakeEnv(map), -2, 0, 3, 1)
   check(out.at(-1, 0).kind == "blocked", "outside every map, outdoors: blocked (the border stands up)")
@@ -233,7 +240,9 @@ end
 -- ---------------------------------------------------------------- buildings
 do
   local K = dofile("src/scene/models/kernel.lua")
+  dofile("src/scene/models/solids.lua")(K)
   local specs = dofile("src/scene/models/specs.lua")(K)
+  local solidSpecs = dofile("src/scene/models/solid_specs.lua")(K, specs)
   local B = dofile("src/scene/buildings.lua")
   -- the kernel: clipping keeps the coordinates it carries exact
   local half = K.clip({ { 0, 0, 10 }, { 4, 0, 14 }, { 4, 4, 18 }, { 0, 4, 14 } }, 1, 2, true)
@@ -270,11 +279,16 @@ do
     return a
   end
   local artSpecs = 0
+  -- (a spec reading another building's drawing gets a made-up one too)
+  local artCtx = { layoutArt = function(_, _, _, w, h) return fakeArt(w, h) end }
   for _, sp in ipairs(specs) do
     local okB, m = pcall(function()
       if sp.parts_art then
         artSpecs = artSpecs + 1
-        local parts, tex = sp.parts_art(fakeArt(sp.rect[3], sp.rect[4]))
+        K.HEIGHTSOLID_LOD = sp.lod
+        local okA, parts, tex = pcall(sp.parts_art, fakeArt(sp.rect[3], sp.rect[4]), artCtx)
+        K.HEIGHTSOLID_LOD = nil
+        assert(okA, parts)
         assert(not tex or (tex.w and tex.h))
         return K.build(parts)
       end
@@ -282,8 +296,43 @@ do
     end)
     if okB and #m.tris > 0 then built = built + 1 else bad = sp.name .. " " .. tostring(m) end
   end
-  check(built == #specs and #specs >= 70 and artSpecs >= 20,
+  check(built == #specs and #specs >= 100 and artSpecs >= 50 and #solidSpecs >= 30,
     "every building spec builds (" .. built .. "/" .. #specs .. ", " .. tostring(bad) .. ")")
+  -- solids: a dome cut to a drawn disc stands within its drawing and is closed (walls at its ends)
+  do
+    local W = 32
+    local a = { w = W, h = W, px = {} }
+    for v = 0, W - 1 do
+      for u = 0, W - 1 do
+        local o = (v * W + u) * 4
+        local inside = ((u + 0.5 - 16) / 16) ^ 2 + ((v + 0.5 - 16) / 16) ^ 2 <= 1
+        a.px[o + 1], a.px[o + 2], a.px[o + 3], a.px[o + 4] = 0.5, 0.5, 0.5, inside and 1 or 0
+      end
+    end
+    local tex = K.withRing(a, {})
+    local hs = K.HeightSolid("d", tex, W, K.Volume():dome(16, 20, 15, 10, 12), { depth = { 0, 32 }, step = 1, mirror_z = 20 })
+    local m = K.build({ hs })
+    local inDrawing, walls, front = true, 0, 0
+    for _, t in ipairs(m.tris) do
+      if t.tag == "d~proj" then
+        front = front + 1
+        for k = 1, 3 do
+          local u, v = t[k][4], t[k][5]
+          if u < -1e-6 or u > W + 1e-6 or v < -1.5 or v > W + 0.01 then inDrawing = false end
+        end
+      elseif t.tag == "d.wall~behind~proj" then walls = walls + 1 end
+    end
+    check(front > 0 and walls > 0 and inDrawing, "a HeightSolid: its seen faces read its drawing, walls close its ends")
+    -- clip_art cuts a card standing past the drawing to the drawing's box
+    local cm = K.mesh()
+    cm:poly({ { -8, 0, 40, -8, 40 }, { 40, 0, 40, 40, 40 }, { 40, 48, 40, 40, -8 }, { -8, 48, 40, -8, -8 } }, 1, "c")
+    K.clipToArt(cm, a)
+    local inside = true
+    for _, t in ipairs(cm.tris) do
+      for k = 1, 3 do if t[k][4] < 0 or t[k][4] > 32 or t[k][5] < 0 or t[k][5] > 32 then inside = false end end
+    end
+    check(#cm.tris >= 2 and inside, "clip_art: a card past the drawing is cut to its box")
+  end
   local lh
   for _, sp in ipairs(specs) do if sp.name == "littleroot_house_w" then lh = K.build(sp.parts()) end end
   check(lh and #lh.tris == 614, "Littleroot's house: 614 triangles, as the generator makes it")

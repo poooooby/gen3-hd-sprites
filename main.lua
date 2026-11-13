@@ -69,9 +69,16 @@ return function(mod)
   local specsOf = loadSibling(mod, "src/scene/models/specs.lua")
   local fenceOf = loadSibling(mod, "src/scene/models/fence.lua")
   local componentsOf = loadSibling(mod, "src/scene/models/components.lua")
+  -- (optional: the solids round things are read off, and their specs)
+  local solidsOf = loadSibling(mod, "src/scene/models/solids.lua")
+  local solidSpecsOf = loadSibling(mod, "src/scene/models/solid_specs.lua")
   if type(specsOf) == "function" and sceneDeps.Kernel then
+    local okS = type(solidsOf) == "function" and pcall(solidsOf, sceneDeps.Kernel)
     local ok, specs = pcall(specsOf, sceneDeps.Kernel)
-    if ok and type(specs) == "table" then sceneDeps.Specs = specs end
+    if ok and type(specs) == "table" then
+      sceneDeps.Specs = specs
+      if okS and type(solidSpecsOf) == "function" then pcall(solidSpecsOf, sceneDeps.Kernel, specs) end
+    end
     local okF, fence = pcall(fenceOf, sceneDeps.Kernel)
     if okF and type(fence) == "table" and type(componentsOf) == "function" then
       local okC, comps = pcall(componentsOf, sceneDeps.Kernel, fence)

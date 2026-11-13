@@ -452,7 +452,9 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   (`Map.worldMidAt` for art; collision and behaviour through the cell's own map: the primary
   layout, a connection found as `fromDir` finds it, `Map.world`). Kinds: floor, grass, sand,
   water, blocked (`CollPermissions.isWall`), void (off every map indoors). Each column's runs of
-  blocked cells stand as cards on the run's southern edge, at most 6 high.
+  blocked cells stand as cards on the run's southern edge, at most 6 high, if one of its
+  metatiles draws on the layer over the player (`env.tall`: a roof, a crown, a sign's top); a
+  cliff's or terrace's edge, drawn on the ground layer alone, lies flat until relief is ported.
 - `camera.lua`: the camera in the battle canvas's own pixels (35 degree vertical field over 160
   rows, target on the canvas centre), so the world meets the battle's sprites through whatever
   mapping puts the canvas on the screen. The stage pose (30 degrees, 7 tiles) and the glide
@@ -478,13 +480,22 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   over the drawing (`K.flat`: the texture is `K.withRing`'s three bands, the hidden faces
   `K.Grown` onto the grown band) or cards: Lilycove's store, museum, hall and harbour, the cable
   car stations, the Mirage Tower, Trainer Hill, Cozmo's antenna, Rydel's bikes and most of the
-  Battle Frontier. Not yet: the parts_art specs built from HeightSolid/Volume, hulls, lathes or
-  voxel_fortree (tents, boats, lanterns, parasols, the Game Corner, Fortree, Sootopolis,
-  Pacifidlog, the League, the Space Center, Rustboro's fountain, the Dome and Pike), `props`
-  (rocks: found by raw upper-layer tile numbers, which the engine's atlases do not keep),
-  bridges and interiors. Every ported spec builds the same triangles as the Python generator
-  (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on the same
-  synthetic drawing; all 74 matched).
+  Battle Frontier.
+- `models/solids.lua` (loaded into the kernel before the specs) and `models/solid_specs.lua`
+  (appended to them, with `specs.helpers`): `Volume` (dome, drum, tube, slab, plate, lathe,
+  profile, pyramid, prism, hip, box, hollow), `HeightSolid` (the volume cut to the drawing column
+  by column; `K.HEIGHTSOLID_LOD` is the spec's `lod` while its `parts_art` runs), `ownBands`,
+  `ProjSection`, `ProjHull`, `ProjCanopy`, `clipToArt`; 31 specs: the battle tents, Slateport's
+  boats, Route 109's parasols, loungers and mats, Route 108's wreck, the Game Corner, Verdanturf's
+  flower box, Lavaridge's sand bath, Pacifidlog's hut, Sootopolis's houses, posts and the Cave of
+  Origin's doorway, the League and its bushes, the Battle Dome and Pike, the Space Center. Spec
+  fields: `lod`, `ground_rgb` (cleared at 5 bits a channel), `clip_art`; `parts_art(art, ctx)`
+  with `ctx.layoutArt(layout, x, y, w, h, ground)` for another building's reference drawing.
+  Not yet: the lathes (Slateport's lantern), Rustboro's fountain, Fortree (`voxel_fortree`),
+  `props` (rocks: found by raw upper-layer tile numbers, which the engine's atlases do not keep),
+  bridges, interiors, relief. Every ported spec builds the same triangles as the Python
+  generator (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on the
+  same synthetic drawing, their textures' checksums too; all 105 matched).
 - `buildings.lua`: in the game, per spec once per session: its reference template (the
   reference layout read through `Map.ensureMidLayout(Runtime._game, "EM_" .. name)`), its art
   from the reference pair's atlases (`imageData` = the lower layer, `overImageData` the upper;

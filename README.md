@@ -83,7 +83,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   trees and houses of the spot where it started, laid out in 2.5D and fading into the distance.
 - 🏠 **Real buildings:** In Emerald, houses, Pokémon Centers, Marts, gyms and the big buildings
   of Hoenn's towns stand in 3D, rebuilt from their own overworld art: walls, roofs, porches and
-  all. Fences stand post by post, and hedges, curbs, railings and walls stand as solid runs.
+  all, down to the round battle tents, the Space Center's domes, the boats in Slateport's harbour
+  and the parasols on Route 109's beach. Fences stand post by post, and hedges, curbs, railings and walls stand as solid runs.
 - 🎥 **A camera that swoops in:** As the battle begins, the camera sweeps down from the
   overworld view to the battle, the houses and trees rising up as it goes.
 - 🎯 **A good spot every time:** Both Pokémon are placed on open ground of the kind you met
@@ -128,7 +129,7 @@ Open **OPTIONS → MODS → WoobleView**.
   real trees with leafy crowns, and in Emerald most of its town buildings, fences, hedges, curbs
   and railings stand in 3D too. Signs, rocks, the buildings not yet rebuilt (and in Ruby,
   Sapphire, FireRed and LeafGreen all of them) and Kanto's trees stand up as flat cut-outs of
-  their overworld art. A battle with no overworld around it, or no open ground near you, keeps the
+  their overworld art; cliff and terrace edges lie flat as drawn. A battle with no overworld around it, or no open ground near you, keeps the
   game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it

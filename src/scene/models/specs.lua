@@ -1346,5 +1346,7 @@ return function(K)
       finish = { [0x223] = true, [0x23F] = true }, foot = 0x240, ground = { 0x2BB, 0x2C3, GRASS }, parts = olive_block },
   }
   for _, sp in ipairs(artSpecs) do specs[#specs + 1] = sp end
+  -- for the specs of round things (src/scene/models/solid_specs.lua)
+  specs.helpers = { flat_block = flat_block, ProjLathe = ProjLathe, GRASS = GRASS }
   return specs
 end
