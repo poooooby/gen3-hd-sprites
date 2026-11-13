@@ -834,7 +834,8 @@ return function(deps)
       local md = { spec = { name = b.name, owned = { ["0,0"] = true }, ground = { b.ground } },
                    ref = { w = 1, h = 1, template = {} }, core = { { 0, 0 } }, tris = b.tris, image = image,
                    texW = atlasW, texH = atlasH, tops = { ["0,0"] = b.top / 16 }, primaryOnly = true,
-                   groundMid = b.ground, patch = b.patch, bridge = true }
+                   groundMid = b.ground, patch = b.patch, bridge = true,
+                   footprints = { ["0,0"] = b.footprint or false } }
       res.models[#res.models + 1] = md
       for _, p in ipairs(b.placed) do res.at[p[2] * 4096 + p[1]] = md end
     end
@@ -842,14 +843,15 @@ return function(deps)
   end
 
   -- (the cache: one text file of the blocks, their triangles in the atlas's texels, and the atlas)
-  local function bridgeSerialize(list, atlasW, atlasH)
-    local out = { ("bridge 1 %d %d %d\n"):format(atlasW, atlasH, #list) }
+  local function bridgeSerialize(list, atlasW, atlasH, decks)
+    local out = { ("bridge 2 %d %d %d %d\n"):format(atlasW, atlasH, #list, #decks) }
+    for _, d in ipairs(decks) do out[#out + 1] = ("D %d %d %d %d %d\n"):format(d[1], d[2], d[3], d[4], d[5]) end
     local f = function(v) return ("%.9g"):format(v) end
     for _, b in ipairs(list) do
       local placed = {}
       for _, p in ipairs(b.placed) do placed[#placed + 1] = p[1] .. " " .. p[2] end
-      out[#out + 1] = ("B %s %d %d %d %d %d %s %d\n"):format(b.name, b.ground, b.top, #b.placed,
-        b.patch and 1 or 0, #b.tris, table.concat(placed, " "), 0)
+      out[#out + 1] = ("B %s %d %d %d %d %d %s %s\n"):format(b.name, b.ground, b.top, #b.placed,
+        b.patch and 1 or 0, #b.tris, table.concat(placed, " "), b.footprint and table.concat(b.footprint, ",") or "-")
       if b.patch then
         local t = {}
         for k = 0, 255 do t[k + 1] = b.patch[k] and tostring(b.patch[k]) or "-1" end
@@ -867,8 +869,13 @@ return function(deps)
   local function bridgeParse(src)
     local lines = src:gmatch("[^\n]+")
     local head = lines()
-    local atlasW, atlasH, n = (head or ""):match("^bridge 1 (%d+) (%d+) (%d+)$")
+    local atlasW, atlasH, n, nd = (head or ""):match("^bridge 2 (%d+) (%d+) (%d+) (%d+)$")
     if not atlasW then return nil end
+    local decks = {}
+    for i = 1, tonumber(nd) do
+      local x, y, t, b, g = lines():match("^D (%-?%d+) (%-?%d+) (%-?%d+) (%-?%d+) (%-?%d+)$")
+      decks[i] = { tonumber(x), tonumber(y), tonumber(t), tonumber(b), tonumber(g) }
+    end
     local list = {}
     for _ = 1, tonumber(n) do
       local l = lines()
@@ -878,6 +885,11 @@ return function(deps)
       local b = { name = fields[2], ground = tonumber(fields[3]), top = tonumber(fields[4]), placed = {}, tris = {} }
       local np, hasPatch, nt = tonumber(fields[5]), fields[6] == "1", tonumber(fields[7])
       for i = 1, np do b.placed[i] = { tonumber(fields[7 + 2 * i - 1]), tonumber(fields[7 + 2 * i]) } end
+      local fp = fields[8 + 2 * np]
+      if fp and fp ~= "-" then
+        b.footprint = {}
+        for v in fp:gmatch("[^,]+") do b.footprint[#b.footprint + 1] = tonumber(v) end
+      end
       if hasPatch then
         b.patch = {}
         local k = 0
@@ -895,7 +907,7 @@ return function(deps)
       end
       list[#list + 1] = b
     end
-    return list, tonumber(atlasW), tonumber(atlasH)
+    return list, tonumber(atlasW), tonumber(atlasH), decks
   end
 
   -- the whole build, inside a coroutine: tick() yields when its slice is spent
@@ -906,6 +918,7 @@ return function(deps)
     if not io then return nil, "no layout data" end
     local br = Bridge.read(io, conf, tick)
     local blocks = Bridge.blocks(br, "cycling_road_" .. name:gsub("^LAYOUT_", ""):lower(), tick)
+    local decks = Bridge.decks(br)
     -- the atlas: each block at (ox + 1, oy + 1), framed by a copy of its edge
     local cols, ox, oy = 1, 0, 0
     local spots = {}
@@ -944,19 +957,20 @@ return function(deps)
         end
         tris[j] = nt
       end
-      list[i] = { name = b.name, ground = b.ground, top = b.top, placed = b.placed, patch = b.patch, tris = tris }
+      list[i] = { name = b.name, ground = b.ground, top = b.top, placed = b.placed, patch = b.patch, tris = tris,
+                  footprint = b.footprint }
       tick("atlas")
     end
     for k = 0, atlasW * atlasH * 4 - 1 do bytes[k + 1] = string.char(pixels[k]) end
-    return list, atlasW, atlasH, table.concat(bytes)
+    return list, atlasW, atlasH, table.concat(bytes), decks
   end
 
-  local function bridgeFinish(name, st, list, atlasW, atlasH, rgba, fromCache)
+  local function bridgeFinish(name, st, list, atlasW, atlasH, rgba, decks, fromCache)
     local res, why = bridgeModels(list, atlasW, atlasH, rgba)
     if not res then st.error = why; return end
-    st.done, st.at, st.models, st.image = true, res.at, res.models, res.image
+    st.done, st.at, st.models, st.image, st.decks = true, res.at, res.models, res.image, decks
     if not fromCache and Scene.cacheModels and Scene.modelCache then
-      Scene.modelCache.write(name .. ".bridge", bridgeSerialize(list, atlasW, atlasH))
+      Scene.modelCache.write(name .. ".bridge", bridgeSerialize(list, atlasW, atlasH, decks))
       Scene.modelCache.write(name .. ".bridge.rgba", rgba)
     end
   end
@@ -973,9 +987,9 @@ return function(deps)
     local src = c and c.read(name .. ".bridge")
     local rgba = src and c.read(name .. ".bridge.rgba")
     if src and rgba then
-      local okP, list, w, h = pcall(bridgeParse, src)
+      local okP, list, w, h, decks = pcall(bridgeParse, src)
       if okP and list and #rgba == w * h * 4 then
-        bridgeFinish(name, st, list, w, h, rgba, true)
+        bridgeFinish(name, st, list, w, h, rgba, decks, true)
         st.cached = true
         if st.done then return st end
       end
@@ -1011,13 +1025,13 @@ return function(deps)
     local clock = love.timer and love.timer.getTime or os.clock
     while st.co do
       st.budget, st.sliceStart = budget or (outer and Scene.BRIDGE_SLICE) or nil, clock()
-      local ok, list, w, h, rgba = coroutine.resume(st.co)
+      local ok, list, w, h, rgba, decks = coroutine.resume(st.co)
       if not ok then
         st.error, st.co = tostring(list), nil
       elseif coroutine.status(st.co) == "dead" then
         st.co = nil
         if list then
-          bridgeFinish(name, st, list, w, h, rgba, false)
+          bridgeFinish(name, st, list, w, h, rgba, decks, false)
           st.ms = math.floor((clock() - st.t0) * 1000 + 0.5)
         else
           st.error = tostring(w)
@@ -1040,6 +1054,33 @@ return function(deps)
     return nil, st.error
   end
   function Scene.hasBridge(name) return Bridge ~= nil and Bridge.BRIDGES[name] ~= nil end
+
+  --- A layout's deck table (Emerald 3DS's: Route 110's Cycling Road, Fortree's decks, bridges and
+  --- ladders), for an overworld that lifts its walkers: { { x, y, top, bottom, gate } } - the
+  --- surface a walker on cell (x, y) stands on, pixels over the ground at the cell's top and bottom
+  --- edges, and the elevation it must be at to be up there (0: any) - or nil. The bridge's is built
+  --- with it (Scene.bridge: now, if it is not yet).
+  local deckTables = {}
+  function Scene.decks(name)
+    if deckTables[name] ~= nil then return deckTables[name] or nil end
+    if Scene.hasBridge(name) then
+      local st = Scene.bridge(name)
+      if st and st.decks then deckTables[name] = st.decks end
+      return st and st.decks or nil
+    end
+    local f = Specs and Specs.decks and Specs.decks[name]
+    local L = f and World and World.layout(name)
+    if not (L and L.grid) then return nil end
+    local grid, W = L.grid, L.w
+    local function cellAt(x, y)
+      local i = (y * W + x) * 2 + 1
+      return grid:byte(i) + grid:byte(i + 1) * 256
+    end
+    local out = f({ w = L.w, h = L.h, metatile = function(x, y) return cellAt(x, y) % 1024 end,
+                    elevation = function(x, y) return math.floor(cellAt(x, y) / 4096) % 16 end })
+    deckTables[name] = out or false
+    return out
+  end
   --- (dev) A layout's bridge read afresh: its blocks (Bridge.blocks) and the curb's height, or nil.
   function Scene._bridgeBlocks(name)
     local L = World and World.layout(name)
@@ -1519,9 +1560,8 @@ return function(deps)
   --- or nil. Every spec is readied first; tick (optional) is called after each (the relief's build
   --- runs sliced in a coroutine).
   local modelCellsOf = {}
-  function Scene.modelCells(name, tick)
-    if modelCellsOf[name] ~= nil then return modelCellsOf[name] or nil end
-    modelCellsOf[name] = false
+  -- the building models standing in a whole layout (Buildings.find over its own grid), or nil
+  local function layoutFind(name, tick)
     local NativeTileset = req("src.core.game3.tileset_native")
     local L = World and World.layout(name)
     if not (L and L.grid and L.pair and Buildings and Specs and NativeTileset) then return nil end
@@ -1550,7 +1590,24 @@ return function(deps)
     local function signCell(c)
       return r ~= nil and (r.role(c.cx, c.cy) == "signpost" or r.role(c.cx, c.cy + 1) == "signpost")
     end
-    local found = Buildings.find(grid, models, alikeOf(NativeTileset, signCell))
+    return Buildings.find(grid, models, alikeOf(NativeTileset, signCell))
+  end
+  --- (dev) The models standing in a layout: { { name, x, y, w, h, footprints, tops } }.
+  function Scene._layoutModels(name)
+    local out = {}
+    for _, pl in ipairs(layoutFind(name) or {}) do
+      local md = pl.model
+      out[#out + 1] = { name = md.spec.name, x = pl.cx, y = pl.cy, w = md.ref.w, h = md.ref.h,
+                        footprints = Buildings.footprints(md), tops = Buildings.tops(md), owned = md.spec.owned,
+                        tris = md.tris }
+    end
+    return out
+  end
+  function Scene.modelCells(name, tick)
+    if modelCellsOf[name] ~= nil then return modelCellsOf[name] or nil end
+    modelCellsOf[name] = false
+    local found = layoutFind(name, tick)
+    if not found then return nil end
     local out = {}
     for _, pl in ipairs(found) do
       local ref = pl.model.ref

@@ -24,13 +24,15 @@
 --
 -- Ported from Emerald 3DS's scripts/voxel_bridge.py (by Zallax and contributors, CC BY-NC-SA 4.0,
 -- https://github.com/ZallaxDev/emerald-3ds; see LICENSE): the same reading, faces, merges and
--- blocks. Not ported: its deck table (what lifts a walker up on the road: the battle scene has no
--- walkers), the cast shadows' footprints and its checks against the drawing.
+-- blocks, the deck table (what lifts a walker up on the road) and the shadows' footprints - the
+-- last two for an overworld view, unused by the battle scene. Not ported: its checks against the
+-- drawing.
 --
 --   Bridge.read(io, conf, tick) -> the bridge of a layout, its faces built (br.faces)
 --   Bridge.blocks(br, name, tick) -> { { name, cell = {x, y}, ground, art, faces, curbs, patch,
---                                        top, placed = { {x, y} } } }, one model per cell drawn
---                                        alike
+--                                        top, footprint, placed = { {x, y} } } }, one model per
+--                                        cell drawn alike
+--   Bridge.decks(br) -> { { x, y, top, bottom, gate } }, the deck table
 -- io = { w, h, metatile(x, y), subtiles(m, layer) (relief_art's), cellImage(m), elevation(x, y),
 --        blocked(x, y), role(x, y), curb = { tiles = set, fill = set, ground = m, height } }.
 -- Colours are packed 0xRRGGBB numbers.
@@ -2488,10 +2490,27 @@ return function(K)
     return out
   end
 
-  --- {cell: the tallest point over it, at most the deck's road}: the deck stands DECK pixels south
-  --- of where it is drawn, so its cells' own rectangles would not tell it.
-  local function worldTops(faces, w, h, tick)
-    local tops = {}
+  -- is (x, z) inside the convex polygon's plan?
+  local function insideXZ(poly, x, z)
+    local sign = 0
+    local n = #poly
+    for i = 1, n do
+      local a, b = poly[i], poly[i % n + 1]
+      local c = (b[1] - a[1]) * (z - a[3]) - (b[3] - a[3]) * (x - a[1])
+      if abs(c) >= 1e-9 then
+        if sign == 0 then sign = c > 0 and 1 or -1
+        elseif (c > 0) ~= (sign > 0) then return false end
+      end
+    end
+    return sign ~= 0
+  end
+
+  --- What the faces stand over, world cell by world cell: {cell: the tallest point over it, at
+  --- most the deck's road} and {cell: 16 rows of 16 bits, the plan the deck and its rails cover}
+  --- (what lighting casts shadows from: the deck stands DECK pixels south of where it is drawn, so
+  --- its cells' own rectangles would not tell it). voxel_bridge _world_cover.
+  local function worldCover(faces, w, h, tick)
+    local tops, plan = {}, {}
     for n, f in ipairs(faces) do
       local pts = f.pts
       local ymax, x0, x1, z0, z1 = -math.huge, math.huge, -math.huge, math.huge, -math.huge
@@ -2512,6 +2531,29 @@ return function(K)
                 for _, p in ipairs(piece) do ym = max(ym, p[2]) end
                 local c = C(cx, cz)
                 tops[c] = max(tops[c] or 0.0, min(DECK, ym))
+                -- the plan it covers, pixel by pixel (a face lying flat; an upright one has none)
+                local area = 0
+                local np = #piece
+                for i = 1, np do
+                  local a, b = piece[i], piece[i % np + 1]
+                  area = area + a[1] * b[3] - b[1] * a[3]
+                end
+                if abs(area) >= 1e-6 then
+                  local xa, xb, za, zb = math.huge, -math.huge, math.huge, -math.huge
+                  for _, p in ipairs(piece) do
+                    xa, xb, za, zb = min(xa, p[1]), max(xb, p[1]), min(za, p[3]), max(zb, p[3])
+                  end
+                  local got = plan[c]
+                  if not got then got = { n = 0 }; plan[c] = got end
+                  for pz = trunc(za), ceil(zb) - 1 do
+                    for px = trunc(xa), ceil(xb) - 1 do
+                      if insideXZ(piece, px + 0.5, pz + 0.5) then
+                        local k = (pz - cz * 16) * 16 + (px - cx * 16)
+                        if not got[k] then got[k] = true; got.n = got.n + 1 end
+                      end
+                    end
+                  end
+                end
               end
             end
           end
@@ -2519,7 +2561,66 @@ return function(K)
       end
       if n % 512 == 0 then tick("tops") end
     end
-    return tops
+    local masks = {}
+    for c, got in pairs(plan) do
+      if got.n > 0 and got.n < 240 then
+        local rows = {}
+        for z = 0, 15 do
+          local r = 0
+          for x = 0, 15 do if got[z * 16 + x] then r = r + 2 ^ x end end
+          rows[z + 1] = r
+        end
+        masks[c] = rows
+      end
+    end
+    return tops, masks
+  end
+
+  --- The surface's height, pixels, where the GBA draws (u, v): what a walker drawn there stands
+  --- on - the 45-degree rule, so a walker on a ramp stays where the GBA draws it.
+  function BR:liftAt(u, v)
+    local ramp = self:rampAt(u, v)
+    if ramp and v >= self.rampHead(ramp) then
+      local _, h = self:rampPoint(ramp, v)
+      return h
+    end
+    return DECK
+  end
+
+  --- The deck table (voxel_bridge decks): { { x, y, top, bottom, gate } } sorted, the surface a
+  --- walker on the cell stands on, in pixels over the ground, at the cell's top and bottom edges,
+  --- and the elevation an object needs to be up there (0: any). For an overworld that lifts its
+  --- walkers; the battle scene has none.
+  function Bridge.decks(br)
+    local cells = {}
+    for p in pairs(br.road) do cells[C(floor(PU(p) / 16), floor(PV(p) / 16))] = true end
+    for _, r in ipairs(br.ramps) do
+      for y = floor(br.rampHead(r) / 16), floor((r[4] + 15) / 16) - 1 do
+        for x = floor(r[1] / 16), floor((r[2] - 1) / 16) do cells[C(x, y)] = true end
+      end
+    end
+    local keys = {}
+    for c in pairs(cells) do keys[#keys + 1] = c end
+    table.sort(keys, function(a, b)
+      local xa, xb = CX(a), CX(b)
+      if xa ~= xb then return xa < xb end
+      return CY(a) < CY(b)
+    end)
+    local out = {}
+    for _, c in ipairs(keys) do
+      local x, y = CX(c), CY(c)
+      local mid = x * 16 + 8
+      local ramp = br:rampAt(mid, y * 16 + 8)
+      local elev = br.io.elevation(x, y)
+      local gate
+      if ramp and (y + 1) * 16 > ramp[3] then gate = 0
+      elseif elev == br.conf.deck or br.signCells[c] then gate = 0
+      elseif elev == br.conf.both then gate = br.conf.deck end
+      if gate then
+        out[#out + 1] = { x, y, pyround(br:liftAt(mid, y * 16)), pyround(br:liftAt(mid, y * 16 + 16)), gate }
+      end
+    end
+    return out
   end
 
   -- ── reading and blocks ───────────────────────────────────────────────────────
@@ -2609,7 +2710,7 @@ return function(K)
       if n % 32 == 0 then tick("grounds") end
     end
     tick("grounds")
-    local tops = worldTops(faces, br.w, br.h, tick)
+    local tops, masks = worldCover(faces, br.w, br.h, tick)
     local patchOf = {}
     for p, rgb in pairs(br.patchPx) do
       local c = C(floor(PU(p) / 16), floor(PV(p) / 16))
@@ -2713,7 +2814,9 @@ return function(K)
       -- (a cell drawn and built like another is the same model)
       local sig = {}
       for k = 0, H * 16 - 1 do sig[#sig + 1] = cols[k] or "" end
-      sig[#sig + 1] = "|" .. g .. "|" .. top .. "|" .. tostring(curbT)
+      local footprint = masks[cell]
+      sig[#sig + 1] = "|" .. g .. "|" .. top .. "|" .. tostring(curbT) .. "|"
+        .. (footprint and table.concat(footprint, ",") or "box")
       if patch then for k = 0, 255 do sig[#sig + 1] = patch[k] or "" end end
       for _, f in ipairs(local_) do
         sig[#sig + 1] = f.tag
@@ -2728,7 +2831,7 @@ return function(K)
       else
         local px = {}
         for k = 0, H * 16 - 1 do put4(px, k * 4, cols[k]) end
-        blk = { name = ("%s_%d_%d"):format(name, x0, y0), cell = { x0, y0 }, ground = g, top = top,
+        blk = { name = ("%s_%d_%d"):format(name, x0, y0), cell = { x0, y0 }, ground = g, top = top, footprint = footprint,
                 art = { w = 16, h = H, px = px }, faces = local_, patch = patch, placed = { { x0, y0 } } }
         if curbT then blk.curb = { stones = stones, band = curbAt, dx = 0, dz = 0 } end
         seen[key] = blk

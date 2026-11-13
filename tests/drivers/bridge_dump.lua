@@ -58,13 +58,83 @@ local function body(game, log)
     log(("from the cache: %.0f ms; cached %s, %s models, error %s"):format((clock() - tc) * 1000, tostring(st.cached),
       tostring(st.models), tostring(st.error)))
   end
-  local f = io.open(dir .. "/bridge.txt", "w")
-  if f then
-    f:write(table.concat(lines, "\n"), "\n")
+  -- a footprint as the dump of buildings.bin writes it: 16 rows of 4 hex digits, or "box"
+  local function fpText(fp)
+    if not fp then return "box" end
+    local t = {}
+    for z = 1, 16 do t[z] = ("%04x"):format(fp[z]) end
+    return table.concat(t, ",")
+  end
+  local lines, placements = {}, {}
+  for _, b in ipairs(blocks) do
+    local mesh = hd._bridgeMesh(b, curbHeight)
+    local tris = {}
+    for _, t in ipairs(mesh.tris) do
+      local pos = {}
+      local cu, cv = 0, 0
+      for k = 1, 3 do
+        local p = t[k]
+        pos[#pos + 1] = ("%.3f %.3f %.3f"):format(p[1], p[2], p[3])
+        cu, cv = cu + p[4] / 3, cv + p[5] / 3
+      end
+      -- (a centroid on a texel's edge, nudged into the texel after it: the reference's 32-bit
+      -- coordinates read either side of the edge)
+      local function nudge(c) return math.abs(c - math.floor(c + 0.5)) < 0.01 and math.floor(c + 0.5) + 0.1 or c end
+      local x, y = math.floor(nudge(cu)), math.floor(nudge(cv))
+      local col = "-"
+      if x >= 0 and x < b.art.w and y >= 0 and y < b.art.h then
+        local o = (y * b.art.w + x) * 4
+        local px = b.art.px
+        local function c5(v) return math.floor(math.floor(v * 255 + 0.5) / 8) end
+        col = ("%d,%d,%d,%d"):format(c5(px[o + 1]), c5(px[o + 2]), c5(px[o + 3]), px[o + 4] >= 0.5 and 1 or 0)
+      end
+      tris[#tris + 1] = ("%s %.2f %s %s uv=%.2f,%.2f"):format(table.concat(pos, " "), t.shade or 1, col,
+        tostring(t.tag), cu, cv)
+    end
+    table.sort(tris)
+    for _, p in ipairs(b.placed) do
+      placements[#placements + 1] = { p[1], p[2], b.ground, tris, b }
+    end
+  end
+  table.sort(placements, function(a, c) if a[2] ~= c[2] then return a[2] < c[2] end return a[1] < c[1] end)
+  for _, pl in ipairs(placements) do
+    lines[#lines + 1] = ("P %d %d %d %d"):format(pl[1], pl[2], pl[3], #pl[4] * 3)
+    lines[#lines + 1] = ("F %s T %d"):format(fpText(pl[5].footprint), pl[5].top)
+    for _, t in ipairs(pl[4]) do lines[#lines + 1] = "  " .. t end
+  end
+  local function write(file, out)
+    local f = io.open(dir .. "/" .. file, "w")
+    if not f then log("FAIL cannot write " .. file); return end
+    f:write(table.concat(out, "\n"), "\n")
     f:close()
-    log("wrote " .. dir .. "/bridge.txt (" .. #placements .. " placements)")
-  else
-    log("FAIL cannot write " .. dir .. "/bridge.txt")
+    log(("wrote %s (%d lines)"):format(file, #out))
+  end
+  write("bridge.txt", lines)
+  -- the deck tables (the bridge's, Fortree's) and every model's footprints in some layouts
+  for _, lname in ipairs({ "LAYOUT_ROUTE110", "LAYOUT_FORTREE_CITY" }) do
+    local out = {}
+    for _, d in ipairs(hd.sceneDecks(lname) or {}) do out[#out + 1] = ("D %d %d %d %d %d"):format(d[1], d[2], d[3], d[4], d[5]) end
+    write("decks_" .. lname .. ".txt", out)
+  end
+  for lname in (env("BRIDGE_FP_LAYOUTS") or "LAYOUT_RUSTBORO_CITY,LAYOUT_FORTREE_CITY,LAYOUT_SLATEPORT_CITY"):gmatch("[^,]+") do
+    local out = {}
+    for _, m in ipairs(hd._layoutModels(lname) or {}) do
+      local fps = {}
+      for j = 0, m.h - 1 do
+        for i = 0, m.w - 1 do fps[#fps + 1] = fpText(m.footprints[i .. "," .. j] or nil) end
+      end
+      out[#out + 1] = ("P %d %d %dx%d %s"):format(m.x, m.y, m.w, m.h, m.name)
+      out[#out + 1] = "F " .. table.concat(fps, " ")
+      local tl = {}
+      for _, t in ipairs(m.tris or {}) do
+        local pos = {}
+        for k = 1, 3 do pos[k] = ("%.3f %.3f %.3f"):format(t[k][1], t[k][2], t[k][3]) end
+        tl[#tl + 1] = ("  %s %.2f -"):format(table.concat(pos, " "), t.shade or 1)
+      end
+      table.sort(tl)
+      for _, l in ipairs(tl) do out[#out + 1] = l end
+    end
+    write("models_" .. lname .. ".txt", out)
   end
 end
 

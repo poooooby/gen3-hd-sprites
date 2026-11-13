@@ -371,6 +371,57 @@ function Buildings.tops(md)
   return tops
 end
 
+--- Each cell's footprint as the sun sees it (gen_voxel_buildings.cell_footprints), for an overworld
+--- that casts shadows: { [i .. "," .. j] = 16 rows (1-based) of 16 bits, bit x of row z set where
+--- the model stands over that pixel of the cell's plan (any triangle with plan area, a pixel above
+--- the ground), or false for a cell it covers whole or not at all (a box, as its top gives it) }.
+--- A model may bring its own (md.footprints: the Cycling Road's, worked out in the world).
+function Buildings.footprints(md)
+  if md.footprints then return md.footprints end
+  local w, h = md.ref.w, md.ref.h
+  local grid = {}
+  for _, t in ipairs(md.tris) do
+    local a, b, c = t[1], t[2], t[3]
+    if max(a[2], b[2], c[2]) >= 1.0 then
+      local ax, az, bx, bz, cx, cz = a[1], a[3], b[1], b[3], c[1], c[3]
+      local area = (bx - ax) * (cz - az) - (bz - az) * (cx - ax)
+      if math.abs(area) >= 1e-6 then
+        local x0 = max(0, floor(min(ax, bx, cx)))
+        local x1 = min(w * 16, math.ceil(max(ax, bx, cx)))
+        local z0 = max(0, floor(min(az, bz, cz)))
+        local z1 = min(h * 16, math.ceil(max(az, bz, cz)))
+        for pz = z0, z1 - 1 do
+          for px = x0, x1 - 1 do
+            local qx, qz = px + 0.5, pz + 0.5
+            local d1 = (bx - ax) * (qz - az) - (bz - az) * (qx - ax)
+            local d2 = (cx - bx) * (qz - bz) - (cz - bz) * (qx - bx)
+            local d3 = (ax - cx) * (qz - cz) - (az - cz) * (qx - cx)
+            if (d1 >= 0 and d2 >= 0 and d3 >= 0) or (d1 <= 0 and d2 <= 0 and d3 <= 0) then
+              grid[pz * 4096 + px] = true
+            end
+          end
+        end
+      end
+    end
+  end
+  local out = {}
+  for j = 0, h - 1 do
+    for i = 0, w - 1 do
+      local rows, n = {}, 0
+      for z = 0, 15 do
+        local r = 0
+        for x = 0, 15 do
+          if grid[(j * 16 + z) * 4096 + i * 16 + x] then r = r + 2 ^ x; n = n + 1 end
+        end
+        rows[z + 1] = r
+      end
+      out[i .. "," .. j] = (n > 0 and n < 240) and rows or false
+    end
+  end
+  md.footprints = out
+  return out
+end
+
 --- A placement's triangles into vertex lists: put(list key, vertex) where a vertex is
 --- { x, y, z, u, v, r, g, b, a } in tiles relative to (ox, oz), uvs 0..1 of the model's art.
 function Buildings.emit(pl, ox, oz, add)

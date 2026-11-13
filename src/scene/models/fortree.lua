@@ -317,5 +317,32 @@ return function(K, specs)
       parts_art = flatArt(bridgeCell) },
   }
   for _, sp in ipairs(list) do specs[#specs + 1] = sp end
+
+  -- The deck table (voxel_fortree.deck_table), for an overworld that lifts its walkers (the battle
+  -- scene has none): the cells walked up on a deck or a bridge (lifted DECK; where the path passes
+  -- under, only at elevation 4) and the ladders (lifted as the player climbs: the foot stays where
+  -- it is drawn, DECK rows south of the deck's front - a 45-degree ramp, top to bottom of each
+  -- cell). decks(io) -> { { x, y, top, bottom, gate } }, io = { w, h, metatile(x, y),
+  -- elevation(x, y) }.
+  local DECK_TILES = { [0x233] = true, [0x237] = true, [0x23B] = true, [0x23C] = true, [0x23D] = true,
+                       [0x23E] = true, [0x23F] = true, [0x256] = true, [0x24E] = true, [0x235] = true }
+  local LADDER_TOP, LADDER_FOOT = 0x245, 0x24D
+  specs.decks = specs.decks or {}
+  specs.decks[L] = function(io)
+    local out = {}
+    for y = 0, io.h - 1 do
+      for x = 0, io.w - 1 do
+        local m = io.metatile(x, y)
+        if DECK_TILES[m] then
+          out[#out + 1] = { x, y, DECK, DECK, io.elevation(x, y) == 15 and 4 or 0 }
+        elseif m == LADDER_TOP then
+          out[#out + 1] = { x, y, DECK, DECK - 16, 0 }
+        elseif m == LADDER_FOOT then
+          out[#out + 1] = { x, y, DECK - 16, 0, 0 }
+        end
+      end
+    end
+    return out
+  end
   return list
 end

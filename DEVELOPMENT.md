@@ -522,7 +522,8 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
 - `models/fortree.lua` (appended to the specs after solid_specs): Fortree's tree houses (deck,
   hut, `LeafRoof`, the bridge planks in the deck's end cells, all `Lifted` 28 px; the ladder a
   `ProjPoly`), the bridge cells and the palms (a card leaning 50 degrees, the trunk cells laid from
-  their lower layer). `voxel_fortree.deck_table` (lifting walkers onto a deck) is not used: their
+  their lower layer). `voxel_fortree.deck_table` (lifting walkers onto a deck: `specs.decks`,
+  served by `Scene.decks`) is kept for an overworld view, unused by the battle scene: their
   battle stage search counts a deck as a building's tall cells too. Not yet: interiors. Every spec ported before the lantern builds the same triangles as the
   Python generator (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on
   the same synthetic drawing, their textures' checksums too; all 105 matched); the lantern,
@@ -546,8 +547,19 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   Checked against Emerald 3DS's own models: `tests/drivers/bridge_dump.lua` writes every
   placement's triangles (pixels, shade, the colour at the centroid) as a dump of their
   buildings.bin does; all 883 placements match (their file has more distinct models, 292 to
-  253, as their dedupe also keys on the shadow footprints). The relief rebuilt with the bridge's
-  cells is still byte for byte theirs.
+  253 then: it also keys on the footprints). The relief rebuilt with the bridge's cells is still
+  byte for byte theirs.
+- For an overworld view, unused by the battle scene: the deck tables (`Scene.decks(layout)`,
+  export `sceneDecks`: `{ x, y, top, bottom, gate }` - Route 110's `Bridge.decks`, kept in its
+  cache, and Fortree's `specs.decks`) and each model cell's shadow footprint
+  (`Buildings.footprints(md)`: `cell_footprints`, 16 rows of 16 bits or false for a box; the
+  bridge's blocks bring theirs from the world, `voxel_bridge._world_cover`; interior pieces will
+  have none). `bridge_dump.lua` also writes the deck tables and every model's footprints in a few
+  layouts (`BRIDGE_FP_LAYOUTS`): the bridge's footprints and tops, both deck tables (484 and 90
+  rows) and Rustboro's and Fortree's footprints match Emerald 3DS's file. Slateport's bushes,
+  bollards and battle tent do not: their meshes differ from that file's (the tent 878 triangles
+  to 528), though they matched the Python of the source we port from - the pak seems built from
+  another version of it.
 - `props.lua`: `voxel_props.py`'s objects (sea rock, sand boulder, sea stack, Fallarbor's boulder
   and stack) and finder, over a layout's upper layer in subtiles (`World.subtiles`: the raw
   `metatiles.bin` of its tilesets; `World.neighbours`: its maps' connections, for an object a
@@ -724,7 +736,8 @@ texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pas
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `sceneZoom()` (the battle scene's zoom this
-frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
+frame; 1 = none), `sceneDecks(layout)` (a layout's deck table, for an overworld view: see Battle
+Scene) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,
 `failed`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.

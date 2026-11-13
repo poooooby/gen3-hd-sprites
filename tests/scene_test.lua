@@ -756,5 +756,21 @@ do
   check(#t == 4 and inBand, "bridge: a dressed side cut into the flank's pieces, each read off the flank")
 end
 
+-- ── shadow footprints (gen_voxel_buildings.cell_footprints) ──
+do
+  local B = dofile("src/scene/buildings.lua")
+  -- a roof over the west half of the first cell, 8 px up; a decal on the ground in the second
+  local function tri(a, b, c) return { a, b, c, shade = 1 } end
+  local md = { ref = { w = 2, h = 1 }, tris = {
+    tri({ 0, 8, 0, 0, 0 }, { 8, 8, 0, 0, 0 }, { 8, 8, 16, 0, 0 }), tri({ 0, 8, 0, 0, 0 }, { 8, 8, 16, 0, 0 }, { 0, 8, 16, 0, 0 }),
+    tri({ 16, 0.25, 0, 0, 0 }, { 32, 0.25, 0, 0, 0 }, { 32, 0.25, 16, 0, 0 }) } }
+  local fp = B.footprints(md)
+  local half = fp["0,0"]
+  local ok = half and #half == 16
+  for z = 1, 16 do if not (ok and half[z] == 255) then ok = false end end
+  check(ok, "footprint: a cell half covered sets the bits under the roof, row by row")
+  check(fp["1,0"] == false, "footprint: what lies on the ground casts nothing (a box: none)")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

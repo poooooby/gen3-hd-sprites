@@ -174,6 +174,14 @@ return function(mod, hd, state)
     if not (hd.scene and hd.scene._bridgeBlocks) then return nil end
     return hd.scene._bridgeBlocks(name)
   end
+  -- (a layout's deck table, for an overworld that lifts its walkers; dev: the models standing in a
+  -- layout, their footprints and tops)
+  exports.sceneDecks = function(name)
+    return hd.scene and hd.scene.decks and hd.scene.decks(name) or nil
+  end
+  exports._layoutModels = function(name)
+    return hd.scene and hd.scene._layoutModels and hd.scene._layoutModels(name) or nil
+  end
   exports._bridgeJob = function(name, budget, fresh, watch)
     return hd.scene and hd.scene._bridgeJob and hd.scene._bridgeJob(name, budget, fresh, watch)
   end
