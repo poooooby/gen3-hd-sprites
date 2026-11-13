@@ -1006,8 +1006,9 @@ function K.Facet(name, a, b, ha, hb)
   end }
 end
 
---- A part moved along Y and Z, its texture with it.
-function K.Moved(part, dy, dz)
+--- A part moved along Y and Z, its texture with it, its faces tagged `tag` too (a table's back
+--- legs, copies of its front ones: "~depth").
+function K.Moved(part, dy, dz, tag)
   return { name = part.name, emit = function(_, mesh)
     local inner = K.mesh()
     part:emit(inner)
@@ -1017,7 +1018,12 @@ function K.Moved(part, dy, dz)
         local p = t[k]
         o[k] = { p[1], p[2] + (dy or 0), p[3] + (dz or 0), p[4], p[5] }
       end
-      mesh:tri(o[1], o[2], o[3], t.shade, t.tag)
+      local tg = t.tag
+      if tag and tag ~= "" then
+        tg = tg or ""
+        if not tg:find(tag, 1, true) then tg = tg .. tag end
+      end
+      mesh:tri(o[1], o[2], o[3], t.shade, tg)
     end
   end }
 end

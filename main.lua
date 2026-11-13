@@ -101,6 +101,17 @@ return function(mod)
   end
   -- (the drawings as pret composes them: the relief's, the bridge's)
   sceneDeps.Art = loadSibling(mod, "src/scene/relief_art.lua")
+  -- (optional: the rooms' walls and furniture, read off their drawing)
+  if sceneDeps.Kernel and sceneDeps.Art then
+    local interiorsOf = loadSibling(mod, "src/scene/models/interiors.lua")
+    local okI, interiors = pcall(function()
+      return type(interiorsOf) == "function" and interiorsOf(sceneDeps.Kernel, sceneDeps.Art)
+    end)
+    local rooms = loadSibling(mod, "src/scene/models/interior_specs.lua")
+    if okI and type(interiors) == "table" and type(rooms) == "table" then
+      sceneDeps.Interiors, sceneDeps.RoomSpecs = interiors, rooms
+    end
+  end
   local worldOf = loadSibling(mod, "src/scene/world.lua")
   local Post = loadSibling(mod, "src/scene/relief_post.lua")
   -- (JSON read with relief_post's own decoder: the engine's belongs to its link code)

@@ -6,7 +6,8 @@
 --
 -- Ported from Emerald 3DS's scripts/voxel_building.py (by Zallax and contributors, CC BY-NC-SA
 -- 4.0, https://github.com/ZallaxDev/emerald-3ds; see LICENSE): Volume, HeightSolid, own_bands,
--- ProjSection, ProjHull, ProjCanopy and catmull, with the same arithmetic, so a model built here
+-- ProjSection, ProjHull, ProjCanopy, catmull, and for the rooms' furniture ProjDome, ProjLathe,
+-- ProjRun, Ribbon and gen_voxel_buildings.py's ViewHull, with the same arithmetic, so a model built here
 -- is the generator's triangle for triangle.
 
 return function(K)
@@ -1576,6 +1577,172 @@ function K.BakedLathe(name, cubes, sides, shift_z)
     end
   end
   return self
+end
+
+-- ── Round and run things for the rooms' furniture (gen_voxel_buildings.interior_specs) ──────
+
+--- A small round thing as a smooth dome over an ellipse, its drawing projected (u = x,
+--- v = z - y): `seg` points round, `rings` up, the base ring at y0, the crown h above it.
+function K.ProjDome(name, cx, cz, rx, rz, h, y0, seg, rings)
+  y0, seg, rings = y0 or 0, seg or 12, rings or 3
+  return { name = name, emit = function(_, mesh)
+    local function pt(k, i)
+      local phi = (pi / 2) * k / rings
+      local a = 2 * pi * i / seg
+      local r = cos(phi)
+      local x = cx + rx * r * cos(a)
+      local z = cz + rz * r * sin(a)
+      local y = y0 + h * sin(phi)
+      return { x, y, z, x, z - y }
+    end
+    local tag = name .. "~proj"
+    for k = 0, rings - 1 do
+      for i = 0, seg - 1 do
+        local a, b = pt(k, i), pt(k, i + 1)
+        local c, d = pt(k + 1, i + 1), pt(k + 1, i)
+        if k == rings - 1 then
+          mesh:tri(a, b, c, 1.0, tag)
+        else
+          mesh:poly({ a, b, c, d }, 1.0, tag)
+        end
+      end
+    end
+  end }
+end
+
+--- A small turned thing as a smooth surface of revolution on an elliptical plan, its drawing
+--- projected: `profile` { { y, radius } } from the foot up, the plan `squash` as deep as wide, a
+--- lid on the top ring (a radius of 0 at either end: a pole); `seg` points round; `offset` the
+--- texture's rows read that far down.
+function K.ProjLathe(name, cx, cz, profile, squash, seg, offset)
+  squash, seg, offset = squash or 1.0, seg or 12, offset or 0.0
+  return { name = name, emit = function(_, mesh)
+    -- (the polygon round each ring circumscribes it: the drawing's outline stays covered)
+    local grow = 1.0 / cos(pi / seg)
+    local function ring(y, r)
+      r = r * grow
+      local out = {}
+      for i = 0, seg - 1 do
+        local a = 2 * pi * i / seg
+        local x = cx + r * cos(a)
+        local z = cz + r * squash * sin(a)
+        out[i + 1] = { x, y, z, x, z - y + offset }
+      end
+      return out
+    end
+    local tag = name .. "~proj"
+    local rings = {}
+    for j, p in ipairs(profile) do rings[j] = ring(p[1], p[2]) end
+    local n = seg
+    for j = 1, #rings - 1 do
+      local lo, hi = rings[j], rings[j + 1]
+      for i = 1, n do
+        local i2 = i % n + 1
+        local quad = { lo[i], lo[i2], hi[i2], hi[i] }
+        if profile[j + 1][2] < 1e-6 then
+          mesh:tri(quad[1], quad[2], quad[3], 1.0, tag)
+        elseif profile[j][2] < 1e-6 then
+          -- (a pole at the foot: one triangle a side)
+          mesh:tri(quad[1], quad[3], quad[4], 1.0, tag)
+        else
+          mesh:poly(quad, 1.0, tag)
+        end
+      end
+    end
+    if profile[#profile][2] > 1e-6 then mesh:poly(rings[#rings], 1.0, tag) end
+  end }
+end
+
+--- A thing whose outline seen from the side (`section`: { x, y }, x across, y up) runs back from
+--- z0 to z1 - an escalator's ramp and balustrades - every face with its drawing projected; the
+--- back, the underside and the ends (an end reading the drawing's column just inside it) darker,
+--- a face lying on the floor left out.
+function K.ProjRun(name, section, z0, z1)
+  return { name = name, emit = function(_, mesh)
+    local sec = section
+    local n = #sec
+    local area = 0
+    for i = 1, n do
+      local a, b = sec[i], sec[i % n + 1]
+      area = area + (a[1] * b[2] - b[1] * a[2])
+    end
+    local function P(x, y, z, u) return { x, y, z, u == nil and x or u, z - y } end
+    for i = 1, n do
+      local xa, ya = sec[i][1], sec[i][2]
+      local xb, yb = sec[i % n + 1][1], sec[i % n + 1][2]
+      local L = sqrt((xb - xa) ^ 2 + (yb - ya) ^ 2)
+      if L >= 1e-6 then
+        -- the outward normal: right of a->b for a section wound counter-clockwise
+        local nx, ny = (yb - ya) / L, -(xb - xa) / L
+        if area < 0 then nx, ny = -nx, -ny end
+        if not (ny < -0.5 and max(ya, yb) <= 1e-6) then
+          local shade, tag, u
+          if ny > 1e-6 then
+            shade, tag = SHADE_ART, name .. "~proj"
+          elseif ny < -1e-6 then
+            shade, tag = SHADE_BACK, name .. ".under~behind~proj"
+          else
+            shade = nx > 0 and SHADE_EAST or SHADE_WEST
+            tag, u = name .. ".end~behind~proj", xa - 0.5 * (nx > 0 and 1 or -1)
+          end
+          local q = { P(xa, ya, z0, u), P(xb, yb, z0, u), P(xb, yb, z1, u), P(xa, ya, z1, u) }
+          triFacing(mesh, q[1], q[2], q[3], nx, ny, 0.0, shade, tag)
+          triFacing(mesh, q[1], q[3], q[4], nx, ny, 0.0, shade, tag)
+        end
+      end
+    end
+    for _, end_ in ipairs({ { z1, 1.0 }, { z0, -1.0 } }) do
+      local z, nz = end_[1], end_[2]
+      local shade = nz > 0 and SHADE_ART or SHADE_BACK
+      local tag = name .. (nz > 0 and "~proj" or ".back~behind~proj")
+      for _, t in ipairs(K.triangulate(sec)) do
+        local a, b, c = sec[t[1]], sec[t[2]], sec[t[3]]
+        triFacing(mesh, P(a[1], a[2], z), P(b[1], b[2], z), P(c[1], c[2], z), 0.0, 0.0, nz, shade, tag)
+      end
+    end
+  end }
+end
+
+--- A strip running back across the plan from (za, ya) to (zb, yb), u0 to u1 wide, its drawing
+--- projected (a beam of light from one post to the next); `voff` the rows below the model's
+--- drawing where its own pixels are.
+function K.Ribbon(name, u0, u1, za, ya, zb, yb, voff)
+  voff = voff or 0
+  return { name = name, emit = function(_, mesh)
+    -- (wound as a card is: its lower edge on the screen first)
+    local lo, hi
+    if zb - yb > za - ya then lo, hi = { zb, yb }, { za, ya } else lo, hi = { za, ya }, { zb, yb } end
+    local quad = { { u0, lo[2], lo[1] }, { u1, lo[2], lo[1] }, { u1, hi[2], hi[1] }, { u0, hi[2], hi[1] } }
+    local q = {}
+    for k, p in ipairs(quad) do q[k] = { p[1], p[2], p[3], p[1], p[3] - p[2] + voff } end
+    mesh:poly(q, SHADE_ART, name .. ".ribbon~proj")
+  end }
+end
+
+--- The 45-degree view of a part's polygons, emitted into it as into a mesh: whether a point of
+--- the drawing is under one of them (gen_voxel_buildings.ViewHull).
+function K.viewHull()
+  local tris = {}
+  local hull = {}
+  function hull:tri(a, b, c)
+    tris[#tris + 1] = { a[1], a[3] - a[2], b[1], b[3] - b[2], c[1], c[3] - c[2] }
+  end
+  function hull:poly(pts)
+    for k = 2, #pts - 1 do self:tri(pts[1], pts[k], pts[k + 1]) end
+  end
+  function hull.covers(u, v)
+    for _, t in ipairs(tris) do
+      local ax, ay, bx, by, cx, cy = t[1], t[2], t[3], t[4], t[5], t[6]
+      local d1 = (bx - ax) * (v - ay) - (by - ay) * (u - ax)
+      local d2 = (cx - bx) * (v - by) - (cy - by) * (u - bx)
+      local d3 = (ax - cx) * (v - cy) - (ay - cy) * (u - cx)
+      if not ((d1 < -1e-9 or d2 < -1e-9 or d3 < -1e-9) and (d1 > 1e-9 or d2 > 1e-9 or d3 > 1e-9)) then
+        return true
+      end
+    end
+    return false
+  end
+  return hull
 end
 
 end

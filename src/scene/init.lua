@@ -1109,6 +1109,291 @@ return function(deps)
 
   -- a placement's ground: its metatile, the drawing laid on it over it (one image per kind)
   local bridgeGrounds = setmetatable({}, { __mode = "k" })
+  -- ── rooms: their walls and furniture (src/scene/models/interiors.lua) ──
+  local Interiors, RoomSpecs = deps.Interiors, deps.RoomSpecs
+  -- the layouts a room reader reads: io.layout(name) -> Interiors.layoutOf's, or nil
+  local function roomIo()
+    local cache = {}
+    return { layout = function(name)
+      if cache[name] ~= nil then return cache[name] or nil end
+      cache[name] = false
+      -- (a room nobody modelled by its number: "#61")
+      local num = tonumber(tostring(name):match("^#(%d+)$"))
+      local L = World and (num and World.layout(num) or World.layout(name) or RoomSpecs.maps
+        and RoomSpecs.maps[name] and World.layout(RoomSpecs.maps[name]))
+      local pair = L and World.pretArt(L)
+      if not (L and pair and L.grid) then return nil end
+      local blocks, grid = {}, L.grid
+      for i = 0, L.w * L.h - 1 do blocks[i] = grid:byte(i * 2 + 1) + grid:byte(i * 2 + 2) * 256 end
+      local A = Interiors.layoutOf({ name = name, w = L.w, h = L.h, blocks = blocks }, pair)
+      cache[name] = A
+      return A
+    end }
+  end
+  -- (dev: the rooms read afresh, in order, up to and with `upto`: { { name, layout, pieces,
+  -- error } }, and the registry of their pieces)
+  function Scene._rooms(upto)
+    if not (Interiors and RoomSpecs and World) then return nil end
+    local io, reg, out = roomIo(), Interiors.registry(), {}
+    for _, spec in ipairs(RoomSpecs) do
+      local ok, pieces, err = pcall(Interiors.room, spec, io, reg)
+      out[#out + 1] = { name = spec.name, layout = spec.interior.layout, pieces = ok and pieces or nil,
+                        error = (not ok) and tostring(pieces) or err }
+      if spec.name == upto then break end
+    end
+    return out, reg
+  end
+  function Scene._roomBuild(piece, bare) return Interiors.build(piece, bare) end
+
+  -- the rooms read once a session, in their order, a slice a frame (warm): { co, done, error,
+  -- io, reg, pieces (every room's, in order), byId = { [layout id] = room layout name },
+  -- everywhere = { [layout id] = true }, models, bares, ms }
+  Scene.ROOM_SLICE = 0.004
+  local roomRun
+  local function roomJob()
+    if roomRun then return roomRun end
+    local st = { pieces = {}, byId = {}, everywhere = {}, models = {}, bares = {}, errors = {} }
+    roomRun = st
+    if not (Interiors and RoomSpecs and World) then st.error = "no rooms"; return st end
+    local clock = love.timer and love.timer.getTime or os.clock
+    st.t0 = clock()
+    st.io, st.reg = roomIo(), Interiors.registry()
+    local function tick()
+      if st.budget and clock() - st.sliceStart > st.budget then coroutine.yield() end
+    end
+    st.co = coroutine.create(function()
+      for _, spec in ipairs(RoomSpecs) do
+        local name = spec.interior.layout
+        local L = World.layout(name) or RoomSpecs.maps and RoomSpecs.maps[name] and World.layout(RoomSpecs.maps[name])
+        if L and L.id and not st.byId[L.id] then st.byId[L.id] = name end
+        local ok, pieces, err = pcall(Interiors.room, spec, st.io, st.reg, tick)
+        if ok and pieces then
+          for _, pc in ipairs(pieces) do st.pieces[#st.pieces + 1] = pc end
+        else
+          st.errors[#st.errors + 1] = spec.name .. ": " .. tostring(ok and err or pieces)
+        end
+        tick()
+      end
+    end)
+    return st
+  end
+  local function roomStep(budget)
+    local st = roomJob()
+    local clock = love.timer and love.timer.getTime or os.clock
+    while st.co do
+      st.budget, st.sliceStart = budget, clock()
+      local ok, err = coroutine.resume(st.co)
+      if not ok then
+        st.error, st.co = tostring(err), nil
+      elseif coroutine.status(st.co) == "dead" then
+        st.co, st.done = nil, true
+        st.ms = math.floor((clock() - st.t0) * 1000 + 0.5)
+      end
+      if budget then break end
+    end
+    return st
+  end
+  --- The rooms read, now if they are not yet: the job's state (st.done), or nil and why.
+  function Scene.rooms()
+    local st = roomStep(nil)
+    if st.done then return st end
+    return nil, st.error
+  end
+
+  -- a piece's model (its bare twin with `bare`), made once
+  local function roomModel(st, pc, bare)
+    local cache = bare and st.bares or st.models
+    if cache[pc] ~= nil then return cache[pc] or nil end
+    cache[pc] = false
+    local ok, built = pcall(Interiors.build, pc, bare)
+    if not ok then
+      hd.stats.sceneRoomError = pc.name .. ": " .. tostring(built)
+      return nil
+    end
+    local tex = built.tex
+    local image = imageOf(tex.w, tex.h, function(data)
+      local px = tex.px
+      for y = 0, tex.h - 1 do
+        for x = 0, tex.w - 1 do
+          local o = (y * tex.w + x) * 4
+          data:setPixel(x, y, px[o + 1], px[o + 2], px[o + 3], px[o + 4])
+        end
+      end
+    end)
+    if not image then return nil end
+    local md = { spec = { name = pc.name .. (bare and "_bare" or ""), owned = pc.owned }, piece = pc,
+                 ref = { w = pc.rect[3], h = pc.rect[4], template = {} }, core = { { 0, 0 } }, tris = built.tris,
+                 image = image, texW = tex.w, texH = tex.h, primaryOnly = true, art = built.art, room = true }
+    cache[pc] = md
+    return md
+  end
+
+  -- the rooms' pieces standing in the window's layouts (find_placements for a room's piece): at
+  -- its own place in its own room (or one drawn cell for cell the same), where its room was found
+  -- to repeat it, and in a room nobody modelled wherever its tiles are drawn again - each on its
+  -- room's floor, or there on that room's commonest floor with the room's own paint laid over it
+  local function placeRooms(grid, found, where)
+    hd.stats.sceneRooms, hd.stats.sceneRoomError = nil, nil
+    local layouts, order = {}, {}
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        if c.mid then
+          local _, lx, ly, id = where(c.cx, c.cy)
+          local L = id and World.layout(id)
+          if L and L.id and not L.outdoor then
+            local e = layouts[L.id]
+            if not e then e = { L = L, at = {} }; layouts[L.id] = e; order[#order + 1] = L.id end
+            e.at[ly * 4096 + lx] = c
+          end
+        end
+      end
+    end
+    if #order == 0 then return end
+    local st, why = Scene.rooms()
+    if not st then hd.stats.sceneRoomError = tostring(why); return end
+    local placed = 0
+    for _, lid in ipairs(order) do
+      local e = layouts[lid]
+      local name = st.byId[lid]
+      local layoutA = st.io.layout(name or ("#" .. lid))
+      if layoutA then
+        -- (a layout drawn cell for cell as a modelled room stands that room's own pieces too)
+        local sameAs
+        if not name then
+          for _, n2 in pairs(st.byId) do
+            local other = st.io.layout(n2)
+            if other and other.w == layoutA.w and other.h == layoutA.h then
+              local same = true
+              for k = 0, other.w * other.h - 1 do
+                if other.blocks[k] % 1024 ~= layoutA.blocks[k] % 1024 then same = false; break end
+              end
+              if same then sameAs = n2; break end
+            end
+          end
+        end
+        local key = name or layoutA.id
+        local own = name or sameAs
+        if not name and not st.everywhere[lid] then
+          st.everywhere[lid] = true
+          pcall(Interiors.placeReused, st.reg, st.io, layoutA, nil)
+        end
+        -- { piece, x, y, ground (nil: the room's commonest floor, its paint over every cell), bare }
+        local list = {}
+        for _, pc in ipairs(st.pieces) do
+          if pc.placed then
+            for _, p in ipairs(name and pc.placed or {}) do
+              if p[1] == name then list[#list + 1] = { pc, p[2], p[3], p[4], false, pc.placed_patches } end
+            end
+          elseif own and pc.layout == own then
+            list[#list + 1] = { pc, pc.rect[1], pc.rect[2], pc.ground[1], false }
+          end
+          for _, p in ipairs(pc.reused_at or {}) do
+            if p[1] == key then list[#list + 1] = { pc, p[2], p[3], p[4], false } end
+          end
+          for _, p in ipairs(pc.bare_at or {}) do
+            if p[1] == key then list[#list + 1] = { pc, p[2], p[3], nil, true } end
+          end
+        end
+        -- (the room's commonest floor: its cells free of collision, the first most common)
+        local commonFloor
+        do
+          local n, firstAt, best, bn = {}, {}, nil, nil
+          for k = 0, layoutA.w * layoutA.h - 1 do
+            local cell = layoutA.blocks[k]
+            if math.floor(cell / 1024) % 4 == 0 then
+              local m = cell % 1024
+              if not n[m] then n[m] = 0; firstAt[#firstAt + 1] = m end
+              n[m] = n[m] + 1
+            end
+          end
+          for _, m in ipairs(firstAt) do
+            if bn == nil or n[m] > bn then best, bn = m, n[m] end
+          end
+          commonFloor = best
+        end
+        local others = st.reg.reusedPixels[key] or {}
+        local RW = layoutA.w * 16
+        for _, item in ipairs(list) do
+          local pc, px, py, g, bare, patches = item[1], item[2], item[3], item[4], item[5], item[6]
+          local w, h = pc.rect[3], pc.rect[4]
+          local stands = true
+          if pc.when then
+            local wc = e.at[(py + pc.when[2]) * 4096 + px + pc.when[1]]
+            stands = wc ~= nil and wc.mid == pc.when[3]
+          end
+          local md = stands and roomModel(st, pc, bare) or nil
+          local anchor = e.at[py * 4096 + px]
+          if md and anchor then
+            local pl = { model = md, cx = anchor.cx, cy = anchor.cy }
+            -- (pieces of a room share cells - a Poke Ball on the counter: the first one's lays the
+            -- floor; nothing else may stand there)
+            local free = true
+            for j = 0, h - 1 do
+              for i = 0, w - 1 do
+                local c = e.at[(py + j) * 4096 + px + i]
+                if c and c.model and not c.model.model.room and (not pc.owned or pc.owned[i .. "," .. j]) then
+                  free = false
+                end
+              end
+            end
+            if free then
+              local patchAll = g == nil
+              local floorMid = g or commonFloor
+              local tops = Buildings.tops(md)
+              for j = 0, h - 1 do
+                for i = 0, w - 1 do
+                  if not pc.owned or pc.owned[i .. "," .. j] then
+                    local c = e.at[(py + j) * 4096 + px + i]
+                    if c then
+                      if not c.model then c.model = pl end
+                      c.top = math.max(c.top or 0, tops[i .. "," .. j] or 0)
+                    end
+                  end
+                end
+              end
+              local cellPatch = {}
+              for _, p in ipairs(patches and patches[px .. "," .. py] or {}) do cellPatch[p[2] * 256 + p[1]] = p[3] end
+              local art, own = md.art, bare and pc.own or nil
+              pl.ground = imageOf(w * 16, h * 16, function(data)
+                for j = 0, h - 1 do
+                  for i = 0, w - 1 do
+                    local base = floorMid and layoutA.cellImage(floorMid)
+                    local patch = cellPatch[j * 256 + i]
+                    local mapCell = patchAll and py + j < layoutA.h and px + i < layoutA.w
+                      and layoutA.cellImage(layoutA.metatile(px + i, py + j)) or nil
+                    for y = 0, 15 do
+                      for x = 0, 15 do
+                        local col = base and base[y * 16 + x]
+                        if patch then col = patch[y * 16 + x] end
+                        if mapCell then
+                          local X, Y = i * 16 + x, j * 16 + y
+                          local drawn
+                          if own then drawn = own[Y * 4096 + X] else drawn = art.c[Y * art.w + X] ~= nil end
+                          if not drawn and not others[((py + j) * 16 + y) * RW + (px + i) * 16 + x] then
+                            col = mapCell[y * 16 + x]
+                          end
+                        end
+                        if col then
+                          data:setPixel(i * 16 + x, j * 16 + y, math.floor(col / 65536) / 255,
+                            math.floor(col / 256) % 256 / 255, col % 256 / 255, 1)
+                        end
+                      end
+                    end
+                  end
+                end
+              end)
+              found[#found + 1] = pl
+              placed = placed + 1
+            end
+          end
+        end
+        hd.stats.sceneRooms = ("%s: %d pieces"):format(tostring(name or layoutA.id), placed)
+      end
+    end
+    if #st.errors > 0 then hd.stats.sceneRoomError = table.concat(st.errors, "; ") end
+  end
+
   local function bridgeGround(md, src)
     local per = bridgeGrounds[src]
     if not per then per = {}; bridgeGrounds[src] = per end
@@ -1425,6 +1710,11 @@ return function(deps)
         end)
       end
     end
+    -- the rooms' walls and furniture (src/scene/models/interiors.lua)
+    if Interiors and World and where then
+      local okR, err = pcall(placeRooms, grid, found, where)
+      if not okR then hd.stats.sceneRoomError = tostring(err) end
+    end
     -- the objects drawn as a block of upper-layer subtiles wherever they land (sea rocks,
     -- boulders, sea stacks: src/scene/props.lua)
     if Props and World and where then
@@ -1538,6 +1828,11 @@ return function(deps)
           warmQueue[#warmQueue + 1] = { bridge = B.name }
           n = n + 1
         end
+      end
+      -- (indoors: the rooms, a slice a frame)
+      if L and not L.outdoor and Interiors and not (roomRun and roomRun.done) then
+        warmQueue[#warmQueue + 1] = { rooms = true }
+        n = n + 1
       end
     end
     for _, spec in ipairs(Specs) do
@@ -1659,7 +1954,11 @@ return function(deps)
         n = n + 1
       end
     end
-    -- (and the bridges, a slice a frame)
+    -- (and the rooms, and the bridges, a slice a frame)
+    if Interiors and not (roomRun and roomRun.done) then
+      warmQueue[#warmQueue + 1] = { rooms = true }
+      n = n + 1
+    end
     for name in pairs(Bridge and Bridge.BRIDGES or {}) do
       if not (bridges[name] and bridges[name].done) then
         warmQueue[#warmQueue + 1] = { bridge = name }
@@ -1673,6 +1972,9 @@ return function(deps)
     local spec = table.remove(warmQueue, 1)
     if type(spec) == "function" then
       pcall(spec)
+    elseif type(spec) == "table" and spec.rooms then
+      local ok, st = pcall(roomStep, Scene.ROOM_SLICE)
+      if ok and st.co then table.insert(warmQueue, 1, spec) end
     elseif type(spec) == "table" and spec.bridge then
       -- (a bridge: a slice, and back to the head of the queue until it is done)
       local ok, st = pcall(bridgeStep, spec.bridge, Scene.BRIDGE_SLICE)

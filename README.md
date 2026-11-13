@@ -90,6 +90,11 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Seaside Cycling Road stands on its piers over the sea, rails, girders and all, with its ramps
   coming down to the gatehouses. Fences stand post by post, and hedges, curbs, railings and walls
   stand as solid runs.
+- 🛋️ **Furnished rooms:** In Emerald, a battle in a Pokémon Center or a Poké Mart takes place
+  in a furnished room: its walls and corners close it in, and the counter with its Poké Balls,
+  the healing machine, the PC, bookcases, shelves, stools, the glass table, plants and the
+  escalator all stand in 3D, rebuilt from the room's own art. The same furniture stands wherever
+  another room draws it.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
@@ -143,7 +148,9 @@ Open **OPTIONS → MODS → WoobleView**.
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or so while you walk, then stays on disk). Rocks in the other games, and the buildings
   not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on the ground
-  as the game draws them. A battle with no overworld around it, or no open ground near you,
+  as the game draws them. Indoors, the Pokémon Centers and Poké Marts are furnished in 3D; other
+  rooms (houses, gyms, the hideouts) show their furniture flat, but for the pieces they share
+  with those rooms. A battle with no overworld around it, or no open ground near you,
   keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
@@ -172,6 +179,7 @@ Open **OPTIONS → MODS → WoobleView**.
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its battle
   camera, its entrance sweep, how it picks where the battle stands, its trees, drawn by its
   artists, its buildings, fences, hedges, signs and rocks, each one rebuilt from its own overworld art,
+  its rooms, cut into their walls and furniture,
   and the shape of the land: how it reads cliffs, terraces and stairs off the map's own drawing,
   with the corrections its team made by hand, map by map.
 

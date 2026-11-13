@@ -524,7 +524,7 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `ProjPoly`), the bridge cells and the palms (a card leaning 50 degrees, the trunk cells laid from
   their lower layer). `voxel_fortree.deck_table` (lifting walkers onto a deck: `specs.decks`,
   served by `Scene.decks`) is kept for an overworld view, unused by the battle scene: their
-  battle stage search counts a deck as a building's tall cells too. Not yet: interiors. Every spec ported before the lantern builds the same triangles as the
+  battle stage search counts a deck as a building's tall cells too. Every spec ported before the lantern builds the same triangles as the
   Python generator (compare counts and coordinate sums with its `vb.Mesh`, the parts_art ones on
   the same synthetic drawing, their textures' checksums too; all 105 matched); the lantern,
   fountain, Fortree and props are checked in the game only.
@@ -549,6 +549,31 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   buildings.bin does; all 883 placements match (their file has more distinct models, 292 to
   253 then: it also keys on the footprints). The relief rebuilt with the bridge's cells is still
   byte for byte theirs.
+- `models/interiors.lua` (+ `models/interior_specs.lua`, the rooms' specs in order): the rooms,
+  `gen_voxel_buildings.interior_specs` with its helpers (claims, `auto_leave`, `support_left`,
+  `outline_trim`, legs (`leg_split`, `table_plan`, `table_parts`), fills, `side_image` /
+  `plain_side` / `slab_side`, `pick_side`, `ball_fit`, `lathe_fit`, `dome_fit`, `post_parts`,
+  decals, `floor_under`) and the reuse registry (`register_piece`, `reuse_pieces`,
+  `place_reused`; `reuse_everywhere` is done per layout, the first time a battle shows a room
+  nobody modelled). `Interiors.room(spec, io, reg, tick)` -> the pieces' specs (`name, layout,
+  rect, ground, art` (an image of colour ints), `parts, owned, placed, placed_patches, when`,
+  and from later rooms `reused_at` / `bare_at`); `Interiors.build(piece[, bare])` -> `{ tris,
+  art, tex }`. Images are `{ w, h, c = { [v * w + u] = colour } }` (nil clear); colours pret's
+  (`World.pretArt`, the relief's `Art.pair`), so the specs' hex colours compare exactly. Python's
+  ties are reproduced: Counter's order (first met), `_set_order` (`Art.setOrder` over tuple
+  hashes) and its compensated float sums (`Art.fsum`). A shared layout pret names for no map is
+  found by one map that uses it (`interior_specs.maps`); the engine keys a layout by pret's
+  number, which is what Emerald 3DS's file numbers them by. `init.lua`: `roomJob` reads every
+  room in order in a coroutine (`Scene.ROOM_SLICE` a frame from the warm-up; `warm` queues it
+  for an indoor map, `warmAll` always; to its end if a battle needs it first), `roomModel`
+  builds a piece's model once, and `placeRooms` stands the pieces of the window's indoor layouts
+  (own place, `placed`, `reused_at`, `bare_at`; a room's commonest floor and its own paint for
+  a room nobody modelled) - pieces share cells, so a cell keeps the first piece's floor and the
+  tallest top. Not yet: the other 99 rooms, animated pieces (`anim`, `ribbon`), a cache.
+  Checked against Emerald 3DS's own models: `tests/drivers/room_dump.lua` (`ROOM`: the last room
+  read) writes every placement in each room's layout as their buildings.bin's dump does
+  (`bld_dump.py <bin> <layout number> out 0 0`); the Center's floors and the Mart match
+  triangle for triangle, colours and all (20, 23 and 11 placements, reuse included).
 - For an overworld view, unused by the battle scene: the deck tables (`Scene.decks(layout)`,
   export `sceneDecks`: `{ x, y, top, bottom, gate }` - Route 110's `Bridge.decks`, kept in its
   cache, and Fortree's `specs.decks`) and each model cell's shadow footprint
@@ -760,7 +785,8 @@ the relief's lifted cells and layouts (`sceneRelief`) and the build time phase b
 (`scenePhases`);
 `SCENE_DUMP` for collision codes, `SCENE_SELFTEST` for the
 renderer on a synthetic field), `bridge_dump.lua` (the Cycling Road's triangles, its sliced build
-and its cache read; see `models/bridge.lua` above) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
+and its cache read; see `models/bridge.lua` above), `room_dump.lua` (the rooms' pieces; see
+`models/interiors.lua` above) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
 `voxel_cells.py` prints them, to diff). The relief is checked against Emerald 3DS's own scripts
 run locally: pret's pokeemerald at their pinned commit with its graphics built, their
 `3ds_port` overlaid, `romfs/voxel/buildings.bin` in place, Python 3.13 (their pinned version;

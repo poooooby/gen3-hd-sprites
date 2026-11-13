@@ -182,6 +182,14 @@ return function(mod, hd, state)
   exports._layoutModels = function(name)
     return hd.scene and hd.scene._layoutModels and hd.scene._layoutModels(name) or nil
   end
+  -- (dev: the rooms read afresh up to `upto`, and a piece's model)
+  exports._rooms = function(upto)
+    if not (hd.scene and hd.scene._rooms) then return nil end
+    return hd.scene._rooms(upto)
+  end
+  exports._roomBuild = function(piece, bare)
+    return hd.scene and hd.scene._roomBuild and hd.scene._roomBuild(piece, bare)
+  end
   exports._bridgeJob = function(name, budget, fresh, watch)
     return hd.scene and hd.scene._bridgeJob and hd.scene._bridgeJob(name, budget, fresh, watch)
   end

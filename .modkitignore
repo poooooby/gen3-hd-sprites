@@ -25,3 +25,4 @@ tests/relief_solve_test.lua
 tests/drivers/relief_dump.lua
 tests/relief_terraces_test.lua
 tests/drivers/bridge_dump.lua
+tests/drivers/room_dump.lua

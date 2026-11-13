@@ -772,5 +772,61 @@ do
   check(fp["1,0"] == false, "footprint: what lies on the ground casts nothing (a box: none)")
 end
 
+-- ── rooms (src/scene/models/interiors.lua: gen_voxel_buildings.interior_specs) ──
+do
+  local K = dofile("src/scene/models/kernel.lua")
+  dofile("src/scene/models/solids.lua")(K)
+  local Art = dofile("src/scene/relief_art.lua")
+  local I = dofile("src/scene/models/interiors.lua")(K, Art)
+  check(I.inside({ { 0, 0, 4, 4 } }, 3, 3) and not I.inside({ { 0, 0, 4, 4 } }, 4, 0),
+    "room shape: a rectangle holds the pixels whose centres are in it")
+  check(I.inside({ { "ellipse", 8, 8, 3, 3 } }, 7, 7) and not I.inside({ { "ellipse", 8, 8, 3, 3 } }, 5, 5),
+    "room shape: an ellipse")
+  check(I.inside({ { { 0, 0 }, { 8, 0 }, { 0, 8 } } }, 1, 1) and not I.inside({ { { 0, 0 }, { 8, 0 }, { 0, 8 } } }, 6, 6),
+    "room shape: a polygon")
+  local c = I.counter()
+  for _, v in ipairs({ 5, 7, 7, 5, 9 }) do I.cAdd(c, v) end
+  check(I.mostCommon(c)[1] == 5 and I.mostCommon(c)[2] == 7, "room counter: ties go to the colour met first")
+  -- a room of 2 x 2 cells: floor (metatile 1) and a box drawn on cell (0, 0) (metatile 2), its
+  -- dark outline round an orange body
+  local F, D, B = 0xCDC58B, 0x404040, 0xD08040
+  local cells = {}
+  cells[1], cells[2] = {}, {}
+  for y = 0, 15 do
+    for x = 0, 15 do
+      cells[1][y * 16 + x] = F
+      local inBox = x >= 2 and x <= 13 and y >= 4
+      local edge = x == 2 or x == 13 or y == 4 or y == 15
+      cells[2][y * 16 + x] = inBox and (edge and D or B) or F
+    end
+  end
+  local function layout(id, blocks)
+    local A = { id = id, w = 2, h = 2, blocks = blocks, primary = "p", secondary = "s" }
+    function A.metatile(x, y) return blocks[y * 2 + x] % 1024 end
+    function A.cellImage(m) return cells[m] end
+    return A
+  end
+  local layouts = { T = layout("T", { [0] = 2, 1, 1, 1 }), U = layout("U", { [0] = 1, 1, 1, 2 }) }
+  local io = { layout = function(name) return layouts[name] end }
+  local box = { name = "box", shape = { { 0, 0, 16, 16 } }, height = 6, base = 0, leave = {}, walls = {}, cells = {},
+                claim = {}, run = {}, skip = {}, at = {}, card = false }
+  local reg = I.registry()
+  local pieces = I.room({ name = "t", interior = { layout = "T", ground = { 1 }, pieces = { box } } }, io, reg)
+  local p = pieces and pieces[1]
+  local onlyBox = p ~= nil
+  for k, col in pairs(p and p.art.c or {}) do
+    local u, v = k % p.art.w, math.floor(k / p.art.w)
+    if v < 16 and col == F then onlyBox = false end
+  end
+  check(#pieces == 1 and p.rect[1] == 0 and p.rect[3] == 1 and p.rect[4] == 1 and onlyBox,
+    "room: a piece claims what its shape holds but the floor, in the cells it covers")
+  local md = I.build(p)
+  check(#md.tris > 0, "room: the piece is read off its pixels (a box at its foot)")
+  I.room({ name = "u", interior = { layout = "U", ground = { 1 }, pieces = {} } }, io, reg)
+  local at = p.reused_at and p.reused_at[1]
+  check(at and at[1] == "U" and at[2] == 1 and at[3] == 1 and at[4] == 1,
+    "room: a piece drawn again tile for tile in a later room stands there, on that room's floor")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end
