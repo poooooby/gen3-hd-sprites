@@ -104,6 +104,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
+| **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings are built the first time you step into the world, one a frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive and dropped when the game closes. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
 ## 💾 Installation
@@ -128,10 +129,13 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's trees stand as
   real trees with leafy crowns, and in Emerald most of its town buildings, fences, hedges, curbs
   and railings stand in 3D too. Signs, street lamps and posts stand as little solids of their own
-  pixels, and Kanto's trees as flat cut-outs of their overworld art. Cliffs, rocks and the
-  buildings not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on
-  the ground as the game draws them. A battle with no overworld around it, or no open ground near
-  you, keeps the game's own background.
+  pixels, and Kanto's trees as flat cut-outs of their overworld art. In Emerald the land has its
+  shape too: cliffs, terraces, ledges, stairs and the rocks at sea rise as the map draws them,
+  read off your own cartridge the first time you play (it builds quietly in the background for a
+  minute or so while you walk, then stays on disk). Rocks in the other games, and the buildings
+  not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on the ground
+  as the game draws them. A battle with no overworld around it, or no open ground near you,
+  keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
   to your screen.
@@ -158,7 +162,9 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** is adapted from the 3D battles of
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its battle
   camera, its entrance sweep, how it picks where the battle stands, its trees, drawn by its
-  artists, and its buildings, fences, hedges and signs, each one rebuilt from its own overworld art.
+  artists, its buildings, fences, hedges and signs, each one rebuilt from its own overworld art,
+  and the shape of the land: how it reads cliffs, terraces and stairs off the map's own drawing,
+  with the corrections its team made by hand, map by map.
 
 ---
 

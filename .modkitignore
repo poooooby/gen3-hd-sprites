@@ -23,3 +23,4 @@ tests/roles_test.lua
 tests/drivers/roles_dump.lua
 tests/relief_solve_test.lua
 tests/drivers/relief_dump.lua
+tests/relief_terraces_test.lua

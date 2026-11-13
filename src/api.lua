@@ -94,17 +94,77 @@ return function(mod, hd, state)
   end
   -- (tests: aim the current battle scene's settled camera at map cell (tx, tz), pitch in
   -- degrees, distance in tiles; nil to leave the stage's)
-  exports._sceneLook = function(tx, tz, pitch, dist)
+  exports._sceneLook = function(tx, tz, pitch, dist, yaw)
     local s = hd.scene and hd.scene.last
     local Camera = hd.scene and hd.scene.Camera
     if not (s and Camera) then return false end
-    s.to = Camera.pose(tx, tz, pitch and math.rad(pitch) or nil, dist)
+    s.to = Camera.pose(tx, tz, pitch and math.rad(pitch) or nil, dist, s.to and s.to.ty or 0,
+      yaw and math.rad(yaw) or 0)
     s.progress = 1
     return true
   end
   -- (dev: a relief.bin's bytes for the scene to draw, src/scene/relief.lua; read by the driver)
   exports._sceneRelief = function(bytes)
     return hd.scene and hd.scene.setReliefBytes and hd.scene.setReliefBytes(bytes) or false
+  end
+  -- (dev: one slice of the relief's background build, as the frame hook runs it; the drivers
+  -- call it since their frames skip the engine's update hook) -> state, detail, phases
+  exports._sceneWarm = function(mapId)
+    local s = hd.scene
+    if not (s and s.warm) then return nil end
+    local n = mapId == "all" and s.warmAll() or s.warm(mapId)
+    while s.warmStep() > 0 do end
+    return n
+  end
+  -- (dev: a readied model's parts and their bounds, by spec name) -> { { tag, n, x0, y0, z0, x1, y1, z1 } }
+  exports._sceneModelBounds = function(name)
+    local s = hd.scene
+    local md = s and s.modelOf and s.modelOf(name)
+    if not md then return nil end
+    local by, order = {}, {}
+    for _, t in ipairs(md.tris) do
+      local tag = tostring(t.tag or "?"):gsub("%..*$", "")
+      local b = by[tag]
+      if not b then b = { tag = tag, n = 0, 1e9, 1e9, 1e9, -1e9, -1e9, -1e9 }; by[tag] = b; order[#order + 1] = b end
+      b.n = b.n + 1
+      for k = 1, 3 do
+        local p = t[k]
+        b[1], b[2], b[3] = math.min(b[1], p[1]), math.min(b[2], p[2]), math.min(b[3], p[3])
+        b[4], b[5], b[6] = math.max(b[4], p[1]), math.max(b[5], p[2]), math.max(b[6], p[3])
+      end
+    end
+    return order
+  end
+  -- (dev: a model's art as rows of '#' (drawn) and '.' (cleared ground))
+  exports._sceneModelArt = function(name)
+    local s = hd.scene
+    local md = s and s.modelOf and s.modelOf(name)
+    if not md then return nil end
+    local art, rows = md.art, {}
+    for y = 0, art.h - 1 do
+      local r = {}
+      for x = 0, art.w - 1 do r[#r + 1] = art.px[(y * art.w + x) * 4 + 4] >= 0.5 and "#" or "." end
+      rows[#rows + 1] = table.concat(r)
+    end
+    return rows
+  end
+  -- (dev: a metatile's two layers at a pixel, through the scene's pixel source) -> r,g,b,a, r,g,b,a
+  exports._scenePixel = function(pair, mid, x, y)
+    local s = hd.scene
+    local okN, NativeTileset = pcall(require, "src.core.game3.tileset_native")
+    local src = s and s._pixelSource and okN and NativeTileset and s._pixelSource(NativeTileset, pair)
+    if not src then return nil end
+    local r0, g0, b0, a0 = src.under(mid, x, y)
+    local r1, g1, b1, a1 = src.over(mid, x, y)
+    return r0, g0, b0, a0, r1, g1, b1, a1
+  end
+  exports._reliefStep = function()
+    local run = hd.scene and hd.scene.reliefRun
+    if not run then return nil end
+    local st = run.state()
+    if st == "idle" then run.start() end
+    run.step()
+    return run.state()
   end
   -- (tests: the current battle scene alone, as image data w x h)
   exports._sceneShot = function(w, h)

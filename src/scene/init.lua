@@ -369,14 +369,79 @@ return function(deps)
   end
 
   -- a spec made ready to place: its reference, art (image), core cells and triangles (once)
+  -- a model's cache (Scene Cache): its triangles, core cells and texture as bytes, under the
+  -- game's key (Scene.modelCache, set by main.lua; Scene.MODELS_VERSION bumps when the specs or
+  -- the kernel change what they build)
+  Scene.MODELS_VERSION = 5
+  local function serialize(md)
+    local out = { "return {primaryOnly=", md.primaryOnly and "true" or "false", ",texW=", md.texW, ",texH=", md.texH,
+                  ",core={" }
+    for _, c in ipairs(md.core) do out[#out + 1] = ("{%d,%d},"):format(c[1], c[2]) end
+    out[#out + 1] = "},tris={"
+    local f = function(v) return ("%.17g"):format(v) end
+    for _, t in ipairs(md.tris) do
+      local parts = {}
+      for k = 1, 3 do
+        local p = t[k]
+        parts[k] = "{" .. f(p[1]) .. "," .. f(p[2]) .. "," .. f(p[3]) .. "," .. f(p[4]) .. "," .. f(p[5]) .. "}"
+      end
+      out[#out + 1] = "{" .. parts[1] .. "," .. parts[2] .. "," .. parts[3] .. ",shade=" .. f(t.shade or 1) .. "},"
+    end
+    out[#out + 1] = "}}"
+    return table.concat(out)
+  end
+  local function cachedModel(spec)
+    local c = Scene.cacheModels and Scene.modelCache
+    if not c then return nil end
+    local src = c.read(spec.name .. ".lua")
+    local rgba = src and c.read(spec.name .. ".rgba")
+    if not (src and rgba) then return nil end
+    local chunk = load(src, "=model", "t", {})
+    local ok, md = pcall(chunk or error)
+    if not (ok and type(md) == "table" and md.tris and md.texW and #rgba == md.texW * md.texH * 4) then return nil end
+    local okI, img = pcall(function()
+      local data = love.image.newImageData(md.texW, md.texH, "rgba8", rgba)
+      local i = G.newImage(data)
+      i:setFilter("nearest", "nearest")
+      return i
+    end)
+    if not okI then return nil end
+    md.image = img
+    return md
+  end
+  local function keepModel(spec, md, tex)
+    local c = Scene.cacheModels and Scene.modelCache
+    if not (c and md and tex) then return end
+    pcall(function()
+      local data = love.image.newImageData(tex.w, tex.h)
+      local px = tex.px
+      for y = 0, tex.h - 1 do
+        for x = 0, tex.w - 1 do
+          local o = (y * tex.w + x) * 4
+          data:setPixel(x, y, px[o + 1], px[o + 2], px[o + 3], px[o + 4])
+        end
+      end
+      c.write(spec.name .. ".rgba", data:getString())
+      c.write(spec.name .. ".lua", serialize(md))
+    end)
+  end
+  Scene.modelsFromCache, Scene.modelsBuilt = 0, 0
+
   local function ready(spec, NativeTileset, ctx)
     if spec._model ~= nil then return spec._model end
-    spec._model = false
     local ref = Buildings.reference(spec, ctx)
     if not ref then return false end
     local src = pixelSource(NativeTileset, ref.pair)
     if not src then return false end
+    spec._model = false
     local art = Buildings.art(spec, ref, src)
+    local hit = cachedModel(spec)
+    if hit then
+      hit.spec, hit.ref, hit.art = spec, ref, art
+      spec._model = hit
+      Scene.modelsFromCache = Scene.modelsFromCache + 1
+      return hit
+    end
     -- (parts read off the drawing come with a texture of their own: the drawing and its bands; a
     -- few read another building's drawing too, by its reference)
     local artCtx = { layoutArt = function(layout, x, y, w, h, ground)
@@ -423,6 +488,8 @@ return function(deps)
     end)
     spec._model = { spec = spec, ref = ref, art = art, core = core, primaryOnly = primaryOnly,
                     tris = mesh.tris, image = image, texW = tex.w, texH = tex.h }
+    Scene.modelsBuilt = Scene.modelsBuilt + 1
+    keepModel(spec, spec._model, tex)
     return spec._model
   end
 
@@ -527,8 +594,59 @@ return function(deps)
     hd.stats.sceneRuns = #runs .. " " .. table.concat(report, " ")
   end
 
+  -- (a town's own metatile drawing the pixels the model owns in that cell stands for it: all but
+  -- an eighth of them, the bits of ground drawn round a corner - Rustboro's paving where the
+  -- reference town has grass)
+  local mf = math.floor
+  local key5 = function(r, g, b) return mf(r * 31 + 0.5) * 1024 + mf(g * 31 + 0.5) * 32 + mf(b * 31 + 0.5) end
+  -- (and a signpost's drawing - a sign's cell, or the cell north of it its head tops - is asked
+  -- its lower layer alone, as Emerald 3DS's same_building_pixels asks it: the sign stands in
+  -- front of the building with a height of its own. Lavaridge's gym sign tops the gym's corner.
+  -- The exact lower layer comes off the atlas blobs, src/scene/world.lua: the engine's lower
+  -- atlas has a COVERED metatile's upper layer drawn over it)
+  local function alikeOf(NativeTileset, signCell)
+    return function(md, cell, i, j)
+      local src = pixelSource(NativeTileset, cell.pair)
+      if not src or src.under(cell.mid, 0, 0) == nil then return false end
+      local art = md.art
+      local lower
+      if signCell and World and signCell(cell) then
+        local wa = World.art(cell.pair)
+        lower = wa and wa.pixels(cell.mid, 0) or nil
+      end
+      local owned, bad = 0, 0
+      for y = 0, 15 do
+        for x = 0, 15 do
+          local o = ((j * 16 + y) * art.w + i * 16 + x) * 4
+          if art.px[o + 4] >= 0.5 then
+            owned = owned + 1
+            local r, g, b, a
+            if lower then
+              local p = lower[y * 16 + x]
+              if p then
+                r, g, b = p[1] / 255, p[2] / 255, p[3] / 255
+              else
+                -- (a colour-index-0 pixel the blobs keep no colour for: the lower atlas where
+                -- nothing is drawn over it; under the sign's pixels, not asked)
+                local _, _, _, a1 = src.over(cell.mid, x, y)
+                if a1 and a1 > 0.5 then owned = owned - 1; r = false else r, g, b = src.under(cell.mid, x, y) end
+              end
+            else
+              r, g, b, a = src.over(cell.mid, x, y)
+              if not (a and a > 0.5) then r, g, b = src.under(cell.mid, x, y) end
+            end
+            if r ~= false and (not r or key5(r, g, b) ~= key5(art.px[o + 1], art.px[o + 2], art.px[o + 3])) then
+              bad = bad + 1
+              if bad > 32 then return false end
+            end
+          end
+        end
+      end
+      return owned > 0 and bad * 8 <= owned
+    end
+  end
   -- the buildings standing in the grid: placements, their cells marked (cell.model)
-  local function placeBuildings(grid, NativeTileset)
+  local function placeBuildings(grid, NativeTileset, signCell)
     if not (Buildings and Kernel and Specs) then return {} end
     local ctx = layoutCtx()
     local mids = {}
@@ -553,31 +671,7 @@ return function(deps)
         if md then models[#models + 1] = md end
       end
     end
-    -- (a town's own metatile drawing the pixels the model owns in that cell stands for it: all but
-    -- an eighth of them, the bits of ground drawn round a corner - Rustboro's paving where the
-    -- reference town has grass)
-    local mf = math.floor
-    local key5 = function(r, g, b) return mf(r * 31 + 0.5) * 1024 + mf(g * 31 + 0.5) * 32 + mf(b * 31 + 0.5) end
-    local found = Buildings.find(grid, models, function(md, cell, i, j)
-      local src = pixelSource(NativeTileset, cell.pair)
-      if not src or src.under(cell.mid, 0, 0) == nil then return false end
-      local art, owned, bad = md.art, 0, 0
-      for y = 0, 15 do
-        for x = 0, 15 do
-          local o = ((j * 16 + y) * art.w + i * 16 + x) * 4
-          if art.px[o + 4] >= 0.5 then
-            owned = owned + 1
-            local r, g, b, a = src.over(cell.mid, x, y)
-            if not (a and a > 0.5) then r, g, b = src.under(cell.mid, x, y) end
-            if key5(r, g, b) ~= key5(art.px[o + 1], art.px[o + 2], art.px[o + 3]) then
-              bad = bad + 1
-              if bad > 32 then return false end
-            end
-          end
-        end
-      end
-      return owned > 0 and bad * 8 <= owned
-    end)
+    local found = Buildings.find(grid, models, alikeOf(NativeTileset, signCell))
     -- the kits' blocks (Rustboro's), each modelled from its own drawing where it stands
     local secondaryOf = function(pair)
       if not Components then return nil end
@@ -726,6 +820,139 @@ return function(deps)
     return reliefData ~= nil
   end
   function Scene.reliefData() return reliefData end
+
+  -- the models warmed ahead of a battle: on entering a map, the specs one of whose cells its
+  -- layout draws are readied one a frame (Scene.warmStep from the frame hook), so the first
+  -- battle there does not build them all at once
+  local warmQueue, warmed = {}, setmetatable({}, { __mode = "k" })
+  function Scene.warm(mapId)
+    local Map, NativeTileset = req("src.core.game3.map"), req("src.core.game3.tileset_native")
+    local Runtime = req("src.core.game3.runtime")
+    local game = Runtime and Runtime._game
+    if not (Buildings and Specs and Map and NativeTileset and game and mapId) then return 0 end
+    local okL, L = pcall(Map.ensureMidLayout, game, mapId)
+    if not (okL and L) then return 0 end
+    local mids = {}
+    for y = 0, (L.height or 0) - 1 do
+      for x = 0, (L.width or 0) - 1 do mids[L:midAt(x, y)] = true end
+    end
+    local ctx = layoutCtx()
+    local n = 0
+    -- (and the game's sign posts and this map's roles, read once a game: src/scene/world.lua)
+    if World then
+      warmQueue[#warmQueue + 1] = function()
+        World.posts()
+        local L = World.layout(mapId)
+        if L then World.roles(L) end
+      end
+    end
+    for _, spec in ipairs(Specs) do
+      if spec._model == nil and not warmed[spec] then
+        local ref = Buildings.reference(spec, ctx)
+        for _, m in ipairs(ref and ref.template or {}) do
+          if mids[m] then
+            warmed[spec] = true
+            warmQueue[#warmQueue + 1] = spec
+            n = n + 1
+            break
+          end
+        end
+      end
+    end
+    return n
+  end
+  --- The cells the building models own in a layout (LAYOUT_X), as the relief solver asks them
+  --- (Emerald 3DS reads them off its buildings.bin): { [(y + 4096) * 16384 + (x + 4096)] = true },
+  --- or nil. Every spec is readied first.
+  local modelCellsOf = {}
+  function Scene.modelCells(name)
+    if modelCellsOf[name] ~= nil then return modelCellsOf[name] or nil end
+    modelCellsOf[name] = false
+    local NativeTileset = req("src.core.game3.tileset_native")
+    local L = World and World.layout(name)
+    if not (L and L.grid and L.pair and Buildings and Specs and NativeTileset) then return nil end
+    local ctx = layoutCtx()
+    local models = {}
+    for _, spec in ipairs(Specs) do
+      local md = ready(spec, NativeTileset, ctx)
+      if md then models[#models + 1] = md end
+    end
+    local rows = {}
+    for y = 0, L.h - 1 do
+      local row = {}
+      for x = 0, L.w - 1 do
+        local i = (y * L.w + x) * 2 + 1
+        row[x] = { cx = x, cy = y, mid = (L.grid:byte(i) + L.grid:byte(i + 1) * 256) % 1024, pair = L.pair }
+      end
+      rows[y] = row
+    end
+    local grid = { x0 = 0, y0 = 0, w = L.w, h = L.h, rows = rows }
+    function grid.at(x, y)
+      local row = rows[y]
+      return row and row[x] or nil
+    end
+    local r = World.roles(L)
+    local function signCell(c)
+      return r ~= nil and (r.role(c.cx, c.cy) == "signpost" or r.role(c.cx, c.cy + 1) == "signpost")
+    end
+    local found = Buildings.find(grid, models, alikeOf(NativeTileset, signCell))
+    local out = {}
+    for _, pl in ipairs(found) do
+      local ref = pl.model.ref
+      for j = 0, ref.h - 1 do
+        for i = 0, ref.w - 1 do
+          if Buildings.owns(pl.model.spec, i, j) then out[(pl.cy + j + 4096) * 16384 + (pl.cx + i + 4096)] = true end
+        end
+      end
+    end
+    modelCellsOf[name] = out
+    return out
+  end
+
+  --- (dev) A spec's readied model by name, built afresh (the cache keeps no part names), or nil.
+  function Scene.modelOf(name)
+    local NativeTileset = req("src.core.game3.tileset_native")
+    for _, spec in ipairs(Specs or {}) do
+      if spec.name == name then
+        if not NativeTileset then return nil end
+        local was = Scene.cacheModels
+        Scene.cacheModels = false
+        spec._model = nil
+        local md = ready(spec, NativeTileset, layoutCtx())
+        Scene.cacheModels = was
+        return md or nil
+      end
+    end
+    return nil
+  end
+
+  --- Every spec queued (Scene Cache): from the cache where kept, built and kept otherwise.
+  local warmedAll = false
+  function Scene.warmAll()
+    if warmedAll or not (Buildings and Specs) then return 0 end
+    warmedAll = true
+    local n = 0
+    if World then warmQueue[#warmQueue + 1] = function() World.posts() end end
+    for _, spec in ipairs(Specs) do
+      if spec._model == nil and not warmed[spec] then
+        warmed[spec] = true
+        warmQueue[#warmQueue + 1] = spec
+        n = n + 1
+      end
+    end
+    return n
+  end
+  --- One model readied, from the frame hook. Returns how many are left.
+  function Scene.warmStep()
+    local spec = table.remove(warmQueue, 1)
+    if type(spec) == "function" then
+      pcall(spec)
+    elseif spec then
+      local NativeTileset = req("src.core.game3.tileset_native")
+      if NativeTileset then pcall(ready, spec, NativeTileset, layoutCtx()) end
+    end
+    return #warmQueue
+  end
 
   -- a map's layout id (the cartridge's: its map header's), as the engine's cache keeps it
   local layoutIds = {}
@@ -1016,7 +1243,19 @@ return function(deps)
       want.enemy = hereKind
     end
     phase("cells")
-    local okB, placed = pcall(placeBuildings, grid, NativeTileset)
+    -- (Emerald's maps: a cell whose role in its own layout is a signpost's, or the cell north of
+    -- one: src/scene/roles.lua)
+    local function roleOf(cx, cy)
+      if not World then return nil end
+      local d, lx, ly, id = env.where(cx, cy)
+      local L = d and id and World.layout(id)
+      local r = L and World.roles(L)
+      return r and r.role(lx, ly) or nil
+    end
+    local function signCell(c)
+      return roleOf(c.cx, c.cy) == "signpost" or roleOf(c.cx, c.cy + 1) == "signpost"
+    end
+    local okB, placed = pcall(placeBuildings, grid, NativeTileset, World and signCell or nil)
     if not okB then
       hd.stats.sceneBuildingError = tostring(placed)
       placed = {}
@@ -1100,7 +1339,7 @@ return function(deps)
         signs = found
         for _, s in ipairs(signs) do
           s.cell.sign, s.cell.up, s.cell.base = true, nil, nil
-          s.cell.groundMid = s.ground
+          if not s.cell.model then s.cell.groundMid = s.ground end
           if s.head then
             local h = grid.at(s.cell.cx, s.cell.cy - 1)
             if h then h.groundMid = s.headGround end
@@ -1114,6 +1353,11 @@ return function(deps)
     -- the relief: each cell's heights and how high what stands on it is (src/scene/relief.lua)
     local R = Relief and Scene.reliefData()
     hd.stats.sceneReliefError = nil
+    if Scene.reliefRun then
+      local st, why = Scene.reliefRun.state()
+      hd.stats.sceneReliefRun = st .. (why and (" (" .. tostring(why) .. ")") or "")
+    end
+    hd.stats.sceneModels = ("%d from the cache, %d built"):format(Scene.modelsFromCache, Scene.modelsBuilt)
     if R then
       local okR, maps = pcall(placeRelief, grid, env, R, px, py)
       if okR then

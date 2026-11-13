@@ -35,13 +35,15 @@ local function body(game, log)
   local root = "mods/gen3-hd-sprites/src/scene/"
   local function mod(n) return dofile(root .. n .. ".lua") end
   local Art, Input, Solve, Roles, Relief = mod("relief_art"), mod("relief_input"), mod("relief_solve"), mod("roles"), mod("relief")
+  local Post = mod("relief_post")
   local WorldMaps = mod("world_maps")({ Solve = Solve, Art = Art, Input = Input, Roles = Roles,
-    parts = { mod("relief_drawn"), mod("relief_shape"), mod("relief_cuts"), mod("relief_world") } })
+    parts = { mod("relief_drawn"), mod("relief_shape"), mod("relief_cuts"), mod("relief_world") },
+    json = function(text) return (Post.json(text)) end })
   local ties
   if env("RELIEF_TIES") then
     local f = io.open(env("RELIEF_TIES"))
     if f then
-      ties = require("src.link.Json").decode(f:read("*a"))
+      ties = (Post.json(f:read("*a")))
       f:close()
     end
   end

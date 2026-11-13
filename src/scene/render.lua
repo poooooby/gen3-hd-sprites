@@ -240,7 +240,7 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h)
     target:setFilter("linear", "linear")
     targetW, targetH = w, h
   end
-  local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist, pose.ty)
+  local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist, pose.ty, pose.yaw)
   G.push("all")
   G.setCanvas({ target, depth = true })
   G.origin()

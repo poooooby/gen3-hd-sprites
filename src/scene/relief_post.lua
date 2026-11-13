@@ -398,7 +398,9 @@ function Post.applyFixes(M, world, fixes, order)
       local changed = 0
       if #enabled > 0 or #cellOrder > 0 then
         local primary, secondary = world.tilesets(name)
-        local function tilesetOf(m) return m < 512 and primary or secondary end
+        -- (a tileset by its short name: "gTileset_General", "general" alike)
+        local function short(n) return (tostring(n):gsub("^gTileset_", ""):gsub("_", "")):lower() end
+        local function tilesetOf(m) return short(m < 512 and primary or secondary) end
         if #enabled > 0 then
           for y = 0, h - 1 do
             for x = 0, w - 1 do
@@ -408,7 +410,7 @@ function Post.applyFixes(M, world, fixes, order)
                 local m = world.metatile(name, x, y)
                 for _, e in ipairs(enabled) do
                   local pc, rect = e[1], e[2]
-                  if pc.metatile == m and (pc.tileset or tilesetOf(m)) == tilesetOf(m)
+                  if pc.metatile == m and (pc.tileset and short(pc.tileset) or tilesetOf(m)) == tilesetOf(m)
                       and (not rect or (rect[1] <= x and x < rect[3] and rect[2] <= y and y < rect[4])) then
                     local g = t.cells[y * t.w + x]
                     local lvl = fx.level ~= nil and fx.level or levelOf(g)

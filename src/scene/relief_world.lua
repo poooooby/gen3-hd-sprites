@@ -273,6 +273,8 @@ return function(S)
   end
   S.blocks = blocks
 
+  S.mapLinks = mapLinks
+
   local WORLD
   function S.worldLevels()
     if WORLD then return WORLD end

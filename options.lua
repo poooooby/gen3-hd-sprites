@@ -30,6 +30,13 @@ return {
     description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
   },
   {
+    key = "scene_cache",
+    label = "Scene Cache",
+    type = "toggle",
+    default = true,
+    description = "With Battle Scene on OVERWORLD: build every town's 3D buildings the first time you step into the world (one a frame, while you play) and keep them on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive there and dropped when the game closes.",
+  },
+  {
     key = "field_hd",
     label = "Field HD",
     type = "toggle",

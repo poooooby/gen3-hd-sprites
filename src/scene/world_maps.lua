@@ -6,10 +6,12 @@
 -- relief_world } } (the plain modules, loaded by the caller).
 --
 --   WorldMaps.input(tick) -> relief_input's tables, or nil and why
---   WorldMaps.solve(opt)  -> the relief model (src/scene/relief.lua's), or nil and why; opt.tick
---                            (called now and then: run it in a coroutine and yield there),
---                            opt.regionTies (voxel_terraces.region_ties, for Route 111's groups),
---                            opt.phase(name) (as each phase ends)
+--   WorldMaps.solve(opt)  -> the relief model (src/scene/relief.lua's) and the solve state S, or
+--                            nil and why; opt.tick (called now and then: run it in a coroutine and
+--                            yield there), opt.phase(name) (as each phase ends), opt.parts (more
+--                            parts: the terraces' three), opt.fixes / fixesOrder / jsonNull (the
+--                            hand marks), opt.Relief, opt.models(layoutName) (the buildings' cells),
+--                            opt.regionTies (only without the terraces' parts)
 
 return function(deps)
   local WorldMaps = {}
@@ -20,10 +22,11 @@ return function(deps)
   end
 
   function WorldMaps.input(tick)
-    local Dataset, Json, Constants = req("src.core.game3.dataset"), req("src.link.Json"), req("src.core.game3.constants")
+    local Dataset, Constants = req("src.core.game3.dataset"), req("src.core.game3.constants")
     local Perm = req("src.core.CollPermissions")
+    local json = deps.json
     local okC, cache = pcall(function() return Dataset and Dataset.cache() end)
-    if not (okC and cache and Json and Constants and Perm) then return nil, "no cache" end
+    if not (okC and cache and json and Constants and Perm) then return nil, "no cache" end
     -- Emerald's behaviour enum, its raw values (pret's include/constants/metatile_behaviors.h)
     local okB, byName = pcall(function() return Constants.of("emerald").metatile_behaviors.byName end)
     if not (okB and type(byName) == "table") then return nil, "no behaviours" end
@@ -34,7 +37,7 @@ return function(deps)
     local io_ = {
       read = function(rel) return cache:read(rel) end,
       json = function(text)
-        local ok, t = pcall(Json.decode, text)
+        local ok, t = pcall(json, text)
         return ok and t or nil
       end,
       lua = function(src)
@@ -59,8 +62,14 @@ return function(deps)
     opt = opt or {}
     local input, why = WorldMaps.input(opt.tick)
     if not input then return nil, why end
-    return deps.Solve.run(input, { Art = deps.Art, Roles = deps.Roles, parts = deps.parts,
-                                   regionTies = opt.regionTies, tick = opt.tick, phase = opt.phase })
+    -- (the solver's parts, then any more the caller joins: the terraces')
+    local parts = {}
+    for _, p in ipairs(deps.parts) do parts[#parts + 1] = p end
+    for _, p in ipairs(opt.parts or {}) do parts[#parts + 1] = p end
+    return deps.Solve.run(input, { Art = deps.Art, Roles = deps.Roles, parts = parts,
+                                   regionTies = opt.regionTies, tick = opt.tick, phase = opt.phase,
+                                   fixes = opt.fixes, fixesOrder = opt.fixesOrder, jsonNull = opt.jsonNull,
+                                   Relief = opt.Relief, models = opt.models })
   end
 
   return WorldMaps

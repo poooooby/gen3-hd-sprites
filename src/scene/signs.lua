@@ -19,7 +19,9 @@
 -- and a cell drawn as a sign event that stands so anywhere in the game (its metatile, or its upper
 -- layer pixel for pixel) is one wherever it stands with walkable ground south (a house's sign
 -- against its wall); and a lamp drawn as a free one (its post and its lantern) is one against a
--- house's wall on one side. A building's cells (a model's) and a tree's never are.
+-- house's wall on one side. A tree's never is; a building's cell (a model's) only where its own
+-- layout's role says so, and then its upper layer alone is the sign, standing in front of the
+-- building (Lavaridge's gym sign on the gym's corner).
 --
 -- Adapted from Emerald 3DS (3ds_port/scripts/voxel_sign_mask.py, gen_voxel_sign_masks.py,
 -- src/voxel/voxel_sign.c; voxel_cells.py's signposts; by Zallax and contributors, CC BY-NC-SA 4.0,
@@ -309,8 +311,9 @@ function Signs.find(grid, opt)
     local c = cell(i, j)
     if c and opt.signpostAt then
       local v = opt.signpostAt(c)
+      -- (in a model's cell it stands in front of the building, as Emerald 3DS stands it)
       if v ~= nil then
-        return v and not c.model and not (opt.stands and opt.stands(c.mid, c.pair)) or false
+        return v and not (opt.stands and opt.stands(c.mid, c.pair)) or false
       end
     end
     return windowSignpost(i, j)
@@ -332,8 +335,11 @@ function Signs.find(grid, opt)
               for _, p in pairs(lo or {}) do ground[key(p)] = true end
             end
           end
+          -- (in a model's cell the sign is its upper layer: the lower layer is the building's)
           local solid = {}
-          for k, p in pairs(lower or {}) do if not ground[key(p)] then solid[k] = true end end
+          if not c.model then
+            for k, p in pairs(lower or {}) do if not ground[key(p)] then solid[k] = true end end
+          end
           for k in pairs(upper or {}) do solid[k] = true end
           local mask = Signs.cutout(solid)
           local any = false

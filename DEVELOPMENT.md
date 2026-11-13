@@ -520,9 +520,13 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   ground quarters (and with `ground_px` ground pixels) clear, `keep` applied. Only specs one of
   whose template metatiles the window draws are read. `find` places a spec wherever its core
   cells (match rows, drawn cells) repeat (a primary-only core: any pair with the same primary;
-  else the same pair): the anchor exactly, the others exactly or by a look-alike metatile that
+  else the same pair; WoobleView's own entries: `gym_sootopolis`, the shared `gym` parts over
+  Sootopolis's rect, its roof in the town's own tiles; `ever_grande_gate`, the gateway on the path
+  up to the League, an `Awning` on its stone legs): the anchor exactly, the others exactly or by a look-alike metatile that
   draws the model's pixels in that cell, all but an eighth (Emerald 3DS's same_building_pixels,
-  with that slack for the ground drawn round a corner: Rustboro's Center and Mart on its paving).
+  with that slack for the ground drawn round a corner: Rustboro's Center and Mart on its paving;
+  a signpost's cell, or the cell its head tops, is asked its lower layer alone, off the atlas
+  blobs, as their same_building_pixels asks it: Lavaridge's gym sign on the gym's corner).
   A placed model's cells (`cell.model`) draw its ground image (the commonest spec ground round
   it, else the commonest open ground the map lays round it; the map's own drawing where the map
   paints otherwise and the model draws nothing) and stand no card, tree or tile; `cell.top` (its height there)
@@ -557,11 +561,41 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   through `exports._sceneRelief`; the solver's port comes next. `Relief.decode` / `encode` are
   `voxel_relief_fixes.py`'s lossless `parse` / `pack` (byte for byte, Python's round-half-even
   included); `Relief.view` is what the renderer reads.
+- `relief_solve.lua` and parts (`relief_art`, `relief_input`, `relief_drawn`, `relief_shape`,
+  `relief_cuts`, `relief_world`): `gen_voxel_relief.py` through `export()`, byte-identical to
+  the Python on all 60 layouts (`world_maps.lua` feeds it the cache's raw tilesets, grids,
+  events and the five script-swapped layouts). `relief_terraces.lua`, `_fit`, `_out`:
+  `voxel_terraces.py` whole, byte-identical on all 29 groups (`S.T.apply(model)`); they need
+  `opt.models(layoutName)`, the cells the building models own (`Scene.modelCells`: every spec
+  placed over the whole layout). The whole chain, export → terraces → the last passes → encode,
+  equals Emerald 3DS's shipped relief.bin byte for byte.
 - `relief_post.lua`: the solver's last passes, after the terraces: `seaRamps`, `cutFeet`,
   `seamEases` (`gen_voxel_relief.py`) and `applyFixes` (`voxel_relief_fixes.py`) over a model,
   with `Post.json` (a JSON decoder that keeps object key order: the marks' edge fills are written
   in file order). `assets/scene/relief_fixes.json` is Emerald 3DS's hand marks, minified, contents
   and order unchanged. Each pass gives the same bytes as Emerald 3DS's stage outputs.
+- `relief_run.lua` (engine side): the relief built once a game in the background and cached.
+  It hooks `core.update`; each frame it runs the scene's model warm-up (`Scene.warmStep`: on
+  `map.entered`, `Scene.warm` queues the specs that map's layout draws, readied one a frame, so a
+  town's first battle no longer builds them all) and then one slice (3 ms) of the build: the
+  solver (`world_maps.lua` over `relief_solve.lua` and its parts), the terraces
+  (`relief_terraces.lua`, optional: without it only a cached relief is served), the last passes
+  and `Relief.encode`. The bytes go to `mod.cache` under `relief/v<N>/<game>-<fingerprint>.bin`
+  (the fingerprint: FNV of the cache's `census.json` and `layout_files.lua`), and to
+  `Scene.setReliefBytes`. Drivers' frames skip the engine's update hook, so `exports._reliefStep`
+  runs a slice by hand (`RELIEF_BUILD=1` in `scene_battle.lua`) and `exports._sceneWarm(mapId)`
+  the warm-up (`SCENE_WARM=1`; `SCENE_WARM=all` the whole-game one). `SCENE_LOOK` takes an
+  optional fifth field, a yaw in degrees east of north (the battle itself always looks north).
+  `SCENE_PROBE=<spec>` logs a model's art (drawn / cleared, row by row) and its parts' bounds
+  (`exports._sceneModelArt`, `_sceneModelBounds`, built afresh); `SCENE_PIXELS=pair:mid:x:y,...`
+  a metatile's two layers at a pixel through the scene's pixel source (`exports._scenePixel`). The dev `WOOBLE_RELIEF_BIN`
+  path still overrides it. **Scene Cache** (`scene_cache`, `Scene.cacheModels`): on the first
+  `map.entered`, `Scene.warmAll` queues every spec; `ready` reads a model from `mod.cache`
+  (`models/v<MODELS_VERSION>/<game key>/<spec>.lua`, a Lua chunk of its triangles, core cells and
+  texture size, plus `<spec>.rgba`, the texture's bytes) or builds it and keeps it. A model's
+  `ref` and `art` are recomputed (cheap; the art feeds look-alike matching). Bump
+  `Scene.MODELS_VERSION` when the kernel or a spec changes what it builds. 104 models: 13 MB,
+  built in 1.9 s, read in 0.85 s; `sceneModels` counts both.
 - `roles.lua`: `voxel_cells.py` whole (every cell's role: water, ledge, stair, floor, signpost,
   wall, tree, fence, cliff, shelf), over an adapter of a layout; matches the Python cell for cell
   on 21 layouts. Its drawings are exact layers from the atlas blobs (`Roles.blobPixels`: colour

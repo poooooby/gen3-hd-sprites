@@ -101,7 +101,8 @@ Solve.C = { LEVEL = LEVEL, STEP = STEP, PER_CELL = PER_CELL, GROUND = GROUND, TO
             SHORE_STRIP = SHORE_STRIP, ROCKY_WATER = ROCKY_WATER, ROLE_MATCH = ROLE_MATCH,
             WRAP_DROP = WRAP_DROP, WRAP_COLUMNS = WRAP_COLUMNS, WRAP_CUT = WRAP_CUT, WRAP_POCKET = WRAP_POCKET,
             WRAP_REACH = WRAP_REACH, WRAP_DEEP = WRAP_DEEP, PIER_REACH = PIER_REACH, CUT_LIFT = CUT_LIFT,
-            CUT_PIXELS = CUT_PIXELS, SPREAD = SPREAD, NO_FACE = NO_FACE, GOES_ON = GOES_ON }
+            CUT_PIXELS = CUT_PIXELS, SPREAD = SPREAD, NO_FACE = NO_FACE, GOES_ON = GOES_ON,
+            LIP = LIP, LIP_WIDTH = LIP_WIDTH, LIP_BACK = LIP_BACK }
 Solve.SETS = { DIRT = DIRT, BOULDER = BOULDER, BOULDER_HEADS = BOULDER_HEADS, SIDE_WEST = SIDE_WEST,
                SIDE_EAST = SIDE_EAST, SEA_CAPS = SEA_CAPS, FACE_SOUTH = FACE_SOUTH, ROCK_TILES = ROCK_TILES,
                FLAT_ROLES = FLAT_ROLES, WRAP_GROUPS = WRAP_GROUPS }
@@ -570,6 +571,7 @@ function Solve.run(input, opt)
       end
     end
   end
+  S.findProps, S.propConnections = findProps, connectionsOf
   --- voxel_props.cells_in: the cells of a layout an object is drawn over (keys)
   local propsMemo = {}
   function S.propsIn(lid)
@@ -1084,6 +1086,8 @@ function Solve.run(input, opt)
     return #list
   end
   S.ledgeBerms = ledgeBerms
+  -- (for src/scene/relief_terraces.lua)
+  S.ledgeLip, S.ledgeReads, S.lipHeight, S.lipRun = ledgeLip, ledgeReads, lipHeight, lipRun
 
   local function ledgesOnGround(RL, h)
     local cells, list = ledgeCells(RL)

@@ -213,12 +213,44 @@ return function(S)
   end
 
   --- _behind: the ground a cut tile is drawn over, as a metatile
-  local function behind(art, RL, x, y, rock, mask, half, content)
+  local function behind(art, RL, x, y, rock, mask, half, content, ignore)
     content = content or rock
     if mask ~= nil then
       local img = art.cellImage(art.metatile(x, y))
       local bg = {}
-      for j = 0, 15 do for i = 0, 15 do if bitOf(mask, i, j) then bg[#bg + 1] = img[j * 16 + i] end end end
+      for j = 0, 15 do
+        for i = 0, 15 do
+          local p = img[j * 16 + i]
+          if bitOf(mask, i, j) and not (ignore and ignore[p]) then bg[#bg + 1] = p end
+        end
+      end
+      -- (`ignore`: colours that are no ground - the grey outline; too little left, the ground
+      -- round the cell says: voxel_terraces' records)
+      if ignore and #bg < 32 then
+        local around = {}
+        for ny = y - 1, y + 1 do
+          for nx = x - 1, x + 1 do
+            if not (nx == x and ny == y) and nx >= 0 and nx < RL.w and ny >= 0 and ny < RL.h then
+              local nimg = art.cellImage(art.metatile(nx, ny))
+              for k = 0, 255 do
+                local p = nimg[k]
+                if not ROCK_ALL[p] and not ignore[p] then around[#around + 1] = p end
+              end
+            end
+          end
+        end
+        local swap = #bg < 8
+        if not swap and #around > 0 then
+          local cb, ca = Art.commonest(bg, Art.hashRGB), Art.commonest(around, Art.hashRGB)
+          local nb, na = 0, 0
+          for _, p in ipairs(around) do
+            if p == cb then nb = nb + 1 end
+            if p == ca then na = na + 1 end
+          end
+          swap = 4 * nb < na
+        end
+        if swap then bg = around end
+      end
       if #bg >= 8 then
         local kind = Art.commonest(bg, Art.hashRGB)
         for _, t in ipairs({ { 0, -1, "S" }, { -1, 0, "E" }, { 1, 0, "W" }, { 0, 0, nil }, { 0, 1, nil } }) do

@@ -87,6 +87,46 @@ local function body(game, log)
       f:close()
     end
   end
+  -- RELIEF_BUILD=1: build the relief in the background first (as the frame hook does in play),
+  -- a slice a frame, and log its phases
+  if env("RELIEF_BUILD") and hd._reliefStep then
+    local t0, st, why, phases = love.timer.getTime(), nil, nil, nil
+    for _ = 1, 200000 do
+      st, why, phases = hd._reliefStep()
+      if st ~= "running" and st ~= "idle" then break end
+      U.wait(1)
+    end
+    log(("relief build: %s (%s) in %.1f s: %s"):format(tostring(st), tostring(why), love.timer.getTime() - t0,
+      table.concat(phases or {}, ", ")))
+  end
+  -- SCENE_WARM=1: warm each spot's map's models first, as the map hook does in play; SCENE_WARM=all:
+  -- every spec (Scene Cache's first-map warm-up), once
+  local warmAhead = env("SCENE_WARM") ~= nil
+  if env("SCENE_WARM") == "all" and hd._sceneWarm then
+    local tw = love.timer.getTime()
+    local n = hd._sceneWarm("all")
+    log(("warmed all: %s models in %.0f ms (%s)"):format(tostring(n), (love.timer.getTime() - tw) * 1000,
+      tostring(hd.stats().sceneModels)))
+  end
+  -- SCENE_PROBE=<spec name>: that model's parts and their bounds (pixels of its drawing)
+  if env("SCENE_PROBE") and hd._sceneModelArt then
+    for i, r in ipairs(hd._sceneModelArt(env("SCENE_PROBE")) or {}) do log(("art %3d %s"):format(i - 1, r)) end
+  end
+  if env("SCENE_PIXELS") and hd._scenePixel then
+    -- SCENE_PIXELS=pair:mid:x:y,... (mid in hex)
+    for spec in env("SCENE_PIXELS"):gmatch("[^,]+") do
+      local pair, mid, x, y = spec:match("([^:]+):(%x+):(%d+):(%d+)")
+      local r0, g0, b0, a0, r1, g1, b1, a1 = hd._scenePixel(pair, tonumber(mid, 16), tonumber(x), tonumber(y))
+      log(("pixel %s %s (%s,%s): under %s %s %s a%s | over %s %s %s a%s"):format(pair, mid, x, y,
+        r0 and math.floor(r0 * 255) or "-", g0 and math.floor(g0 * 255) or "-", b0 and math.floor(b0 * 255) or "-", tostring(a0),
+        r1 and math.floor(r1 * 255) or "-", g1 and math.floor(g1 * 255) or "-", b1 and math.floor(b1 * 255) or "-", tostring(a1)))
+    end
+  end
+  if env("SCENE_PROBE") and hd._sceneModelBounds then
+    for _, b in ipairs(hd._sceneModelBounds(env("SCENE_PROBE")) or {}) do
+      log(("probe %-18s %5d tris  x %6.1f..%-6.1f y %6.1f..%-6.1f z %6.1f..%-6.1f"):format(b.tag, b.n, b[1], b[4], b[2], b[5], b[3], b[6]))
+    end
+  end
   log("hd active:", hd.isActive(), "fit:", hd.fitEnabled(), "fill:", hd.fillEnabled(), "scene:", hd.sceneEnabled())
   local BattleBridge = require("src.core.game3.battle_bridge")
   local Battle = require("src.core.game3.battle")
@@ -136,6 +176,11 @@ local function body(game, log)
       end
     end
     hd.setScene(true)
+    if warmAhead and hd._sceneWarm then
+      local tw = love.timer.getTime()
+      local n = hd._sceneWarm(mapId)
+      log(("%s warmed %s models in %.0f ms"):format(mapId, tostring(n), (love.timer.getTime() - tw) * 1000))
+    end
     local ok, err = BattleBridge.startWild(Runtime._mod, game,
       { species = C:require("species", env("SCENE_FOE") or "SPECIES_WURMPLE"), level = 3 }, { fade = false })
     if not ok then log("FAIL startWild", tostring(err)); return end
@@ -160,8 +205,9 @@ local function body(game, log)
     -- SCENE_LOOK=dx:dz:pitch:dist[,...]: the settled camera aimed that far from the player too
     local looks = 0
     for look in (env("SCENE_LOOK") or ""):gmatch("[^,]+") do
-      local dx, dz, pitch, dist = look:match("(-?[%d.]+):(-?[%d.]+):([%d.]+):([%d.]+)")
-      if dx and hd._sceneLook(px + tonumber(dx), py + tonumber(dz), tonumber(pitch), tonumber(dist)) then
+      -- dx:dz:pitch:dist[:yaw] (yaw: degrees the view turns east of north)
+      local dx, dz, pitch, dist, yaw = look:match("(-?[%d.]+):(-?[%d.]+):([%d.]+):([%d.]+):?(-?[%d.]*)")
+      if dx and hd._sceneLook(px + tonumber(dx), py + tonumber(dz), tonumber(pitch), tonumber(dist), tonumber(yaw)) then
         looks = looks + 1
         U.wait(4)
         U.shot(game, ("%s/%s_look%d.png"):format(dir, mapId, looks))
@@ -178,7 +224,8 @@ local function body(game, log)
       stat("sceneError"), stat("composites"), stat("failed")))
     log(("%s buildings: %s (error %s)"):format(mapId, stat("sceneBuildings"), stat("sceneBuildingError")))
     log(("%s signs: %s (error %s)"):format(mapId, stat("sceneSigns"), stat("sceneSignError")))
-    log(("%s relief: %s (error %s)"):format(mapId, stat("sceneRelief"), stat("sceneReliefError")))
+    log(("%s relief: %s (error %s; build %s); models %s"):format(mapId, stat("sceneRelief"), stat("sceneReliefError"),
+      stat("sceneReliefRun"), stat("sceneModels")))
     log(("%s runs: %s (built in %s ms: %s)"):format(mapId, stat("sceneRuns"), stat("sceneMs"), stat("scenePhases")))
     hd.setScene(false)
     U.wait(6)

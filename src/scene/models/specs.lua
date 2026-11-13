@@ -1070,12 +1070,29 @@ return function(K)
       parts = gym },
     { name = "gym_rustboro", layout = "LAYOUT_RUSTBORO_CITY", rect = { 24, 15, 6, 5 }, ground = { 0x2BB, 0x2C3, GRASS },
       parts = gym },
+    -- (WoobleView's own entry: Sootopolis's gym is the same building, its roof drawn in the
+    -- town's own gravel tiles, standing in the lake)
+    { name = "gym_sootopolis", layout = "LAYOUT_SOOTOPOLIS_CITY", rect = { 28, 28, 6, 5 }, match_rows = { 0, 4 },
+      ground = { GRASS, 0x279 }, parts = gym },
     { name = "devon_corporation", layout = "LAYOUT_RUSTBORO_CITY", rect = { 7, 7, 10, 9 }, ground = { 0x2BB, 0x2C3, GRASS },
       parts = devon },
     { name = "slateport_awning", layout = "LAYOUT_SLATEPORT_CITY", rect = { 16, 7, 5, 3 }, match_rows = { 0, 2 },
       ground = { GRASS }, ground_px = true,
       parts = function() return { Awning("awning", 8, 72, { top_v = 1, valance_v = 24, post_v = 32, foot_v = 47,
         back = 0, lift = 12, rep = { 3, 11 }, posts = { { 8, 14 }, { 66, 72 } }, shaft = { 34, 43 }, foot = { 43, 47 } }) } end },
+    -- (WoobleView's own entry: Ever Grande's gateway on the path up to the League, an orange
+    -- slatted roof on two stone legs, walked under - an awning in all but cloth: its top drawn
+    -- over rows 0-37, its dark valance 38-47, the legs below to their feet at row 80, the roof
+    -- 42 px deep at its own height, nothing lifted)
+    { name = "ever_grande_gate", layout = "LAYOUT_EVER_GRANDE_CITY", rect = { 15, 11, 7, 5 },
+      owned = cells({ { 0, 0 }, { 1, 0 }, { 2, 0 }, { 3, 0 }, { 4, 0 }, { 5, 0 }, { 6, 0 },
+                      { 0, 1 }, { 1, 1 }, { 2, 1 }, { 3, 1 }, { 4, 1 }, { 5, 1 }, { 6, 1 },
+                      { 0, 2 }, { 1, 2 }, { 2, 2 }, { 3, 2 }, { 4, 2 }, { 5, 2 }, { 6, 2 },
+                      { 0, 3 }, { 6, 3 }, { 0, 4 }, { 6, 4 } }),
+      -- (the path shows between the roof's slats: ground, pixel by pixel)
+      ground = { GRASS, 0x23D, 0x23C, 0x23E }, ground_px = true,
+      parts = function() return { Awning("gate", 0, 112, { top_v = 0, valance_v = 38, post_v = 48, foot_v = 80,
+        back = 42, lift = 0, rep = { 2, 38 }, posts = { { 1, 15 }, { 97, 111 } }, shaft = { 50, 76 }, foot = { 76, 80 } }) } end },
     { name = "fan_club", layout = "LAYOUT_SLATEPORT_CITY", rect = { 2, 22, 5, 6 }, ground = { GRASS, 0x209, 0x218, 0x219 },
       keep = { { 0, 0, 80, 80 }, { 29, 80, 33, 96 }, { 47, 80, 51, 96 } }, parts = fan_club },
     { name = "museum", layout = "LAYOUT_SLATEPORT_CITY", rect = { 25, 7, 7, 6 }, ground = { GRASS },

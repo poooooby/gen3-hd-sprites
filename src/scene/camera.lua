@@ -33,25 +33,33 @@ Camera.STAGE_PITCH, Camera.STAGE_DIST = rad(30), 7
 Camera.FIELD_PITCH = rad(90)
 Camera.FIELD_DIST = 5 / tan(Camera.FOV / 2)
 
---- A pose: { tx, tz, pitch, dist, ty } (ty: the target's height, 0 when not given; on lifted
---- ground its tz is as far south again, src/scene/relief.lua).
-function Camera.pose(tx, tz, pitch, dist, ty)
-  return { tx = tx, tz = tz, pitch = pitch or Camera.STAGE_PITCH, dist = dist or Camera.STAGE_DIST, ty = ty or 0 }
+--- A pose: { tx, tz, pitch, dist, ty, yaw } (ty: the target's height, 0 when not given; on lifted
+--- ground its tz is as far south again, src/scene/relief.lua; yaw: radians the view turns east of
+--- north, 0 when not given - the battle always looks north; the dev shots turn).
+function Camera.pose(tx, tz, pitch, dist, ty, yaw)
+  return { tx = tx, tz = tz, pitch = pitch or Camera.STAGE_PITCH, dist = dist or Camera.STAGE_DIST, ty = ty or 0,
+           yaw = yaw or 0 }
 end
 
---- The eye, and the view's up and forward vectors (right is always east, (1, 0, 0)).
+--- The eye, and the view's right, up and forward vectors: ex, ey, ez, rx, rz, ux, uy, uz, fx,
+--- fy, fz (right has no y).
 function Camera.basis(p)
   local s, c = sin(p.pitch), cos(p.pitch)
-  local ex, ey, ez = p.tx, (p.ty or 0) + p.dist * s, p.tz + p.dist * c
-  -- up (0, c, -s), forward (0, -s, -c)
-  return ex, ey, ez, c, -s, -s, -c
+  local sy, cy = sin(p.yaw or 0), cos(p.yaw or 0)
+  -- forward: north turned by yaw, pitched down; right: east turned with it
+  local fx, fy, fz = -sy * c, -s, -cy * c
+  local rx, rz = cy, -sy
+  -- up = right x forward
+  local ux, uy, uz = -rz * fy, rz * fx - rx * fz, rx * fy
+  local ex, ey, ez = p.tx - p.dist * fx, (p.ty or 0) - p.dist * fy, p.tz - p.dist * fz
+  return ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz
 end
 
 --- The camera's coordinates of a world point: right, up, depth (along the view).
 function Camera.view(p, x, y, z)
-  local ex, ey, ez, uy, uz, fy, fz = Camera.basis(p)
+  local ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz = Camera.basis(p)
   local dx, dy, dz = x - ex, y - ey, z - ez
-  return dx, dy * uy + dz * uz, dy * fy + dz * fz
+  return dx * rx + dz * rz, dx * ux + dy * uy + dz * uz, dx * fx + dy * fy + dz * fz
 end
 
 --- A world point on the canvas: u, v (pixels) and its depth; nil when behind the camera.
@@ -64,10 +72,10 @@ end
 --- Where the ray through canvas pixel (u, v) meets the ground (y = h, default 0): x, z; nil when
 --- it never does (at or above the horizon).
 function Camera.ground(p, u, v, h)
-  local ex, ey, ez, uy, uz, fy, fz = Camera.basis(p)
+  local ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz = Camera.basis(p)
   local a, b = (u - Camera.CX) / Camera.F, -(v - Camera.CY) / Camera.F
   -- direction: right * a + up * b + forward
-  local dx, dy, dz = a, uy * b + fy, uz * b + fz
+  local dx, dy, dz = rx * a + ux * b + fx, uy * b + fy, rz * a + uz * b + fz
   if dy >= -1e-6 then return nil end
   local t = ((h or 0) - ey) / dy
   return ex + dx * t, ez + dz * t
@@ -75,11 +83,11 @@ end
 
 --- The view matrix as four rows (world point -> right, up, depth, 1), for a shader.
 function Camera.viewRows(p)
-  local ex, ey, ez, uy, uz, fy, fz = Camera.basis(p)
+  local ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz = Camera.basis(p)
   return {
-    { 1, 0, 0, -ex },
-    { 0, uy, uz, -(ey * uy + ez * uz) },
-    { 0, fy, fz, -(ey * fy + ez * fz) },
+    { rx, 0, rz, -(ex * rx + ez * rz) },
+    { ux, uy, uz, -(ex * ux + ey * uy + ez * uz) },
+    { fx, fy, fz, -(ex * fx + ey * fy + ez * fz) },
     { 0, 0, 0, 1 },
   }
 end
@@ -107,7 +115,7 @@ Camera.PITCH_MAX = rad(89)
 --- small settling quake.
 function Camera.glide(from, to, t)
   t = math.max(0, math.min(1, t or 1))
-  if t >= 1 then return Camera.pose(to.tx, to.tz, to.pitch, to.dist, to.ty) end
+  if t >= 1 then return Camera.pose(to.tx, to.tz, to.pitch, to.dist, to.ty, to.yaw) end
   if t < Camera.TRAVEL then
     local q = smoother(t / Camera.TRAVEL)
     local pitch = lerp(from.pitch, to.pitch, q) + Camera.CRANE * sin(pi * q)

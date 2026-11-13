@@ -29,6 +29,10 @@ end
 Buildings.primaryOf = primaryOf
 
 local function owns(spec, i, j)
+  return Buildings.owns(spec, i, j)
+end
+--- Whether a spec owns cell (i, j) of its rectangle (all of it, or its `owned` cells).
+function Buildings.owns(spec, i, j)
   return not spec.owned or spec.owned[i .. "," .. j] == true
 end
 

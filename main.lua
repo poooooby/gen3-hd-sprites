@@ -11,10 +11,10 @@
 -- is drawn exactly as the game draws it. See src/hd.lua for how a frame is split and
 -- composited, and README.md for the API.
 
-local function loadSibling(mod, name)
+local function loadSibling(mod, name, optional)
   local source = mod:read(name)
   if not source then
-    mod.log:error("%s is missing -- reinstall the mod", name)
+    if not optional then mod.log:error("%s is missing -- reinstall the mod", name) end
     return nil
   end
   local chunk, err = load(source, "@" .. mod.path .. "/" .. name)
@@ -91,8 +91,11 @@ return function(mod)
     end
   end
   local worldOf = loadSibling(mod, "src/scene/world.lua")
-  if type(worldOf) == "function" and sceneDeps.Roles then
-    local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles })
+  local Post = loadSibling(mod, "src/scene/relief_post.lua")
+  -- (JSON read with relief_post's own decoder: the engine's belongs to its link code)
+  local json = Post and function(text) return (Post.json(text)) end or nil
+  if type(worldOf) == "function" and sceneDeps.Roles and json then
+    local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles, json = json })
     if okW and type(world) == "table" then sceneDeps.World = world end
   end
   if SceneInit and sceneDeps.Camera and sceneDeps.Cells and sceneDeps.Stage and sceneDeps.Render then
@@ -101,6 +104,65 @@ return function(mod)
       Engine.Scene = Scene
       hd.scene = Scene
       hd.sceneRenderer = Scene.render
+    end
+  end
+  -- the relief, built once a game in the background and cached (src/scene/relief_run.lua): the
+  -- solver (src/scene/relief_solve.lua and parts), the terraces (relief_terraces.lua, optional:
+  -- without it only a cached relief is served) and the last passes (relief_post.lua)
+  local reliefRun
+  if Engine.Scene and sceneDeps.Relief and sceneDeps.Roles then
+    local Art, Input = loadSibling(mod, "src/scene/relief_art.lua"), loadSibling(mod, "src/scene/relief_input.lua")
+    local Solve = loadSibling(mod, "src/scene/relief_solve.lua")
+    local parts = { loadSibling(mod, "src/scene/relief_drawn.lua"), loadSibling(mod, "src/scene/relief_shape.lua"),
+                    loadSibling(mod, "src/scene/relief_cuts.lua"), loadSibling(mod, "src/scene/relief_world.lua") }
+    local worldMapsOf = loadSibling(mod, "src/scene/world_maps.lua")
+    -- (the terraces: three parts of the solve, all or none)
+    local Terraces
+    do
+      local a, b, c = loadSibling(mod, "src/scene/relief_terraces.lua", true),
+        loadSibling(mod, "src/scene/relief_terraces_fit.lua", true), loadSibling(mod, "src/scene/relief_terraces_out.lua", true)
+      if a and b and c then Terraces = { a, b, c } end
+    end
+    local runOf = loadSibling(mod, "src/scene/relief_run.lua")
+    local okM, WorldMaps = pcall(function()
+      return worldMapsOf({ Solve = Solve, Art = Art, Input = Input, Roles = sceneDeps.Roles, parts = parts, json = json })
+    end)
+    if Post and okM and type(WorldMaps) == "table" and type(runOf) == "function" then
+      local okV, GameVersion = pcall(require, "src.core.GameVersion")
+      local okD, Dataset = pcall(require, "src.core.game3.dataset")
+      local okR, run = pcall(runOf, {
+        Relief = sceneDeps.Relief, Post = Post, WorldMaps = WorldMaps, Terraces = Terraces, Roles = sceneDeps.Roles,
+        fixes = mod:read("assets/scene/relief_fixes.json"),
+        cache = mod.cache, hooks = mod.hooks, log = mod.log,
+        version = okV and GameVersion or nil,
+        readCache = function(rel)
+          local okC, c = pcall(function() return okD and Dataset.cache() end)
+          return okC and c and c:read(rel) or nil
+        end,
+        onReady = function(bytes) Engine.Scene.setReliefBytes(bytes) end,
+        models = function(name) return Engine.Scene.modelCells(name) end,
+        onFrame = function() Engine.Scene.warmStep() end,
+      })
+      if okR and type(run) == "table" then
+        reliefRun = run
+        Engine.Scene.reliefRun = run
+        -- (the models' cache: the mod's, under the same game key as the relief's)
+        Engine.Scene.modelCache = {
+          read = function(name)
+            local k = run.gameKey()
+            local okC, b = pcall(function() return k and mod.cache:read("models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k .. "/" .. name) end)
+            return okC and b or nil
+          end,
+          write = function(name, bytes)
+            local k = run.gameKey()
+            return k and pcall(function() mod.cache:write("models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k .. "/" .. name, bytes) end)
+          end,
+        }
+      else
+        mod.log:warn("relief: the background build is off (%s)", tostring(run))
+      end
+    else
+      mod.log:warn("relief: the background build is off (%s)", tostring(okM and (Post and "no runner" or "no post passes") or WorldMaps))
     end
   end
 
@@ -121,7 +183,10 @@ return function(mod)
     -- only captured to fill the screen)
     hd.enabled.boot = hd.enabled.battle and hd.fit.enabled and hd.fit.fill
     hd.enabled.screen = hd.enabled.boot
-    if Engine.Scene then Engine.Scene.enabled = option("battle_scene", "classic") == "overworld" end
+    if Engine.Scene then
+      Engine.Scene.enabled = option("battle_scene", "classic") == "overworld"
+      Engine.Scene.cacheModels = option("scene_cache", true) ~= false
+    end
   end
 
   local function install()
@@ -141,6 +206,19 @@ return function(mod)
   end
 
   mod.events:on("game.ready", function() install() end, 0)
+  if Engine.Scene then
+    mod.events:on("map.entered", function(ev)
+      if not (ev and ev.mapId and Engine.Scene.enabled) then return end
+      -- (Scene Cache: every town's models from the first map on, read from the cache or built
+      -- and kept; else this map's)
+      if Engine.Scene.cacheModels and Engine.Scene.warmAll then pcall(Engine.Scene.warmAll) end
+      pcall(Engine.Scene.warm, ev.mapId)
+    end)
+  end
+  if reliefRun then
+    local okI, hooked = pcall(reliefRun.install)
+    if not (okI and hooked) then mod.log:warn("relief: no frame hook (%s)", tostring(hooked)) end
+  end
   pcall(install)
 
   mod.events:on("mod.options_changed", function(ev)

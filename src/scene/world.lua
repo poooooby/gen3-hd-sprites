@@ -11,7 +11,7 @@
 -- Emerald only (its maps are EM_*), once a game; everything is cached.
 
 return function(deps)
-  local Roles = deps.Roles
+  local Roles, json = deps.Roles, deps.json      -- (json(text) -> table or nil)
   local World = {}
 
   local function req(name)
@@ -74,16 +74,16 @@ return function(deps)
     local maps = gameData()
     if type(maps) ~= "table" then return nil end
     if state and state.maps == maps then return state end
-    local Dataset, Rse, Json = req("src.core.game3.dataset"), req("src.core.game3.rse"), req("src.link.Json")
+    local Dataset, Rse = req("src.core.game3.dataset"), req("src.core.game3.rse")
     local cache = Dataset and Dataset.cache()
-    if not (cache and Rse and Json) then return nil end
+    if not (cache and Rse and json) then return nil end
     local s = { maps = maps, layouts = {}, byName = {}, byMap = {}, arts = {}, roles = {} }
     for id, def in pairs(maps) do
       if type(id) == "string" and id:match("^EM_") then
         local okG, g, n = pcall(Rse.mapGroupNum, id)
         local slot = okG and g and (g .. "_" .. n)
         local rawH = slot and cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/header.json")
-        local okJ, h = pcall(function() return rawH and Json.decode(rawH) end)
+        local okJ, h = pcall(function() return rawH and json(rawH) end)
         if okJ and h and h.layoutId then
           local L = s.layouts[h.layoutId]
           if not L then
@@ -95,7 +95,7 @@ return function(deps)
           L.maps[#L.maps + 1] = id
           L.outdoor = L.outdoor or Dataset.isOutdoorMapType(h.mapType)
           local rawE = cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/events.json")
-          local okE, e = pcall(function() return rawE and Json.decode(rawE) end)
+          local okE, e = pcall(function() return rawE and json(rawE) end)
           for _, w in ipairs(okE and e and e.warps or {}) do L.warps[#L.warps + 1] = { w.x, w.y } end
           for _, b in ipairs(okE and e and e.bgEvents or {}) do
             if b.type == "sign" then L.signs[b.x .. "," .. b.y] = true end
@@ -154,6 +154,13 @@ return function(deps)
       pixels = art.pixels, cell = art.cell,
     }
     return L.adapter
+  end
+
+  --- A pair's drawings off its atlas blobs: { pixels(m, layer) -> { [y * 16 + x] = { r, g, b } }
+  --- (0..255; layer 0 the lower, 1 the upper), cell(m) }, or nil.
+  function World.art(pair)
+    local s = load()
+    return s and pair and artOf(s, pair) or nil
   end
 
   --- The game's sign posts (Roles.posts over every outdoor layout with sign events): posts,

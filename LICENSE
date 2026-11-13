@@ -66,6 +66,17 @@ cut tiles' flat layers and run-on ground, cliff walls, a back's north face; voxe
 tile's cleared background). Changes: rewritten in Lua for LOVE; no lighting; one texture of the
 drawings a battle's window lays.
 
+The relief solver (src/scene/relief_solve.lua, relief_art.lua, relief_input.lua,
+relief_drawn.lua, relief_shape.lua, relief_cuts.lua, relief_world.lua) adapts Emerald 3DS's
+gen_voxel_relief.py whole (3ds_port/scripts: the ledges, the drawn mountains read off their
+pixels, the world's placement of the maps, the cut tiles and cell shapes, its export) with the
+drawings composed as voxel_art.py and dump_region_art.py compose them and the objects of
+voxel_props.py; its terraces (src/scene/relief_terraces.lua, relief_terraces_fit.lua,
+relief_terraces_out.lua) adapt voxel_terraces.py whole. Changes: rewritten in Lua for LOVE,
+run in the game once over the player's own cartridge data instead of offline, sliced a few
+milliseconds a frame; Python's own arithmetic and ordering (its hash-ordered sets, compensated
+sums, rounding) reproduced where the result depends on them, so the bytes come out the same.
+
 The relief's last passes (src/scene/relief_post.lua) adapt Emerald 3DS's sea ramps and cut feet
 (3ds_port/scripts/gen_voxel_relief.py) and its hand corrections (voxel_relief_fixes.py: how
 relief.bin is read and written, how the corrections apply), and assets/scene/relief_fixes.json
