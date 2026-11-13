@@ -1073,6 +1073,44 @@ function HD.new(G, opts)
     cur.open = nil
   end
 
+  --- The battle scene's world in place of the wallpaper (Battle Scene: Overworld, src/scene/):
+  --- recorded with the draw state the wallpaper would have had (a move's dimming, flash or
+  --- palette shader, the background's shake as the transform), then drawn by the composite at
+  --- window resolution through self.sceneRenderer, with the scene's own mapping. `image` (the
+  --- wallpaper) is what shows when the frame is put back the low-res way. Returns false outside
+  --- a pass (nothing recorded).
+  self.sceneRenderer = nil
+  function self.world(image, scene, x, y)
+    local cur = self.cur
+    if not (cur and onPass() and self.sceneRenderer) then return false end
+    local rec = record(image, {}, x or 0, y or 0)
+    if not rec then return false end
+    cur.items[#cur.items + 1] = { kind = "world", rec = rec, scene = scene }
+    cur.backdropImage = image
+    cur.pending = true
+    cur.open = nil
+    return true
+  end
+
+  -- the world item at window resolution: rendered for the screen rect `box` ({x, y, w, h}) with
+  -- the scene's mapping (canvas pixels -> screen), then drawn there with its recorded draw state.
+  -- False when it could not be (the caller draws the wallpaper instead)
+  local function worldDraw(item, bx, by, bsx, bsy, box)
+    local ok, c, x, y = pcall(self.sceneRenderer, item, bx, by, bsx, bsy, box)
+    if not (ok and c) then
+      if not ok then self.stats.sceneError = tostring(c) end
+      return false
+    end
+    local rec = item.rec
+    real.setScissor(box[1], box[2], box[3], box[4])
+    real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
+    useShader(rec)
+    real.setBlendMode(rec.blend[1], rec.blend[2])
+    real.draw(c, x, y)
+    self.stats.world = (self.stats.world or 0) + 1
+    return true
+  end
+
   --- Draw a band that wraps sideways (the intro's scrolling grass): recorded, then drawn at
   --- window resolution with the scene's zoom, repeated across the whole view so the zoomed-out
   --- scene never shows its ends. Outside a pass it is simply drawn.
@@ -2224,6 +2262,11 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         real.setScissor(box[1], box[2], box[3], box[4])
         if item.kind == "hd" then
           tagDraw(item.rec, cur, blit, ubx, uby, U, Uy, box)
+        elseif item.kind == "world" then
+          if not worldDraw(item, ubx, uby, U, Uy, box) then
+            real.setScissor(box[1], box[2], box[3], box[4])
+            drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy)
+          end
         elseif item.kind == "stage" then
           imageDraw(item.rec, ubx, uby, U, Uy)
         elseif item.kind == "backdrop" or item.kind == "band" then
@@ -2480,6 +2523,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       elseif item.kind == "wide" then
         -- a move's background band: across the whole view with fill, else in the canvas's box
         drawWide(item, sx0, sy0, ssx, ssy, sceneBox or cover)
+      elseif item.kind == "world" then
+        -- the battle scene's world: the ground under the battlers, so zoomed with them (no
+        -- parallax), over the whole view
+        if not worldDraw(item, sx0, sy0, ssx, ssy, sceneBox or cover) then
+          scissor(sceneBox)
+          drawBackdrop(item.rec, cover[3], cover[4], bkx, bky, bksx, bksy, cover[1], cover[2], 1, 1)
+        end
       elseif item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band" then
         scissor(inScene and sceneBox or uiBox)
         if item.kind == "backdrop" then
@@ -2590,8 +2640,9 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     real.origin()
     real.setScissor()
     for _, item in ipairs(cur.items) do
+      -- (the battle scene's world goes back as the wallpaper it stands in for)
       if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band"
-          or item.kind == "wide" then
+          or item.kind == "wide" or item.kind == "world" then
         local rec = item.rec
         real.push()
         real.translate(rec.tx, rec.ty)

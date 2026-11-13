@@ -22,6 +22,14 @@ return {
     description = "With Battle Fit, the battle scene fills your whole screen, top to bottom and out to the sides, while the text box, HP bars and menus keep their sharp size, docked to the bottom. The summary, party, bag, Pokedex page, evolution and nickname screens fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokedex, party, bag, options, mods). Off: the usual framed battle screen.",
   },
   {
+    key = "battle_scene",
+    label = "Battle Scene",
+    type = "choice",
+    default = "classic",
+    choices = { { "CLASSIC", "classic" }, { "OVERWORLD", "overworld" } },
+    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
+  },
+  {
     key = "field_hd",
     label = "Field HD",
     type = "toggle",

@@ -76,6 +76,22 @@ resolution, and the camera pulls back so even the biggest ones fit.
 - 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment
   after it leaves. It doesn't bob with a Pokémon's animation.
 
+### Battle Scene 🏞️
+
+- 🗺️ **Battle where you stand:** With **Battle Scene** set to **Overworld**, a battle takes
+  place in the world around you instead of on a painted backdrop: the paths, grass, water,
+  trees and houses of the spot where it started, laid out in 2.5D and fading into the distance.
+- 🏠 **Real buildings:** In Emerald, houses, Pokémon Centers, Marts, gyms and the big buildings
+  of Hoenn's towns stand in 3D, rebuilt from their own overworld art: walls, roofs, porches and
+  all. Fences stand post by post, and hedges, curbs, railings and walls stand as solid runs.
+- 🎥 **A camera that swoops in:** As the battle begins, the camera sweeps down from the
+  overworld view to the battle, the houses and trees rising up as it goes.
+- 🎯 **A good spot every time:** Both Pokémon are placed on open ground of the kind you met
+  them on (grass for a grass encounter, water when you're surfing), with nothing standing in
+  front of them, and a soft shadow under each.
+- 🖥️ **Fills any screen:** The scene zooms with Battle Fit and fills your whole screen with
+  Fill Screen, and every move, flash and screen shake plays over it as usual.
+
 ## ⚙️ Options
 
 Open **OPTIONS → MODS → WoobleView**.
@@ -86,6 +102,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Battle Fit** | On / Off | On | Pull the battle camera back so tall Pokémon fit. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
+| **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
 ## 💾 Installation
@@ -107,6 +124,12 @@ Open **OPTIONS → MODS → WoobleView**.
 
 ## 📌 Good to Know
 
+- **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's trees stand as
+  real trees with leafy crowns, and in Emerald most of its town buildings, fences, hedges, curbs
+  and railings stand in 3D too. Signs, rocks, the buildings not yet rebuilt (and in Ruby,
+  Sapphire, FireRed and LeafGreen all of them) and Kanto's trees stand up as flat cut-outs of
+  their overworld art. A battle with no overworld around it, or no open ground near you, keeps the
+  game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
   to your screen.
@@ -128,6 +151,14 @@ Open **OPTIONS → MODS → WoobleView**.
   and the rest of the overworld look just as the game draws them, and a battle another mod draws
   in an arena of its own is left to that mod.
 
+## 🪪 Credits
+
+- **Battle Scene** is adapted from the 3D battles of
+  [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its battle
+  camera, its entrance sweep, how it picks where the battle stands, its trees, drawn by its
+  artists, and its buildings, fences and hedges, each one rebuilt from its own overworld art.
+
 ---
 
-Licence: [MIT](LICENSE). Making a mod that uses it? See [DEVELOPMENT.md](DEVELOPMENT.md).
+Licence: [CC BY-NC-SA 4.0](LICENSE) (versions up to 0.6.0: MIT). Making a mod that uses it? See
+[DEVELOPMENT.md](DEVELOPMENT.md).

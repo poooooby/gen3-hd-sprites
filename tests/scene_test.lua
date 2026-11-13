@@ -1,0 +1,397 @@
+-- Headless checks of the battle scene's plain-Lua parts (src/scene/). Run from the mod root:
+--   luajit tests/scene_test.lua
+local Camera = dofile("src/scene/camera.lua")
+local Cells = dofile("src/scene/cells.lua")
+local Stage = dofile("src/scene/stage.lua")
+local Render = dofile("src/scene/render.lua")
+
+local passed, failed = 0, 0
+local function check(cond, msg)
+  if cond then passed = passed + 1 else failed = failed + 1; print("FAIL: " .. msg) end
+end
+local function near(a, b, e) return type(a) == "number" and math.abs(a - b) < (e or 1e-6) end
+
+-- ------------------------------------------------------------------ camera
+do
+  local p = Camera.pose(10.5, 20.5)
+  local u, v = Camera.project(p, 10.5, 0, 20.5)
+  check(near(u, 120) and near(v, 80), "the target lands on the canvas's centre")
+  local x, z = Camera.ground(p, 30, 140)
+  local u2, v2 = Camera.project(p, x, 0, z)
+  check(near(u2, 30, 1e-6) and near(v2, 140, 1e-6), "a canvas point cast onto the ground projects back onto itself")
+  check(z > 20.5, "...a point low on the canvas is south of the target (nearer the camera)")
+  local _, ztop = Camera.ground(p, 120, 0)
+  check(ztop < 20.5 - 5, "the canvas's top shows the ground well north of the target")
+  check(Camera.ground(Camera.pose(0, 0, math.rad(10)), 120, 0) == nil, "a ray above the horizon meets no ground")
+  -- the stage pose's scale: a tile at the target is about 36 canvas pixels across
+  local ua = Camera.project(p, 10, 0, 20.5)
+  local ub = Camera.project(p, 11, 0, 20.5)
+  check(near(ub - ua, Camera.F / 7, 1e-6), "one tile across at the target is F / 7 pixels")
+
+  -- the shader's projection: screen pixel * depth is linear in the view coordinates
+  local u0, v0, kx, ky = -40, -20, 6, 6
+  local proj = Camera.screenProjection(u0, v0, kx, ky)
+  local px, py, pz = 12.25, 0.75, 18.5
+  local xc, yc, zc = Camera.view(p, px, py, pz)
+  local cu, cv = Camera.project(p, px, py, pz)
+  local sx = (proj[1] * xc + proj[2] * zc) / zc
+  local sy = (-proj[3] * yc + proj[4] * zc) / zc
+  check(near(sx, (cu - u0) * kx, 1e-6) and near(sy, (cv - v0) * ky, 1e-6),
+    "the shader's projection puts a point where the canvas mapping does (" .. sx .. ", " .. sy .. ")")
+  -- the view rows agree with Camera.view
+  local R = Camera.viewRows(p)
+  local function row(r) return r[1] * px + r[2] * py + r[3] * pz + r[4] end
+  check(near(row(R[1]), xc) and near(row(R[2]), yc) and near(row(R[3]), zc), "the view matrix rows match Camera.view")
+
+  -- the glide: from the field's pose to the stage's
+  local from = Camera.pose(5.5, 5.5, Camera.FIELD_PITCH, Camera.FIELD_DIST)
+  local to = Camera.pose(4, 2)
+  local g0, g1 = Camera.glide(from, to, 0), Camera.glide(from, to, 1)
+  check(near(g0.tx, 5.5) and near(g0.pitch, Camera.FIELD_PITCH) and near(g0.dist, Camera.FIELD_DIST),
+    "the glide starts at the field's pose")
+  check(near(g1.tx, 4) and near(g1.tz, 2) and near(g1.pitch, to.pitch) and near(g1.dist, to.dist),
+    "...and ends at the stage's")
+  local mid = Camera.glide(from, to, 0.39)
+  check(mid.pitch > to.pitch and mid.pitch <= Camera.PITCH_MAX + 1e-9, "...its pitch arcs on the way")
+  -- the field's pose shows 10 rows of tiles on the canvas
+  local _, zt = Camera.ground(from, 120, 0)
+  local _, zb = Camera.ground(from, 120, 160)
+  check(near(zb - zt, 10, 1e-6), "straight down, the canvas shows the field's 10 rows (" .. (zb - zt) .. ")")
+end
+
+-- ------------------------------------------------------------------- cells
+-- a fake map from rows of characters: . floor, g grass, s sand, w water, T blocked, outside: none
+local function fakeEnv(map, indoor)
+  local h = #map
+  local env = { indoor = indoor }
+  function env.mid(cx, cy) return (cy * 100 + cx) % 1024, "pair" end
+  function env.cell(cx, cy)
+    local line = map[cy + 1]
+    if cx < 0 or cy < 0 or cy >= h or cx >= #line then return nil end
+    local ch = line:sub(cx + 1, cx + 1)
+    if ch == "T" then return 1, 0 end
+    if ch == "w" then return 2, 0 end
+    if ch == "g" then return 0, 0x02 end
+    if ch == "s" then return 0, 0x21 end
+    return 0, 0
+  end
+  env.isWall = function(c) return c == 1 end
+  env.isWater = function(c) return c == 2 end
+  env.isSurfable = function() return false end
+  return env
+end
+
+do
+  local map = {
+    "..........",
+    ".TT.......",
+    ".TT...T...",
+    "......T...",
+    "gggg..T...",
+    "gggg......",
+    "wwww......",
+  }
+  local grid = Cells.build(fakeEnv(map), 0, 0, 10, 7)
+  check(grid.at(0, 4).kind == "grass" and grid.at(0, 6).kind == "water" and grid.at(1, 1).kind == "blocked"
+    and grid.at(5, 5).kind == "floor", "cells take their kinds from collision and behaviour")
+  check(grid.at(6, 4).up == 0 and grid.at(6, 3).up == 1 and grid.at(6, 2).up == 2 and grid.at(6, 2).base == 4,
+    "a column's blocked run stands from its southern cell up")
+  check(grid.at(1, 2).up == 0 and grid.at(1, 1).up == 1 and grid.at(1, 1).base == 2, "...each column on its own")
+  check(grid.at(5, 5).up == nil, "open ground stands nothing up")
+  check(grid.at(20, 20) == nil, "outside the window: nil")
+  local out = Cells.build(fakeEnv(map), -2, 0, 3, 1)
+  check(out.at(-1, 0).kind == "blocked", "outside every map, outdoors: blocked (the border stands up)")
+  local inside = Cells.build(fakeEnv(map, true), -2, 0, 3, 1)
+  check(inside.at(-1, 0).kind == "void", "...indoors: void")
+  -- a run longer than RUN_MAX starts again
+  local tall = {}
+  for i = 1, Cells.RUN_MAX + 2 do tall[i] = "T" end
+  local tg = Cells.build(fakeEnv(tall), 0, 0, 1, #tall)
+  check(tg.at(0, #tall - 1).up == 0 and tg.at(0, #tall - Cells.RUN_MAX).up == Cells.RUN_MAX - 1
+    and tg.at(0, #tall - Cells.RUN_MAX - 1).up == 0, "a run is at most RUN_MAX tall, then another starts")
+end
+
+-- -------------------------------------------------------------------- stage
+local function field(w, h, fill)
+  local m = {}
+  for y = 1, h do m[y] = string.rep(fill or "g", w) end
+  return m
+end
+local FEET = { enemy = { 176, 70 }, player = { 72, 114 } }
+local SPRITES = { enemy = { 144, 8, 208, 72 }, player = { 40, 48, 104, 112 } }
+
+do
+  -- open grass everywhere: the player's Pokemon stands on the player's own cell
+  local map = field(60, 60)
+  local grid = Cells.build(fakeEnv(map), 0, 0, 60, 60)
+  local best = Stage.search(Camera, grid, { player = { cx = 30, cy = 40 }, want = { player = "grass", enemy = "grass" },
+    feet = FEET, sprites = SPRITES })
+  check(best and math.floor(best.feet.player[1]) == 30 and math.floor(best.feet.player[2]) == 40,
+    "open ground: the player's Pokemon stands on the player's cell")
+  check(best and best.feet.enemy[2] < best.feet.player[2] and best.feet.enemy[1] > best.feet.player[1],
+    "...the foe north-east of it")
+
+  -- a tree line just south of the player: the stage moves so nothing stands in front
+  local map2 = field(60, 60)
+  for y = 41, 43 do map2[y + 1] = string.rep("T", 60) end
+  local grid2 = Cells.build(fakeEnv(map2), 0, 0, 60, 60)
+  local c = grid2.at(30, 41)
+  check(c.up ~= nil, "(the tree line stands up)")
+  local best2 = Stage.search(Camera, grid2, { player = { cx = 30, cy = 40 }, want = { player = "grass", enemy = "grass" },
+    feet = FEET, sprites = SPRITES })
+  local pf = best2 and grid2.at(math.floor(best2.feet.player[1]), math.floor(best2.feet.player[2]))
+  check(pf and pf.kind == "grass", "with trees about: the player's Pokemon still on grass")
+  check(best2 and best2.score > Stage.FLOOR, "...a stage that fits")
+
+  -- indoors: a small room in the void; the stage keeps the void off the feet
+  local room = {}
+  for y = 1, 40 do room[y] = string.rep(" ", 40) end
+  for y = 18, 30 do room[y] = string.rep(" ", 14) .. string.rep(".", 12) .. string.rep(" ", 14) end
+  local env = fakeEnv(room, true)
+  local cellOf = env.cell
+  env.cell = function(cx, cy)
+    local line = room[cy + 1]
+    if not line or cx < 0 or cx >= #line or line:sub(cx + 1, cx + 1) == " " then return nil end
+    return cellOf(cx, cy)
+  end
+  local grid3 = Cells.build(env, 0, 0, 40, 40)
+  local best3 = Stage.search(Camera, grid3, { player = { cx = 20, cy = 27 }, feet = FEET, sprites = SPRITES, void = true })
+  local p3 = best3 and grid3.at(math.floor(best3.feet.player[1]), math.floor(best3.feet.player[2]))
+  local e3 = best3 and grid3.at(math.floor(best3.feet.enemy[1]), math.floor(best3.feet.enemy[2]))
+  check(p3 and p3.kind == "floor" and e3 and e3.kind == "floor", "indoors: both sides stand inside the room")
+  check(best3 and best3.score > Stage.FLOOR, "...a stage that fits")
+
+  -- all void: nothing fits
+  local none = Cells.build(fakeEnv({ "" }, true), 0, 0, 30, 30)
+  local best4 = Stage.search(Camera, none, { player = { cx = 15, cy = 15 }, feet = FEET, sprites = SPRITES, void = true })
+  check(best4 and best4.score < Stage.FLOOR, "all void: below the floor (the wallpaper is kept)")
+end
+
+-- ------------------------------------------------------------------- render
+do
+  local map = { "...", ".T.", "..." }
+  local grid = Cells.build(fakeEnv(map), 0, 0, 3, 3)
+  local function img(name) return { name = name, getDimensions = function() return 256, 256 end } end
+  local under, over = img("under"), img("over")
+  local function q(x, y) return { getViewport = function() return x, y, 16, 16 end } end
+  local tiles = function()
+    return { image = under, overImage = over, slot = function(mid) return mid end,
+             quad = function(s) return q(0, 0) end, overQuad = function(s) return q(16, 0) end }
+  end
+  local lists = Render.vertices(grid, tiles, 1, 1)
+  local lo, up = lists.lower[under], lists.upper[over]
+  -- 9 ground quads + 1 card, 6 vertices each, per layer
+  check(lo and #lo == 60 and up and #up == 60, "each cell lies on the ground, the blocked one stands too (both layers)")
+  -- the card: at the run's southern edge (z = base + 1 - origin), one tile high, darker
+  -- (cell (1, 1) is the fifth: its ground quad is vertices 25-30, its card 31-36)
+  local card = lo[31]
+  check(card and near(card[1], 0) and near(card[2], 1) and near(card[3], 1) and near(card[6], Render.CARD_SHADE),
+    "the card stands on its cell's southern edge, a tile high, shaded")
+  check(near(lo[1][1], -1) and near(lo[1][3], -1), "positions are relative to the origin")
+  check(lo[1][4] > 0 and lo[1][4] < 1 / 256, "uvs are kept off the tile's edge")
+end
+
+-- -------------------------------------------------------------------- trees
+do
+  local Trees = dofile("src/scene/trees.lua")
+  local sec, general = Trees.tilesets("general__petalburg")
+  check(sec == "petalburg" and general == true, "a pair's secondary tileset and whether its primary is General")
+  check(select(1, Trees.tilesets("battle_frontier_outside_west")) == nil, "...a name with no pair: none")
+  check(Trees.part(sec, 0x1D4) == 0 and Trees.part(sec, 0x1D5) == 1 and Trees.part(sec, 0x1E4) == 2
+    and Trees.part(sec, 0x1E7) == 3, "the General's large tree: its four parts")
+  check(Trees.part(sec, 0x0C6) == Trees.SMALL and Trees.part(sec, 0x015) == Trees.GRASS, "...a small tree, long grass")
+  check(Trees.part(sec, 0x001) == nil and Trees.part(sec, 0x2F8) == nil, "...grass is none, nor another tileset's id")
+  check(Trees.part("mossdeep", 0x2F8) == 2 and Trees.laysGround("mossdeep", 0x2F8) == false,
+    "Mossdeep's tree in the shallows: its trunk row, over the water the ground lays")
+  check(Trees.groundMetatile(sec, 0x00E) == 0x001 and Trees.groundMetatile(sec, 0x1C6) == 0x00D
+    and Trees.groundMetatile(sec, 0x087) == 0x087, "a crown's top over grass lays grass; anything else itself")
+  check(Trees.groundMetatile("dewford", 0x239) == 0x124, "...a secondary tileset's own")
+
+  local quads = {}
+  local function put(a, b, c, d, u0, v0, u1, v1, kind) quads[#quads + 1] = { a, b, c, d, u0, v0, u1, v1, kind } end
+  -- a whole tree: its trunk row's left cell (part 2) at (10, 5), the crown row above it a tree part
+  Trees.emit(put, sec, 0x1E4, 10, 5, 2, function(x, y) return y == 4 and 0 or nil end)
+  check(#quads == 2 and quads[1][9] == "ground" and quads[2][9] == "card", "a tree cell lays its ground and one crown row")
+  check(near(quads[1][1][1], 10) and near(quads[1][1][3], 5) and quads[1][5] == 32 and quads[1][6] == 16,
+    "...its ground from the trunk's art (32, 16: the trunk row's left)")
+  local top = quads[2][1]
+  check(top[2] > 0 and top[3] < 6.35, "...its crown card leans back from the trunk row's foot")
+  -- the crown row covered by something else (a roof): that row is added
+  quads = {}
+  Trees.emit(put, sec, 0x1E4, 10, 5, 2, function() return nil end)
+  check(#quads == 3, "a crown row drawn over by something else is added anyway")
+  quads = {}
+  Trees.emit(put, sec, 0x1E4, 10, 5, 2, function() return false end)
+  check(#quads == 2, "...but not across the map's edge")
+  -- a small tree: a trunk plate and a 16:32 crown card
+  quads = {}
+  Trees.emit(put, sec, 0x0C6, 3, 3, Trees.SMALL, function() return nil end)
+  check(#quads == 2 and quads[1][5] == 48 and quads[1][6] == 32 and quads[2][5] == 32 and quads[2][8] == 64,
+    "a small tree: its trunk plate (48, 32) and crown (32, 32)-(48, 64)")
+end
+
+-- ---------------------------------------------------------------- buildings
+do
+  local K = dofile("src/scene/models/kernel.lua")
+  local specs = dofile("src/scene/models/specs.lua")(K)
+  local B = dofile("src/scene/buildings.lua")
+  -- the kernel: clipping keeps the coordinates it carries exact
+  local half = K.clip({ { 0, 0, 10 }, { 4, 0, 14 }, { 4, 4, 18 }, { 0, 4, 14 } }, 1, 2, true)
+  local edge = 0
+  for _, p in ipairs(half) do if near(p[1], 2) then edge = edge + 1; check(near(p[3], 12 + p[2]), "a clipped point's carried value is interpolated") end end
+  check(#half == 4 and edge == 2, "a square clipped down its middle keeps four corners, two on the cut")
+  check(#K.triangulate({ { 0, 0 }, { 4, 0 }, { 4, 4 }, { 2, 1 }, { 0, 4 } }) == 3, "a concave pentagon is three ears")
+  -- a tile repeated over a face: one piece per repeat, each a translation of the art
+  local pieces = K.tilePieces({ { 0, 0 }, { 20, 0 }, { 20, 8 }, { 0, 8 } }, K.Tile(8, 40, 16, 48))
+  check(#pieces == 3, "a 20-wide face over an 8-wide tile: three pieces")
+  local ok = true
+  for _, pc in ipairs(pieces) do
+    for _, p in ipairs(pc) do if p[4] < 40 - 1e-9 or p[4] > 48 + 1e-9 or p[3] < 8 - 1e-9 or p[3] > 16 + 1e-9 then ok = false end end
+  end
+  check(ok, "...every piece reads inside the tile")
+  -- a wall projected: u = X, v = Z - Y
+  local mesh = K.build({ K.Walls("w", { { 0, 64 }, { 32, 64 } }, 0, 20) })
+  local proj = true
+  for _, t in ipairs(mesh.tris) do
+    for k = 1, 3 do if not (near(t[k][4], t[k][1]) and near(t[k][5], t[k][3] - t[k][2])) then proj = false end end
+  end
+  check(#mesh.tris == 2 and proj, "a wall the drawing shows is the drawing projected (u = X, v = Z - Y)")
+  -- every spec builds (the same triangles as Emerald 3DS's generator: see DEVELOPMENT.md)
+  local built, bad = 0, nil
+  for _, sp in ipairs(specs) do
+    local okB, m = pcall(K.build, sp.parts())
+    if okB and #m.tris > 0 then built = built + 1 else bad = sp.name end
+  end
+  check(built == #specs and #specs >= 40, "every building spec builds (" .. built .. "/" .. #specs .. ", " .. tostring(bad) .. ")")
+  local lh
+  for _, sp in ipairs(specs) do if sp.name == "littleroot_house_w" then lh = K.build(sp.parts()) end end
+  check(lh and #lh.tris == 614, "Littleroot's house: 614 triangles, as the generator makes it")
+
+  -- placing: a 2x2 building over a fake map, its art read from fake layers
+  local spec = { name = "hut", layout = "L", rect = { 1, 1, 2, 2 }, ground = { 1 } }
+  local refMids = { [1] = { [1] = 10, [2] = 11 }, [2] = { [1] = 12, [2] = 13 } }
+  local ctx = { layout = function(id)
+    return id == "L" and { pair = "general__x", mid = function(x, y) return (refMids[y] or {})[x] or 1 end } or nil
+  end }
+  local ref = B.reference(spec, ctx)
+  check(ref and ref.w == 2 and ref.template[1] == 10 and ref.template[4] == 13, "a reference reads its template")
+  -- layers: ground (1) is plain green; 10..13 draw a roof on their upper layer's top half only
+  local src = {
+    under = function(m, x, y) if m == 1 or (m >= 10 and m <= 13) then return 0, 1, 0, 1 end end,
+    over = function(m, x, y) if m >= 10 and m <= 13 and y < 8 then return 1, 0, 0, 1 end return 0, 0, 0, 0 end,
+  }
+  local art = B.art(spec, ref, src)
+  local function alpha(x, y) return art.px[(y * art.w + x) * 4 + 4] end
+  check(art.w == 32 and alpha(3, 3) == 1 and alpha(3, 12) == 0, "its art: the upper layer kept, the ground's quarters clear")
+  local core = B.core(spec, ref, art)
+  check(#core == 4, "...every cell it draws in is core")
+  -- the map: the hut at (5, 3) and a half copy at (9, 3)
+  local mapMids = { ["5,3"] = 10, ["6,3"] = 11, ["5,4"] = 12, ["6,4"] = 13, ["9,3"] = 10, ["10,3"] = 11 }
+  local grid = { w = 14, h = 8, rows = {} }
+  for j = 0, 7 do
+    grid.rows[j] = {}
+    for i = 0, 13 do grid.rows[j][i] = { cx = i, cy = j, kind = "floor", pair = "general__y", mid = mapMids[i .. "," .. j] or 1 } end
+  end
+  grid.at = function(x, y) local r = grid.rows[y]; return r and r[x] end
+  local md = { spec = spec, ref = ref, core = core, primaryOnly = true, tris = K.build({ K.Walls("w", { { 0, 32 }, { 32, 32 } }, 0, 16) }).tris }
+  local found = B.find(grid, { md })
+  check(#found == 1 and found[1].cx == 5 and found[1].cy == 3, "it stands where the map draws it whole, not at a half copy")
+  md.primaryOnly = false
+  check(#B.find(grid, { md }) == 0, "...a building of a secondary tileset stands only over its own pair")
+  md.primaryOnly = true
+  check(B.groundOf(grid, found[1], function() return true end) == 1, "...on the ground round it")
+  local tops = B.tops(md)
+  check(near(tops["0,1"], 1) and tops["1,1"] ~= nil, "a model's height over its cells, in tiles (the wall: 16 px)")
+  -- the stage keeps the feet off a building's cells, as off a card's
+  local open = { w = 30, h = 30, rows = {} }
+  for j = 0, 29 do
+    open.rows[j] = {}
+    for i = 0, 29 do open.rows[j][i] = { cx = i, cy = j, kind = "floor" } end
+  end
+  open.at = function(x, y) local r = open.rows[y]; return r and r[x] end
+  local opts = { player = { cx = 15, cy = 20 }, feet = { player = { 72, 114 }, enemy = { 176, 70 } } }
+  local free = Stage.search(Camera, open, opts)
+  local pf = open.at(math.floor(free.feet.player[1]), math.floor(free.feet.player[2]))
+  pf.model, pf.top = true, 2
+  local moved = Stage.search(Camera, open, opts)
+  check(moved.score < free.score and (moved.tx ~= free.tx or moved.tz ~= free.tz),
+    "the stage moves off a building's cell (" .. free.score .. " -> " .. moved.score .. ")")
+  local verts = {}
+  B.emit(found[1], 5, 3, function(v) verts[#verts + 1] = v end)
+  check(#verts == 6 and near(verts[1][1], 0) and near(verts[1][3], 2) and near(verts[3][2], 1),
+    "its triangles in tiles from the window's origin, 16 pixels a tile")
+end
+
+-- -------------------------------------------------------- hedges, fences, kits
+do
+  local K = dofile("src/scene/models/kernel.lua")
+  local Fence = dofile("src/scene/models/fence.lua")(K)
+  local C = dofile("src/scene/models/components.lua")(K, Fence)
+  local B = dofile("src/scene/buildings.lua")
+  local p, s = C.names("general__battle_frontier_outside_west")
+  check(p == "general" and s == "battlefrontieroutsidewest", "a pair's names, as the specs spell tilesets")
+  -- a fake map: a hedge run (0x23d) of three cells in Petalburg's tiles, the same tiles in
+  -- another town's pair, and a curb of nothing but its plain middle (0x05E)
+  local function grid(cells)
+    local g = { w = 12, h = 8, rows = {} }
+    for j = 0, 7 do
+      g.rows[j] = {}
+      for i = 0, 11 do
+        local c = cells[i .. "," .. j]
+        g.rows[j][i] = { cx = i, cy = j, kind = "floor", pair = c and c[2] or "general__petalburg", mid = c and c[1] or 1 }
+      end
+    end
+    g.at = function(x, y) local r = g.rows[y]; return r and r[x] end
+    return g
+  end
+  local g = grid({ ["2,2"] = { 0x23d }, ["3,2"] = { 0x23d }, ["3,3"] = { 0x23d },
+                   ["8,2"] = { 0x23d, "general__rustboro" }, ["6,6"] = { 0x05E }, ["7,6"] = { 0x05E } })
+  local runs = C.find(g)
+  local hedges, curbs = 0, 0
+  for _, r in ipairs(runs) do
+    if r.spec.name == "hedge" then
+      hedges = hedges + 1
+      check(r.x0 == 2 and r.y0 == 2 and r.w == 2 and r.h == 2 and r.owned["1,1"] and not r.owned["0,1"],
+        "a hedge run: its cells, connected, in its bounding box")
+    end
+    if r.spec.name == "curb" then curbs = curbs + 1 end
+  end
+  check(hedges == 1, "...only in its own tileset's towns")
+  check(curbs == 0, "a run of nothing but a curb's plain middle is the road, not a curb")
+  -- built from a fake drawing: every cell's upper layer a block 12 rows tall from row 4
+  local src = {
+    under = function(m) if m then return 0.2, 0.6, 0.2, 1 end end,
+    over = function(m, x, y)
+      if m == 0x23d and y >= 4 then return 0.1, 0.5, 0.1, 1 end
+      return 0, 0, 0, 0
+    end,
+  }
+  local hedgeRun
+  for _, r in ipairs(runs) do if r.spec.name == "hedge" then hedgeRun = r end end
+  local built = C.build(hedgeRun, src, function(x, y) local c = g.at(x, y); return c and c.mid end, function() return nil end)
+  local mesh = built and K.build(built.parts)
+  check(mesh and #mesh.tris > 0, "a hedge run builds a solid read off its drawing")
+  local tall = 0
+  for _, t in ipairs(mesh and mesh.tris or {}) do for k = 1, 3 do tall = math.max(tall, t[k][2]) end end
+  check(math.abs(tall - 11) < 1e-6, "...its front the spec's 11 rows tall (" .. tall .. ")")
+  -- a fence's rasteriser: a projected wall covers the pixels the drawing shows it on
+  local tex = Fence.newArt(16, 16)
+  for i = 4, #tex.px, 4 do tex.px[i] = 1 end
+  local wall = K.build({ K.Walls("w", { { 2, 12 }, { 10, 12 } }, 0, 6) }).tris
+  local cov = Fence.drawnBy(wall, tex, 16, 16)
+  check(cov[6 * 16 + 2] and cov[11 * 16 + 9] and not cov[12 * 16 + 5] and not cov[8 * 16 + 11],
+    "the pixels a post's front draws at 45 degrees (u = X, v = Z - Y)")
+  -- kits: a block found by its corner, top row, end and foot
+  local kg = grid({ ["1,1"] = { 0x220, "general__rustboro" }, ["2,1"] = { 0x221, "general__rustboro" },
+                    ["3,1"] = { 0x223, "general__rustboro" }, ["1,2"] = { 0x228, "general__rustboro" },
+                    ["1,3"] = { 0x240, "general__rustboro" } })
+  local specs = dofile("src/scene/models/specs.lua")(K)
+  local kits = B.kits(kg, specs.kits, function(pair) return select(2, C.names(pair)) end)
+  check(#kits == 1 and kits[1].cx == 1 and kits[1].cy == 1 and kits[1].spec.rect[3] == 3 and kits[1].spec.rect[4] == 3,
+    "a Rustboro block: found by its corner, 3 wide to its end, 3 tall to its foot")
+  local okK, km = pcall(K.build, kits[1].spec.parts())
+  check(okK and #km.tris > 0, "...and built as a flat-roofed block of that size")
+end
+
+print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
+if failed > 0 then os.exit(1) end

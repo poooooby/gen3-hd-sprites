@@ -441,6 +441,87 @@ captured pass would never be composited there.
 If `BattleChrome.drawTerrain`, `BattleChrome.terrain` or `BallOpen.draw` is missing,
 `fit.available` is false and the option does nothing. The HD sprites are unaffected.
 
+## Battle Scene (Gen 3)
+
+**Battle Scene: OVERWORLD** (`battle_scene`, `Engine.Scene`, `hd.scene`) replaces the battle's
+wallpaper and pads with the map around the player, in 2.5D. It needs Battle Fit (it rides the
+battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` and handed to
+`init.lua`:
+
+- `cells.lua`: once per battle (a new `Battle._st`), a 61x65 window of cells around the player
+  (`Map.worldMidAt` for art; collision and behaviour through the cell's own map: the primary
+  layout, a connection found as `fromDir` finds it, `Map.world`). Kinds: floor, grass, sand,
+  water, blocked (`CollPermissions.isWall`), void (off every map indoors). Each column's runs of
+  blocked cells stand as cards on the run's southern edge, at most 6 high.
+- `camera.lua`: the camera in the battle canvas's own pixels (35 degree vertical field over 160
+  rows, target on the canvas centre), so the world meets the battle's sprites through whatever
+  mapping puts the canvas on the screen. The stage pose (30 degrees, 7 tiles) and the glide
+  (field pose straight down, smootherstep travel with a crane arc, a landing push) are adapted
+  from Emerald 3DS.
+- `stage.lua`: Emerald 3DS's stage search: 13x13 targets scored on what each side's feet stand
+  on, cards in front of a sprite and void on screen. A best score under `Stage.FLOOR` keeps the
+  wallpaper.
+- `trees.lua`: Emerald 3DS's trees (`voxel_tree.c`), on outdoor maps whose primary tileset is
+  General (the engine's pair `general__<secondary>`): `part(sec, mid)` (0-3 a 2x2 tree's,
+  SMALL, GRASS), `groundMetatile` (a crown's top over grass lays the grass), `laysGround`,
+  `emit` (trunk plates and crown cards from `assets/scene/trees.png`, the crown's missing row).
+  Packed by `tools/pack_trees.py` from an emerald-3ds checkout. No relief yet: no steeper
+  crowns against rock. Cells a tree or a crown covers stand no card.
+- `models/kernel.lua`: Emerald 3DS's building primitives (`voxel_building.py`): a model in pixels
+  from its rectangle's top-left (X east, Y up, Z south), its drawing at u = X, v = Z - Y; Proj,
+  Tile, Band, Strip (courses laid up a face), Prism, HipRoof, Frustum, Vault, Walls, Cylinder,
+  PlainWall, PlanPrism, PlanPyramid, PlanHip, PlatePrism, SectionPrism, Moved, Lifted. Python's
+  0-based edge indices stay 0-based (`edges = { [0] = ... }`), `Strip`'s `repeat` is `rep`.
+- `models/specs.lua`: the 52 exterior specs built from explicit parts (`voxel_building_specs.py`),
+  numbers unchanged: houses, Centers, Marts, gyms, Devon, the Safari Zone, Slateport's market,
+  museum and halls. Not yet: the specs read off their art (`parts_art`: tents, boats, Lilycove's
+  store, Fortree, Sootopolis, the Frontier), `components` (hedges, fences, walls, railings),
+  `props` (rocks), `kit` (Rustboro's blocks), bridges and interiors. Every ported spec builds the
+  same triangles as the Python generator (compare counts and coordinate sums with its
+  `vb.Mesh`; all 52 matched).
+- `buildings.lua`: in the game, per spec once per session: its reference template (the
+  reference layout read through `Map.ensureMidLayout(Runtime._game, "EM_" .. name)`), its art
+  from the reference pair's atlases (`imageData` = the lower layer, `overImageData` the upper;
+  exact for NORMAL and SPLIT metatiles, COVERED ones read their composite as the lower layer),
+  ground quarters (and with `ground_px` ground pixels) clear, `keep` applied. Only specs one of
+  whose template metatiles the window draws are read. `find` places a spec wherever its core
+  cells (match rows, drawn cells) repeat exactly (a primary-only core: any pair with the same
+  primary; else the same pair). A placed model's cells (`cell.model`) draw its ground image
+  (the commonest spec ground round it, the map's own drawing where the map paints otherwise
+  and the model draws nothing) and stand no card, tree or tile; `cell.top` (its height there)
+  feeds the stage search like a card.
+- `models/components.lua` and `models/fence.lua`: the `components` specs (hedges, fences, curbs,
+  railings, Sootopolis's walls, Lavaridge's spring, Slateport's crates), found at runtime as
+  connected runs of their metatiles in one pair (`tilesIn`: `primary`/`secondary` names as the
+  engine's pairs spell them, lower case without underscores; `also`, `skip`, `fill`), each run
+  built whole: a `Relief` (the kernel's, column by column off the run's own drawing, after
+  close_gaps, trim_outline, join_corners, fill_behind, pick_side and flank_band) or, with
+  `posts`, `Fence.build` (posts found by their drawn caps, rails between them, logs, a ground
+  Decal). A fence's reference metatile is read from any pair of its primary that draws it.
+  `Buildings.kits` finds Rustboro's blocks by corner, top row, end and foot (`specs.kits`).
+  Component cells lay the map's own drawing where the model draws nothing, and under it the
+  ground metatile (or, for what is drawn on the upper layer, the cell's own lower layer).
+- The atlases are split by draw order, not by metatile layer: `pixelSource` takes `image` as
+  the lower layer and `overImage` as the upper, except for a metatile with nothing over whose
+  `image` shows more than one colour where `midImage` is clear (a NORMAL one shows only the
+  backdrop there): that one is COVERED, its upper layer `midImage`.
+- `render.lua`: static meshes per atlas and layer (ground quads, then cards, then trees, then
+  buildings); a shader that
+  outputs screen pixel x depth through LOVE's own projection with the view depth as w (so the
+  ground is perspective-correct and LOVE's canvas flip still applies), depth-tested, fogged
+  into a haze colour (the wallpaper's top colour outdoors, black indoors).
+
+In `src/gen3.lua`, `fitTerrain` records `hd.world(wallpaper, scene)` and two soft shadows as
+stage items instead of the wallpaper and pads; `drawEntry` skips the intro bands. The `"world"`
+item is drawn by `hd.composite` (and `compositeCard`) through `hd.sceneRenderer` with the
+scene's mapping, in the wallpaper's recorded colour and shader (move dims, flashes); the
+recorded transform is the background's shake. `flatten` puts the wallpaper back. The intro's
+progress is the battlers' slide (`enemyOx` -240 to 0).
+
+The battle scene is adapted from Emerald 3DS (CC BY-NC-SA 4.0), which is why WoobleView is
+CC BY-NC-SA 4.0 from this version on (LICENSE names what was adapted and how). Keep any further
+material taken from it credited there.
+
 ## API (`mod.exports`)
 
 ```lua
@@ -473,7 +554,8 @@ Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: 
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true }`),
-`fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`, `sceneZoom()` (the battle scene's zoom this
+`fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
+`sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,
 `failed`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
@@ -486,6 +568,13 @@ exact path in `.modkitignore`. The drivers in `tests/drivers/` run in the game
 (`POKEPORT_DRIVER`, each file's header says how) and screenshot what they check; for the Game
 Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT` and `GEN1_COLORS`), `gen2_battle.lua`,
 `field_gb.lua` (Field HD with Vivid Worlds: OG), `screens_gb.lua` (Red's whole screens) and
-`dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off).
+`dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off). Battle Scene:
+`luajit tests/scene_test.lua` (camera, cells, stage search, vertices, trees, the building kernel,
+specs and placement, component runs, fences, kits) and the driver
+`scene_battle.lua` (`SCENE_SPOTS`, `SCENE_LOOK` for shots aimed elsewhere, each also saved as the
+scene alone through the test hooks `exports._sceneLook` / `_sceneShot`; it logs every placed
+model with its cell, every component run with its triangles, and the build time;
+`SCENE_DUMP` for collision codes, `SCENE_SELFTEST` for the
+renderer on a synthetic field).
 
 Keep [README.md](README.md) describing the mod as it is now (players read it).

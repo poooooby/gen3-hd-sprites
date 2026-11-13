@@ -16,3 +16,6 @@ tests/drivers/gen2_battle.lua
 tests/drivers/field_gb.lua
 tests/drivers/screens_gb.lua
 tests/drivers/dex_gb.lua
+tests/scene_test.lua
+tests/drivers/scene_battle.lua
+tools/pack_trees.py

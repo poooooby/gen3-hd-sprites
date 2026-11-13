@@ -51,6 +51,42 @@ return function(mod)
   local hd = HD.new(love.graphics, { log = mod.log })
   local state = { active = false }
 
+  -- optional: Battle Scene (Gen 3's battles over the overworld in 2.5D, src/scene/)
+  local SceneInit = loadSibling(mod, "src/scene/init.lua")
+  local sceneDeps = {
+    Camera = loadSibling(mod, "src/scene/camera.lua"),
+    Cells = loadSibling(mod, "src/scene/cells.lua"),
+    Stage = loadSibling(mod, "src/scene/stage.lua"),
+    Render = loadSibling(mod, "src/scene/render.lua"),
+    -- (optional: without it trees stand as cut-outs too)
+    Trees = loadSibling(mod, "src/scene/trees.lua"),
+    -- (optional: without them buildings stand as cut-outs)
+    Buildings = loadSibling(mod, "src/scene/buildings.lua"),
+    Kernel = loadSibling(mod, "src/scene/models/kernel.lua"),
+    path = mod.path,
+    hd = hd,
+  }
+  local specsOf = loadSibling(mod, "src/scene/models/specs.lua")
+  local fenceOf = loadSibling(mod, "src/scene/models/fence.lua")
+  local componentsOf = loadSibling(mod, "src/scene/models/components.lua")
+  if type(specsOf) == "function" and sceneDeps.Kernel then
+    local ok, specs = pcall(specsOf, sceneDeps.Kernel)
+    if ok and type(specs) == "table" then sceneDeps.Specs = specs end
+    local okF, fence = pcall(fenceOf, sceneDeps.Kernel)
+    if okF and type(fence) == "table" and type(componentsOf) == "function" then
+      local okC, comps = pcall(componentsOf, sceneDeps.Kernel, fence)
+      if okC and type(comps) == "table" then sceneDeps.Components = comps end
+    end
+  end
+  if SceneInit and sceneDeps.Camera and sceneDeps.Cells and sceneDeps.Stage and sceneDeps.Render then
+    local ok, Scene = pcall(SceneInit, sceneDeps)
+    if ok and type(Scene) == "table" then
+      Engine.Scene = Scene
+      hd.scene = Scene
+      hd.sceneRenderer = Scene.render
+    end
+  end
+
   local function option(key, default)
     local ok, v = pcall(function() return mod.options and mod.options:get(key) end)
     if ok and v ~= nil then return v end
@@ -68,6 +104,7 @@ return function(mod)
     -- only captured to fill the screen)
     hd.enabled.boot = hd.enabled.battle and hd.fit.enabled and hd.fit.fill
     hd.enabled.screen = hd.enabled.boot
+    if Engine.Scene then Engine.Scene.enabled = option("battle_scene", "classic") == "overworld" end
   end
 
   local function install()

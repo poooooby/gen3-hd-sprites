@@ -57,12 +57,36 @@ function Gen3.wrapFit(Engine, hd)
     return false
   end
   local function fitting() return hd.fit.enabled and hd.capturing("battle") end
+  -- this battle's 2.5D scene (Battle Scene: Overworld, src/scene/), or nil: the wallpaper
+  local okBM, BattleMod = pcall(require, "src.core.game3.battle")
+  local function sceneFor(key, entry)
+    local Scene = Engine.Scene
+    if not (Scene and Scene.enabled and okBM and type(BattleMod) == "table") then return nil end
+    return Scene.forBattle(BattleMod._st, key, entry and entry.bgImage)
+  end
 
   local drawTerrain = Chrome.drawTerrain
   if not ours[drawTerrain] then
     local function fitTerrain(key, enemyOx, playerOx, bgOx)
       key = key or "building"
       local entry = Chrome.terrain(key) or Chrome.terrain("building") or Chrome.terrain("grass")
+      local scene = sceneFor(key, entry)
+      if scene and entry and entry.bgImage and hd.world(entry.bgImage, scene, 0, 0) then
+        -- the world in place of the wallpaper; a soft shadow under each side instead of its pad
+        -- (sliding in with the side, as the pads do)
+        Engine.Scene.step(scene, enemyOx)
+        local G = love.graphics
+        local fade = math.min(1, scene.progress * 1.5)
+        G.setColor(1, 1, 1, Engine.Scene.SHADOW_ALPHA * fade)
+        if scene.shadows.enemy then hd.drawStage(scene.shadows.enemy, tonumber(enemyOx) or 0, 0, "enemy") end
+        if scene.shadows.player then hd.drawStage(scene.shadows.player, tonumber(playerOx) or 0, 0, "player") end
+        G.setColor(1, 1, 1, 1)
+        if Engine.prefit then
+          local okP, errP = pcall(Engine.prefit)
+          if not okP then hd.stats.prefitError = tostring(errP) end
+        end
+        return true
+      end
       if entry and entry.bgImage and entry.enemyPlat and entry.playerPlat then
         local G = love.graphics
         G.setColor(1, 1, 1, 1)
@@ -95,6 +119,11 @@ function Gen3.wrapFit(Engine, hd)
   local drawEntry = Chrome.drawEntry
   if type(drawEntry) == "function" and type(Chrome.entry) == "function" and not ours[drawEntry] then
     Chrome.drawEntry = function(key, scrollX, scrollY, alpha, ...)
+      -- (the battle scene's glide is this battle's entrance: no bands over it)
+      if fitting() and Engine.Scene and okBM and type(BattleMod) == "table"
+          and Engine.Scene.current(BattleMod._st) then
+        return true
+      end
       if fitting() then
         -- (an entry missing from the cache errors exactly as the game's own draw would)
         local e = Chrome.entry(key)

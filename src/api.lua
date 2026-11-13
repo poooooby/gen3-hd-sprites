@@ -51,6 +51,8 @@
 --   setFit(on)            turn Battle Fit on or off (it pulls back to 40% at most); the old
 --                         "off" / "fit" / "tall" still work, "fit" and "tall" meaning on
 --   sceneZoom()           the battle scene's zoom this frame (1 = none)
+--   sceneEnabled() / setScene(on)   Battle Scene (Gen 3): battles over the overworld in 2.5D
+--                         (needs Battle Fit)
 --   fillEnabled() / setFill(on)   Fill Screen: the battle scene fills the screen, its UI
 --                         docked to the bottom at its own scale (needs Battle Fit)
 
@@ -83,6 +85,27 @@ return function(mod, hd, state)
     return exports.fitEnabled() and hd.fit.fill == true
   end
   exports.setFill = function(on) hd.fit.fill = on and true or false end
+  -- Battle Scene (Gen 3): the battle over the overworld in 2.5D
+  exports.sceneEnabled = function()
+    return exports.fitEnabled() and hd.scene ~= nil and hd.scene.enabled == true
+  end
+  exports.setScene = function(on)
+    if hd.scene then hd.scene.enabled = on and true or false end
+  end
+  -- (tests: aim the current battle scene's settled camera at map cell (tx, tz), pitch in
+  -- degrees, distance in tiles; nil to leave the stage's)
+  exports._sceneLook = function(tx, tz, pitch, dist)
+    local s = hd.scene and hd.scene.last
+    local Camera = hd.scene and hd.scene.Camera
+    if not (s and Camera) then return false end
+    s.to = Camera.pose(tx, tz, pitch and math.rad(pitch) or nil, dist)
+    s.progress = 1
+    return true
+  end
+  -- (tests: the current battle scene alone, as image data w x h)
+  exports._sceneShot = function(w, h)
+    return hd.scene and hd.scene.snapshot and hd.scene.snapshot(w, h) or nil
+  end
   exports.sceneZoom = function()
     if not exports.fitEnabled() then return 1 end
     return hd.fit.z
