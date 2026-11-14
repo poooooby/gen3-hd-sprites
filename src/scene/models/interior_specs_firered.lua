@@ -195,15 +195,16 @@ end
 
 -- the two statues by a gym's door (every gym has them, each drawn with its own tileset): at cell
 -- columns xs, their pedestals in cell row `row` - each a figure (a card, 18 rows) on a pedestal 16
--- rows to its foot, as deep as it is tall
-local function gymStatues(xs, row, leave)
+-- rows to its foot, as deep as it is tall (or `deep` rows, under a shorter figure)
+local function gymStatues(xs, row, leave, deep)
   local out = {}
   local y = row * 16
   for i, cx in ipairs(xs) do
     local x, side = cx * 16, i == 1 and "w" or "e"
     out[#out + 1] = piece("statue_" .. side .. "_figure", { { x, y - 18, x + 16, y } }, 18,
       { base = 16, card = true, leave = leave })
-    out[#out + 1] = piece("statue_" .. side, { { x, y, x + 16, y + 16 } }, 16, { back = y, leave = leave })
+    out[#out + 1] = piece("statue_" .. side, { { x, y, x + 16, y + 16 } }, 16,
+      { back = y + 16 - (deep or 16), leave = leave })
   end
   return out
 end
@@ -522,6 +523,243 @@ local function rocketFloor(f)
   return out
 end
 
+-- the Pokemon Tower (24 x 20, every floor the same round hall): its back wall stepped down either
+-- side, each step a row of panels (26 rows to its foot) under a white rim, and the rim running
+-- down the step's inner end (8 px wide) from the step above's - the top of the wall turning south
+-- there. TOWER_STEPS is each column's panel row, from column 2 (nil: no wall). The graves (one
+-- cell, a headstone on its base) stand wherever drawn, the gold ones too; 7F's two statues are a
+-- bust (a card) on a fluted pillar. The stairs, the mats and 1F's counter stay as drawn
+local TOWER_FLOOR = { "6a9c6a", "83ac83", "5a835a", "527b52", "416a41" }
+local TOWER_STEPS = { 7, 5, 4, 3, 3, 2, 2, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 5, 7 }
+local function towerShell(steps)
+  local out, first = {}, 2
+  local mid = first + 9 -- the hall's middle column
+  local c = first
+  while c <= first + #steps - 1 do
+    local p = steps[c - first + 1]
+    local c1 = c
+    while c1 + 1 <= first + #steps - 1 and steps[c1 + 1 - first + 1] == p do c1 = c1 + 1 end
+    if p then
+      local shape, skip = { { c * 16, (p - 1) * 16, c1 * 16 + 16, p * 16 + 16 } }, {}
+      -- (the rim down the step's inner end, from the step above's)
+      local inner = c1 < mid and c1 + 1 or c - 1
+      local q = steps[inner - first + 1]
+      if q and q < p then
+        local x = c1 < mid and c1 * 16 + 8 or c * 16
+        shape[#shape + 1] = { x, (q - 1) * 16, x + 8, (p - 1) * 16 }
+        -- (the cells the rim crosses are outside the hall: no floor of the piece's)
+        for cy = q - 1, p - 2 do
+          for cx = c, c1 do skip[#skip + 1] = { cx, cy } end
+        end
+      end
+      out[#out + 1] = piece("wall_" .. c, shape, 26, { fill = 16, foot = p * 16 + 16, skip = skip })
+    end
+    c = c1 + 1
+  end
+  return out
+end
+local function towerFloor(steps, more)
+  local out = towerShell(steps)
+  for _, pc in ipairs(more or {}) do table.insert(out, 1, pc) end
+  return out
+end
+local TOWER_1F_STEPS = { 7, 5, 4, 3, 3, 2, 2, 1, 1, 1, 1, 1, 2, 2, 3, 3, 4, 5 }
+local TOWER_3F = {
+  piece("grave", { { 96, 112, 112, 128 } }, 10, { leave = TOWER_FLOOR }),
+  repeated("grave_more", {
+    { 7, 3 }, { 8, 3 }, { 5, 4 }, { 6, 4 }, { 7, 4 }, { 8, 4 }, { 6, 6 }, { 7, 6 }, { 8, 6 },
+    { 9, 6 }, { 10, 6 }, { 11, 6 }, { 12, 6 }, { 13, 6 }, { 14, 6 }, { 15, 6 }, { 16, 6 }, { 17, 6 }, { 18, 6 },
+    { 6, 8 }, { 17, 8 }, { 19, 8 }, { 6, 9 }, { 10, 9 }, { 11, 9 }, { 12, 9 }, { 16, 9 }, { 6, 10 }, { 10, 10 },
+    { 11, 10 }, { 12, 10 }, { 16, 10 }, { 6, 11 }, { 16, 11 }, { 6, 12 }, { 16, 12 }, { 19, 12 }, { 20, 12 }, { 6, 13 },
+    { 10, 13 }, { 11, 13 }, { 12, 13 }, { 13, 13 }, { 14, 13 }, { 15, 13 }, { 16, 13 }, { 18, 13 }, { 19, 13 }, { 4, 15 },
+    { 5, 15 }, { 6, 15 }, { 17, 15 }, { 18, 15 }, { 6, 16 }, { 9, 17 }, { 10, 17 }, { 11, 17 }, { 12, 17 }, { 13, 17 } }, 10, { leave = TOWER_FLOOR }),
+}
+local TOWER_7F = {
+  piece("grave_gold", { { 80, 96, 96, 112 } }, 10, { leave = TOWER_FLOOR }),
+  repeated("grave_gold_more", {
+    { 7, 4 }, { 8, 4 }, { 14, 4 }, { 15, 4 }, { 5, 5 }, { 6, 5 }, { 7, 5 }, { 8, 5 }, { 14, 5 },
+    { 15, 5 }, { 16, 5 }, { 17, 5 }, { 4, 6 }, { 6, 6 }, { 7, 6 }, { 8, 6 }, { 14, 6 }, { 15, 6 }, { 16, 6 },
+    { 17, 6 }, { 18, 6 }, { 3, 7 }, { 4, 7 }, { 5, 7 }, { 6, 7 }, { 7, 7 }, { 15, 7 }, { 16, 7 }, { 17, 7 },
+    { 18, 7 }, { 19, 7 }, { 3, 8 }, { 4, 8 }, { 5, 8 }, { 6, 8 }, { 16, 8 }, { 17, 8 }, { 18, 8 }, { 19, 8 },
+    { 2, 11 }, { 3, 11 }, { 4, 11 }, { 5, 11 }, { 6, 11 }, { 16, 11 }, { 17, 11 }, { 18, 11 }, { 19, 11 }, { 20, 11 },
+    { 3, 12 }, { 4, 12 }, { 5, 12 }, { 6, 12 }, { 7, 12 }, { 15, 12 }, { 16, 12 }, { 17, 12 }, { 18, 12 }, { 19, 12 },
+    { 3, 13 }, { 4, 13 }, { 5, 13 }, { 6, 13 }, { 7, 13 }, { 8, 13 }, { 9, 13 }, { 13, 13 }, { 14, 13 }, { 15, 13 },
+    { 16, 13 }, { 17, 13 }, { 18, 13 }, { 19, 13 }, { 4, 14 }, { 5, 14 }, { 6, 14 }, { 7, 14 }, { 8, 14 }, { 9, 14 },
+    { 13, 14 }, { 14, 14 }, { 15, 14 }, { 16, 14 }, { 17, 14 }, { 18, 14 }, { 5, 15 }, { 6, 15 }, { 7, 15 }, { 8, 15 },
+    { 14, 15 }, { 15, 15 }, { 16, 15 }, { 17, 15 }, { 6, 16 }, { 7, 16 }, { 8, 16 }, { 14, 16 }, { 15, 16 }, { 16, 16 } }, 10, { leave = TOWER_FLOOR }),
+  repeated("statue_figure", { { 9, 2 }, { 13, 2 } }, 18,
+    { base = 20, card = true, leave = TOWER_FLOOR, shape = { { 144, 40, 160, 58 } } }),
+  repeated("statue", { { 9, 3 }, { 13, 3 } }, 20, { leave = TOWER_FLOOR, shape = { { 144, 56, 160, 80 } } }),
+}
+
+-- Saffron's Fighting Dojo (13 x 16): its back wall (27 rows to its foot at 48, windows and scrolls
+-- on it), the two low partitions running from its foot to 110 (a cream top over a lacquered
+-- front, 24 rows: the wall's rim shows above them), the vase of flowers before the wall (a card)
+-- and the two statues by the door (their figures 12 rows: the pedestals as deep). The mats stay as drawn
+local DOJO_FLOOR = { "ded58b", "b4ac62", "9c9452" }
+local DOJO_WALL = { "9cbd83", "73a46a", "decd73", "7b6a39", "a4a4ac", "eeeef6" }
+local function dojo()
+  local out = gymStatues({ 3, 9 }, 13, DOJO_FLOOR, 12)
+  local more = {
+    piece("vase", { { 97, 40, 109, 56 } }, 16, { card = true, leave = cat(DOJO_FLOOR, DOJO_WALL) }),
+    piece("partition_w", { { 64, 24, 80, 110 } }, 24, { foot = 110 }),
+    piece("partition_e", { { 128, 24, 144, 110 } }, 24, { foot = 110 }),
+    piece("wall", { { 16, 16, 192, 48 } }, 27, { fill = 16, foot = 48 }),
+  }
+  for _, pc in ipairs(more) do out[#out + 1] = pc end
+  return out
+end
+
+-- the Pokemon Mansion (38 x 35): its walls are cream under a brown rail, 40 rows from the rail's
+-- top to the dark line at their foot, the partitions' salmon tops seen from above (8 rows over the
+-- rail: the wall's top). They're read off each floor's drawing: every pixel column drawn as the
+-- rail (6 rows or more, then the dark line) with the foot line 40 rows below, the columns with the
+-- same rail row grouped (a gap of 3 px or less closed: the rubble's outline at a foot; a column
+-- whose foot something stands before counts by its cream 18 rows under the rail). Each
+-- { x0, x1 (exclusive), the rail's top } stands 40 rows to its foot under its top. The partitions
+-- seen from above, the gates (they open), the rubble and the stairs stay as drawn. (Each floor
+-- stands its own walls: a wall isn't looked for elsewhere)
+local MANSION_WALLS = {
+  ["1F"] = {
+    { 24, 584, 8 }, { 16, 22, 16 }, { 586, 592, 16 }, { 464, 526, 88 }, { 304, 350, 152 }, { 402, 462, 152 }, { 24, 208, 168 },
+    { 16, 22, 176 }, { 210, 222, 200 }, { 272, 368, 280 }, { 384, 494, 280 }, { 546, 584, 280 }, { 586, 592, 288 }, { 82, 94, 328 },
+    { 178, 190, 328 }, { 371, 430, 392 }, { 482, 496, 392 }, { 562, 584, 392 }, { 586, 592, 400 }, { 82, 94, 408 }, { 178, 190, 408 },
+    { 82, 94, 488 }, { 178, 190, 488 } },
+  ["2F"] = {
+    { 24, 192, 8 }, { 208, 328, 8 }, { 360, 584, 8 }, { 16, 22, 16 }, { 330, 336, 16 }, { 352, 358, 16 }, { 586, 592, 16 },
+    { 194, 206, 56 }, { 338, 382, 136 }, { 434, 494, 136 }, { 24, 192, 184 }, { 16, 22, 192 }, { 304, 382, 216 }, { 434, 584, 216 },
+    { 586, 592, 224 }, { 194, 206, 232 }, { 24, 110, 312 }, { 272, 414, 312 }, { 530, 592, 312 }, { 16, 22, 320 }, { 24, 160, 424 },
+    { 16, 22, 432 }, { 258, 270, 440 } },
+  ["3F"] = {
+    { 24, 328, 8 }, { 360, 456, 8 }, { 488, 584, 8 }, { 16, 22, 16 }, { 330, 336, 16 }, { 352, 358, 16 }, { 458, 464, 16 },
+    { 480, 486, 16 }, { 586, 592, 16 }, { 338, 350, 56 }, { 466, 478, 56 }, { 147, 224, 136 }, { 240, 270, 168 }, { 322, 414, 168 },
+    { 498, 592, 168 }, { 240, 286, 248 }, { 338, 366, 248 }, { 402, 416, 248 }, { 466, 592, 248 }, { 8, 238, 360 }, { 418, 600, 360 } },
+  ["B1F"] = {
+    { 24, 192, 8 }, { 208, 400, 8 }, { 416, 584, 8 }, { 16, 22, 16 }, { 586, 592, 16 }, { 208, 270, 104 }, { 322, 400, 104 },
+    { 402, 478, 120 }, { 546, 592, 120 }, { 16, 78, 232 }, { 130, 192, 232 }, { 208, 480, 232 }, { 482, 526, 312 }, { 578, 592, 312 },
+    { 272, 318, 344 }, { 370, 416, 344 }, { 16, 206, 376 }, { 258, 270, 408 }, { 530, 592, 424 } },
+}
+-- 1F's furniture, standing as it is on every floor that draws it: the tables (a yellow top 36
+-- rows deep over 8 of front and legs), the chairs, the statue (its figure a card on a pedestal 10
+-- rows to its foot); 2F's: the tables with the diary on them, the lab machines against the walls
+-- (20 rows of front under an 8-row top, backed onto the wall's foot). Its potted plants are the
+-- Pokemon Center's
+local MANSION_FLOOR = { "9c835a", "decd9c", "ffeebd", "bda473", "8b7331" }
+local MANSION_WALL = { "ffeebd", "bda473", "8b5239", "a4624a", "52526a", "de947b" }
+local MANSION_1F = {
+  piece("table", { { 112, 76, 160, 120 } }, 8, { back = 84, leave = MANSION_FLOOR }),
+  piece("table_2", { { 512, 156, 560, 200 } }, 8, { back = 164, leave = MANSION_FLOOR }),
+  piece("chair_e", { { 160, 80, 176, 96 } }, 11, { leave = MANSION_FLOOR }),
+  piece("chair_w", { { 96, 112, 112, 128 } }, 11, { leave = MANSION_FLOOR }),
+  piece("statue_figure", { { 80, 64, 96, 85 } }, 21, { base = 10, card = true, leave = MANSION_FLOOR }),
+  piece("statue", { { 80, 84, 96, 96 } }, 10, { leave = MANSION_FLOOR }),
+}
+local MANSION_2F = {
+  piece("table_diary", { { 400, 60, 448, 104 } }, 8, { back = 68, leave = MANSION_FLOOR }),
+  piece("table_diary_2", { { 80, 492, 128, 536 } }, 8, { back = 500, leave = MANSION_FLOOR }),
+  piece("machine_1", { { 496, 28, 512, 56 } }, 20, { back = 48, leave = cat(MANSION_FLOOR, MANSION_WALL) }),
+  piece("machine_2", { { 512, 28, 528, 56 } }, 20, { back = 48, leave = cat(MANSION_FLOOR, MANSION_WALL) }),
+  piece("machine_3", { { 528, 28, 544, 56 } }, 20, { back = 48, leave = cat(MANSION_FLOOR, MANSION_WALL) }),
+}
+local function mansionFloor(f, more)
+  local out = {}
+  for i, b in ipairs(MANSION_WALLS[f]) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1], b[3] - 8, b[2], b[3] + 40 } }, 40,
+      { foot = b[3] + 40, alone = true })
+  end
+  for _, pc in ipairs(more or {}) do table.insert(out, 1, pc) end
+  return out
+end
+
+-- the S.S. Anne: its walls are white (in the cabins, papered) under a grey cornice and a white rim,
+-- 24 rows from the cornice's top to the dark line at their foot (32 in the captain's office), read
+-- off each deck's drawing as the Mansion's are: every pixel column drawn as the cornice (6 rows or
+-- more, then the dark line) with the foot line that far below (or, a foot hidden, the white 12 rows
+-- under the cornice), the columns with the same cornice row grouped, a gap of one door (16 px) or
+-- less closed: the doors stand in the walls as drawn. Each { x0, x1 (exclusive), the cornice's
+-- top } stands to its foot under the rim (8 rows: the wall's top). The stairs and the railings stay
+-- as drawn
+local ANNE_WALLS = {
+  ["1F_CORRIDOR"] = { { 296, 328, 8 }, { 35, 286, 104 }, { 338, 480, 104 } },
+  ["2F_CORRIDOR"] = { { 24, 80, 8 }, { 480, 509, 8 }, { 456, 478, 104 }, { 82, 446, 152 } },
+  ["3F_CORRIDOR"] = { { 40, 336, 8 }, { 16, 30, 24 } },
+  ["B1F_CORRIDOR"] = { { 16, 333, 24 } },
+  ["1F_ROOM1"] = { { 0, 96, 8 } },
+  ["2F_ROOM1"] = { { 0, 96, 8 } },
+  ["KITCHEN"] = { { 24, 232, 8 } },
+  ["CAPTAINS_OFFICE"] = { { 16, 112, 8 } },
+}
+-- its furniture: the cabins' tables, beds and chairs (each cabin layout serves every cabin of its
+-- deck), the kitchen's three counters (a grey top 75 rows deep over 8 of front), the captain's
+-- desk, chairs, bookshelf and bin. The plants are the Pokemon Center's
+local ANNE_CABIN_1 = { "83b431", "accd31", "5a9c39" }
+local ANNE_CABIN_2 = { "ffc562", "ffde9c", "deac62" }
+local ANNE_WOOD = { "cdb47b", "a48b52", "836229" }
+local ANNE_FURNITURE = {
+  ["1F_ROOM1"] = {
+    piece("table", { { 8, 84, 32, 128 } }, 8, { back = 92, leave = ANNE_CABIN_1 }),
+    piece("chair", { { 36, 96, 48, 112 } }, 10, { leave = ANNE_CABIN_1 }),
+    piece("bed", { { 62, 83, 82, 112 } }, 10, { back = 93, leave = ANNE_CABIN_1 }),
+  },
+  ["2F_ROOM1"] = {
+    piece("table", { { 0, 37, 48, 72 } }, 8, { back = 45, leave = ANNE_CABIN_2 }),
+    piece("chair", { { 16, 64, 28, 80 } }, 10, { leave = ANNE_CABIN_2 }),
+    piece("bed", { { 62, 35, 82, 64 } }, 10, { back = 45, leave = ANNE_CABIN_2 }),
+  },
+  KITCHEN = {
+    piece("counter_w", { { 48, 60, 80, 144 } }, 8, { back = 69, leave = ANNE_WOOD }),
+    piece("counter_mid", { { 112, 60, 144, 144 } }, 8, { back = 69, leave = ANNE_WOOD }),
+    piece("counter_e", { { 176, 60, 208, 144 } }, 8, { back = 69, leave = ANNE_WOOD }),
+  },
+  CAPTAINS_OFFICE = {
+    piece("desk", { { 16, 53, 64, 80 } }, 8, { back = 61, leave = ANNE_WOOD }),
+    piece("armchair", { { 24, 32, 48, 48 } }, 14, { leave = ANNE_WOOD }),
+    piece("bin", { { 81, 44, 95, 64 } }, 13, { back = 57, leave = ANNE_WOOD }),
+    piece("chair_1", { { 116, 96, 128, 112 } }, 10, { leave = ANNE_WOOD }),
+    piece("chair_2", { { 116, 112, 128, 128 } }, 10, { leave = ANNE_WOOD }),
+    piece("bookshelf", { { 112, 16, 128, 48 } }, 28, { leave = ANNE_WOOD }),
+  },
+}
+local function anneRoom(r, tall, more)
+  more = more or ANNE_FURNITURE[r]
+  local out = {}
+  for i, b in ipairs(ANNE_WALLS[r]) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1], b[3] - 8, b[2], b[3] + tall } }, tall,
+      { foot = b[3] + tall, alone = true })
+  end
+  for _, pc in ipairs(more or {}) do table.insert(out, 1, pc) end
+  return out
+end
+
+-- Trainer Tower's floors (18 x 17, every floor the same hall): its walls are blue-grey panels under
+-- a white rim (6 rows: the wall's top), 26 rows from the panels' top to the grey line at their foot,
+-- read as the Mansion's are (a column whose foot the stairs hide counts by its panel 12 rows down);
+-- the alcove's lit console (its lights the floor's number: each floor's own) stands as a block 26
+-- rows to its foot; the white posts, three to a column in two groups, are each a short post 9 rows
+-- tall. The stairs stay as drawn
+local TOWER_HALL_WALLS = { { 33, 96, 70 }, { 227, 256, 70 }, { 97, 128, 118 }, { 176, 207, 118 } }
+local TT_FLOOR = { "ded55a", "bdb431", "d5cd5a", "c5bd41", "aca420" }
+local function trainerTowerFloor(first)
+  local out = {}
+  if first then
+    local cells = {}
+    for _, cx in ipairs({ 3, 9, 15 }) do
+      for _, cy in ipairs({ 9, 10, 11, 13, 14, 15 }) do
+        if not (cx == 3 and cy == 9) then cells[#cells + 1] = { cx, cy } end
+      end
+    end
+    table.insert(cells, 1, { 3, 10 })
+    out[#out + 1] = piece("post", { { 48, 157, 64, 173 } }, 9, { leave = TT_FLOOR })
+    out[#out + 1] = repeated("post_more", cells, 9, { leave = TT_FLOOR, shape = { { 48, 173, 64, 189 } } })
+  end
+  out[#out + 1] = piece("wall_console", { { 128, 112, 176, 160 } }, 26, { foot = 160, alone = true })
+  for i, b in ipairs(TOWER_HALL_WALLS) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1], b[3] - 6, b[2], b[3] + 26 } }, 27,
+      { foot = b[3] + 26, alone = true })
+  end
+  return out
+end
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -558,6 +796,34 @@ local ROOMS = {
   { name = "fr_silph_9f", interior = { layout = "LAYOUT_SILPH_CO_9F", ground = { 0x334 }, pieces = silphFloor("9F") } },
   { name = "fr_silph_10f", interior = { layout = "LAYOUT_SILPH_CO_10F", ground = { 0x334 }, pieces = silphFloor("10F") } },
   { name = "fr_silph_11f", interior = { layout = "LAYOUT_SILPH_CO_11F", ground = { 0x334 }, pieces = silphFloor("11F") } },
+  { name = "fr_tower_3f", interior = { layout = "LAYOUT_POKEMON_TOWER_3F", ground = { 0x282 }, pieces = towerFloor(TOWER_STEPS, TOWER_3F) } },
+  { name = "fr_tower_7f", interior = { layout = "LAYOUT_POKEMON_TOWER_7F", ground = { 0x282 }, pieces = towerFloor(TOWER_STEPS, TOWER_7F) } },
+  { name = "fr_tower_1f", interior = { layout = "LAYOUT_POKEMON_TOWER_1F", ground = { 0x282 }, pieces = towerFloor(TOWER_1F_STEPS) } },
+  { name = "fr_tower_2f", interior = { layout = "LAYOUT_POKEMON_TOWER_2F", ground = { 0x282 }, pieces = towerFloor(TOWER_STEPS) } },
+  { name = "fr_tower_4f", interior = { layout = "LAYOUT_POKEMON_TOWER_4F", ground = { 0x282 }, pieces = towerFloor(TOWER_STEPS) } },
+  { name = "fr_tower_5f", interior = { layout = "LAYOUT_POKEMON_TOWER_5F", ground = { 0x282 }, pieces = towerFloor(TOWER_STEPS) } },
+  { name = "fr_tower_6f", interior = { layout = "LAYOUT_POKEMON_TOWER_6F", ground = { 0x282 }, pieces = towerFloor(TOWER_STEPS) } },
+  { name = "fr_dojo", interior = { layout = "LAYOUT_SAFFRON_CITY_DOJO", ground = { 0x2C0 }, pieces = dojo() } },
+  { name = "fr_mansion_1f", interior = { layout = "LAYOUT_POKEMON_MANSION_1F", ground = { 0x284 }, pieces = mansionFloor("1F", MANSION_1F) } },
+  { name = "fr_mansion_2f", interior = { layout = "LAYOUT_POKEMON_MANSION_2F", ground = { 0x284 }, pieces = mansionFloor("2F", MANSION_2F) } },
+  { name = "fr_mansion_3f", interior = { layout = "LAYOUT_POKEMON_MANSION_3F", ground = { 0x284 }, pieces = mansionFloor("3F") } },
+  { name = "fr_mansion_b1f", interior = { layout = "LAYOUT_POKEMON_MANSION_B1F", ground = { 0x284 }, pieces = mansionFloor("B1F") } },
+  { name = "fr_anne_1f_corridor", interior = { layout = "LAYOUT_SSANNE_1F_CORRIDOR", ground = { 0x298 }, pieces = anneRoom("1F_CORRIDOR", 24) } },
+  { name = "fr_anne_2f_corridor", interior = { layout = "LAYOUT_SSANNE_2F_CORRIDOR", ground = { 0x298 }, pieces = anneRoom("2F_CORRIDOR", 24) } },
+  { name = "fr_anne_3f_corridor", interior = { layout = "LAYOUT_SSANNE_3F_CORRIDOR", ground = { 0x298 }, pieces = anneRoom("3F_CORRIDOR", 24) } },
+  { name = "fr_anne_b1f_corridor", interior = { layout = "LAYOUT_SSANNE_B1F_CORRIDOR", ground = { 0x298 }, pieces = anneRoom("B1F_CORRIDOR", 24) } },
+  { name = "fr_anne_1f_cabin", interior = { layout = "LAYOUT_SSANNE_1F_ROOM1", ground = { 0x31C }, pieces = anneRoom("1F_ROOM1", 24) } },
+  { name = "fr_anne_2f_cabin", interior = { layout = "LAYOUT_SSANNE_2F_ROOM1", ground = { 0x324 }, pieces = anneRoom("2F_ROOM1", 24) } },
+  { name = "fr_anne_kitchen", interior = { layout = "LAYOUT_SSANNE_KITCHEN", ground = { 0x299 }, pieces = anneRoom("KITCHEN", 24) } },
+  { name = "fr_anne_captains_office", interior = { layout = "LAYOUT_SSANNE_CAPTAINS_OFFICE", ground = { 0x298 }, pieces = anneRoom("CAPTAINS_OFFICE", 32) } },
+  { name = "fr_trainer_tower_1f", interior = { layout = "LAYOUT_TRAINER_TOWER_1F", ground = { 0x2EE }, pieces = trainerTowerFloor(true) } },
+  { name = "fr_trainer_tower_2f", interior = { layout = "LAYOUT_TRAINER_TOWER_2F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
+  { name = "fr_trainer_tower_3f", interior = { layout = "LAYOUT_TRAINER_TOWER_3F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
+  { name = "fr_trainer_tower_4f", interior = { layout = "LAYOUT_TRAINER_TOWER_4F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
+  { name = "fr_trainer_tower_5f", interior = { layout = "LAYOUT_TRAINER_TOWER_5F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
+  { name = "fr_trainer_tower_6f", interior = { layout = "LAYOUT_TRAINER_TOWER_6F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
+  { name = "fr_trainer_tower_7f", interior = { layout = "LAYOUT_TRAINER_TOWER_7F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
+  { name = "fr_trainer_tower_8f", interior = { layout = "LAYOUT_TRAINER_TOWER_8F", ground = { 0x2EE }, pieces = trainerTowerFloor(false) } },
   { name = "fr_rocket_b1f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B1F", ground = { 0x281 }, pieces = rocketFloor("B1F") } },
   { name = "fr_rocket_b2f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B2F", ground = { 0x281 }, pieces = rocketFloor("B2F") } },
   { name = "fr_rocket_b3f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B3F", ground = { 0x281 }, pieces = rocketFloor("B3F") } },

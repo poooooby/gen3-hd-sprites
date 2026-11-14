@@ -123,7 +123,11 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Giovanni's maze, and every gym's statues, and so is the Pokémon League: Lorelei's ice pillars,
   Bruno's stone pillars, Agatha's torches, Lance's dragon horns and the Champion's hall, and
   every floor of Silph Co. and of the Rocket Hideout stands walled in, its offices furnished with
-  their desks, stools, plants and computers.
+  their desks, stools, plants and computers. The Pokémon Tower's stepped walls rise round rows of
+  standing graves (the gold ones and the statues at the top too), the Pokémon Mansion's walls,
+  pillars, tables, statues and lab machines stand on all four floors, the S.S. Anne's decks and
+  cabins have their walls, beds, tables and the kitchen's long counters, the Fighting Dojo its
+  partitions and statues, and Trainer Tower's halls their walls, console and white posts.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
