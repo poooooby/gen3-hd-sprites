@@ -1734,6 +1734,18 @@ return function(deps)
   -- its own place in its own room (or one drawn cell for cell the same), where its room was found
   -- to repeat it, and in a room nobody modelled wherever its tiles are drawn again - each on its
   -- room's floor, or there on that room's commonest floor with the room's own paint laid over it
+  -- the layouts a room spec models, by name (RoomSpecs' interiors)
+  local modelledRooms
+  local function roomModelled(name)
+    if not modelledRooms then
+      modelledRooms = {}
+      for _, r in ipairs(RoomSpecs or {}) do
+        local lay = type(r) == "table" and r.interior and r.interior.layout
+        if lay then modelledRooms[lay] = true end
+      end
+    end
+    return modelledRooms[name] == true
+  end
   local function placeRooms(grid, found, where)
     hd.stats.sceneRooms, hd.stats.sceneRoomError = nil, nil
     local layouts, order = {}, {}
@@ -1743,7 +1755,9 @@ return function(deps)
         if c.mid then
           local _, lx, ly, id = where(c.cx, c.cy)
           local L = id and World.layout(id)
-          if L and L.id and not L.outdoor then
+          -- (a room: an indoor layout, or one a room spec models whatever its map's type - the
+          -- Abandoned Ship's flooded rooms are MAP_TYPE_UNDERWATER, outdoors to voxel_cells)
+          if L and L.id and (not L.outdoor or roomModelled(L.name)) then
             local e = layouts[L.id]
             if not e then e = { L = L, at = {} }; layouts[L.id] = e; order[#order + 1] = L.id end
             e.at[ly * 4096 + lx] = c
@@ -2583,7 +2597,7 @@ return function(deps)
         end
       end
       -- (indoors: the rooms, a slice a frame)
-      if L and not L.outdoor and Interiors and not (roomRun and roomRun.done) then
+      if L and (not L.outdoor or roomModelled(L.name)) and Interiors and not (roomRun and roomRun.done) then
         warmQueue[#warmQueue + 1] = { rooms = true }
         n = n + 1
       end

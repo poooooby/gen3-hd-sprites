@@ -679,12 +679,14 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   not the drawing. Everything the battle's window places over the 100 layouts the pak has
   placements in (`bridge_dump.lua` with `BRIDGE_RUNS=all`: `placeBuildings` over a whole layout -
   buildings, kits, props, the Cycling Road's blocks, the components' blocks) is checked against the
-  pak: 4620 of its 4634 placements stand at the same place and equal its triangles - the
+  pak: 4622 of its 4634 placements stand at the same place and equal its triangles - the
   layouts a script swaps in too (World's alternates, read by name) - and the 986 with a ground
   plan lay its ground metatile and number of patches (`P` and `G` lines; the pak's patch field
   six vertices a patch). The rest: sea rocks and stacks across a map's seam (they stand in the
-  window, the next map in it; a lone layout has no next map), the Abandoned Ship's two
-  underwater rooms and a 5x6 building at Sky Pillar's foot. `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
+  window, the next map in it; a lone layout has no next map) and a 5x6 building at Sky
+  Pillar's foot. A room spec's pieces stand in its own layout whatever its map's type (the
+  Abandoned Ship's flooded rooms are MAP_TYPE_UNDERWATER, outdoors to voxel_cells); a room
+  nobody modelled is an indoor one (gen_voxel_buildings's reuse_everywhere). `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
   not (`_findWhy`: each core cell's metatile, sign, and the pixels it draws otherwise). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
   driver's `SCENE_GROUND_OLD=1`, for before-and-after shots), the old rule: the commonest spec
   ground round it, the map's paint in every cell it paints otherwise.
