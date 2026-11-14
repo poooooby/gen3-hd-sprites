@@ -53,7 +53,10 @@ return function(mod)
 
   -- optional: Battle Scene (Gen 3's battles over the overworld in 2.5D, src/scene/)
   local SceneInit = loadSibling(mod, "src/scene/init.lua")
+  -- (where the engine keeps the player's cartridge data, by its own constants: src/scene/cache.lua)
+  local SceneCache = loadSibling(mod, "src/scene/cache.lua")
   local sceneDeps = {
+    Cache = SceneCache,
     Camera = loadSibling(mod, "src/scene/camera.lua"),
     Cells = loadSibling(mod, "src/scene/cells.lua"),
     Stage = loadSibling(mod, "src/scene/stage.lua"),
@@ -128,7 +131,7 @@ return function(mod)
   local json = Post and function(text) return (Post.json(text)) end or nil
   if type(worldOf) == "function" and sceneDeps.Roles and json then
     local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles, json = json, Art = sceneDeps.Art,
-                                              Signs = sceneDeps.Signs,
+                                              Signs = sceneDeps.Signs, Cache = SceneCache,
                                               Input = loadSibling(mod, "src/scene/relief_input.lua") })
     if okW and type(world) == "table" then sceneDeps.World = world end
   end
@@ -160,20 +163,18 @@ return function(mod)
     end
     local runOf = loadSibling(mod, "src/scene/relief_run.lua")
     local okM, WorldMaps = pcall(function()
-      return worldMapsOf({ Solve = Solve, Art = Art, Input = Input, Roles = sceneDeps.Roles, parts = parts, json = json })
+      return worldMapsOf({ Solve = Solve, Art = Art, Input = Input, Roles = sceneDeps.Roles, parts = parts, json = json,
+                           Cache = SceneCache })
     end)
     if Post and okM and type(WorldMaps) == "table" and type(runOf) == "function" then
       local okV, GameVersion = pcall(require, "src.core.GameVersion")
-      local okD, Dataset = pcall(require, "src.core.game3.dataset")
       local okR, run = pcall(runOf, {
         Relief = sceneDeps.Relief, Post = Post, WorldMaps = WorldMaps, Terraces = Terraces, Roles = sceneDeps.Roles,
         fixes = mod:read("assets/scene/relief_fixes.json"),
         cache = mod.cache, hooks = mod.hooks, log = mod.log,
         version = okV and GameVersion or nil,
-        readCache = function(rel)
-          local okC, c = pcall(function() return okD and Dataset.cache() end)
-          return okC and c and c:read(rel) or nil
-        end,
+        -- (rel under the engine's cache root: src/scene/cache.lua)
+        readCache = function(rel) return SceneCache and SceneCache.read(rel) or nil end,
         onReady = function(bytes) Engine.Scene.setReliefBytes(bytes) end,
         models = function(name, tick) return Engine.Scene.modelCells(name, tick) end,
         onFrame = function() Engine.Scene.warmStep() end,

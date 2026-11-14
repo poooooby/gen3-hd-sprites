@@ -1,20 +1,20 @@
 -- What the relief solver reads (Battle Scene: Overworld), off the engine's cache of the player's
 -- cartridge: what pret's data gives Emerald 3DS's generators.
 --
---   data/generated/gba/map_tree/census.json                 every map's slot (group_num) and name
---   data/generated/gba/map_tree/maps/<slot>/header.json     its layout id, type, size, tilesets,
---                                                            connections
---   .../maps/<slot>/events.json, grid.bin                   its warps and sign events; its
---                                                            layout's blockdata (u16 a cell, raw)
---   data/generated/gba/map_tree/tilesets/<ts>/              tiles.4bpp, palettes.bin, metatiles.bin,
---                                                            attributes.bin, as pret builds them
---   data/generated/gba/native/layout_files.lua, manifest.lua  a layout id's map name, a map's
---                                                            tileset pair (its tilesets' names)
---   data/generated/gba/native/layouts/alt_<id>.mid          a layout a script swaps in (no map
---                                                            uses it), baked by the engine
+-- Paths under the engine's cache root (src/scene/cache.lua: the engine's own constants):
+--   map_tree/census.json                 every map's slot (group_num) and name
+--   map_tree/maps/<slot>/header.json     its layout id, type, size, tilesets, connections
+--   map_tree/maps/<slot>/events.json, grid.bin   its warps and sign events; its layout's blockdata
+--                                        (u16 a cell, raw)
+--   map_tree/tilesets/<ts>/              tiles.4bpp, palettes.bin, metatiles.bin, attributes.bin,
+--                                        as pret builds them
+--   native/layout_files.lua, manifest.lua   a layout id's map name, a map's tileset pair (its
+--                                        tilesets' names)
+--   native/layouts/alt_<id>.mid          a layout a script swaps in (no map uses it), baked by the
+--                                        engine
 --
 -- Plain Lua: Input.build(io) with
---   io.read(rel) -> bytes or nil       rel under data/generated/gba/
+--   io.read(rel) -> bytes or nil       rel under the cache's root (the paths above)
 --   io.json(text) -> table             io.lua(text) -> the table a "return {...}" source gives
 --   io.behaviours                      { MB_NAME = value } Emerald's behaviour enum (raw values)
 --   io.collBlocked(coll) -> bool       an engine collision code that blocks (an alternate layout's
@@ -114,7 +114,7 @@ function Input.short(name)
 end
 
 function Input.build(io, palettesOf)
-  local ROOT = "data/generated/gba/"
+  local ROOT = ""     -- (io.read's paths are under the cache's root already)
   local tick = io.tick
   local census = io.json(io.read(ROOT .. "map_tree/census.json") or "{}") or {}
   local files = io.lua(io.read(ROOT .. "native/layout_files.lua") or "return {}") or {}

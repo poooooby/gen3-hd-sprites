@@ -2,7 +2,9 @@
 -- 101 and waits for the question (WoobleView's flag file must be gone from its cache, and Battle
 -- Scene on CLASSIC); then answers it (FIRST_RUN_ANSWERS, default "a,a": turn on, build now),
 -- shooting each step and the progress bar every FIRST_RUN_EVERY frames (default 240) until the
--- prompt closes. FIRST_RUN_CLEAR=1 clears the 3D cache first. Run from the engine root:
+-- prompt closes. FIRST_RUN_CLEAR=1 clears the 3D cache first; FIRST_RUN_ANSWERS=a,a,b with
+-- FIRST_RUN_BG=1 leaves the build to carry on as you play and waits for its notice. Run from the
+-- engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/first_run.lua love .
 
@@ -86,6 +88,26 @@ local function body(game, log)
     opt("battle_scene"), opt("scene_build"), tostring(hd.stats and hd.stats().sceneReliefRun)))
   wait(30)
   U.shot(game, dir .. "/9_after.png")
+  -- FIRST_RUN_BG=1 (with FIRST_RUN_ANSWERS ending in b: Build as I play): the build left to carry
+  -- on in the background - stepped by hand, as the frame hook would (a driver's frames skip it) -
+  -- until it is done, then the notice that says so
+  if env("FIRST_RUN_BG") then
+    log("background: relief", tostring(hd.stats and hd.stats().sceneReliefRun), "prompt up", tostring(up()))
+    local frames = 0
+    while frames < 60000 do
+      -- (eight slices a frame: the frame hook's one would take this driver many minutes)
+      local st
+      for _ = 1, 8 do st = hd._reliefStep and hd._reliefStep() end
+      hd._promptTick(1 / 60)
+      U.wait(1)
+      frames = frames + 1
+      if st ~= "running" then break end
+    end
+    if hd._sceneWarm then hd._sceneWarm("all") end
+    for _ = 1, 10 do hd._promptTick(1 / 60); U.wait(1) end
+    U.shot(game, dir .. "/c_ready.png")
+    log(("background build done after %d frames: relief %s"):format(frames, tostring(hd.stats and hd.stats().sceneReliefRun)))
+  end
   -- FIRST_RUN_ACTIONS=1: Clear 3D Cache and Build 3D Cache pressed, as the options pane sets them
   if env("FIRST_RUN_ACTIONS") then
     local function press(key)

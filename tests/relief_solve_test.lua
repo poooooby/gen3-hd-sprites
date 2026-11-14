@@ -73,7 +73,7 @@ end
 -- ---------------------------------------------------------------- the input
 do
   local files = {}
-  local function put(path, s) files["data/generated/gba/" .. path] = s end
+  local function put(path, s) files[path] = s end   -- (io.read's paths are under the cache root)
   local function grid(w, h, f)
     local parts = {}
     for y = 0, h - 1 do for x = 0, w - 1 do local v = f(x, y); parts[#parts + 1] = string.char(v % 256, math.floor(v / 256)) end end

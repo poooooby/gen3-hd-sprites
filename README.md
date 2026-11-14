@@ -147,7 +147,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
-| **Build 3D Cache** | Press A | – | Emerald, with Battle Scene on Overworld: build the whole 3D world now, with a progress bar and the time left (a minute or two), and keep it on this device so every battle loads its world straight away. Otherwise it builds a little at a time while you play. |
+| **Build 3D Cache** | Press A | – | Emerald, with Battle Scene on Overworld: build the whole 3D world now, with a progress bar and the time left (a minute or two), and keep it on this device so every battle loads its world straight away. Press B to keep playing while it finishes in the background; a message tells you when it's ready. Otherwise it builds a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Delete the 3D world kept on this device, to free the space or start afresh. It is built again the next time it is needed. |
 | **Scene Blur** | On / Off | On | With Battle Scene on Overworld: a soft tilt-shift blur on the far distance and the nearest ground, so the world looks like a miniature. Off: the whole world sharp. |
 | **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings and every furnished room are built the first time you step into the world, a little each frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive, the rooms read again each time the game starts, and both dropped when it closes. |
@@ -174,6 +174,7 @@ Open **OPTIONS → MODS → WoobleView**.
 
 - 👋 **The first time you play Emerald** with WoobleView, it asks whether you'd like your battles
   in 3D, and if so whether to build the 3D world now (with a progress bar) or let it build while
+  you play. Changed your mind while it builds? Press B and it carries on in the background while
   you play. Say no and it never asks again; you can switch it on any time in **OPTIONS → MODS →
   WoobleView**. Its messages carry the WoobleView name, so you always know which mod is asking.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's trees stand as

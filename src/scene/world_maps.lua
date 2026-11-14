@@ -34,8 +34,11 @@ return function(deps)
     for name, v in pairs(byName) do
       if type(name) == "string" and name:match("^MB_") and type(v) == "number" then behaviours[name] = v end
     end
+    -- (rel under the engine's cache root, from its own constants: src/scene/cache.lua)
+    local Cache = deps.Cache
+    if not (Cache and Cache.root()) then return nil, "no cache root" end
     local io_ = {
-      read = function(rel) return cache:read(rel) end,
+      read = function(rel) return Cache.read(rel) end,
       json = function(text)
         local ok, t = pcall(json, text)
         return ok and t or nil

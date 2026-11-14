@@ -1326,7 +1326,9 @@ return function(deps)
     local Dataset, NativePack = req("src.core.game3.dataset"), req("src.import.gba.native_pack")
     local cache = Dataset and Dataset.cache()
     if not (cache and NativePack and NativePack.decodeMidLayout) then return nil end
-    local root = "data/generated/gba/native"
+    -- (the engine's native tree, by its own constant: src/scene/cache.lua)
+    local root = deps.Cache and deps.Cache.native()
+    if not root then return nil end
     local src = cache:read(root .. "/layout_files.lua")
     local chunk = src and load(src, "=layout_files", "t", {})
     local okF, files = pcall(chunk or error)
@@ -1383,8 +1385,9 @@ return function(deps)
       local pair = A.enginePair
       local Dataset = req("src.core.game3.dataset")
       local cache = Dataset and Dataset.cache()
-      if not (pair and cache) then return nil end
-      local root = "data/generated/gba/native/" .. pair .. "/"
+      local native = deps.Cache and deps.Cache.native()
+      if not (pair and cache and native) then return nil end
+      local root = native .. "/" .. pair .. "/"
       bankManifests[pair] = bankManifests[pair] or (function()
         local src = cache:read(root .. "anim_manifest.lua")
         local chunk = src and load(src, "=anim_manifest", "t", {})
@@ -2991,11 +2994,13 @@ return function(deps)
     --- What it is working on, in words for the progress bar.
     function job.stage()
       if run and run.state() == "running" then
-        local p = run.progress()
-        if p < 0.02 then return "Reading the maps" end
-        if p < 0.23 then return "Shaping the land" end
-        if p < 0.58 then return "Laying out cliffs, paths and water" end
-        return "Raising the terraces"
+        -- (by the phase under way: relief_run's Run.phase)
+        local ph = run.phase and run.phase()
+        if ph == "groups" then return "Reading the maps" end
+        if ph == "world" then return "Shaping the land" end
+        if ph == "export" then return "Laying out cliffs, paths and water" end
+        if ph == "terraces" then return "Raising the terraces" end
+        return "Finishing the land"
       end
       if #warmQueue > 0 then return "Building towns and rooms" end
       return "Saving"
@@ -3062,7 +3067,7 @@ return function(deps)
     local ok, g, num = pcall(function() return Rse.mapGroupNum(mapId) end)
     if ok and g and Dataset and Dataset.cache then
       local okC, cache = pcall(Dataset.cache)
-      local raw = okC and cache and cache:read("data/generated/gba/map_tree/maps/" .. g .. "_" .. num .. "/header.json")
+      local raw = okC and cache and deps.Cache and deps.Cache.read("map_tree/maps/" .. g .. "_" .. num .. "/header.json")
       layoutIds[mapId] = tonumber(raw and raw:match('"layoutId":(%d+)')) or false
     end
     return layoutIds[mapId] or nil

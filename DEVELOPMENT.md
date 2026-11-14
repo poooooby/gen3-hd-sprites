@@ -1008,14 +1008,38 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   Battle Scene. `main.lua`'s `mod.options_changed` handler runs a row set to `go` and sets it back
   (Build's when the panel closes). A `go` left from the launcher runs once the field is quiet.
   Build is Emerald only for now.
+- **Build as I play:** the progress panel's one button, `Build as I play (B)`, is taken by B or a
+  click, never by A, so mashing through text can't close it.
+  - It closes the panel and keeps the job (`bgJob`). The build carries on as it would have in the
+    background: the relief's frame hook, a slice a frame, and the models' warm-up, one a frame.
+  - The prompt's tick checks `bgJob.done()` and shows "The 3D world is ready" (or a failure notice)
+    when it finishes.
+  - `FIRST_RUN_ANSWERS=a,a,b FIRST_RUN_BG=1` in `first_run.lua` runs this, stepping the build by
+    hand, since a driver's frames skip the hook.
 - **`Scene.cacheJob()`:** `warmAll` queued (Scene Cache forced on) and the relief run started.
   `job.step(budget)` works ~28 ms a frame on both. `job.progress()` = 0.95 × relief + 0.05 ×
   models, and `job.stage()` names the phase.
-- **`Run.progress()` (relief_run.lua):** by the phases passed (groups 2%, world 21%, export 35%,
-  29 terrace groups 42%). Within a phase it creeps on at the pace so far, measured once the
-  world's phase is done (a 90 s guess until then), to 95% of the phase.
-- **Time left:** the bar's pace over the last 20 s, counted down between frames and eased toward
-  the estimate, by the real clock.
+- **`Run.progress()` (relief_run.lua):** the work done over the whole build's work.
+  - The build makes the same ticks for the same map data on every device: 117030 for Emerald, as
+    two builds counted. So progress is counted in ticks, not guessed from time.
+  - A tick's cost differs by phase. In ms a tick on a desktop (`Run.TICK_COST`): groups 0.32,
+    world 1.96, export 0.37, terraces 1.61, the finish 1.05. Each phase's ticks are weighted by it.
+  - `phase()` adds the finished phase's work and names the next. `progress()` adds the ticks of
+    the phase under way, divided by `Run.TICKS[game]` (each phase's count) weighted the same way.
+  - A finished build keeps its own counts beside the relief (`relief/v1/<key>.ticks`, kept by
+    Clear), which other map data under the same game id then uses.
+  - Measured: the bar stays within 8% of the clock over a whole build.
+  - Without a known whole, the old phase-share estimate remains (groups 2%, world 21%, export 35%,
+    terraces 42%, creeping on within a phase).
+  - `Run.phase()` names the phase under way, for the panel's stage label.
+- **Time left:** the pace since the panel opened, `(1 − p) × spent ÷ (p − p_open)`, shown after
+  5 s and 2% done. It counts down between frames and eases toward the estimate by the real clock;
+  a longer estimate eases up slowly.
+  - The old version, the bar's pace over the last 20 s on phase shares measured on a desktop,
+    told an Android player "67 minutes" at 26%, then about 7 a minute later. A phase that took a
+    larger share of the time there stalled the bar.
+  - Measured on a desktop: within 12% from 20% to 60% done. About 36% high at 10%, and a few
+    seconds low near the end (the display rounds those).
 - **`Scene.cacheClear()`:** deletes every file the cache holds:
   - each spec's `.lua`/`.rgba`;
   - each bridge's;
@@ -1026,6 +1050,21 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   relief bytes). The flag file is kept.
 - **Background build gate:** the relief's background build now starts only while the scene is
   wanted (`deps.wanted`: Battle Scene on Overworld).
+- **Cache paths (`src/scene/cache.lua`):** every read of the engine's cache of the player's
+  cartridge goes through `Cache.read(rel)` / `Cache.native()`.
+  - The root comes from the engine's own constants (`src.core.game3.cache_paths`: `CACHE_ROOT`,
+    `NATIVE_ROOT`, which follow the cache if it moves). Shipped files never spell it out.
+  - `relief_input`'s `io.read`, `relief_run`'s `readCache` and `world.lua`'s `cread` take paths
+    under that root (`map_tree/maps/<slot>/header.json`, `native/layout_files.lua`).
+  - Why: `modkit pack` runs the engine's no-ROM-content gate, MK301, which refuses any shipped Lua
+    or JSON naming the cache's path, comments included.
+  - `assets_transforms` can't stand in: its sandbox reads only images under the generated assets
+    and writes only PNGs, and nothing it makes reaches a mod's Lua.
+  - The scene still reads the player's own cache at runtime, through `engine_internals`, as the
+    engine's modules do, and ships none of it. The constants pass the tool. The rule's own
+    wording ("nothing may point into the generated trees") is broader, which is worth knowing if
+    the engine ever adds a map-data API to use instead.
+  - Tests may name the paths (they don't ship).
 - **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
   `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the
   prompt through `exports._promptTick`.

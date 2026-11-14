@@ -1267,5 +1267,25 @@ do
   check(clear, "twelve speed lines, none across the battlers' band")
 end
 
+-- the engine's cache, by its own constants (src/scene/cache.lua): no root without the engine's
+-- module, the root it names when it is there, and the reads under it
+do
+  local Cache = dofile("src/scene/cache.lua")
+  local savedP, savedD = package.loaded["src.core.game3.cache_paths"], package.loaded["src.core.game3.dataset"]
+  package.loaded["src.core.game3.cache_paths"], package.loaded["src.core.game3.dataset"] = nil, nil
+  check(Cache.root() == nil and Cache.read("map_tree/census.json") == nil, "no engine module: no cache root, no reads")
+  local asked = {}
+  package.loaded["src.core.game3.cache_paths"] = { CACHE_ROOT = "R", NATIVE_ROOT = "R/nat" }
+  package.loaded["src.core.game3.dataset"] = { cache = function()
+    return { read = function(_, p) asked[#asked + 1] = p; return "bytes:" .. p end }
+  end }
+  check(Cache.root() == "R" and Cache.native() == "R/nat", "the root and the native tree are the engine's")
+  check(Cache.read("map_tree/census.json") == "bytes:R/map_tree/census.json", "a read is under the root")
+  check(Cache.readNative("layouts/x.mid") == "bytes:R/nat/layouts/x.mid", "a native read is under the native tree")
+  package.loaded["src.core.game3.cache_paths"] = { CACHE_ROOT = "S" }
+  check(Cache.native() == "S/native", "...which is the root's native/ when the engine names none")
+  package.loaded["src.core.game3.cache_paths"], package.loaded["src.core.game3.dataset"] = savedP, savedD
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

@@ -15,12 +15,16 @@ return function(deps)
   local Signs = deps.Signs                        -- (optional: src/scene/signs.lua, for signMetatiles)
   local Input = deps.Input                        -- (optional: src/scene/relief_input.lua, for the
                                                   -- layouts a script swaps in)
+  local Cache = deps.Cache                        -- (src/scene/cache.lua: the engine's cache roots)
   local World = {}
 
   local function req(name)
     local ok, m = pcall(require, name)
     return ok and type(m) == "table" and m or nil
   end
+
+  -- the bytes at `rel` under the engine's cache root, or nil
+  local function cread(rel) return Cache and Cache.read(rel) or nil end
 
   local state            -- per game data table: { layouts, byName, arts, roles, posts, ... }
 
@@ -54,11 +58,11 @@ return function(deps)
   local function artOf(s, pair)
     local a = s.arts[pair]
     if a then return a end
-    local Dataset, NativePack, CachePaths = req("src.core.game3.dataset"), req("src.import.gba.native_pack"),
-      req("src.core.game3.cache_paths")
+    local Dataset, NativePack = req("src.core.game3.dataset"), req("src.import.gba.native_pack")
     local cache = Dataset and Dataset.cache()
-    if not (cache and NativePack) then return nil end
-    local root = ((CachePaths and CachePaths.NATIVE_ROOT) or "data/generated/gba/native") .. "/" .. pair
+    local native = Cache and Cache.native()
+    if not (cache and NativePack and native) then return nil end
+    local root = native .. "/" .. pair
     local function blob(name)
       local b = cache:read(root .. "/" .. name)
       return b and { blob = b, index = Roles.blobIndex(b) } or nil
@@ -107,7 +111,7 @@ return function(deps)
       if type(id) == "string" and id:match("^EM_") then
         local okG, g, n = pcall(Rse.mapGroupNum, id)
         local slot = okG and g and (g .. "_" .. n)
-        local rawH = slot and cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/header.json")
+        local rawH = slot and cread("map_tree/maps/" .. slot .. "/header.json")
         local okJ, h = pcall(function() return rawH and json(rawH) end)
         if okJ and h and h.layoutId then
           local L = s.layouts[h.layoutId]
@@ -117,7 +121,7 @@ return function(deps)
                   tilesets = { h.primaryTileset, h.secondaryTileset },
                   primary = short(select(1, Roles.pairTilesets(def.pair))),
                   secondary = short(select(2, Roles.pairTilesets(def.pair))),
-                  grid = cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/grid.bin") }
+                  grid = cread("map_tree/maps/" .. slot .. "/grid.bin") }
             s.layouts[h.layoutId] = L
           end
           L.maps[#L.maps + 1] = id
@@ -128,7 +132,7 @@ return function(deps)
                                       tonumber(c.offset) or 0 }
           end
           L.outdoor = L.outdoor or Dataset.isOutdoorMapType(h.mapType)
-          local rawE = cache:read("data/generated/gba/map_tree/maps/" .. slot .. "/events.json")
+          local rawE = cread("map_tree/maps/" .. slot .. "/events.json")
           local okE, e = pcall(function() return rawE and json(rawE) end)
           for _, w in ipairs(okE and e and e.warps or {}) do L.warps[#L.warps + 1] = { w.x, w.y } end
           for _, b in ipairs(okE and e and e.bgEvents or {}) do
@@ -154,7 +158,7 @@ return function(deps)
     for id, row in pairs(Input and alternates or {}) do
       local base = s.byName[row[2]]
       if base and base.grid and Perm and not s.layouts[id] then
-        local function baked(name) return Input.baked(cache:read("data/generated/gba/native/layouts/" .. name .. ".mid")) end
+        local function baked(name) return Input.baked(cread("native/layouts/" .. name .. ".mid")) end
         local bb = {}
         for i = 0, base.w * base.h - 1 do bb[i] = base.grid:byte(i * 2 + 1) + base.grid:byte(i * 2 + 2) * 256 end
         local alt = baked("alt_" .. id)
@@ -377,7 +381,7 @@ return function(deps)
     local cache = Dataset and Dataset.cache()
     if not cache then return nil end
     local function metatiles(key)
-      return key and cache:read("data/generated/gba/map_tree/tilesets/" .. tostring(key) .. "/metatiles.bin") or ""
+      return key and cread("map_tree/tilesets/" .. tostring(key) .. "/metatiles.bin") or ""
     end
     local pt, st = metatiles(L.tilesets[1]), metatiles(L.tilesets[2])
     local grid, W = L.grid, L.w
@@ -422,12 +426,12 @@ return function(deps)
     local function tileset(k)
       local t = s.pretTilesets[k]
       if t then return t end
-      local base = "data/generated/gba/map_tree/tilesets/" .. tostring(k) .. "/"
-      local tiles = cache:read(base .. "tiles.4bpp")
+      local base = "map_tree/tilesets/" .. tostring(k) .. "/"
+      local tiles = cread(base .. "tiles.4bpp")
       if not tiles then return nil end
-      t = { key = k, name = short(k), tiles = tiles, metatiles = cache:read(base .. "metatiles.bin") or "",
-            attributes = cache:read(base .. "attributes.bin") or "",
-            palettes = Art.palettes(cache:read(base .. "palettes.bin")) }
+      t = { key = k, name = short(k), tiles = tiles, metatiles = cread(base .. "metatiles.bin") or "",
+            attributes = cread(base .. "attributes.bin") or "",
+            palettes = Art.palettes(cread(base .. "palettes.bin")) }
       s.pretTilesets[k] = t
       return t
     end

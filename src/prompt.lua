@@ -34,6 +34,7 @@ return function(deps)
   local game
   local state             -- the prompt up: { phase, t, focus, job, shown, ... }
   local notice            -- a short notice: { text, t }
+  local bgJob             -- a build left to carry on as you play (Build as I play), until it is done
   local buttons = {}      -- this frame's buttons on screen: { x, y, w, h, i }
 
   -- ── options ──────────────────────────────────────────────────────────
@@ -125,8 +126,11 @@ return function(deps)
         .. "on. Or skip it, and it builds a little at a time in the background while you play.",
       buttons = { "Build now", "Later" },
     },
+    -- (B, or a click on the button, leaves it building as you play: `background`; A does not, so
+    -- mashing through the game's text cannot close it by accident)
     building = { title = "Building the 3D world", progress = true,
-      foot = "Kept on this device, so it only happens once." },
+      foot = "Kept on this device, so it only happens once.",
+      buttons = { "Build as I play  (B)" }, secondary = true, background = true },
     done = { title = "All set", body = "The 3D world is ready. Enjoy your battles!", buttons = { "Done" } },
     failed = { title = "Couldn't build it", buttons = { "OK" } },
   }
@@ -134,6 +138,7 @@ return function(deps)
   local function startBuild()
     -- (what is built is kept and read back: Scene Cache on)
     if option("scene_cache", true) == false then P.setOption("scene_cache", true) end
+    bgJob = nil           -- (the panel back up: it shows the build again)
     local ok, job = pcall(Scene.cacheJob)
     if not (ok and job) then
       open("failed", { body = "Something went wrong: " .. tostring(job) })
@@ -159,6 +164,12 @@ return function(deps)
       end
     elseif ph == "askBuild" then
       if i == 1 then startBuild() else close() end
+    elseif ph == "building" then
+      -- build as you play: the panel goes, the build carries on a few ms a frame (relief_run's
+      -- frame hook, the models' warm-up), and a notice says when it is done
+      bgJob = state.job
+      close()
+      P.notify("Building the 3D world while you play")
     elseif ph == "done" or ph == "failed" then
       close()
     end
@@ -170,6 +181,10 @@ return function(deps)
     local n = def and def.buttons and #def.buttons or 0
     if n == 0 then return end
     local function pressed(b) return input.wasPressed and input:wasPressed(b) end
+    if def.background then
+      if pressed("b") then choose(1) end
+      return
+    end
     if pressed("left") or pressed("up") then state.focus = max(1, state.focus - 1) end
     if pressed("right") or pressed("down") then state.focus = min(n, state.focus + 1) end
     if pressed("a") or pressed("start") then choose(state.focus)
@@ -370,28 +385,25 @@ return function(deps)
       shine(sx - 40 * s, y, 80 * s, th, 0.32 * a)
       G.setScissor()
       y = y + th
-      -- the time left: the time so far over the share done, counting down between frames and
-      -- settling gently on the estimate so it does not jump about
-      -- (by the real clock: a frame of building is longer than the game's step)
+      -- the time left: the pace since the panel opened (the bar is the build's work done, which
+      -- moves at a steady pace on any device: src/scene/relief_run.lua Run.progress), counting down
+      -- between frames and settling gently on the estimate, so it does not jump about
+      -- (by the real clock: a frame of building is longer than the game's step; since the panel
+      -- opened, not the build: one begun in the background went a few ms a frame)
       local now = love.timer.getTime()
-      state.since = state.since or now
+      if not state.since then state.since, state.sinceP = now, target end
       local dt = now - (state.lastNow or now)
       state.lastNow = now
-      local spent = now - state.since
-      -- (the bar's pace over the last 20 seconds: its phases are not all alike)
-      local smp = state.samples or {}
-      state.samples = smp
-      if #smp == 0 or now - smp[#smp][1] >= 0.5 then smp[#smp + 1] = { now, target } end
-      while #smp > 2 and now - smp[1][1] > 20 do table.remove(smp, 1) end
-      local first = smp[1]
-      local rate = now - first[1] > 4 and (target - first[2]) / (now - first[1]) or 0
-      if spent > 6 and rate > 0 then
-        local remain = (1 - target) / rate
+      local spent, gained = now - state.since, target - state.sinceP
+      if spent > 5 and gained >= 0.02 then
+        local remain = (1 - target) * spent / gained
         if not state.eta then
           state.eta = remain
         else
           state.eta = max(0, state.eta - dt)
-          state.eta = state.eta + (remain - state.eta) * min(1, dt * 0.8)
+          -- (a longer estimate than the one shown eases up slowly: a slow stretch is not a jump)
+          local k = remain > state.eta * 1.3 and 0.2 or 0.8
+          state.eta = state.eta + (remain - state.eta) * min(1, dt * k)
         end
       end
       y = y + 12 * s
@@ -418,7 +430,7 @@ return function(deps)
         local bw = max(116 * s, f:getWidth(label) + 44 * s)
         x = x - bw
         local focus = state.focus == i
-        local primary = i == 1
+        local primary = i == 1 and not def.secondary
         if focus then
           col(ACCENT, 0.55 * a)
           G.setLineWidth(2 * s)
@@ -517,6 +529,17 @@ return function(deps)
       end
       if state.phase == "done" and state.t > 2.4 then close() end
       return
+    end
+    -- a build left to carry on as you play: a notice once it is done
+    if bgJob then
+      local okD, done = pcall(bgJob.done)
+      if not okD then
+        bgJob = nil
+      elseif done then
+        local okF, why = pcall(bgJob.failed)
+        bgJob = nil
+        P.notify((okF and why) and "Couldn't build the 3D world" or "The 3D world is ready")
+      end
     end
     -- the first-run question and a build asked for before the game started, once the field is
     -- still: Emerald only - looked at once each time the field settles, not every frame
