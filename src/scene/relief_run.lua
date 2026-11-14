@@ -46,14 +46,23 @@ return function(deps)
     return h
   end
 
+  -- (the fingerprint read and hashed once a game: its map data does not change while it runs,
+  -- and every model's file asks for the key - gameKey() - so it is kept)
+  local keyId, keyOf, gameKeyOf
   local function cacheKey()
-    local okG, id = pcall(function() return deps.version.get() end)
+    local V = deps.version
+    if not (V and V.get) then return nil end
+    local okG, id = pcall(V.get)
     if not (okG and type(id) == "string") then return nil end
+    if id == keyId then return keyOf, id end
     local census = deps.readCache and deps.readCache("data/generated/gba/map_tree/census.json")
     if type(census) ~= "string" then return nil end
     local files = deps.readCache("data/generated/gba/native/layout_files.lua") or ""
     local fp = fnv(files, fnv(census))
-    return ("relief/v%d/%s-%08x.bin"):format(Run.VERSION, id, fp), id
+    keyId = id
+    keyOf = ("relief/v%d/%s-%08x.bin"):format(Run.VERSION, id, fp)
+    gameKeyOf = keyOf:match("/([^/]+)%.bin$")
+    return keyOf, id
   end
 
   local function ready(bytes, how)
@@ -189,18 +198,18 @@ return function(deps)
     if state == "ready" then return 1 end
     if state ~= "running" or not phases then return 0 end
     local p, terraces = 0, 0
-    local seen = {}
-    for _, ph in ipairs(phases) do
-      local name = ph:match("^(%S+)")
-      if name == "groups" then p = math.max(p, 0.02); seen.groups = true
-      elseif name == "world" then p = math.max(p, 0.23); seen.world = true
-      elseif name == "export" then p = math.max(p, 0.58); seen.export = true
-      elseif name and name:match("^terraces:") then terraces = terraces + 1 end
+    local groups, world, export = false, false, false
+    for i = 1, #phases do
+      local ph = phases[i]
+      if ph:find("^groups ") then p = math.max(p, 0.02); groups = true
+      elseif ph:find("^world ") then p = math.max(p, 0.23); world = true
+      elseif ph:find("^export ") then p = math.max(p, 0.58); export = true
+      elseif ph:find("^terraces:") then terraces = terraces + 1 end
     end
     local tShare = 0.415 / Run.TERRACE_GROUPS
     p = p + tShare * math.min(terraces, Run.TERRACE_GROUPS)
     -- the phase under way: its share, and how far into it by the pace so far
-    local share = not seen.groups and 0.02 or not seen.world and 0.21 or not seen.export and 0.35
+    local share = not groups and 0.02 or not world and 0.21 or not export and 0.35
       or terraces < Run.TERRACE_GROUPS and tShare or 0.005
     local now = clock and clock() or 0
     local start, at = Run._startAt or now, Run._phaseAt or now
@@ -221,9 +230,8 @@ return function(deps)
 
   --- "<game>-<fingerprint>" of the current game's map data (what the cache is keyed by), or nil.
   function Run.gameKey()
-    local k, id = cacheKey()
-    if not k then return nil end
-    return k:match("/([^/]+)%.bin$")
+    if not cacheKey() then return nil end
+    return gameKeyOf
   end
 
   --- Hook the engine's frame; start when a game is up.

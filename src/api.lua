@@ -107,8 +107,6 @@ return function(mod, hd, state)
   exports._sceneRelief = function(bytes)
     return hd.scene and hd.scene.setReliefBytes and hd.scene.setReliefBytes(bytes) or false
   end
-  -- (dev: one slice of the relief's background build, as the frame hook runs it; the drivers
-  -- call it since their frames skip the engine's update hook) -> state, detail, phases
   -- (dev: WoobleView's prompt ticked by hand - a driver's frames skip core.update - and its
   -- phase up, or nil)
   exports._promptTick = function(dt)
@@ -180,6 +178,8 @@ return function(mod, hd, state)
     local r1, g1, b1, a1 = src.over(mid, x, y)
     return r0, g0, b0, a0, r1, g1, b1, a1
   end
+  -- (dev: one slice of the relief's background build, as the frame hook runs it; the drivers
+  -- call it since their frames skip the engine's update hook) -> state, detail, phases
   exports._reliefStep = function(watch)
     local run = hd.scene and hd.scene.reliefRun
     if not run then return nil end

@@ -39,9 +39,24 @@ return function(deps)
   -- ── options ──────────────────────────────────────────────────────────
 
   local function option(key, default)
-    local ok, v = pcall(function() return mod.options and mod.options:get(key) end)
+    local o = mod.options
+    if not o then return default end
+    local ok, v = pcall(o.get, o, key)
     if ok and v ~= nil then return v end
     return default
+  end
+
+  -- the engine's modules, each required once it loads (through require: a mod's package.loaded
+  -- is not the engine's, and the sandbox's require allocates on every call)
+  local engineMods = {}
+  local function engine(name)
+    local m = engineMods[name]
+    if m then return m end
+    local ok
+    ok, m = pcall(require, name)
+    if not (ok and type(m) == "table") then return nil end
+    engineMods[name] = m
+    return m
   end
 
   --- Set one of WoobleView's options as the Mod Manager does (saved, and mod.options_changed
@@ -58,26 +73,29 @@ return function(deps)
     return ok
   end
 
+  -- (once asked, it stays asked: kept in memory too, so the frame hook never reads the disk again)
+  local askedYet = false
   local function asked()
-    local ok, yes = pcall(function() return mod.cache:exists(P.FLAG) end)
-    return ok and yes
+    if askedYet then return true end
+    local c = mod.cache
+    local ok, yes = pcall(c.exists, c, P.FLAG)
+    askedYet = ok and yes == true
+    return askedYet
   end
   local function markAsked()
+    askedYet = true
     pcall(function() mod.cache:write(P.FLAG, "asked") end)
   end
 
   local function isEmerald()
-    local ok, GV = pcall(require, "src.core.GameVersion")
-    return ok and type(GV) == "table" and GV.get and GV.get() == "emerald"
+    local GV = engine("src.core.GameVersion")
+    return GV ~= nil and GV.get ~= nil and GV.get() == "emerald"
   end
 
   -- ── the layer that pauses the field and takes the buttons ─────────────
 
   local layer = {}
-  local function Stack()
-    local ok, S = pcall(require, "src.ui.game3.stack")
-    return ok and type(S) == "table" and S or nil
-  end
+  local function Stack() return engine("src.ui.game3.stack") end
   local function close()
     state = nil
     local S = Stack()
@@ -205,14 +223,15 @@ return function(deps)
   local function easeOut(t) t = min(1, max(0, t)); return 1 - (1 - t) ^ 3 end
 
   -- a horizontal gradient bar (rounded by drawing its caps)
+  -- (both meshes made once and their corners set in place each frame: no tables per frame)
   local gradMesh
-  local function gradient(x, y, w, h, a, b, alpha)
+  local function gradient(x, y, w, h, ar, ag, ab, br, bg, bb, alpha)
     if w <= 0 then return end
-    local verts = {
-      { x, y, 0, 0, a[1], a[2], a[3], alpha }, { x + w, y, 0, 0, b[1], b[2], b[3], alpha },
-      { x + w, y + h, 0, 0, b[1], b[2], b[3], alpha }, { x, y + h, 0, 0, a[1], a[2], a[3], alpha },
-    }
-    if not gradMesh then gradMesh = G.newMesh(verts, "fan", "stream") else gradMesh:setVertices(verts) end
+    if not gradMesh then gradMesh = G.newMesh(4, "fan", "stream") end
+    gradMesh:setVertex(1, x, y, 0, 0, ar, ag, ab, alpha)
+    gradMesh:setVertex(2, x + w, y, 0, 0, br, bg, bb, alpha)
+    gradMesh:setVertex(3, x + w, y + h, 0, 0, br, bg, bb, alpha)
+    gradMesh:setVertex(4, x, y + h, 0, 0, ar, ag, ab, alpha)
     G.setColor(1, 1, 1, 1)
     G.draw(gradMesh)
   end
@@ -221,19 +240,30 @@ return function(deps)
   local shineMesh
   local function shine(x, y, w, h, alpha)
     local m = x + w / 2
-    local verts = {
-      { x, y, 0, 0, 1, 1, 1, 0 }, { m, y, 0, 0, 1, 1, 1, alpha }, { m, y + h, 0, 0, 1, 1, 1, alpha },
-      { x, y + h, 0, 0, 1, 1, 1, 0 },
-      { m, y, 0, 0, 1, 1, 1, alpha }, { x + w, y, 0, 0, 1, 1, 1, 0 }, { x + w, y + h, 0, 0, 1, 1, 1, 0 },
-      { m, y + h, 0, 0, 1, 1, 1, alpha },
-    }
     if not shineMesh then
       shineMesh = G.newMesh(8, "triangles", "stream")
       shineMesh:setVertexMap(1, 2, 3, 1, 3, 4, 5, 6, 7, 5, 7, 8)
     end
-    shineMesh:setVertices(verts)
+    shineMesh:setVertex(1, x, y, 0, 0, 1, 1, 1, 0)
+    shineMesh:setVertex(2, m, y, 0, 0, 1, 1, 1, alpha)
+    shineMesh:setVertex(3, m, y + h, 0, 0, 1, 1, 1, alpha)
+    shineMesh:setVertex(4, x, y + h, 0, 0, 1, 1, 1, 0)
+    shineMesh:setVertex(5, m, y, 0, 0, 1, 1, 1, alpha)
+    shineMesh:setVertex(6, x + w, y, 0, 0, 1, 1, 1, 0)
+    shineMesh:setVertex(7, x + w, y + h, 0, 0, 1, 1, 1, 0)
+    shineMesh:setVertex(8, m, y + h, 0, 0, 1, 1, 1, alpha)
     G.setColor(1, 1, 1, 1)
     G.draw(shineMesh)
+  end
+
+  -- the body's lines, wrapped again only when the text or the width changes
+  local wrapText, wrapWidth, wrapFont, wrapLines = nil, nil, nil, {}
+  local function wrapped(f, text, width)
+    if text ~= wrapText or width ~= wrapWidth or f ~= wrapFont then
+      local _, l = f:getWrap(text, width)
+      wrapText, wrapWidth, wrapFont, wrapLines = text, width, f, l
+    end
+    return wrapLines
   end
 
   local function chip(x, y, s, alpha)
@@ -265,11 +295,7 @@ return function(deps)
     local inner = pw - 2 * pad
     local titleF, bodyF, smallF = font(24 * s), font(15 * s), font(13 * s)
     local body = state.body or def.body
-    local lines = {}
-    if body then
-      local _, l = bodyF:getWrap(body, inner)
-      lines = l
-    end
+    local lines = body and wrapped(bodyF, body, inner)
     local bodyH = body and #lines * bodyF:getHeight() * 1.25 or 0
     local btnH = 42 * s
     local ph = pad + 24 * s + 16 * s + titleF:getHeight() + (body and (12 * s + bodyH) or 0)
@@ -304,8 +330,8 @@ return function(deps)
       y = y + 12 * s
       G.setFont(bodyF)
       col(SOFT, a)
-      for _, line in ipairs(lines) do
-        G.print(line, px + pad, floor(y))
+      for i = 1, #lines do
+        G.print(lines[i], px + pad, floor(y))
         y = y + bodyF:getHeight() * 1.25
       end
     end
@@ -331,13 +357,13 @@ return function(deps)
       -- deepens as it grows, with round caps; and a light running along it
       local x0, rr = px + pad, th / 2
       local k = fw / inner
-      local endC = { ACCENT[1] + (ACCENT2[1] - ACCENT[1]) * k, ACCENT[2] + (ACCENT2[2] - ACCENT[2]) * k,
-                     ACCENT[3] + (ACCENT2[3] - ACCENT[3]) * k }
+      local er, eg, eb = ACCENT[1] + (ACCENT2[1] - ACCENT[1]) * k, ACCENT[2] + (ACCENT2[2] - ACCENT[2]) * k,
+                         ACCENT[3] + (ACCENT2[3] - ACCENT[3]) * k
       col(ACCENT, a)
       G.circle("fill", x0 + rr, y + rr, rr)
-      col(endC, a)
+      G.setColor(er, eg, eb, a)
       G.circle("fill", x0 + fw - rr, y + rr, rr)
-      gradient(x0 + rr, y, fw - th, th, ACCENT, endC, a)
+      gradient(x0 + rr, y, fw - th, th, ACCENT[1], ACCENT[2], ACCENT[3], er, eg, eb, a)
       local sweep = (love.timer.getTime() * 0.6) % 1.4 - 0.2
       local sx = x0 + sweep * fw
       G.setScissor(floor(x0 + rr), floor(y), max(0, floor(fw - th)), math.ceil(th))
@@ -380,8 +406,8 @@ return function(deps)
         y = y + smallF:getHeight()
       end
     end
-    -- the buttons, right-aligned, the first the main one
-    buttons = {}
+    -- the buttons, right-aligned, the first the main one (their records reused frame to frame)
+    local nb = 0
     if def.buttons then
       y = y + 26 * s
       local f = font(15 * s)
@@ -408,10 +434,14 @@ return function(deps)
           col(INK, a)
         end
         G.print(label, floor(x + (bw - f:getWidth(label)) / 2), floor(y + (btnH - f:getHeight()) / 2))
-        buttons[#buttons + 1] = { x = x, y = y, w = bw, h = btnH, i = i }
+        nb = nb + 1
+        local b = buttons[nb] or {}
+        buttons[nb] = b
+        b.x, b.y, b.w, b.h, b.i = x, y, bw, btnH, i
         x = x - 12 * s
       end
     end
+    for j = #buttons, nb + 1, -1 do buttons[j] = nil end
   end
 
   local function drawNotice(W, H)
@@ -462,18 +492,13 @@ return function(deps)
   end
 
   local quiet = 0
-  -- (through require: a mod's package.loaded is not the engine's)
-  local function engine(name)
-    local ok, m = pcall(require, name)
-    return ok and type(m) == "table" and m or nil
-  end
   local function fieldQuiet()
     local F = engine("src.core.game3.field")
-    local B = engine("src.core.game3.battle")
     if not (F and F.running) then return false end
+    local B = engine("src.core.game3.battle")
     if B and B.isActive and B.isActive() then return false end
-    local okR, Runtime = pcall(require, "src.core.game3.runtime")
-    return okR and Runtime.uiBusy and not Runtime.uiBusy()
+    local Runtime = engine("src.core.game3.runtime")
+    return Runtime ~= nil and Runtime.uiBusy ~= nil and not Runtime.uiBusy()
   end
 
   local function tick(dt)
@@ -494,9 +519,9 @@ return function(deps)
       return
     end
     -- the first-run question and a build asked for before the game started, once the field is
-    -- still: Emerald only
+    -- still: Emerald only - looked at once each time the field settles, not every frame
     if fieldQuiet() then quiet = quiet + 1 else quiet = 0 end
-    if quiet < P.QUIET_FRAMES or not isEmerald() then return end
+    if quiet ~= P.QUIET_FRAMES or not isEmerald() then return end
     if option("scene_build", "idle") == "go" then
       quiet = 0
       startBuild()
@@ -515,9 +540,9 @@ return function(deps)
   function P.phase() return state and state.phase or nil end
   function P._why()
     local F = engine("src.core.game3.field")
-    local okR, Runtime = pcall(require, "src.core.game3.runtime")
+    local Runtime = engine("src.core.game3.runtime")
     return ("field %s, busy %s, emerald %s, asked %s, quiet %d, scene %s"):format(tostring(F and F.running),
-      tostring(okR and Runtime.uiBusy and Runtime.uiBusy()), tostring(isEmerald()), tostring(asked()), quiet,
+      tostring(Runtime and Runtime.uiBusy and Runtime.uiBusy()), tostring(isEmerald()), tostring(asked()), quiet,
       tostring(option("battle_scene", "classic")))
   end
 

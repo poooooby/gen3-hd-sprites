@@ -832,7 +832,8 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   solver (`world_maps.lua` over `relief_solve.lua` and its parts), the terraces
   (`relief_terraces.lua`, optional: without it only a cached relief is served), the last passes
   and `Relief.encode`. The bytes go to `mod.cache` under `relief/v<N>/<game>-<fingerprint>.bin`
-  (the fingerprint: FNV of the cache's `census.json` and `layout_files.lua`), and to
+  (the fingerprint: FNV of the cache's `census.json` and `layout_files.lua`, about 126 KB, worked
+  out once a game and kept, since every model file's path asks for it through `Run.gameKey()`), and to
   `Scene.setReliefBytes`. Drivers' frames skip the engine's update hook, so `exports._reliefStep`
   runs a slice by hand (`RELIEF_BUILD=1` in `scene_battle.lua`) and `exports._sceneWarm(mapId)`
   the warm-up (`SCENE_WARM=1`; `SCENE_WARM=all` the whole-game one). `SCENE_LOOK` takes an
@@ -988,6 +989,12 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   `state/first_run_asked` is not in `mod.cache`, it asks "Battle in the world around you?" (yes:
   `battle_scene` = overworld, then "Build the 3D world now?"). Either answer writes the flag; with
   Overworld already chosen it only writes the flag.
+- **No garbage while idle:** the hook runs every frame for the whole session, so it allocates
+  nothing (0.01 KB a tick, measured with the GC stopped). The engine modules are required once
+  they load and kept, since the sandbox's `require` allocates on every call. The flag is kept in
+  memory once seen. The checks after the quiet count run once each time the field settles
+  (`quiet == QUIET_FRAMES`), not on every quiet frame. The panel reuses its meshes (`setVertex`),
+  its wrapped body lines and its button records.
 - **Build 3D Cache / Clear 3D Cache:** `choice` rows (`idle` / `go`, `visible_if` Overworld) under
   Battle Scene. `main.lua`'s `mod.options_changed` handler runs a row set to `go` and sets it back
   (Build's when the panel closes). A `go` left from the launcher runs once the field is quiet.
