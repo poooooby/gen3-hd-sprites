@@ -310,7 +310,8 @@ function K.stripFace(mesh, pts, origin, sdir, tdir, strip, shade, tag)
           local v = const and v0 or (v0 - (q[2] - t0))
           out[k] = { q[3], q[4], q[5], q[1] + du, v }
         end
-        mesh:poly(out, shade, tag)
+        -- (the proofs' tags, as the generator's: a row held, not laid one texel a pixel)
+        mesh:poly(out, shade, const and (tag .. "~clamp") or tag)
       end
     end
   end
@@ -404,7 +405,7 @@ local function emitPrism(pr, mesh)
               else u, v = x, p[1] - p[2] end
               quad[q] = { x, p[2], p[1], u, v }
             end
-            mesh:poly(quad, shade, tag)
+            mesh:poly(quad, shade, (clampLo or clampHi) and (tag .. "~clamp") or tag)
           end
         elseif getmetatable(mat) == Strip then
           local start, finish = a, b
@@ -601,8 +602,10 @@ local function frustumEmit(self, mesh)
     local band = { { p[1], y1, p[2] }, { q[1], y1, q[2] }, { qi[1], y2, qi[2] }, { pi_[1], y2, pi_[2] } }
     local sdir = unit({ q[1] - p[1], 0, q[2] - p[2] })
     if drawn then
-      projPoly(mesh, wall, K.SHADE_ART, n .. ".wall")
-      projPoly(mesh, band, K.SHADE_ART, n .. ".band")
+      -- (a chamfer, drawn at 45 degrees, has no 1:1 reading: "~proj")
+      local diag = abs(nx) > 1e-6
+      projPoly(mesh, wall, K.SHADE_ART, n .. ".wall" .. (diag and "~proj" or ""))
+      projPoly(mesh, band, K.SHADE_ART, n .. ".band" .. (diag and "~proj" or ""))
     else
       stripFace(mesh, wall, { p[1], y0, p[2] }, sdir, { 0, 1, 0 }, self.wall_side, shade, n .. ".wall")
       stripFace(mesh, band, { p[1], y1, p[2] }, sdir, unit({ -nx, 1, -nz }), self.band_side, shade, n .. ".band")
@@ -628,7 +631,7 @@ local function vaultEmit(self, mesh)
   for i = 1, #pts - 1 do
     local xa, ha, xb, hb = pts[i][1], pts[i][2], pts[i + 1][1], pts[i + 1][2]
     projPoly(mesh, { { xa, y0 + ha, zf }, { xb, y0 + hb, zf }, { xb, y0 + hb, zb }, { xa, y0 + ha, zb } },
-      K.SHADE_ART, n .. ".top")
+      K.SHADE_ART, n .. ".top~proj")
     if ha > 0 or hb > 0 then
       local front = { { xa, y0, zf }, { xb, y0, zf }, { xb, y0 + hb, zf }, { xa, y0 + ha, zf } }
       local q = {}
@@ -652,7 +655,7 @@ local function wallsEmit(self, mesh)
   for i = 1, #self.plan - 1 do
     local p, q = self.plan[i], self.plan[i + 1]
     projPoly(mesh, { { p[1], self.y0, p[2] }, { q[1], self.y0, q[2] }, { q[1], self.y1, q[2] }, { p[1], self.y1, p[2] } },
-      K.SHADE_ART, self.name .. ".wall")
+      K.SHADE_ART, self.name .. (abs(q[2] - p[2]) > 1e-6 and ".wall~proj" or ".wall"))
   end
 end
 
@@ -1253,11 +1256,12 @@ local function reliefEmit(self, mesh)
         if self.see_through then
           local q = {}
           for j, p in ipairs(back) do q[j] = { p[1], p[2], p[3], p[1], z1 - p[2] } end
-          mesh:poly(q, K.SHADE_BACK, n .. ".back")
+          mesh:poly(q, K.SHADE_BACK, n .. (self.back ~= nil and ".back~depth" or ".back"))
         elseif self.hull > 0 or (self.foot and not self.solid) or (self.proj_back and self.back == nil) then
-          projPoly(mesh, back, K.SHADE_BACK, n .. ".back")
+          projPoly(mesh, back, K.SHADE_BACK, n .. ".back~proj")
         else
-          reliefTile(self, mesh, back, { x1, z0 }, { -1, 0 }, top, K.SHADE_BACK, n .. ".back")
+          reliefTile(self, mesh, back, { x1, z0 }, { -1, 0 }, top, K.SHADE_BACK,
+            n .. (self.back ~= nil and ".back~depth" or ".back"))
         end
       end
     end
@@ -1313,13 +1317,13 @@ local function reliefEmit(self, mesh)
               for j, p in ipairs({ { x, low, za }, { x, low, zb }, { x, t, zb }, { x, t, za } }) do
                 q[j] = { p[1], p[2], p[3], col, p[3] - p[2] }
               end
-              mesh:poly(q, facing > 0 and K.SHADE_EAST or K.SHADE_WEST, n .. ".flank")
+              mesh:poly(q, facing > 0 and K.SHADE_EAST or K.SHADE_WEST, n .. ".flank~proj")
             elseif facing > 0 then
               reliefTile(self, mesh, { { x, low, zb }, { x, low, za }, { x, t, za }, { x, t, zb } },
-                { x, zb }, { 0, -1 }, t, K.SHADE_EAST, n .. ".flank")
+                { x, zb }, { 0, -1 }, t, K.SHADE_EAST, n .. (self.back ~= nil and ".flank~depth" or ".flank"))
             else
               reliefTile(self, mesh, { { x, low, za }, { x, low, zb }, { x, t, zb }, { x, t, za } },
-                { x, za }, { 0, 1 }, t, K.SHADE_WEST, n .. ".flank")
+                { x, za }, { 0, 1 }, t, K.SHADE_WEST, n .. (self.back ~= nil and ".flank~depth" or ".flank"))
             end
           end
         end

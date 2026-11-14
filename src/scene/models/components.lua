@@ -107,9 +107,19 @@ return function(K, Fence)
 
   local function norm(s) return (s or ""):lower():gsub("_", "") end
   --- A pair's primary and secondary names (normalised).
+  -- (the game's tileset family, src/scene/family.lua, set by C.useFamily; nil: Emerald's. These
+  -- specs are Hoenn's: FireRed's tilesets are named apart, so none is drawn by them)
+  C.family = nil
+  function C.useFamily(F) C.family = F end
   function C.names(pair)
     if type(pair) ~= "string" then return nil end
-    local p, s = pair:match("^(.-)__(.*)$")
+    local p, s
+    if C.family and C.family.namespace then
+      p, s = C.family.pairNames(pair, "^(.-)__(.*)$")
+      if not p then return norm(C.family.namespace .. pair), "" end
+      return norm(p), norm(s)
+    end
+    p, s = pair:match("^(.-)__(.*)$")
     if not p then return norm(pair), "" end
     return norm(p), norm(s)
   end

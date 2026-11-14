@@ -8,7 +8,8 @@
 -- drawings layer by layer. This module joins them per layout id (the cartridge's: its map
 -- headers'), as voxel_cells.MapEvents does, and builds src/scene/roles.lua's adapters over them.
 --
--- Emerald only (its maps are EM_*), once a game; everything is cached.
+-- The game being played's maps (Emerald's EM_*, FireRed's FR_* and SEVII_*: src/scene/family.lua),
+-- once a game; everything is cached. Emerald's swaps (a layout a script swaps in) are Emerald's.
 
 return function(deps)
   local Roles, json = deps.Roles, deps.json      -- (json(text) -> table or nil)
@@ -16,6 +17,8 @@ return function(deps)
   local Input = deps.Input                        -- (optional: src/scene/relief_input.lua, for the
                                                   -- layouts a script swaps in)
   local Cache = deps.Cache                        -- (src/scene/cache.lua: the engine's cache roots)
+  local Family = deps.Family                      -- (optional: src/scene/family.lua; without it,
+                                                  -- Emerald's)
   local World = {}
 
   local function req(name)
@@ -98,7 +101,7 @@ return function(deps)
   -- a tileset's short name (voxel_props compares them): "battle_frontier" -> "battlefrontier"
   local function short(name) return (tostring(name or ""):gsub("^gTileset_", ""):gsub("_", "")):lower() end
 
-  -- every Emerald map by its slot: layouts by id, their maps' events joined
+  -- every map of the game by its slot: layouts by id, their maps' events joined
   local function load()
     local maps = gameData()
     if type(maps) ~= "table" then return nil end
@@ -106,9 +109,19 @@ return function(deps)
     local Dataset, Rse = req("src.core.game3.dataset"), req("src.core.game3.rse")
     local cache = Dataset and Dataset.cache()
     if not (cache and Rse and json) then return nil end
-    local s = { maps = maps, layouts = {}, byName = {}, byMap = {}, bySlot = {}, arts = {}, roles = {} }
+    local game = Family and Family.game() or "emerald"
+    local F = Family and Family.of(game) or nil
+    local s = { maps = maps, layouts = {}, byName = {}, byMap = {}, bySlot = {}, arts = {}, roles = {},
+                game = game, family = F, emerald = game == "emerald" }
+    if Roles.useFamily then Roles.useFamily(F) end
+    -- (the prefix of one of the game's map ids: "EM_"; FireRed's "FR_", "SEVII_")
+    local function prefixOf(id)
+      if F then return Family.prefixOf(F, id) end
+      return id:match("^EM_") and "EM_" or nil
+    end
     for id, def in pairs(maps) do
-      if type(id) == "string" and id:match("^EM_") then
+      local prefix = type(id) == "string" and prefixOf(id)
+      if prefix then
         local okG, g, n = pcall(Rse.mapGroupNum, id)
         local slot = okG and g and (g .. "_" .. n)
         local rawH = slot and cread("map_tree/maps/" .. slot .. "/header.json")
@@ -138,7 +151,7 @@ return function(deps)
           for _, b in ipairs(okE and e and e.bgEvents or {}) do
             if b.type == "sign" then L.signs[b.x .. "," .. b.y] = true end
           end
-          s.byName["LAYOUT_" .. id:gsub("^EM_", "")] = L
+          s.byName["LAYOUT_" .. id:sub(#prefix + 1)] = L
           s.byMap[id] = L
         end
       end
@@ -153,8 +166,10 @@ return function(deps)
     -- drawn with it: voxel_props.connections), and the engine's collision codes (`codes`)
     local Perm = req("src.core.CollPermissions")
     local alternates = {}
-    for id, row in pairs(Input and Input.ALTERNATES or {}) do alternates[id] = row end
-    for id, row in pairs(World.ROOM_ALTERNATES) do alternates[id] = row end
+    if s.emerald then
+      for id, row in pairs(Input and Input.ALTERNATES or {}) do alternates[id] = row end
+      for id, row in pairs(World.ROOM_ALTERNATES) do alternates[id] = row end
+    end
     for id, row in pairs(Input and alternates or {}) do
       local base = s.byName[row[2]]
       if base and base.grid and Perm and not s.layouts[id] then
@@ -182,11 +197,11 @@ return function(deps)
       end
     end
     s.drawn = {}
-    -- Emerald's behaviour names as the engine's ids (src/core/game3/mb.lua: FireRed's value where
+    -- the game's behaviour names as the engine's ids (src/core/game3/mb.lua: FireRed's value where
     -- FireRed has the behaviour, 0x100 + Emerald's otherwise)
     local MB, Constants = req("src.core.game3.mb"), req("src.core.game3.constants")
     s.behaviours = {}
-    local okC, em = pcall(function() return Constants.of("emerald").metatile_behaviors.byName end)
+    local okC, em = pcall(function() return Constants.of(game).metatile_behaviors.byName end)
     for name in pairs(okC and em or {}) do
       if type(name) == "string" and name:match("^MB_") then s.behaviours[name] = MB.id(name) end
     end
@@ -260,14 +275,14 @@ return function(deps)
         if L.alternateOf == base then candidates[#candidates + 1] = L end
       end
       table.sort(candidates, function(p, q) return p.id < q.id end)
-      local other = World.MAP_SWAPS[base.name] and s.byName[World.MAP_SWAPS[base.name]]
+      local other = s.emerald and World.MAP_SWAPS[base.name] and s.byName[World.MAP_SWAPS[base.name]]
       if other then candidates[#candidates + 1] = other end
       s.drawn[current] = World.swappedIn(base, candidates, liveMid)
     end
     local Rse, FieldRse = req("src.core.game3.rse.init"), req("src.core.game3.scripting.natives_field_rse")
     local Runtime = req("src.core.game3.runtime")
     local sess = Runtime and Runtime.getSession and Runtime.getSession()
-    for mapId, sw in pairs(World.NEIGHBOUR_SWAPS) do
+    for mapId, sw in pairs(s.emerald and World.NEIGHBOUR_SWAPS or {}) do
       local L = s.layouts[sw[1]]
       if mapId ~= current and L and s.byMap[mapId] and L.alternateOf == s.byMap[mapId] then
         local ok, yes = true, true
@@ -386,12 +401,13 @@ return function(deps)
     local pt, st = metatiles(L.tilesets[1]), metatiles(L.tilesets[2])
     local grid, W = L.grid, L.w
     local at, order = {}, {}
+    local NM = s.family and s.family.primaryMetatiles or 512
     for y = 0, L.h - 1 do
       for x = 0, W - 1 do
         local i = (y * W + x) * 2 + 1
         local m = (grid:byte(i) + grid:byte(i + 1) * 256) % 1024
         local ts, k = pt, m
-        if m >= 512 then ts, k = st, m - 512 end
+        if m >= NM then ts, k = st, m - NM end
         if (k + 1) * 16 <= #ts then
           for q = 0, 3 do
             local o = k * 16 + (4 + q) * 2 + 1
@@ -431,7 +447,7 @@ return function(deps)
       if not tiles then return nil end
       t = { key = k, name = short(k), tiles = tiles, metatiles = cread(base .. "metatiles.bin") or "",
             attributes = cread(base .. "attributes.bin") or "",
-            palettes = Art.palettes(cread(base .. "palettes.bin")) }
+            palettes = Art.palettes(cread(base .. "palettes.bin")), family = s.family }
       s.pretTilesets[k] = t
       return t
     end
@@ -452,7 +468,8 @@ return function(deps)
     local A = World.adapter(L)
     if not A then return nil end
     local posts, drawings = World.posts()
-    local ref = World.layout("LAYOUT_ROUTE116")
+    -- (Emerald's alias reference: its rock drawn in the General tileset's own colours)
+    local ref = s.emerald and World.layout("LAYOUT_ROUTE116") or nil
     r = Roles.new(A, { behaviours = s.behaviours, posts = posts, postDrawings = drawings,
                        reference = ref and World.adapter(ref) or nil })
     s.roles[L.id] = r

@@ -55,8 +55,18 @@ return function(mod)
   local SceneInit = loadSibling(mod, "src/scene/init.lua")
   -- (where the engine keeps the player's cartridge data, by its own constants: src/scene/cache.lua)
   local SceneCache = loadSibling(mod, "src/scene/cache.lua")
+  -- (the game's tileset family: Emerald's or FireRed's cuts, src/scene/family.lua)
+  local SceneFamily = loadSibling(mod, "src/scene/family.lua")
+  -- (each game's own tables, read off its own drawing; Emerald's are Emerald 3DS's, in the modules)
+  local SceneGames = {}
+  do
+    local fr = loadSibling(mod, "src/scene/games/firered.lua", true)
+    if type(fr) == "table" then SceneGames.firered, SceneGames.leafgreen = fr, fr end
+  end
   local sceneDeps = {
     Cache = SceneCache,
+    Family = SceneFamily,
+    Games = SceneGames,
     Camera = loadSibling(mod, "src/scene/camera.lua"),
     Cells = loadSibling(mod, "src/scene/cells.lua"),
     Stage = loadSibling(mod, "src/scene/stage.lua"),
@@ -97,6 +107,17 @@ return function(mod)
   if type(specsOf) == "function" and sceneDeps.Kernel then
     local okS = type(solidsOf) == "function" and pcall(solidsOf, sceneDeps.Kernel)
     local ok, specs = pcall(specsOf, sceneDeps.Kernel)
+    -- (FireRed's own buildings, read off its own drawing: src/scene/models/specs_firered.lua)
+    local frOf = loadSibling(mod, "src/scene/models/specs_firered.lua", true)
+    -- (with Emerald 3DS's helpers - flat_block and the rest - which its specs share)
+    local okF, frSpecs = pcall(function()
+      return type(frOf) == "function" and frOf(sceneDeps.Kernel, ok and type(specs) == "table" and specs.helpers or nil) or nil
+    end)
+    if okF and type(frSpecs) == "table" then
+      sceneDeps.SpecsByGame = { firered = frSpecs, leafgreen = frSpecs }
+    elseif not okF then
+      mod.log:warn("FireRed's building specs: %s", tostring(frSpecs))
+    end
     if ok and type(specs) == "table" then
       sceneDeps.Specs = specs
       if okS and type(solidSpecsOf) == "function" then pcall(solidSpecsOf, sceneDeps.Kernel, specs) end
@@ -124,6 +145,12 @@ return function(mod)
     if okI and type(interiors) == "table" and type(rooms) == "table" then
       sceneDeps.Interiors, sceneDeps.RoomSpecs = interiors, rooms
     end
+    -- (FireRed's and LeafGreen's own rooms, our reading, once there are any: Emerald 3DS's are
+    -- Emerald's. Without them FireRed's rooms lie flat as drawn)
+    local frRooms = loadSibling(mod, "src/scene/models/interior_specs_firered.lua", true)
+    if okI and type(interiors) == "table" and type(frRooms) == "table" then
+      sceneDeps.RoomSpecsByGame = { firered = frRooms, leafgreen = frRooms }
+    end
   end
   local worldOf = loadSibling(mod, "src/scene/world.lua")
   local Post = loadSibling(mod, "src/scene/relief_post.lua")
@@ -131,7 +158,7 @@ return function(mod)
   local json = Post and function(text) return (Post.json(text)) end or nil
   if type(worldOf) == "function" and sceneDeps.Roles and json then
     local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles, json = json, Art = sceneDeps.Art,
-                                              Signs = sceneDeps.Signs, Cache = SceneCache,
+                                              Signs = sceneDeps.Signs, Cache = SceneCache, Family = SceneFamily,
                                               Input = loadSibling(mod, "src/scene/relief_input.lua") })
     if okW and type(world) == "table" then sceneDeps.World = world end
   end
@@ -151,6 +178,9 @@ return function(mod)
   if Engine.Scene and sceneDeps.Relief and sceneDeps.Roles then
     local Art, Input = sceneDeps.Art or loadSibling(mod, "src/scene/relief_art.lua"), loadSibling(mod, "src/scene/relief_input.lua")
     local Solve = loadSibling(mod, "src/scene/relief_solve.lua")
+    if Solve and Solve.GAMES then
+      for id, G in pairs(SceneGames) do Solve.GAMES[id] = G end
+    end
     local parts = { loadSibling(mod, "src/scene/relief_drawn.lua"), loadSibling(mod, "src/scene/relief_shape.lua"),
                     loadSibling(mod, "src/scene/relief_cuts.lua"), loadSibling(mod, "src/scene/relief_world.lua") }
     local worldMapsOf = loadSibling(mod, "src/scene/world_maps.lua")
@@ -164,7 +194,7 @@ return function(mod)
     local runOf = loadSibling(mod, "src/scene/relief_run.lua")
     local okM, WorldMaps = pcall(function()
       return worldMapsOf({ Solve = Solve, Art = Art, Input = Input, Roles = sceneDeps.Roles, parts = parts, json = json,
-                           Cache = SceneCache })
+                           Cache = SceneCache, Family = SceneFamily })
     end)
     if Post and okM and type(WorldMaps) == "table" and type(runOf) == "function" then
       local okV, GameVersion = pcall(require, "src.core.GameVersion")
@@ -286,10 +316,10 @@ return function(mod)
     -- set back (the Build row when its build ends)
     if Prompt and ev.value == "go" then
       local okV, GV = pcall(require, "src.core.GameVersion")
-      local emerald = okV and GV.get and GV.get() == "emerald"
+      local game3d = okV and GV.get and Prompt.GAMES_3D and Prompt.GAMES_3D[GV.get()] == true
       if ev.key == "scene_build" then
-        if not emerald then
-          Prompt.notify("The 3D cache is built in Emerald for now")
+        if not game3d then
+          Prompt.notify("The 3D cache is built in Emerald, FireRed and LeafGreen")
           Prompt.setOption("scene_build", "idle")
         elseif not Prompt.build() then
           Prompt.setOption("scene_build", "idle")

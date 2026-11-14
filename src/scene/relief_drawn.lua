@@ -39,13 +39,17 @@ return function(S)
   -- ROLE_REFERENCE's order: FACE_SOUTH's ids under 0x200 in Python's set order, then SIDE_WEST's,
   -- then SIDE_EAST's
   local function pyset(list) return Art.setOrder(list, Art.hashInt) end
+  -- (the game's own lists: Solve.LISTS, Emerald 3DS's for Emerald; a primary's ids only - the
+  -- family's cut: Solve.game.primary, 0x200 for Emerald)
+  local LISTS, GENERAL = Solve.LISTS, Solve.GENERAL
+  local NP = Solve.game and Solve.game.primary or 0x200
   local ROLE_REFERENCE, REF_IDS = {}, {}
   do
-    for _, m in ipairs(pyset({ 0x07C, 0x0A9, 0x09F, 0x0A7, 0x091, 0x079, 0x1B0, 0x0AF, 0x0CF, 0x1F0, 0x1F1, 0x33B, 0x33C })) do
-      if m < 0x200 then ROLE_REFERENCE[#ROLE_REFERENCE + 1] = { m, "face" } end
+    for _, m in ipairs(pyset(LISTS.FACE_SOUTH)) do
+      if m < NP then ROLE_REFERENCE[#ROLE_REFERENCE + 1] = { m, "face" } end
     end
-    for _, m in ipairs(pyset({ 0x070, 0x073 })) do ROLE_REFERENCE[#ROLE_REFERENCE + 1] = { m, "west" } end
-    for _, m in ipairs(pyset({ 0x072, 0x075, 0x0A2 })) do ROLE_REFERENCE[#ROLE_REFERENCE + 1] = { m, "east" } end
+    for _, m in ipairs(pyset(LISTS.SIDE_WEST)) do ROLE_REFERENCE[#ROLE_REFERENCE + 1] = { m, "west" } end
+    for _, m in ipairs(pyset(LISTS.SIDE_EAST)) do ROLE_REFERENCE[#ROLE_REFERENCE + 1] = { m, "east" } end
     for _, r in ipairs(ROLE_REFERENCE) do REF_IDS[r[1]] = true end
   end
   local function rockPixels(art, m, lowerOnly)
@@ -68,7 +72,7 @@ return function(S)
     local role, low = nil, false
     if FACE_SOUTH[m] or SIDE_WEST[m] or SIDE_EAST[m] then
       role = FACE_SOUTH[m] and "face" or SIDE_WEST[m] and "west" or "east"
-    elseif art.primary == "general" then
+    elseif art.primary == GENERAL then
       if not refs then
         refs = {}
         for i, r in ipairs(ROLE_REFERENCE) do

@@ -27,12 +27,25 @@ local Trees = {}
 
 Trees.DIM = 128
 Trees.SMALL, Trees.GRASS = 4, 5
-local SECONDARY = 0x200
+local SECONDARY = 0x200     -- (the family's: Trees.useFamily)
+-- The game's tileset family (src/scene/family.lua; nil: Emerald's). Hoenn's trees below are read
+-- off Hoenn's tilesets only: FireRed's are named apart (Family's pairNames), so none is taken
+-- for them
+Trees.family = nil
+function Trees.useFamily(F)
+  Trees.family = F
+  SECONDARY = F and F.primaryMetatiles or 0x200
+end
 
 --- The secondary tileset of an engine tileset pair ("general__petalburg" -> "petalburg"),
 --- without underscores; and whether the pair's primary is the General tileset.
 function Trees.tilesets(pair)
-  local p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
+  local p, s
+  if Trees.family and Trees.family.namespace then
+    p, s = Trees.family.pairNames(pair)
+  else
+    p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
+  end
   if not p then return nil, false end
   return (s:gsub("_", "")):lower(), p:lower() == "general"
 end

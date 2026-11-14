@@ -1072,6 +1072,59 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     wording ("nothing may point into the generated trees") is broader, which is worth knowing if
     the engine ever adds a map-data API to use instead.
   - Tests may name the paths (they don't ship).
+- **Tileset families (`src/scene/family.lua`):** Emerald draws with the RSE family and FireRed /
+  LeafGreen with FRLG. The two cut their tilesets differently, and everything that reads a
+  metatile goes through the game's family:
+
+  |                   | RSE (Emerald)  | FRLG (FireRed) |
+  |-------------------|----------------|----------------|
+  | primary metatiles | 512            | 640            |
+  | primary tiles     | 512            | 640            |
+  | primary palettes  | 6              | 7              |
+  | attribute         | u16            | u32            |
+  | behaviour         | bits 0-7       | bits 0-8       |
+  | layer type        | bits 12-15     | bits 29-30     |
+
+  - `Family.active()` reads the engine's game id.
+  - Tilesets carry their family (`ts.family`), so `Art.pair` cuts and reads attributes by it (`P.behaviour`, `P.layer`, `P.NUM_PRIMARY`).
+  - The plain modules that read tileset names are told the family on each scene build (`useFamily`): Roles, Signs, Trees, Buildings and Components.
+  - Behaviour enums come from `Constants.of(game)`, compared by name. FireRed's own names (`MB_FAST_WATER`, `MB_CYCLING_ROAD_WATER`, `MB_WARP_DOOR`, `MB_RUNNING_DISALLOWED`) sit in the same lists; a name the game lacks is skipped.
+  - **FireRed's names are its own.** The engine names FireRed's primary "general", like Hoenn's. `pairNames` puts `fr:` before each FireRed tileset name (`fr:general`), so no table read off Hoenn's tilesets ever matches FireRed's tiles: trees, fences, curbs, props, mountain rock, the relief's tables.
+  - It also resolves the pairs the engine names otherwise (`pallet_outdoor` → General + Pallet Town, the engine's `versions_frlg.TILESET_PAIRS`).
+  - **Maps:** World and the relief's input read the game's own maps by its prefixes (Emerald `EM_`; FireRed `FR_` and `SEVII_`).
+  - FireRed's cache has no `native/layout_files.lua`. A layout id is named after its maps' baked layouts, found by the engine's own name match (`Family.normal`: upper case, letters and digits). Maps sharing a layout keep the first name in sorted order, as World names them.
+  - In the scratch engine this gives 303 layouts from 419 of FireRed's 425 maps.
+  - **Emerald-only data stays Emerald's:**
+    - the swaps and alternates;
+    - Emerald 3DS's hand marks and sea ramps (`relief_run` applies them only when the key's game is `emerald`);
+    - the terrace groups (`T.chosenLayouts`). Emerald's `LAYOUT_SAFARI_ZONE_NORTH` is also a FireRed name;
+    - the rooms (`ROOMS.ids` are Emerald's layout numbers; `roomJob` and `placeRooms` skip a game drawn with other tilesets);
+    - `World.roles`' alias reference (Route 116).
+  - **World root:** the relief's world starts at the player's home town (Littleroot, or Pallet in FireRed).
+  - **Weather:** FireRed's weather is the engine's own FRLG field weather, not Emerald's state machine. `hazeFor` builds the state `light.lua` reads from it: rain as many drops as are falling (of 24), the others full once up.
+  - **Relief key:** a game other than Emerald carries its relief rules' version (`Run.RULES`: `firered-r2-<fp>.bin`), so a relief built by older FireRed rules is rebuilt. Emerald's key is unchanged.
+  - **Check:** Emerald's relief rebuilt after this was byte-identical (`emerald-0c3fad9f.bin`, same ticks).
+- **FireRed's relief (`src/scene/games/firered.lua`):** Emerald 3DS's counted levels, run on our own
+  reading of FireRed's General rock. No FireRed 3DS code is used (its FireRed files carry no
+  licence); its screenshots were a visual reference only.
+  - The table names ids and roles only: the rock's colours (palette 1, slots 9-14), the reference pieces (`lists`: south face, west and east bands), the rock a drawn map must hold (`rockTiles`), the mountain range, and the terraces' pieces (`terraces`: bands, heads, face ends, carved steps, faces, tree cards, the outline grey, the plain top). Its header says how each was read.
+  - `Solve.useGame(game)` points the solver's tables at the game's own (`Solve.GAMES`, filled by main.lua from `src/scene/games/`). Emerald keeps its original tables, so its build is unchanged.
+  - `Roles.useGame` does the same for the roles; the terraces read `Solve.game.terraces` (`T.G`), and `T.NP` is the family's primary size.
+  - `groups = "drawn"`: every FireRed map read as drawn is rebuilt terrace by terrace (Emerald's are a chosen list).
+  - **Post-pass (FireRed only, `relief_run.lua`):** a cell a building model stands on is flattened to the level of the first cell south of it that no model holds, and its cuts are removed. A building drawn into a cliff (Lavender's tower, its door a cave door) then stands on its door's ground, not on a plateau.
+- **FireRed's buildings (`src/scene/models/specs_firered.lua`):** our own reading of each building,
+  by Emerald 3DS's method, on our kernel. main.lua loads the file for FireRed and LeafGreen
+  (`sceneDeps.SpecsByGame`), and `useFamily` picks the game's specs (Emerald keeps `specs.lua`).
+  - **The proof (`tests/model_check.lua`, `tests/drivers/model_check.lua`):** Emerald 3DS's `ortho_check` and `density_check`, in Lua. A spec passes only when its model, rendered at 45 degrees, equals its drawing pixel for pixel over its `exact` rectangles, and no face stretches a texel. Run it with `MODEL_CHECK=<names or prefix*>`; `MODEL_VERBOSE` lists the wrong pixels and stretched faces, and each spec gets a `<name>_ortho.ppm` sheet (drawing | render | differences). All 80 FireRed specs pass.
+  - **Kernel tags:** the kernel marks what the proof doesn't judge, as Emerald 3DS's does: `~clamp` (a constant strip row, a clamped projection), `~proj` (drawn diagonal walls, vault tops), `~depth` / `~behind` (depth the drawing never shows). Geometry is unchanged, and tags aren't stored in the model cache.
+  - **Helpers:** `pallet_house` (hipped, striped hips), `gable_house` (eave, front and back slopes, an optional chimney), `gym`, `flat_top` (a top flat as drawn, falling away behind), `HipRoof` uses for the Centers, and `slabs`: runs read column by column off an outline (`{ x0, x1, top, foot }`), each a block whose front is projected and whose top falls back at 45 degrees. That fall is edge-on in the GBA's view and faces away from every lower camera. Slabs make the Cinnabar Lab's capsule, the Power Plant's octagon and its stacks, and the trees, statues and gables standing before a wall.
+  - **Placement:** `match_rows` skips a top row drawn over different backgrounds. A FireRed-only rule in `Buildings.find` drops a placement lying wholly inside a larger one (one kit drawn at several sizes). `anywhere` lets a kit stand in another secondary tileset when its pixels match: the Sevii houses and harbor, drawn alike in all three of the islands' tilesets.
+  - **Model cache:** models are cached by spec name (`models/v<MODELS_VERSION>/<game key>/`). After changing a spec in development, delete the game's folder there (or bump `Scene.MODELS_VERSION`), or the old model is served.
+  - **Left flat for now:** the cranes beside the Sevii harbors and the Power Plant, Vermilion's harbour canopies, Two Island's market stall, Trainer Tower, Mt Ember's volcano rock (no piece table for its Sevii tileset), the boulders on land, and Kanto's trees (cut-out cards: Emerald 3DS's tree art is Hoenn's).
+- **FireRed's rooms:** `roomJob` takes the game's own room specs (`deps.RoomSpecsByGame`, loaded by main.lua from `src/scene/models/interior_specs_firered.lua` when that file exists), or Emerald 3DS's for a game drawn with Hoenn's tilesets. FireRed has none yet, so its rooms lie flat as drawn. Its rooms draw with their own primary tileset (`fr:building`). `Interiors.layoutOf` cuts tiles and palettes by the pair's family (640 / 7 in FireRed). A FireRed room spec needs a room proof first (the model check over a room's pieces), as Emerald's rooms had the pak to compare with.
+- **First run (`src/prompt.lua`):** the question and Build 3D Cache come up in the games whose world is built in 3D (`P.GAMES_3D`: Emerald, FireRed, LeafGreen). `Run.TICKS` holds each game's measured build (FireRed 62,662 ticks against Emerald's 117,030; LeafGreen draws the same maps). Measured in the scratch engine: FireRed's whole build in 46 s, LeafGreen's in 41 s. `tests/drivers/first_run.lua` takes `FIRST_RUN_SPOT=MAP:x:y` for another game's field (`FR_ROUTE_1:10:20`).
+- **FireRed's sea rocks (`props.lua`):** `fr_sea_rock` and `fr_sea_rock_pale`, each four General tiles in a square at the corner four metatiles share (as Emerald's sea rock): tiles 420-423 in palette 4 (metatiles 0x110-0x119) and 173/174 over 189/190 in palette 2 (0x1CB-0x1D4). They stand as Mounds on the General's plain water (0x12B), their pale outline the foam. The relief solver's own copy of the objects is unchanged (FireRed's relief bytes stay the same); the rocks' cells are water to it.
+- **LeafGreen:** it draws FireRed's maps with its own palettes. All 81 FireRed specs pass against LeafGreen's drawings, and placements match FireRed's.
 - **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
   `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the
   prompt through `exports._promptTick`.

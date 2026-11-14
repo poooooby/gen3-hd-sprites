@@ -9,27 +9,31 @@
 --   map_tree/tilesets/<ts>/              tiles.4bpp, palettes.bin, metatiles.bin, attributes.bin,
 --                                        as pret builds them
 --   native/layout_files.lua, manifest.lua   a layout id's map name, a map's tileset pair (its
---                                        tilesets' names)
+--                                        tilesets' names); without layout_files (FireRed's cache
+--                                        has none) a layout id's name is its first map's baked one
+--                                        (the engine's match: Family.normal)
 --   native/layouts/alt_<id>.mid          a layout a script swaps in (no map uses it), baked by the
 --                                        engine
 --
 -- Plain Lua: Input.build(io) with
 --   io.read(rel) -> bytes or nil       rel under the cache's root (the paths above)
 --   io.json(text) -> table             io.lua(text) -> the table a "return {...}" source gives
---   io.behaviours                      { MB_NAME = value } Emerald's behaviour enum (raw values)
+--   io.behaviours                      { MB_NAME = value } the game's behaviour enum (raw values)
+--   io.family, io.Family               optional: the game's tileset family and src/scene/family.lua
+--                                       (without them, Emerald's: RSE, "EM_" names)
 --   io.collBlocked(coll) -> bool       an engine collision code that blocks (an alternate layout's
 --                                       baked cells keep no collision bits: where its metatile is
 --                                       not the base layout's there, this decides)
 --   io.tick                            optional, called now and then
 -- Returns { layouts = { [id] = L }, byName = { [name] = L }, maps = { map... sorted by name },
--- tilesets = { [ts] = ts }, behaviours }, with
+-- tilesets = { [ts] = ts }, behaviours, game (io.game: "emerald", "firered"; nil without it) }, with
 --   L = { id, name ("LAYOUT_ROUTE104"), w, h, blocks (0-based raw u16s), primary, secondary (ts
 --         records), outdoor, warps = { {x, y} } (sorted), signs = { ["x,y"] = true }, alternateOf
 --         (the base's name) }
 --   map = { name ("Route104"), layout (id), outdoor, connections = { { direction ("up", "down",
 --           "left", "right"), layout (id), offset } } }
 --   ts = { key, name (short: "general", "mossdeep", "battlefrontieroutsideeast"), tiles, palettes,
---          metatiles, attributes }
+--          metatiles, attributes, family (io.family) }
 
 local Input = {}
 
@@ -116,19 +120,26 @@ end
 function Input.build(io, palettesOf)
   local ROOT = ""     -- (io.read's paths are under the cache's root already)
   local tick = io.tick
+  local F, Fam = io.family, io.Family
+  -- (the prefix of a baked name of the game's: "EM_"; FireRed's "FR_" and "SEVII_")
+  local function prefixOf(file)
+    if F and Fam then return Fam.prefixOf(F, file) end
+    return file:match("^EM_") and "EM_" or nil
+  end
   local census = io.json(io.read(ROOT .. "map_tree/census.json") or "{}") or {}
   local files = io.lua(io.read(ROOT .. "native/layout_files.lua") or "return {}") or {}
   local manifest = io.lua(io.read(ROOT .. "native/manifest.lua") or "return {}") or {}
   local pairOfMap = {}
   for name, info in pairs(manifest.layouts or {}) do pairOfMap[name] = info.pair end
-  local out = { layouts = {}, byName = {}, maps = {}, tilesets = {}, behaviours = io.behaviours }
+  local out = { layouts = {}, byName = {}, maps = {}, tilesets = {}, behaviours = io.behaviours, game = io.game }
   local tilesets = out.tilesets
   local function tileset(key, short)
     local t = tilesets[key]
     if t then return t end
     local base = ROOT .. "map_tree/tilesets/" .. key .. "/"
     t = { key = key, name = short, tiles = io.read(base .. "tiles.4bpp") or "",
-          metatiles = io.read(base .. "metatiles.bin") or "", attributes = io.read(base .. "attributes.bin") or "" }
+          metatiles = io.read(base .. "metatiles.bin") or "", attributes = io.read(base .. "attributes.bin") or "",
+          family = F }
     t.palettes = palettesOf(io.read(base .. "palettes.bin"))
     tilesets[key] = t
     return t
@@ -149,21 +160,47 @@ function Input.build(io, palettesOf)
     if h then headers[slot] = h end
     if tick then tick() end
   end
+  -- (no layout_files: each layout id named after its maps' baked layouts, which the engine's own
+  -- name match finds; maps sharing a layout keep the first name in sorted order, as World names it)
+  if next(files) == nil and F and Fam then
+    local names, byNormal = {}, {}
+    for name in pairs(manifest.layouts or {}) do names[#names + 1] = name end
+    table.sort(names)
+    for _, name in ipairs(names) do
+      local k = Fam.normal(F, name)
+      if byNormal[k] == nil then byNormal[k] = name end
+    end
+    for _, slot in ipairs(slots) do
+      local h = headers[slot]
+      local id = h and tonumber(h.layoutId)
+      local k = id and byNormal[Fam.normal(F, tostring(h.pretName or h.id or ""))]
+      if k then
+        local had = files[id]
+        if had == nil or k:sub(#prefixOf(k) + 1) < had:sub(#prefixOf(had) + 1) then files[id] = k end
+      end
+    end
+  end
   local OUTDOOR = { [1] = true, [2] = true, [3] = true, [5] = true, [6] = true }
   for _, slot in ipairs(slots) do
     local h = headers[slot]
     local id = h and tonumber(h.layoutId)
     local file = id and files[id]
-    if file and type(file) == "string" and file:match("^EM_") then
+    local prefix = type(file) == "string" and prefixOf(file)
+    if prefix then
       local L = out.layouts[id]
       if not L then
         local grid = io.read(ROOT .. "map_tree/maps/" .. slot .. "/grid.bin")
         local pair = pairOfMap[file]
-        local p, s = tostring(pair or ""):match("^(.-)__(.+)$")
+        local p, s
+        if F and F.namespace then
+          p, s = F.pairNames(pair, "^(.-)__(.+)$")
+        else
+          p, s = tostring(pair or ""):match("^(.-)__(.+)$")
+        end
         if grid and p then
           local blocks = {}
           for i = 0, h.width * h.height - 1 do blocks[i] = u16(grid, i * 2) end
-          L = { id = id, name = "LAYOUT_" .. file:sub(4), w = h.width, h = h.height, blocks = blocks,
+          L = { id = id, name = "LAYOUT_" .. file:sub(#prefix + 1), w = h.width, h = h.height, blocks = blocks,
                 primary = tileset(h.primaryTileset, Input.short(p)),
                 secondary = tileset(h.secondaryTileset, Input.short(s)),
                 outdoor = false, warps = {}, signs = {}, warpSet = {} }
@@ -203,7 +240,7 @@ function Input.build(io, palettesOf)
   -- the alternates: the engine's baked cells (Input.alternateBlocks), the base's tilesets, events
   -- and outdoor-ness
   local function baked(name) return Input.baked(io.read(ROOT .. "native/layouts/" .. name .. ".mid")) end
-  for id, row in pairs(Input.ALTERNATES) do
+  for id, row in pairs((F == nil or F.name == "rse") and Input.ALTERNATES or {}) do
     local base = out.byName[row[2]]
     local blocks = base and Input.alternateBlocks(base, baked("alt_" .. id), baked("EM_" .. base.name:sub(8)),
       io.collBlocked, tick)

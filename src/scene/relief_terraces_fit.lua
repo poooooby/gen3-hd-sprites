@@ -1161,7 +1161,7 @@ return function(S)
     end
     local function own(cell)
       local m = ownId(cell)
-      return m ~= nil and m >= 512
+      return m ~= nil and m >= T.NP
     end
     local seams = T.seamCellsOf(c)
     local function tileset(cell) return S.input.byName[c.src[cell][1]].secondary.name end
@@ -2162,7 +2162,7 @@ return function(S)
       local q = pieces[n]
       if q == nil or q[1] ~= "F" or c.keep[n] or c.bridges[n] then return false end
       local k = c.kind[n]
-      if not (k == GROUND or (k == UNKNOWN and (c:role(n) ~= "tree" or c:metatile(n) >= 512))) then return false end
+      if not (k == GROUND or (k == UNKNOWN and (c:role(n) ~= "tree" or c:metatile(n) >= T.NP))) then return false end
       if q[2] >= h - 0.5 then return k == GROUND end
       local up = K(KX(n), KY(n) - 1)
       local north = pieces[up]

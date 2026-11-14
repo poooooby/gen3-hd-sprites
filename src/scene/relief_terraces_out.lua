@@ -29,13 +29,20 @@ return function(S)
   local ROCK_ALL, ROCK_TOP, ROCK_RIM = Solve.ROCK_ALL, Solve.ROCK_TOP, Solve.ROCK_RIM
 
   local CUT_LIFT = 2
-  local FACES = { 0x07c, 0x0a9, 0x079, 0x091 }
+  -- (another game's own: T.G, src/scene/games/<game>.lua; Emerald 3DS's for Emerald)
+  local G, NP = T.G, T.NP
+  local FACES = G and G.faces or { 0x07c, 0x0a9, 0x079, 0x091 }
   local BLOCK_WALLS, PLAIN, THIN_DECK = 4, 1, 8
   local OUTLINE_GREY = { [0x83 * 65536 + 0x83 * 256 + 0x8b] = true }
+  if G then
+    OUTLINE_GREY = {}
+    for _, c in ipairs(G.outlineGrey) do OUTLINE_GREY[c] = true end
+  end
   local GOES_ON, GOES_ON_FACE, GOES_ON_SOUTH, FACE_TOP, CANOPY = C.GOES_ON, 32, 64, 16, 128
-  local CANOPY_TOP = 0x00E
-  local SIDE_FACE = { W = 0x070, E = 0x072 }
-  local HEAD_DRAWN = { W = 0x068, E = 0x06a }
+  local CANOPY_TOP = G and G.canopyTop or 0x00E
+  local SIDE_FACE = G and G.sideFace or { W = 0x070, E = 0x072 }
+  local HEAD_DRAWN = G and G.headDrawn or { W = 0x068, E = 0x06a }
+  local PLAIN_TOP = G and G.plainTop or 0x071
   T.HEAD_DRAWN = HEAD_DRAWN
   local LIP_ROWS = 6
   local NONE16, NO_VARIANT = 0xFFFF, 0xFFFF
@@ -195,7 +202,7 @@ return function(S)
   local headOfCache = setmetatable({}, { __mode = "k" })
   function T.headOf(art, m)
     m = twin(art, m)
-    if m >= 0x200 or BOULDER_HEAD[m] then return nil end
+    if m >= NP or BOULDER_HEAD[m] then return nil end
     local known = artCache(headOfCache, art)
     local v = known[m]
     if v ~= nil then return v or nil end
@@ -355,7 +362,7 @@ return function(S)
         if out[n] and out[n][3] ~= nil and out[n][3] ~= false then return out[n][3] end
       end
     end
-    return 0x071
+    return PLAIN_TOP
   end
 
   local function lowSide(c, cell)
@@ -863,7 +870,7 @@ return function(S)
       local lid = s[1]
       local art = c.arts[lid]
       local below = K(KX(cell), KY(cell) + 1)
-      if not (c:metatile(cell) < 512 or c.keep[cell] or not c.src[below] or not T.smallTrunk(c, below)) then
+      if not (c:metatile(cell) < T.NP or c.keep[cell] or not c.src[below] or not T.smallTrunk(c, below)) then
         local rows = canopyMask(art, c:metatile(cell))
         local rec = out[cell]
         if not (rows == nil or (rec ~= nil and (type(rec[1]) == "table" or rec[4] ~= false))) then
@@ -888,7 +895,7 @@ return function(S)
     local recs = T.records(sol)
     local function tsOf(lay) return S.input.layouts[lay].secondary.name end
     local function vkey(lay, m, rows)
-      return (m >= 512 and tsOf(lay) or "-") .. "|" .. m .. "|" .. table.concat(rows, ",", 0, 15)
+      return (m >= T.NP and tsOf(lay) or "-") .. "|" .. m .. "|" .. table.concat(rows, ",", 0, 15)
     end
     local keyof = {}
     for i = 0, M.nVariants - 1 do
@@ -908,7 +915,7 @@ return function(S)
           for i = -1, 1 do
             local n = K(x + i + ox, y + j + oy)
             if c.src[n] and c.src[n][1] == lid and (c.kind[n] == ROCK or c.kind[n] == TOP) then
-              if ownXY(x + i, y + j) >= 512 then mine = mine + 1 else theirs = theirs + 1 end
+              if ownXY(x + i, y + j) >= T.NP then mine = mine + 1 else theirs = theirs + 1 end
             end
           end
         end
@@ -1102,7 +1109,15 @@ return function(S)
 
   function T.chosenLayouts()
     local out, have = {}, {}
-    for _, l in ipairs(T.GROUPS) do out[#out + 1] = l; have[l] = true end
+    -- (Emerald's maps: another game's of the same name is not one of them. A game whose own pieces
+    -- say "drawn" has every map read as drawn rebuilt: a member of each drawn group)
+    local game = S.input and S.input.game
+    local groups = (game == nil or game == "emerald") and T.GROUPS or {}
+    if G and G.groups == "drawn" then
+      groups = {}
+      for _, g in ipairs(S.DRAWN) do groups[#groups + 1] = g.members[1] end
+    end
+    for _, l in ipairs(groups) do out[#out + 1] = l; have[l] = true end
     for _, l in ipairs(T.markedLayouts()) do
       if not have[l] then out[#out + 1] = l; have[l] = true end
     end

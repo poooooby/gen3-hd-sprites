@@ -172,6 +172,13 @@ bases, belts and edge fills set by hand, cell by cell, for 39 maps; no data of t
 Changes: rewritten in Lua, the maps read from the game instead of pret's files; the corrections
 file minified (its contents and key order unchanged).
 
+FireRed and LeafGreen: the relief's piece tables (src/scene/games/firered.lua) and the building
+specs (src/scene/models/specs_firered.lua) are WoobleView's own reading of those games' drawings,
+run by the adapted relief solver, terraces and modelling primitives above. The proofs those specs
+pass (tests/model_check.lua, a development tool, not shipped) adapt Emerald 3DS's ortho_check
+and density_check (3ds_port/scripts/voxel_building.py). Changes: rewritten in Lua over the
+kernel's meshes, run in the game. No code of Pokemon FireRed 3DS (NachoGonzalez2001) is used.
+
 Pokemon is (c) Nintendo, Game Freak and Creatures. WoobleView contains none of their content.
 
 ========================================================================================

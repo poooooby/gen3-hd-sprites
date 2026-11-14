@@ -1,8 +1,9 @@
 -- The relief solver's input off the engine (Battle Scene: Overworld, and any later 3D view of the
 -- overworld): src/scene/relief_input.lua over the engine's cache of the player's cartridge, and
--- the solve (src/scene/relief_solve.lua) run on it. Emerald only.
+-- the solve (src/scene/relief_solve.lua) run on it, for the game being played (its tileset family:
+-- src/scene/family.lua).
 --
--- deps = { Solve, Art, Input, Roles, parts = { relief_drawn, relief_shape, relief_cuts,
+-- deps = { Solve, Art, Input, Roles, Family, parts = { relief_drawn, relief_shape, relief_cuts,
 -- relief_world } } (the plain modules, loaded by the caller).
 --
 --   WorldMaps.input(tick) -> relief_input's tables, or nil and why
@@ -27,8 +28,11 @@ return function(deps)
     local json = deps.json
     local okC, cache = pcall(function() return Dataset and Dataset.cache() end)
     if not (okC and cache and json and Constants and Perm) then return nil, "no cache" end
-    -- Emerald's behaviour enum, its raw values (pret's include/constants/metatile_behaviors.h)
-    local okB, byName = pcall(function() return Constants.of("emerald").metatile_behaviors.byName end)
+    -- the game's behaviour enum, its raw values (pret's include/constants/metatile_behaviors.h)
+    local Family = deps.Family
+    local game = Family and Family.game() or "emerald"
+    if Family and deps.Roles and deps.Roles.useFamily then deps.Roles.useFamily(Family.of(game)) end
+    local okB, byName = pcall(function() return Constants.of(game).metatile_behaviors.byName end)
     if not (okB and type(byName) == "table") then return nil, "no behaviours" end
     local behaviours = {}
     for name, v in pairs(byName) do
@@ -50,6 +54,7 @@ return function(deps)
         return ok and t or nil
       end,
       behaviours = behaviours,
+      family = Family and Family.of(game) or nil, Family = Family, game = game,
       -- (an alternate layout's baked cell, its metatile not the base's there: pret's collision bits
       -- are set on walls and on ledges' jump cells)
       collBlocked = function(c) return Perm.isWall(c) or Perm.isLedge(c) end,
@@ -57,7 +62,7 @@ return function(deps)
     }
     local ok, input = pcall(deps.Input.build, io_, deps.Art.palettes)
     if not ok then return nil, tostring(input) end
-    if not next(input.layouts) then return nil, "no Emerald layouts" end
+    if not next(input.layouts) then return nil, "no layouts" end
     return input
   end
 

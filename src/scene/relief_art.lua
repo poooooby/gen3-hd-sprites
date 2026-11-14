@@ -12,8 +12,10 @@
 --
 -- Plain Lua. A tileset: { name ("gTileset_General"), tiles (4bpp bytes, a string), palettes
 -- (sixteen palettes of sixteen colours, each r * 65536 + g * 256 + b, 0-based), metatiles (8 u16
--- tile entries a metatile, a string), attributes (a u16 a metatile, a string) }. A colour is the
--- integer r * 65536 + g * 256 + b throughout.
+-- tile entries a metatile, a string), attributes (an attribute a metatile, a string), family (its
+-- tileset family, src/scene/family.lua: where the primary's tiles, metatiles and palettes end and
+-- how an attribute reads; without one, Emerald's) }. A colour is the integer r * 65536 + g * 256 + b
+-- throughout.
 
 local bit = require("bit")
 local band, bor, bxor, rshift, lshift = bit.band, bit.bor, bit.bxor, bit.rshift, bit.lshift
@@ -21,7 +23,7 @@ local floor = math.floor
 
 local Art = {}
 
-Art.NUM_PRIMARY = 512
+Art.NUM_PRIMARY = 512     -- (Emerald's: a pair's own is pair.NUM_PRIMARY)
 local MAGENTA = 255 * 65536 + 0 * 256 + 255
 
 -- ── Python, exactly ──────────────────────────────────────────────────────────
@@ -238,11 +240,15 @@ end
 function Art.pair(pt, st)
   st = st or pt
   local P = { primary = pt, secondary = st, _sub = {}, _sub2 = {}, _cells = {}, _layers = {} }
+  -- (the family's cuts: Emerald's 512 / 512 / 6 and u16 attributes without one)
+  local F = pt.family
+  local NT, NM, NPAL = F and F.primaryTiles or 512, F and F.primaryMetatiles or 512, F and F.primaryPals or 6
+  P.NUM_PRIMARY, P.family = NM, F
   -- an 8x8 block: { [k] = colour, [64 + k] = colour index }, row major, or nil (pret's Pair:
   -- unreadable); `magenta` as Tilesets.subtile has it (magenta, index 0)
   local function readSubtile(tileId, palId, magenta)
-    local ts = tileId < 512 and pt or st
-    local loc = tileId < 512 and tileId or tileId - 512
+    local ts = tileId < NT and pt or st
+    local loc = tileId < NT and tileId or tileId - NT
     local base = loc * 32
     if base + 32 > #ts.tiles then
       if not magenta then return nil end
@@ -250,7 +256,7 @@ function Art.pair(pt, st)
       for k = 0, 63 do out[k], out[64 + k] = MAGENTA, 0 end
       return out
     end
-    local pal = (palId < 6 and pt or st).palettes[palId]
+    local pal = (palId < NPAL and pt or st).palettes[palId]
     if not pal then
       if not magenta then return nil end
       pal = {}
@@ -268,19 +274,29 @@ function Art.pair(pt, st)
   end
   --- The 8 tile entries of metatile m, or nil past its table.
   function P.entries(m)
-    local ts = m < 512 and pt or st
-    local i = m < 512 and m or m - 512
+    local ts = m < NM and pt or st
+    local i = m < NM and m or m - NM
     if (i + 1) * 16 > #ts.metatiles then return nil end
     local e = {}
     for k = 0, 7 do e[k] = u16(ts.metatiles, i * 16 + k * 2) end
     return e
   end
-  --- Its attribute (the behaviour is its low byte).
+  --- Its attribute (Emerald's a u16, its behaviour the low byte; FireRed's a u32).
   function P.attribute(m)
-    local ts = m < 512 and pt or st
-    local i = m < 512 and m or m - 512
+    local ts = m < NM and pt or st
+    local i = m < NM and m or m - NM
+    if F then return F.attribute(ts.attributes, i) end
     if not ts.attributes or (i + 1) * 2 > #ts.attributes then return 0 end
     return u16(ts.attributes, i * 2)
+  end
+  --- Its behaviour (the game's raw value) and layer type.
+  function P.behaviour(m)
+    local a = P.attribute(m)
+    return F and F.behaviour(a) or a % 256
+  end
+  function P.layer(m)
+    local a = P.attribute(m)
+    return F and F.layer(a) or floor(a / 4096) % 16
   end
   -- LayoutArt.subtiles(m, layer): four blocks of 64 { colour, index }, flips applied (magenta
   -- where a tile is unreadable)
@@ -406,8 +422,9 @@ end
 function Art.aliasOf(art, ref, rolesSorted, boulderHeads)
   if not Art.ALIAS_TILESETS[art.secondary] then return nil end
   local known = {}
+  local NM = art.pair and art.pair.NUM_PRIMARY or 512
   for _, m in ipairs(rolesSorted) do
-    if m < 512 then
+    if m < NM then
       local k = drawingKey(ref.cellImage(m))
       if known[k] == nil then known[k] = m end
     end
@@ -426,7 +443,7 @@ function Art.aliasOf(art, ref, rolesSorted, boulderHeads)
   local alias, aliasOrder = {}, {}
   local votes, voteOrder = {}, {}
   for _, m in ipairs(order) do
-    if m >= 512 then
+    if m >= NM then
       local g = known[drawingKey(art.cellImage(m))]
       if g then
         alias[m] = g
@@ -496,6 +513,7 @@ end
 --- tiles read as the General's ids, its own colours in the General's).
 function Art.aliasArt(art, a)
   local A = {}
+  local NM = art.pair and art.pair.NUM_PRIMARY or 512
   for k, v in pairs(art) do A[k] = v end
   A.alias = a
   A.reading = art.id
@@ -510,7 +528,7 @@ function Art.aliasArt(art, a)
     local img = cache[key]
     if img then return img end
     img = art.cellImage(m, lowerOnly)
-    if m >= 512 then
+    if m >= NM then
       local out = {}
       for k = 0, 255 do out[k] = a.colour[img[k]] or img[k] end
       img = out

@@ -56,7 +56,13 @@ Signs.FOLIAGE = 0.5
 Signs.COVER_SLACK = 2      -- rows a covering drawing may leave short
 Signs.HOUSE_HALF_WIDTH, Signs.HOUSE_HEIGHT = 5, 7
 
-local SECONDARY = 0x200
+local SECONDARY = 0x200     -- (the family's: Signs.useFamily)
+-- The game's tileset family (src/scene/family.lua; nil: Emerald's)
+Signs.family = nil
+function Signs.useFamily(F)
+  Signs.family = F
+  SECONDARY = F and F.primaryMetatiles or 0x200
+end
 -- Secondary-tileset metatiles that stand alone with no sign event and are never a post: Slateport's
 -- curb ends, its harbour bollard, the market's goods, a moored sailboat's cell
 local NOT_POSTS = { slateport = { [0x2B9] = true, [0x2C7] = true, [0x32D] = true, [0x20C] = true,
@@ -82,7 +88,12 @@ end
 --- An engine tileset pair's primary and secondary tileset names ("general__mossdeep" -> "general",
 --- "mossdeep"), lower case without underscores.
 function Signs.tilesets(pair)
-  local p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
+  local p, s
+  if Signs.family and Signs.family.namespace then
+    p, s = Signs.family.pairNames(pair)
+  else
+    p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
+  end
   if not p then return nil, nil end
   return p:lower(), (s:gsub("_", "")):lower()
 end

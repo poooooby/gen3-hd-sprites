@@ -92,6 +92,13 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Seaside Cycling Road stands on its piers over the sea, rails, girders and all, with its ramps
   coming down to the gatehouses. Fences stand post by post, and hedges, curbs, railings and walls
   stand as solid runs.
+- 🗼 **Kanto in 3D:** In FireRed and LeafGreen, the towns of Kanto and the Sevii Islands stand in
+  3D, each building rebuilt from its own overworld art: the houses, Pokémon Centers, Marts and
+  gyms, Professor Oak's lab, Pewter's museum, the Pokémon Tower, Celadon's Department Store and
+  Game Corner, Silph Co., the Pokémon Mansion, Cinnabar's capsule-shaped lab, the Power Plant
+  with its four smokestacks, the Pokémon League with its trees and statues, Bill's sea cottage
+  with his machine on the roof, the route gatehouses, the Cycling Road's gate, and the islands'
+  houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them.
 - 🛋️ **Furnished rooms:** In Emerald, battles indoors take place in furnished rooms, rebuilt
   from their own art: the Pokémon Centers and Poké Marts (the counter with its Poké Balls, the
   healing machine, stools, the escalator), the houses of Littleroot and the common houses of
@@ -147,7 +154,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
-| **Build 3D Cache** | Press A | – | Emerald, with Battle Scene on Overworld: build the whole 3D world now, with a progress bar and the time left (a minute or two), and keep it on this device so every battle loads its world straight away. Press B to keep playing while it finishes in the background; a message tells you when it's ready. Otherwise it builds a little at a time while you play. |
+| **Build 3D Cache** | Press A | – | Emerald, FireRed and LeafGreen, with Battle Scene on Overworld: build the whole 3D world now, with a progress bar and the time left (a minute or two), and keep it on this device so every battle loads its world straight away. Press B to keep playing while it finishes in the background; a message tells you when it's ready. Otherwise it builds a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Delete the 3D world kept on this device, to free the space or start afresh. It is built again the next time it is needed. |
 | **Scene Blur** | On / Off | On | With Battle Scene on Overworld: a soft tilt-shift blur on the far distance and the nearest ground, so the world looks like a miniature. Off: the whole world sharp. |
 | **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings and every furnished room are built the first time you step into the world, a little each frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive, the rooms read again each time the game starts, and both dropped when it closes. |
@@ -172,23 +179,25 @@ Open **OPTIONS → MODS → WoobleView**.
 
 ## 📌 Good to Know
 
-- 👋 **The first time you play Emerald** with WoobleView, it asks whether you'd like your battles
+- 👋 **The first time you play Emerald, FireRed or LeafGreen** with WoobleView, it asks whether you'd like your battles
   in 3D, and if so whether to build the 3D world now (with a progress bar) or let it build while
   you play. Changed your mind while it builds? Press B and it carries on in the background while
   you play. Say no and it never asks again; you can switch it on any time in **OPTIONS → MODS →
   WoobleView**. Its messages carry the WoobleView name, so you always know which mod is asking.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's trees stand as
   real trees with leafy crowns, and in Emerald most of its town buildings, fences, hedges, curbs
-  and railings stand in 3D too. Signs, street lamps and posts stand as little solids of their own
-  pixels, and Kanto's trees as flat cut-outs of their overworld art. In Emerald the land has its
-  shape too: cliffs, terraces, ledges, stairs and the rocks at sea rise as the map draws them,
-  and the land past the map's edges carries on at their height (a cave's rock, a crater's rim),
-  all read off your own cartridge the first time you play (it builds quietly in the background
-  for a minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk). Rocks in the other games, and the buildings
-  not yet rebuilt (in Ruby, Sapphire, FireRed and LeafGreen, all of them) lie flat on the ground
-  as the game draws them. Indoors, the few rooms not rebuilt show their furniture flat, but for
-  the pieces they share with the rooms that are. A battle with no overworld around it, or no open ground near you,
-  keeps the game's own background.
+  and railings stand in 3D too, as do the buildings of FireRed and LeafGreen. Signs, street lamps
+  and posts stand as little solids of their own pixels, and Kanto's trees as flat cut-outs of
+  their overworld art. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
+  terraces, ledges, stairs and the rocks at sea rise as the map draws them, and
+  the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
+  read off your own cartridge the first time you play (it builds quietly in the background for a
+  minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk).
+  Rocks and buildings in Ruby and Sapphire, and the few buildings not yet rebuilt in FireRed and
+  LeafGreen (the harbour cranes, Trainer Tower), lie flat on the ground as the game draws them.
+  Indoors, Emerald's few rooms not rebuilt show their furniture flat, but for the pieces they
+  share with the rooms that are; FireRed's and LeafGreen's rooms are drawn flat for now. A battle
+  with no overworld around it, or no open ground near you, keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
   to your screen.
@@ -222,6 +231,12 @@ Open **OPTIONS → MODS → WoobleView**.
   the weather's light and haze, the drifting patches of sunlight, the rays, dust and glow, the
   rain, sand, ash and fog in the scene, the diorama blur and the entrance's cinema bars, blur,
   speed lines and flash.
+
+## 💡 Inspirations
+
+- [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS) by
+  NachoGonzalez2001 first showed Kanto standing in 3D. WoobleView's FireRed and LeafGreen buildings
+  and land are its own reading of the games' art, by Emerald 3DS's method.
 
 ---
 

@@ -49,26 +49,36 @@ return function(S)
   for k in pairs(ROCK_TOP) do TOP_COLOURS[k] = true end
   for k in pairs(ROCK_RIM) do TOP_COLOURS[k] = true end
   local FACE_COLOURS, FLECK = ROCK_FACE, ROCK_FLECK
-  local BAND_WEST = set({ 0x070, 0x073, 0x088, 0x06b, 0x080, 0x083, 0x068, 0x172, 0x175, 0x177, 0x17a })
-  local BAND_EAST = set({ 0x072, 0x075, 0x0a2, 0x08a, 0x06d, 0x082, 0x084, 0x06a, 0x174, 0x176, 0x17c, 0x0a4 })
-  local HEADS = { [0x068] = "W", [0x083] = "W", [0x080] = "W", [0x06a] = "E", [0x084] = "E", [0x082] = "E" }
-  local HEADS_SORTED = { 0x068, 0x06a, 0x080, 0x082, 0x083, 0x084 }
-  local ON_TOP = SETS.BOULDER
-  local BOULDER_FOOT = set({ 0x09b, 0x09c })
-  local BOULDER_HEAD = set({ 0x093, 0x094 })
-  local LOOSE = set({ 0x0df, 0x0e0, 0x0e1, 0x0e2 })
-  local CARVED_STEPS = set({ 0x0e8, 0x0e9, 0x0ea, 0x0eb })
-  local UPPER_END = set({ 0x074, 0x089 })
-  local LOWER_END = set({ 0x07d, 0x07b, 0x078, 0x092, 0x090 })
+  -- (another game's own pieces: Solve.game.terraces, src/scene/games/<game>.lua; Emerald 3DS's
+  -- below for Emerald. NP: where the game's primary metatiles end)
+  local G = Solve.game and Solve.game.terraces or nil
+  local NP = Solve.game and Solve.game.primary or 0x200
+  T.G, T.NP = G, NP
+  local BAND_WEST = set(G and G.bandWest or { 0x070, 0x073, 0x088, 0x06b, 0x080, 0x083, 0x068, 0x172, 0x175, 0x177, 0x17a })
+  local BAND_EAST = set(G and G.bandEast or { 0x072, 0x075, 0x0a2, 0x08a, 0x06d, 0x082, 0x084, 0x06a, 0x174, 0x176, 0x17c, 0x0a4 })
+  local HEADS = G and G.heads or { [0x068] = "W", [0x083] = "W", [0x080] = "W", [0x06a] = "E", [0x084] = "E", [0x082] = "E" }
+  local HEADS_SORTED = G and G.headsSorted or { 0x068, 0x06a, 0x080, 0x082, 0x083, 0x084 }
+  local ON_TOP = G and set(G.onTop) or SETS.BOULDER
+  local BOULDER_FOOT = set(G and G.boulderFoot or { 0x09b, 0x09c })
+  local BOULDER_HEAD = set(G and G.boulderHead or { 0x093, 0x094 })
+  local LOOSE = set(G and G.loose or { 0x0df, 0x0e0, 0x0e1, 0x0e2 })
+  local CARVED_STEPS = set(G and G.carvedSteps or { 0x0e8, 0x0e9, 0x0ea, 0x0eb })
+  local UPPER_END = set(G and G.upperEnd or { 0x074, 0x089 })
+  local LOWER_END = set(G and G.lowerEnd or { 0x07d, 0x07b, 0x078, 0x092, 0x090 })
   local MOUNTAIN = {}
-  for m = 0x064, 0x0bf do MOUNTAIN[m] = true end
-  for m = 0x172, 0x192 do MOUNTAIN[m] = true end
-  for _, m in ipairs({ 0x1a0, 0x1a8, 0x1b0, 0x1f0, 0x1f1 }) do MOUNTAIN[m] = true end
-  for m in pairs(SETS.FACE_SOUTH) do MOUNTAIN[m] = true end
-  for m in pairs(SETS.BOULDER) do MOUNTAIN[m] = true end
-  for m in pairs(SETS.DIRT) do MOUNTAIN[m] = nil end
+  if G then
+    for _, m in ipairs(G.mountain) do MOUNTAIN[m] = true end
+    for m in pairs(SETS.FACE_SOUTH) do MOUNTAIN[m] = true end
+  else
+    for m = 0x064, 0x0bf do MOUNTAIN[m] = true end
+    for m = 0x172, 0x192 do MOUNTAIN[m] = true end
+    for _, m in ipairs({ 0x1a0, 0x1a8, 0x1b0, 0x1f0, 0x1f1 }) do MOUNTAIN[m] = true end
+    for m in pairs(SETS.FACE_SOUTH) do MOUNTAIN[m] = true end
+    for m in pairs(SETS.BOULDER) do MOUNTAIN[m] = true end
+    for m in pairs(SETS.DIRT) do MOUNTAIN[m] = nil end
+  end
   local MOUNTAIN_SORTED = {}        -- sorted(MOUNTAIN), the General's (< 0x200)
-  for m in pairs(MOUNTAIN) do if m < 0x200 then MOUNTAIN_SORTED[#MOUNTAIN_SORTED + 1] = m end end
+  for m in pairs(MOUNTAIN) do if m < NP then MOUNTAIN_SORTED[#MOUNTAIN_SORTED + 1] = m end end
   table.sort(MOUNTAIN_SORTED)
   local GROUND, TOP, ROCK, UNKNOWN = "G", "T", "R", "?"
   local WORLD = -1                  -- the level the world is counted from (a key no cell has)
@@ -79,7 +89,7 @@ return function(S)
   T.LOOSE, T.CARVED_STEPS, T.UPPER_END, T.LOWER_END, T.MOUNTAIN, T.MOUNTAIN_SORTED = LOOSE, CARVED_STEPS, UPPER_END, LOWER_END, MOUNTAIN, MOUNTAIN_SORTED
   T.GROUND, T.TOP, T.ROCK, T.UNKNOWN, T.WORLD = GROUND, TOP, ROCK, UNKNOWN, WORLD
   T.TOP_COLOURS, T.FACE_COLOURS = TOP_COLOURS, FACE_COLOURS
-  local GENERAL = "general"
+  local GENERAL = Solve.GENERAL or "general"
   T.GENERAL = GENERAL
 
   -- ── small helpers ────────────────────────────────────────────────────────────
@@ -186,7 +196,7 @@ return function(S)
     local cls = {}
     for k = 0, 255 do cls[k] = "G" end
     local flat = false
-    if m >= 0x200 then
+    if m >= NP then
       flat = true
       local c0 = img[0]
       for k = 1, 255 do if img[k] ~= c0 then flat = false; break end end
@@ -266,7 +276,7 @@ return function(S)
   local twinsOf = setmetatable({}, { __mode = "k" })
   --- The General tileset's mountain tile a map's own tile is drawn as, or m itself.
   local function twin(art, m)
-    if m < 0x200 then return m end
+    if m < NP then return m end
     local known = cacheOf(twinsOf, art)
     local hit = known[m]
     if hit then return hit end
@@ -330,7 +340,7 @@ return function(S)
   local copiesOf = setmetatable({}, { __mode = "k" })
   --- The General's mountain tile whose rock tile m draws pixel for pixel, or m.
   local function drawnCopy(art, m)
-    if m >= 0x200 or MOUNTAIN[m] or art.primary ~= GENERAL then return m end
+    if m >= NP or MOUNTAIN[m] or art.primary ~= GENERAL then return m end
     local known = cacheOf(copiesOf, art)
     local hit = known[m]
     if hit then return hit end
@@ -579,7 +589,7 @@ return function(S)
     end
     local own = m
     local warp = roles.warps[lx .. "," .. ly]
-    if not (m >= 0x200 and warp) or rockBeside() then m = twin(art, m) end
+    if not (m >= NP and warp) or rockBeside() then m = twin(art, m) end
     local t = cls.T / 256.0
     local f = cls.F / 256.0
     local role = roles.role_at(lx, ly)
@@ -587,8 +597,8 @@ return function(S)
       m, role = drawnCopy(art, m), "cliff"
     end
     local isAl = aliased(art)
-    local alien = isAl and m >= 0x200 and not MOUNTAIN[m]
-    if isAl and own >= 0x200 and role == "floor" then
+    local alien = isAl and m >= NP and not MOUNTAIN[m]
+    if isAl and own >= NP and role == "floor" then
       alien = true
       if MOUNTAIN[m] and f < 0.08 and t >= 0.45 then
         self.walked_tops[cell] = true
@@ -745,7 +755,13 @@ return function(S)
     local cls = pixelClasses(art, m)
     return cls.F < 0.08 * 256 and cls.T >= 0.45 * 256
   end
-  function Cells:house(cell) return self.models[cell] ~= nil and self:role(cell) == "wall" end
+  -- (a house: a building model's cell its roles call a wall - inside a house its door opens; in a game
+  -- with its own pieces, any building model's cell: FireRed opens many a building on a plain
+  -- doorway, MB_CAVE_DOOR, as it opens its caves, which no door rule could tell apart)
+  function Cells:house(cell)
+    if self.models[cell] == nil then return false end
+    return G ~= nil or self:role(cell) == "wall"
+  end
   function T.inFace(art, x, y, both)
     local a, b
     for i, nx in ipairs({ x - 1, x + 1 }) do
@@ -964,7 +980,7 @@ return function(S)
             else
               local rank
               if (wa and wb) or (k == GROUND and nk == GROUND and c:walked(cell) and c:walked(n)) then rank = 0
-              elseif ma < 0x200 and mb < 0x200 then rank = 1
+              elseif ma < NP and mb < NP then rank = 1
               else rank = 2 end
               if (c.walked_tops[cell] == true) ~= (c.walked_tops[n] == true) then rank = 3 end
               if wa ~= wb then rank = rank + 3 end
@@ -1031,7 +1047,7 @@ return function(S)
       local _, n = steps(c, cells, d)
       local key = vk(comp[hi], comp[lo], n)
       vote.add(key, head and 1 or 2)
-      local h = d == "S" and ((c:role(lo) == "wall" and c:metatile(lo) >= 0x200)
+      local h = d == "S" and ((c:role(lo) == "wall" and c:metatile(lo) >= NP)
         or c.kind[K(KX(lo), KY(lo) + 1)] == UNKNOWN)
       hidden[key] = (hidden[key] or 0) + (h and 1 or 0)
     end
@@ -1329,12 +1345,13 @@ return function(S)
   end
 
   function T.treeCard(c, cell) return T.TREE_CARDS[c:metatile(cell)] == true or T.smallTrunk(c, cell) end
-  T.SMALL_TRUNKS = set({ 0x016, 0x017, 0x0C6, 0x0C7, 0x1F4, 0x1F5 })
-  T.TREE_CARDS = set({ 0x016, 0x017, 0x0C6, 0x0C7, 0x1F4, 0x1F5, 0x1D4, 0x1D5, 0x1D6, 0x1D7, 0x1DC, 0x1DD, 0x1DE,
-                       0x1DF, 0x1E4, 0x1E5, 0x1E6, 0x1E7, 0x1EC, 0x1ED, 0x1F2, 0x1F3, 0x1FC, 0x1FD, 0x01E, 0x01F,
-                       0x026, 0x027, 0x036, 0x037 })
-  T.OWN_TRUNKS = { dewford = set({ 0x23A, 0x243 }), fortree = set({ 0x253, 0x22A }), mauville = set({ 0x226 }),
-                   lavaridge = set({ 0x218, 0x21A, 0x3B8, 0x203, 0x201 }), rustboro = set({ 0x307 }) }
+  T.SMALL_TRUNKS = set(G and G.smallTrunks or { 0x016, 0x017, 0x0C6, 0x0C7, 0x1F4, 0x1F5 })
+  T.TREE_CARDS = set(G and G.treeCards or { 0x016, 0x017, 0x0C6, 0x0C7, 0x1F4, 0x1F5, 0x1D4, 0x1D5, 0x1D6, 0x1D7, 0x1DC,
+                       0x1DD, 0x1DE, 0x1DF, 0x1E4, 0x1E5, 0x1E6, 0x1E7, 0x1EC, 0x1ED, 0x1F2, 0x1F3, 0x1FC, 0x1FD,
+                       0x01E, 0x01F, 0x026, 0x027, 0x036, 0x037 })
+  T.OWN_TRUNKS = G and G.ownTrunks or { dewford = set({ 0x23A, 0x243 }), fortree = set({ 0x253, 0x22A }),
+                   mauville = set({ 0x226 }), lavaridge = set({ 0x218, 0x21A, 0x3B8, 0x203, 0x201 }),
+                   rustboro = set({ 0x307 }) }
   function T.smallTrunk(c, cell)
     local m = c:metatile(cell)
     if T.SMALL_TRUNKS[m] then return true end
@@ -1940,8 +1957,9 @@ return function(S)
   end
 
   -- a band's column is drawn with its ends
-  local BAND_HEAD = { E = set({ 0x074 }), W = set({ 0x089 }) }
-  local BAND_FOOT = { E = set({ 0x07a, 0x07d, 0x092 }), W = set({ 0x07b, 0x078, 0x090 }) }
+  local BAND_HEAD = G and { E = set(G.bandHead.E), W = set(G.bandHead.W) } or { E = set({ 0x074 }), W = set({ 0x089 }) }
+  local BAND_FOOT = G and { E = set(G.bandFoot.E), W = set(G.bandFoot.W) }
+    or { E = set({ 0x07a, 0x07d, 0x092 }), W = set({ 0x07b, 0x078, 0x090 }) }
   T.BAND_HEAD, T.BAND_FOOT = BAND_HEAD, BAND_FOOT
 
   --- { { side, head or nil, cells, foot or nil } }

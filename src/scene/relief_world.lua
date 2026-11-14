@@ -16,7 +16,9 @@ return function(S)
   local SEAM_WEIGHT, STEP_SEAM_WEIGHT = 16, 1
   local HARD_WEIGHT, LOOSE_WEIGHT = 1e6, 0.01
   local GROUND_SPREAD, MASSIF = 0.05, 160
-  local WORLD_ROOT = "LAYOUT_LITTLEROOT_TOWN"
+  -- (the world's first map, where its levels start from: the player's home town)
+  local game = S.input and S.input.game
+  local WORLD_ROOT = (game == "firered" or game == "leafgreen") and "LAYOUT_PALLET_TOWN" or "LAYOUT_LITTLEROOT_TOWN"
   local DRAWN_EXCLUDED = { route122 = true, ever_grande_city = true }
   local COUNTED_GROUPS = { route111 = true, route111_no_mirage_tower = true }
   local STEP_SEAMS = { ["LAYOUT_ROUTE107|LAYOUT_ROUTE108"] = true, ["LAYOUT_ROUTE108|LAYOUT_ROUTE107"] = true }

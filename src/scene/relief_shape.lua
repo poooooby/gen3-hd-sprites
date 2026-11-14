@@ -471,6 +471,9 @@ return function(S)
       local sh = shapes[K(cx, cy)]
       local hi, fl, rects, held = sh[1], sh[2], sh[3], sh[4]
       local moved = false
+      -- (a rock cell that hangs from nothing - no edge to fall from: Emerald's maps have none, the
+      -- generator's min() would fail on it - keeps the level it has)
+      if held == nil and #rects == 0 then return false end
       local slope = (hi - fl) / 16.0
       local src
       if held ~= nil then

@@ -1429,15 +1429,18 @@ function I.layoutOf(L, pair)
     if band(entry, 0x800) ~= 0 then py = 7 - py end
     return band(entry, 0x3FF), py * 8 + px, floor(entry / 4096) % 16
   end
+  -- (the tileset family's cuts: Emerald 512 tiles and 6 palettes in its primary, FireRed 640 and 7)
+  local NT = pair.family and pair.family.primaryTiles or 512
+  local NPAL = pair.family and pair.family.primaryPals or 6
   function A.tilePixel(tile, pixel)
-    local ts = tile < 512 and pair.primary or pair.secondary
-    local loc = tile < 512 and tile or tile - 512
+    local ts = tile < NT and pair.primary or pair.secondary
+    local loc = tile < NT and tile or tile - NT
     if (loc + 1) * 32 > #ts.tiles then return 0 end
     local b = ts.tiles:byte(loc * 32 + floor(pixel / 8) * 4 + floor((pixel % 8) / 2) + 1)
     return pixel % 2 == 1 and floor(b / 16) or b % 16
   end
   function A.palette(id)
-    local ts = id < 6 and pair.primary or pair.secondary
+    local ts = id < NPAL and pair.primary or pair.secondary
     return ts.palettes[id]
   end
   return A

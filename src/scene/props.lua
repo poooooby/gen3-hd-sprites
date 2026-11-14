@@ -46,6 +46,12 @@ Props.OBJECTS = {
   basket_red = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 514, 515 }, { 530, 531 } } },
   urn = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 614, 615 }, { 630, 631 } } },
   fruit = { land = true, tileset = "general", secondary = "slateport", palette = 7, grid = { { 736, 737 }, { 738, 739 } } },
+  -- FireRed's and LeafGreen's (src/scene/family.lua names their General "fr:general"; WoobleView's
+  -- own reading): the two rocks in Kanto's and the Sevii Islands' seas, each four tiles of the
+  -- General in a square at the corner four metatiles share (as Emerald's), on a darker patch of
+  -- water - the grey one (Cinnabar's, 0x110-0x119) and the pale one (0x1CB-0x1D4)
+  fr_sea_rock = { tileset = "fr:general", palette = 4, grid = { { 420, 421 }, { 422, 423 } } },
+  fr_sea_rock_pale = { tileset = "fr:general", palette = 2, grid = { { 173, 174 }, { 189, 190 } } },
 }
 
 -- The props the scene models, in the specs' order. `shape`: a Mound (the default;
@@ -58,6 +64,10 @@ Props.SPECS = {
   -- the grey rock in the sea: a low dome, as deep as it is drawn tall below its crest; the water
   -- round it stays the map's own; its foam on the water
   { name = "sea_rock", props = "sea_rock", ground = { 0x170 }, rise = 1.0, step = 2, ring = { { 222, 230, 238 } } },
+  -- (FireRed's: the same low dome on the General's plain water, 0x12B; its foam the pale outline)
+  { name = "fr_sea_rock", props = "fr_sea_rock", ground = { 0x12B }, rise = 1.0, step = 2, ring = { { 230, 246, 255 } } },
+  { name = "fr_sea_rock_pale", props = "fr_sea_rock_pale", ground = { 0x12B }, rise = 1.0, step = 2,
+    ring = { { 246, 246, 255 } } },
   -- a boulder on the sand or the grass, a cell across (Route 106's beach, Route 111's desert, the
   -- Safari Zone)
   { name = "sand_boulder", props = "sand_boulder", ground = { 0x124 }, rise = 1.0, step = 2 },

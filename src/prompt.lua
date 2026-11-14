@@ -1,4 +1,5 @@
--- WoobleView's own prompts: the first-run question about 3D battles (Emerald), building the 3D
+-- WoobleView's own prompts: the first-run question about 3D battles (Emerald, FireRed and
+-- LeafGreen: the games the 3D world is built for), building the 3D
 -- cache with a progress bar, and short notices. Drawn at the window's own resolution over
 -- everything (the engine's render.hud hook), WoobleView's name in the panel's corner so the
 -- player knows which mod is asking. While a prompt is up, an empty layer on the game's screen
@@ -88,9 +89,12 @@ return function(deps)
     pcall(function() mod.cache:write(P.FLAG, "asked") end)
   end
 
-  local function isEmerald()
+  -- (the games whose world is built in 3D: Emerald's by Emerald 3DS's tables, FireRed's and
+  -- LeafGreen's by our own, src/scene/games/)
+  P.GAMES_3D = { emerald = true, firered = true, leafgreen = true }
+  local function has3D()
     local GV = engine("src.core.GameVersion")
-    return GV ~= nil and GV.get ~= nil and GV.get() == "emerald"
+    return GV ~= nil and GV.get ~= nil and P.GAMES_3D[GV.get()] == true
   end
 
   -- ── the layer that pauses the field and takes the buttons ─────────────
@@ -115,7 +119,7 @@ return function(deps)
   local PHASES = {
     ask3d = {
       title = "Battle in the world around you?",
-      body = "WoobleView can stage Emerald's battles in 3D, right where they start: the paths, "
+      body = "WoobleView can stage your battles in 3D, right where they start: the paths, "
         .. "trees, houses and water around you, with a camera that sweeps down into the fight. "
         .. "You can change this any time in OPTIONS > MODS > WoobleView.",
       buttons = { "Turn on 3D battles", "No thanks" },
@@ -542,9 +546,9 @@ return function(deps)
       end
     end
     -- the first-run question and a build asked for before the game started, once the field is
-    -- still: Emerald only - looked at once each time the field settles, not every frame
+    -- still: the 3D games only - looked at once each time the field settles, not every frame
     if fieldQuiet() then quiet = quiet + 1 else quiet = 0 end
-    if quiet ~= P.QUIET_FRAMES or not isEmerald() then return end
+    if quiet ~= P.QUIET_FRAMES or not has3D() then return end
     if option("scene_build", "idle") == "go" then
       quiet = 0
       startBuild()
@@ -564,8 +568,8 @@ return function(deps)
   function P._why()
     local F = engine("src.core.game3.field")
     local Runtime = engine("src.core.game3.runtime")
-    return ("field %s, busy %s, emerald %s, asked %s, quiet %d, scene %s"):format(tostring(F and F.running),
-      tostring(Runtime and Runtime.uiBusy and Runtime.uiBusy()), tostring(isEmerald()), tostring(asked()), quiet,
+    return ("field %s, busy %s, 3d %s, asked %s, quiet %d, scene %s"):format(tostring(F and F.running),
+      tostring(Runtime and Runtime.uiBusy and Runtime.uiBusy()), tostring(has3D()), tostring(asked()), quiet,
       tostring(option("battle_scene", "classic")))
   end
 

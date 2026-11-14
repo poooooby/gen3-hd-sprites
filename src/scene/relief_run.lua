@@ -41,7 +41,14 @@ return function(deps)
   -- relief, `<key>.ticks`: other map data under the same game reads those instead)
   Run.TICKS = {
     emerald = { groups = 1165, world = 8601, export = 82851, terraces = 24157, finish = 256 },
+    -- (FireRed's, measured the same way; LeafGreen draws the same maps)
+    firered = { groups = 426, world = 5230, export = 45288, terraces = 11093, finish = 625 },
+    leafgreen = { groups = 426, world = 5230, export = 45288, terraces = 11093, finish = 625 },
   }
+  -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
+  -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
+  -- rules are Emerald 3DS's, its key as it always was
+  Run.RULES = { firered = 2, leafgreen = 2 }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end
@@ -108,7 +115,8 @@ return function(deps)
     local files = deps.readCache("native/layout_files.lua") or ""
     local fp = fnv(files, fnv(census))
     keyId = id
-    keyOf = ("relief/v%d/%s-%08x.bin"):format(Run.VERSION, id, fp)
+    local rules = Run.RULES[id]
+    keyOf = ("relief/v%d/%s%s-%08x.bin"):format(Run.VERSION, id, rules and ("-r" .. rules) or "", fp)
     gameKeyOf = keyOf:match("/([^/]+)%.bin$")
     return keyOf, id
   end
@@ -148,7 +156,8 @@ return function(deps)
       work.done = work.done + n * (Run.TICK_COST[b] or 1)
       work.bucket = nextBucket(name)
     end
-    local fixes, order = Post.json(deps.fixes or "{}", tick)
+    -- (Emerald 3DS's hand marks are Emerald's layouts': no other game's, whatever its names)
+    local fixes, order = Post.json(keyId == "emerald" and deps.fixes or "{}", tick)
     local model, S = WorldMaps.solve({
       tick = tick, phase = phase,
       -- (the terraces: their three parts join the solve; the hand marks, the buildings' cells)
@@ -161,6 +170,38 @@ return function(deps)
     if S.T then
       S.T.apply(model)
       phase("terraces")
+    end
+    -- (another game's buildings stand on the ground their doors open onto: each cell a building
+    -- model owns takes the level of the first cell south of the building, whatever the drawing
+    -- round it says - Lavender's tower is drawn between two rock bands, its door on the town's
+    -- path. Emerald 3DS's own rules read its houses' levels; Emerald's relief is theirs)
+    if keyId ~= "emerald" and deps.models then
+      local floor_ = math.floor
+      for id, t in pairs(model.layouts) do
+        local L = S.input.layouts[id]
+        local own = L and deps.models(L.name, tick)
+        if own and next(own) then
+          local function K(x, y) return (y + 4096) * 16384 + (x + 4096) end
+          for k in pairs(own) do
+            local x, y = k % 16384 - 4096, floor_(k / 16384) - 4096
+            if x >= 0 and y >= 0 and x < t.w and y < t.h then
+              local yy = y + 1
+              while yy < t.h and own[K(x, yy)] do yy = yy + 1 end
+              local below = yy < t.h and t.cells[yy * t.w + x] or nil
+              local level = below and Relief.centre(below) or 0
+              if level == 0 then
+                t.cells[y * t.w + x] = nil
+              else
+                local g = {}
+                for n = 0, 24 do g[n] = level end
+                t.cells[y * t.w + x] = g
+              end
+              model.cuts[id * 65536 + x * 256 + y] = nil
+            end
+          end
+          tick()
+        end
+      end
     end
     -- the last passes, over the maps as the solver read them
     local input = S.input
@@ -178,18 +219,23 @@ return function(deps)
       metatile = function(name, x, y) local L = input.byName[name]; return L.blocks[y * L.w + x] % 1024 end,
       isWater = function(name, m)
         local L = input.byName[name]
-        local ts = m < 512 and L.primary or L.secondary
-        local i = m - (m < 512 and 0 or 512)
+        -- (the tileset family's cut and attribute: src/scene/family.lua; Emerald's without one)
+        local F = L.primary.family
+        local NP = F and F.primaryMetatiles or 512
+        local ts = m < NP and L.primary or L.secondary
+        local i = m - (m < NP and 0 or NP)
         local a = ts.attributes
+        if F then return waterRaw[F.behaviour(F.attribute(a, i))] == true and a ~= nil and #a > 0 end
         if not a or 2 * i + 2 > #a then return false end
         return waterRaw[a:byte(2 * i + 1)] == true
       end,
     }
-    Post.seaRamps(model, world)
+    -- (Emerald's sea ramps and hand marks: its own maps')
+    if keyId == "emerald" then Post.seaRamps(model, world) end
     tick()
     Post.cutFeet(model)
     tick()
-    Post.applyFixes(model, world, fixes, order, tick)
+    if keyId == "emerald" then Post.applyFixes(model, world, fixes, order, tick) end
     phase("post")
     local bytes = Relief.encode(model, Post.seamEases(model, world), tick)
     phase("encode")

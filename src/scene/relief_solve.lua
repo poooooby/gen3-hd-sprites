@@ -118,6 +118,72 @@ do
   table.sort(ALIAS_MATCHED)
 end
 
+-- ── each game's own tables ────────────────────────────────────────────────────
+-- The tables above are Emerald 3DS's, read off Emerald's General tileset (its ids, its rock's
+-- colours). Another game's are its own, read off its own drawing (src/scene/games/<game>.lua, set
+-- in Solve.GAMES by the caller): Solve.useGame(game) points the solver at them - the very tables,
+-- not copies refilled (so Emerald's are always the objects above, read in their own order) - and
+-- the parts read them off Solve.SETS and Solve.ROCK_* as each run builds them.
+--   G = { general = the game's General tileset's name ("fr:general"), rock = { top, rim, face,
+--         fleck } (lists of 0xRRGGBB), lists = { FACE_SOUTH, SIDE_WEST, SIDE_EAST } (ids, in order),
+--         rockTiles, dirt, boulder, seaCaps (ids), boulderHeads ({ [id] = id }) }
+Solve.GAMES = {}
+Solve.GENERAL = "general"
+Solve.LISTS = {
+  FACE_SOUTH = { 0x07C, 0x0A9, 0x09F, 0x0A7, 0x091, 0x079, 0x1B0, 0x0AF, 0x0CF, 0x1F0, 0x1F1, 0x33B, 0x33C },
+  SIDE_WEST = { 0x070, 0x073 }, SIDE_EAST = { 0x072, 0x075, 0x0A2 },
+}
+local GENERAL = "general"
+local EMERALD = { ROCK_TOP = ROCK_TOP, ROCK_RIM = ROCK_RIM, ROCK_FACE = ROCK_FACE, ROCK_FLECK = ROCK_FLECK,
+                  ROCK_ALL = ROCK_ALL, DIRT = DIRT, BOULDER = BOULDER, BOULDER_HEADS = BOULDER_HEADS,
+                  SIDE_WEST = SIDE_WEST, SIDE_EAST = SIDE_EAST, SEA_CAPS = SEA_CAPS, FACE_SOUTH = FACE_SOUTH,
+                  ROCK_TILES = ROCK_TILES, ALIAS_MATCHED = ALIAS_MATCHED, LISTS = Solve.LISTS }
+local built = {}
+local function tablesOf(G)
+  local T = built[G]
+  if T then return T end
+  local function colours(list)
+    local t = {}
+    for _, c in ipairs(list or {}) do t[c] = true end
+    return t
+  end
+  T = { ROCK_TOP = colours(G.rock.top), ROCK_RIM = colours(G.rock.rim), ROCK_FACE = colours(G.rock.face),
+        ROCK_FLECK = colours(G.rock.fleck), DIRT = set(G.dirt or {}), BOULDER = set(G.boulder or {}),
+        BOULDER_HEADS = G.boulderHeads or {}, SIDE_WEST = set(G.lists.SIDE_WEST), SIDE_EAST = set(G.lists.SIDE_EAST),
+        SEA_CAPS = set(G.seaCaps or {}), FACE_SOUTH = set(G.lists.FACE_SOUTH), ROCK_TILES = set(G.rockTiles or {}),
+        LISTS = G.lists }
+  T.ROCK_ALL = {}
+  for _, k in ipairs({ "ROCK_TOP", "ROCK_RIM", "ROCK_FACE", "ROCK_FLECK" }) do
+    for c in pairs(T[k]) do T.ROCK_ALL[c] = true end
+  end
+  for _, k in ipairs({ "FACE_SOUTH", "SIDE_WEST", "SIDE_EAST" }) do
+    for m in pairs(T[k]) do T.ROCK_TILES[m] = true end
+  end
+  local all, list = {}, {}
+  for _, k in ipairs({ "ROCK_TILES", "SEA_CAPS", "BOULDER" }) do for m in pairs(T[k]) do all[m] = true end end
+  for m in pairs(all) do list[#list + 1] = m end
+  table.sort(list)
+  T.ALIAS_MATCHED = list
+  built[G] = T
+  return T
+end
+function Solve.useGame(game)
+  local G = Solve.GAMES[game]
+  local T = G and tablesOf(G) or EMERALD
+  ROCK_TOP, ROCK_RIM, ROCK_FACE, ROCK_FLECK, ROCK_ALL = T.ROCK_TOP, T.ROCK_RIM, T.ROCK_FACE, T.ROCK_FLECK, T.ROCK_ALL
+  DIRT, BOULDER, BOULDER_HEADS, SIDE_WEST, SIDE_EAST = T.DIRT, T.BOULDER, T.BOULDER_HEADS, T.SIDE_WEST, T.SIDE_EAST
+  SEA_CAPS, FACE_SOUTH, ROCK_TILES, ALIAS_MATCHED = T.SEA_CAPS, T.FACE_SOUTH, T.ROCK_TILES, T.ALIAS_MATCHED
+  Solve.ROCK_TOP, Solve.ROCK_RIM, Solve.ROCK_FACE, Solve.ROCK_FLECK, Solve.ROCK_ALL =
+    ROCK_TOP, ROCK_RIM, ROCK_FACE, ROCK_FLECK, ROCK_ALL
+  local SE = Solve.SETS
+  SE.DIRT, SE.BOULDER, SE.BOULDER_HEADS, SE.SIDE_WEST, SE.SIDE_EAST = DIRT, BOULDER, BOULDER_HEADS, SIDE_WEST, SIDE_EAST
+  SE.SEA_CAPS, SE.FACE_SOUTH, SE.ROCK_TILES = SEA_CAPS, FACE_SOUTH, ROCK_TILES
+  Solve.LISTS = T.LISTS
+  GENERAL = G and G.general or "general"
+  Solve.GENERAL = GENERAL
+  Solve.game = G
+end
+
 -- voxel_props.OBJECTS: drawn as a block of upper-layer subtiles wherever it lands
 local OBJECTS = {
   { name = "sea_rock", tileset = "general", palette = 1, grid = { { 141, 142 }, { 157, 158 } } },
@@ -234,6 +300,9 @@ Solve.counter = counter
 
 function Solve.run(input, opt)
   local Art, Roles = opt.Art, opt.Roles
+  -- (the game's own tables: Emerald 3DS's for Emerald)
+  Solve.useGame(input.game)
+  if Roles and Roles.useGame then Roles.useGame(Solve.game) end
   local tick = opt.tick or function() end
   local S = { input = input, opt = opt, Art = Art, Roles = Roles, tick = tick, Solve = Solve }
   local layouts = input.byName
@@ -260,7 +329,7 @@ function Solve.run(input, opt)
   local FLAT_BEHAVIOURS, SANDS = {}, {}
   for name, v in pairs(MB) do
     if name:find("BRIDGE", 1, true) or name:find("_LOG_", 1, true) or name:sub(-5) == "_DOOR"
-        or name == "MB_NO_RUNNING" then
+        or name == "MB_NO_RUNNING" or name == "MB_RUNNING_DISALLOWED" then
       FLAT_BEHAVIOURS[v] = true
     end
     if name:find("SAND", 1, true) then SANDS[v] = true end
@@ -296,7 +365,8 @@ function Solve.run(input, opt)
   local aliasMemo = {}
   local function aliasOf(lid, set_)
     set_ = set_ or Art.ALIAS_LAYOUTS
-    if not set_[lid] then return nil end
+    -- (Emerald's recoloured rock: its own maps')
+    if Solve.game or not set_[lid] then return nil end
     local hit = aliasMemo[lid]
     if hit ~= nil then return hit or nil end
     aliasMemo[lid] = false
@@ -338,7 +408,7 @@ function Solve.run(input, opt)
       primary = L.primary.name, secondary = L.secondary.name,
       metatile = function(x, y) return L.blocks[y * W + x] % 1024 end,
       blocked = function(x, y) return floor(L.blocks[y * W + x] / 1024) % 4 ~= 0 end,
-      behaviour = function(x, y) return p.attribute(L.blocks[y * W + x] % 1024) % 256 end,
+      behaviour = function(x, y) return p.behaviour(L.blocks[y * W + x] % 1024) end,
       pixels = function(m, layer)
         local key = m * 2 + layer
         local t = pix[key]
@@ -427,7 +497,7 @@ function Solve.run(input, opt)
     end
     function RL.behaviour(x, y)
       if x < 0 or y < 0 or x >= W or y >= H then return 0 end
-      return p.attribute(L.blocks[y * W + x] % 1024) % 256
+      return p.behaviour(L.blocks[y * W + x] % 1024)
     end
     RL.role_at = r.role
     RL.covers = r.covers
@@ -1192,7 +1262,7 @@ function Solve.run(input, opt)
     local blocks, seeds, seedList = {}, {}, {}
     for _, L in ipairs(ordered) do
       local lid = L.name
-      if not alternates[lid] and L.primary.name == "general" then
+      if not alternates[lid] and L.primary.name == GENERAL then
         local ms = {}
         local a = aliasOf(lid)
         local n = 0
@@ -1445,7 +1515,7 @@ function Solve.run(input, opt)
         if ground ~= nil and S.plainBackground(art, m, mask, ground) then flatp[K(x, y)] = 1 end
         m = art.ownMetatile(x, y)
         ground = ground ~= nil and S.ownId(lid, ground) or nil
-        local tsName = m < 512 and art.primary or art.secondary
+        local tsName = m < (art.pair and art.pair.NUM_PRIMARY or 512) and art.primary or art.secondary
         local vkey = tsName .. "|" .. m .. "|" .. table.concat(mask, ",", 0, 15)
         if not variants[vkey] then
           variants[vkey] = { #variantOrder, index[lid], m, mask }

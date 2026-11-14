@@ -367,17 +367,66 @@ return function(deps)
   -- ── buildings (src/scene/buildings.lua) ──
 
   local Buildings, Kernel, Specs = deps.Buildings, deps.Kernel, deps.Specs
+  -- (each game's own specs: Emerald 3DS's for Emerald, src/scene/models/specs_firered.lua for
+  -- FireRed and LeafGreen - none for a game with neither; chosen with the family, useFamily)
+  local EMERALD_SPECS = Specs
   local Signs, Relief, World = deps.Signs, deps.Relief, deps.World
   local placeComponents
 
-  -- a reference layout, by its id (LAYOUT_X is the game's map EM_X)
+  -- the game's tileset family (src/scene/family.lua: Emerald's or FireRed's cuts; nil without it),
+  -- for the game being played now
+  local famGame, famF
+  local function family()
+    local Fm = deps.Family
+    if not Fm then return nil end
+    local g = Fm.game()
+    if g ~= famGame or famF == nil then famGame, famF = g, Fm.of(g) end
+    return famF
+  end
+  -- where a primary tileset's metatiles end (Emerald 512, FireRed 640)
+  local function numPrimary()
+    local F = family()
+    return F and F.primaryMetatiles or 512
+  end
+  -- whether the game draws with Hoenn's tilesets (Emerald 3DS's data - specs, rooms by layout
+  -- number - is read off them; FireRed's are named apart, src/scene/family.lua)
+  local function hoennTilesets()
+    local F = family()
+    return not (F and F.namespace)
+  end
+  -- every plain module that reads tileset names or cuts, told the game's family
+  local function useFamily()
+    local F = family()
+    for _, M in ipairs({ deps.Roles, deps.Signs, deps.Trees, deps.Buildings, deps.Components }) do
+      if type(M) == "table" and M.useFamily then M.useFamily(F) end
+    end
+    -- (and the game's own rock, src/scene/games/: Emerald 3DS's for Emerald)
+    if deps.Roles and deps.Roles.useGame then deps.Roles.useGame(deps.Games and deps.Games[famGame] or nil) end
+    -- (and its own buildings)
+    local own = deps.SpecsByGame and deps.SpecsByGame[famGame]
+    if own then Specs = own
+    elseif F and F.namespace then Specs = nil
+    else Specs = EMERALD_SPECS end
+  end
+
+  -- a reference layout, by its id (LAYOUT_X is the game's map EM_X; FireRed's FR_X or SEVII_X)
   local function layoutCtx()
     local Runtime, Map = req("src.core.game3.runtime"), req("src.core.game3.map")
     local game = Runtime and Runtime._game
+    local F = family()
     return {
       layout = function(id)
         if not (Map and game and type(Map.ensureMidLayout) == "function") then return nil end
-        local mapId = "EM_" .. tostring(id):gsub("^LAYOUT_", "")
+        local bare = tostring(id):gsub("^LAYOUT_", "")
+        local mapId = "EM_" .. bare
+        if F and F.prefixes then
+          local maps = game.data and game.data.maps
+          mapId = nil
+          for _, p in ipairs(F.prefixes) do
+            if maps and maps[p .. bare] then mapId = p .. bare; break end
+          end
+          if not mapId then return nil end
+        end
         local ok, L = pcall(Map.ensureMidLayout, game, mapId)
         local maps = game.data and game.data.maps
         local def = maps and maps[mapId]
@@ -768,7 +817,7 @@ return function(deps)
     local core = Buildings.core(spec, ref, art)
     local primaryOnly = true
     for _, c in ipairs(core) do
-      if ref.template[c[2] * ref.w + c[1] + 1] >= 512 then primaryOnly = false end
+      if ref.template[c[2] * ref.w + c[1] + 1] >= numPrimary() then primaryOnly = false end
     end
     tex = tex or art
     local image, imageData = imageOf(tex.w, tex.h, function(data)
@@ -781,7 +830,9 @@ return function(deps)
       end
     end)
     spec._model = { spec = spec, ref = ref, art = art, core = core, primaryOnly = primaryOnly,
-                    tris = mesh.tris, image = image, _data = imageData, texW = tex.w, texH = tex.h, live = live }
+                    tris = mesh.tris, image = image, _data = imageData, texW = tex.w, texH = tex.h, live = live,
+                    -- (dev: the texture itself, for the proofs - tests/model_check.lua)
+                    tex = Scene.keepTex and tex or nil }
     if live then liveModels[#liveModels + 1] = spec._model end
     Scene.modelsBuilt = Scene.modelsBuilt + 1
     keepModel(spec, spec._model, tex)
@@ -1665,7 +1716,11 @@ return function(deps)
     if roomRun then return roomRun end
     local st = { pieces = {}, byId = {}, everywhere = {}, models = {}, bares = {}, errors = {} }
     roomRun = st
-    if not (Interiors and RoomSpecs and World) then st.error = "no rooms"; return st end
+    -- (the game's own rooms - FireRed's, src/scene/models/interior_specs_firered.lua - or Emerald
+    -- 3DS's, by Emerald's layout numbers, for a game drawn with Hoenn's tilesets; none otherwise)
+    family()
+    RoomSpecs = deps.RoomSpecsByGame and deps.RoomSpecsByGame[famGame] or hoennTilesets() and deps.RoomSpecs or nil
+    if not (Interiors and RoomSpecs and World) then st.error = "no rooms for this game"; return st end
     local clock = love.timer and love.timer.getTime or os.clock
     st.t0 = clock()
     st.io = roomIo()
@@ -1843,6 +1898,7 @@ return function(deps)
   end
   local function placeRooms(grid, found, where)
     hd.stats.sceneRooms, hd.stats.sceneRoomError = nil, nil
+    if not (hoennTilesets() or deps.RoomSpecsByGame and deps.RoomSpecsByGame[famGame]) then return end
     local layouts, order = {}, {}
     for j = 0, grid.h - 1 do
       for i = 0, grid.w - 1 do
@@ -2118,12 +2174,13 @@ return function(deps)
   -- cache, the metatiles it paints and those it paints beside themselves, its water, its cells'
   -- colours as pret draws them; nil without the World's data. Read once per layout.
   local groundMaps = setmetatable({}, { __mode = "k" })
-  local rawWater
+  local rawWater, rawWaterGame
   local function waterBehaviours()
-    if rawWater then return rawWater end
-    rawWater = {}
+    local game = deps.Family and deps.Family.game() or "emerald"
+    if rawWater and rawWaterGame == game then return rawWater end
+    rawWater, rawWaterGame = {}, game
     local Constants = req("src.core.game3.constants")
-    local ok, em = pcall(function() return Constants.of("emerald").metatile_behaviors.byName end)
+    local ok, em = pcall(function() return Constants.of(game).metatile_behaviors.byName end)
     for _, n in ipairs(deps.Roles and deps.Roles.WATER_NAMES or {}) do
       local v = ok and em and em[n]
       if v then rawWater[v] = true end
@@ -2155,7 +2212,7 @@ return function(deps)
     local water = waterBehaviours()
     G = { id = L.name, w = W, h = L.h, painted = painted, seamless = seamless, P = P,
           block = function(x, y) return blocks[y * W + x] end,
-          water = function(m) return water[P.attribute(m) % 256] == true end,
+          water = function(m) return water[P.behaviour(m)] == true end,
           rgb = function(m) return P.entries(m) and P.cellImage(m) or nil end }
     groundMaps[L] = G
     return G
@@ -2173,7 +2230,7 @@ return function(deps)
     local RP = RL and World.pretArt(RL)
     local water, groundWater = waterBehaviours(), false
     for _, g in ipairs(RP and md.spec.ground or {}) do
-      if water[RP.attribute(g) % 256] then groundWater = true end
+      if water[RP.behaviour(g)] then groundWater = true end
     end
     return setmetatable({ px = lx - i, py = ly - j, groundWater = groundWater, odd = md.ref.template ~= nil,
                           refP = RP }, { __index = G })
@@ -2447,7 +2504,7 @@ return function(deps)
           if not seen then
             seen = true
             for _, c in ipairs(Buildings.core(spec, ref)) do
-              if ref.template[c[2] * ref.w + c[1] + 1] >= 512 then seen = false; break end
+              if ref.template[c[2] * ref.w + c[1] + 1] >= numPrimary() then seen = false; break end
             end
           end
         end
@@ -2555,7 +2612,8 @@ return function(deps)
                 for x = 0, 15 do
                   local X, Y = i * 16 + x, j * 16 + y
                   local m = whole or g
-                  if not whole and patched and not Buildings.drawn(md, X, Y) then m = c.mid end
+                  -- (a cell past the window's edge has no grid cell: nothing of it is drawn here)
+                  if not whole and patched and c and not Buildings.drawn(md, X, Y) then m = c.mid end
                   if bareAt then
                     local r, gg, b = bareAt(x, y)
                     if r then data:setPixel(X, Y, r, gg, b, 1) end
@@ -2602,7 +2660,7 @@ return function(deps)
   local postIndex = setmetatable({}, { __mode = "k" })
   local function postKey(mid, pair)
     local primary, secondary = Signs.tilesets(pair)
-    return tostring(mid < 512 and primary or secondary) .. ":" .. mid
+    return tostring(mid < numPrimary() and primary or secondary) .. ":" .. mid
   end
   local function signPosts(env)
     local Runtime, Map, Dataset = req("src.core.game3.runtime"), req("src.core.game3.map"), req("src.core.game3.dataset")
@@ -2662,6 +2720,7 @@ return function(deps)
   -- battle there does not build them all at once
   local warmQueue, warmed = {}, setmetatable({}, { __mode = "k" })
   function Scene.warm(mapId)
+    useFamily()
     local Map, NativeTileset = req("src.core.game3.map"), req("src.core.game3.tileset_native")
     local Runtime = req("src.core.game3.runtime")
     local game = Runtime and Runtime._game
@@ -2867,6 +2926,7 @@ return function(deps)
     return out
   end
   function Scene.modelCells(name, tick)
+    useFamily()
     if modelCellsOf[name] ~= nil then return modelCellsOf[name] or nil end
     modelCellsOf[name] = false
     local found = layoutFind(name, tick)
@@ -2891,17 +2951,27 @@ return function(deps)
     return out
   end
 
-  --- (dev) A spec's readied model by name, built afresh (the cache keeps no part names), or nil.
-  function Scene.modelOf(name)
+  --- (dev) Every building spec's name, in order.
+  function Scene.specNames()
+    useFamily()
+    local out = {}
+    for _, spec in ipairs(Specs or {}) do out[#out + 1] = spec.name end
+    return out
+  end
+
+  --- (dev) A spec's readied model by name, built afresh (the cache keeps no part names), or nil;
+  --- with `keepTex` its texture kept on it (md.tex).
+  function Scene.modelOf(name, keepTex)
+    useFamily()
     local NativeTileset = req("src.core.game3.tileset_native")
     for _, spec in ipairs(Specs or {}) do
       if spec.name == name then
         if not NativeTileset then return nil end
         local was = Scene.cacheModels
-        Scene.cacheModels = false
+        Scene.cacheModels, Scene.keepTex = false, keepTex == true
         spec._model = nil
         local md = ready(spec, NativeTileset, layoutCtx())
-        Scene.cacheModels = was
+        Scene.cacheModels, Scene.keepTex = was, false
         return md or nil
       end
     end
@@ -2911,6 +2981,7 @@ return function(deps)
   --- Every spec queued (Scene Cache): from the cache where kept, built and kept otherwise.
   local warmedAll = false
   function Scene.warmAll()
+    useFamily()
     if warmedAll or not (Buildings and Specs) then return 0 end
     warmedAll = true
     local n = 0
@@ -3530,6 +3601,9 @@ return function(deps)
     local Player = req("src.core.game3.player")
     local NativeTileset = req("src.core.game3.tileset_native")
     if not (env and Player and NativeTileset) then return nil, "no map" end
+    -- (the modules that read tileset names and cuts, told the game's: src/scene/family.lua)
+    useFamily()
+    local NP = numPrimary()
     -- Hoenn's games (Emerald 3DS's rules: nothing stands up but its models) or Kanto's
     local Profile = req("src.core.game3.profile")
     local okV, gameId = pcall(function() return Profile.active().id end)
@@ -3538,22 +3612,22 @@ return function(deps)
     env.kanto = okV and (gameId == "firered" or gameId == "leafgreen")
     -- whether a metatile is a tree's that stands as a cut-out: in Kanto's games only (Hoenn's trees
     -- are models, and nothing else stands there: Mossdeep's ledges, half grass, are no trees), a
-    -- primary tileset's drawn as leaves (Emerald 3DS's foliage test: half its drawn pixels green)
-    -- with something over the player (a crown). Anything else no model rebuilds lies flat as drawn
+    -- primary tileset's whose layer over the player (a crown) is drawn as leaves (Emerald 3DS's
+    -- foliage test, on that layer: half its drawn pixels green - a fence over grass, its posts
+    -- grey, is no tree). Anything else no model rebuilds lies flat as drawn
     local standsOf = {}
     function env.stands(mid, pair)
-      if hoenn or mid == nil or mid >= 512 then return false end
+      if hoenn or mid == nil or mid >= NP then return false end
       local key = tostring(pair) .. ":" .. tostring(mid)
       local t = standsOf[key]
       if t ~= nil then return t end
       local src = pixelSource(NativeTileset, pair)
       t = false
       if src and src.under(mid, 0, 0) ~= nil then
-        local n, green, over = 0, 0, false
+        local n, green = 0, 0
         for y = 0, 15 do
           for x = 0, 15 do
             local r, g, b, a = src.over(mid, x, y)
-            if a and a > 0.5 then over = true else r, g, b, a = src.under(mid, x, y) end
             if a and a > 0.5 then
               n = n + 1
               r, g, b = r * 255, g * 255, b * 255
@@ -3561,7 +3635,7 @@ return function(deps)
             end
           end
         end
-        t = over and n > 0 and green / n >= 0.5
+        t = n > 0 and green / n >= 0.5
       end
       standsOf[key] = t
       return t
@@ -3624,7 +3698,7 @@ return function(deps)
       local uppers = {}
       for _, f in pairs(posts) do
         local mid, pair = f[1], f[2]
-        local via = mid < 512 and byPrimary[Signs.tilesets(pair) or ""] or (windowPairs[pair] and pair) or nil
+        local via = mid < NP and byPrimary[Signs.tilesets(pair) or ""] or (windowPairs[pair] and pair) or nil
         if via then
           local _, up = layersOf(mid, via)
           if up then uppers[Signs.upperKey(up)] = true end
@@ -4103,6 +4177,20 @@ return function(deps)
     if R and R.getCurrentWeather then
       state = R.state
       weather = R.getCurrentWeather()
+    elseif W and W.get then
+      -- (FireRed's: the engine's own field weather, its ids pokefirered's - the same as Emerald's -
+      -- read as Emerald's state would have it: the rain as many drops as are falling, the others
+      -- full once they are up)
+      local FW = req("src.core.game3.field_weather")
+      local okW, id = pcall(function() return FW and FW.getWeather and FW.getWeather() or W.get() end)
+      weather = okW and tonumber(id) or nil
+      if weather then
+        local drops = FW and type(FW._rainSprites) == "table" and #FW._rainSprites or 0
+        local up = weather ~= 0
+        state = { currWeather = weather, curRainSpriteIndex = math.min(drops, 24), currBlendEVA = up and 16 or 0,
+                  ashSpritesCreated = up, sandstormSpritesCreated = up, fogHSpritesCreated = weather == 6,
+                  fogDSpritesCreated = weather == 9 }
+      end
     end
     local light = Light.light({ indoor = s.walled, weather = weather, state = state, cave = s.cave })
     -- (the sun's light in the air: src/scene/sunfx.lua; the landing's burst of bloom)

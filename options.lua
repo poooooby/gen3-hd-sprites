@@ -36,7 +36,7 @@ return {
     default = "idle",
     choices = { { "PRESS A", "idle" }, { "BUILDING", "go" } },
     visible_if = { key = "battle_scene", equals = "overworld" },
-    description = "Emerald, with Battle Scene on OVERWORLD: build the whole 3D world now, with a progress bar (a minute or two), and keep it on this device, so every battle loads its world straight away. Otherwise it builds a little at a time while you play.",
+    description = "Emerald, FireRed and LeafGreen, with Battle Scene on OVERWORLD: build the whole 3D world now, with a progress bar (a minute or two), and keep it on this device, so every battle loads its world straight away. Otherwise it builds a little at a time while you play.",
   },
   {
     key = "scene_clear",

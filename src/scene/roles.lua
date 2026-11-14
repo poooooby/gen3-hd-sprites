@@ -55,6 +55,12 @@ local Roles = {}
 local floor = math.floor
 
 Roles.NUM_PRIMARY = 512
+-- The game's tileset family (src/scene/family.lua; nil: Emerald's): set by Roles.useFamily
+Roles.family = nil
+function Roles.useFamily(F)
+  Roles.family = F
+  Roles.NUM_PRIMARY = F and F.primaryMetatiles or 512
+end
 -- A house is at most this many cells either side of its door and this tall.
 Roles.HOUSE_HALF_WIDTH, Roles.HOUSE_HEIGHT = 5, 7
 Roles.FOLIAGE = 0.5
@@ -85,8 +91,12 @@ Roles.WATER_NAMES = { "MB_POND_WATER", "MB_INTERIOR_DEEP_WATER", "MB_DEEP_WATER"
   "MB_SOOTOPOLIS_DEEP_WATER", "MB_OCEAN_WATER", "MB_PUDDLE", "MB_SHALLOW_WATER",
   "MB_NO_SURFACING", "MB_SEAWEED", "MB_SEAWEED_NO_SURFACING", "MB_HOT_SPRINGS",
   "MB_REFLECTION_UNDER_BRIDGE", "MB_EASTWARD_CURRENT", "MB_WESTWARD_CURRENT",
-  "MB_NORTHWARD_CURRENT", "MB_SOUTHWARD_CURRENT" }
-Roles.HOUSE_DOOR_NAMES = { "MB_ANIMATED_DOOR", "MB_PETALBURG_GYM_DOOR", "MB_CLOSED_SOOTOPOLIS_DOOR" }
+  "MB_NORTHWARD_CURRENT", "MB_SOUTHWARD_CURRENT",
+  -- (FireRed's own: its rapids and the Cycling Road's sea; a name the game has not is skipped)
+  "MB_FAST_WATER", "MB_CYCLING_ROAD_WATER" }
+Roles.HOUSE_DOOR_NAMES = { "MB_ANIMATED_DOOR", "MB_PETALBURG_GYM_DOOR", "MB_CLOSED_SOOTOPOLIS_DOOR",
+  -- (FireRed's house door)
+  "MB_WARP_DOOR" }
 
 -- gen_voxel_relief.py's mountain colours: the tops, the rim, the faces, the speckle in both
 local ROCK_ALL = {}
@@ -112,6 +122,32 @@ local BOULDER_HEADS = { [0x093] = 0x09B, [0x094] = 0x09C }
 
 local function rgbKey(c) return c[1] * 65536 + c[2] * 256 + c[3] end
 
+-- Another game's own rock (src/scene/games/<game>.lua, as relief_solve's Solve.useGame reads it):
+-- its colours, its General tileset's name and the range of its General rock; nil puts Emerald's
+-- (Emerald 3DS's) back. Emerald's recoloured rock (alias_of) is Emerald's alone.
+local GENERAL_NAME = "general"
+local EMERALD_ROCK = { ROCK_ALL, MOUNTAIN_ROCK_FIRST, MOUNTAIN_ROCK_LAST }
+local rockOf = {}
+function Roles.useGame(G)
+  if G then
+    local t = rockOf[G]
+    if not t then
+      t = {}
+      for _, k in ipairs({ "top", "rim", "face", "fleck" }) do
+        for _, c in ipairs(G.rock[k] or {}) do t[c] = true end
+      end
+      rockOf[G] = t
+    end
+    ROCK_ALL, GENERAL_NAME = t, G.general
+    MOUNTAIN_ROCK_FIRST, MOUNTAIN_ROCK_LAST = G.mountainRock[1], G.mountainRock[2]
+  else
+    ROCK_ALL, MOUNTAIN_ROCK_FIRST, MOUNTAIN_ROCK_LAST = EMERALD_ROCK[1], EMERALD_ROCK[2], EMERALD_ROCK[3]
+    GENERAL_NAME = "general"
+  end
+  Roles.ROCK_ALL = ROCK_ALL
+  Roles.game = G
+end
+
 --- A tileset's short name: "gTileset_General", "general" -> "general"; "gTileset_EverGrande",
 --- "ever_grande" -> "evergrande".
 function Roles.tilesetName(name)
@@ -121,6 +157,8 @@ end
 
 --- An engine tileset pair's tilesets ("general__mossdeep" -> "general", "mossdeep").
 function Roles.pairTilesets(pair)
+  -- (FireRed's names are its own: Family's pairNames)
+  if Roles.family and Roles.family.namespace then return Roles.family.pairNames(pair) end
   local p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
   return p, s
 end
@@ -261,7 +299,7 @@ end
 --- ALIAS_LAYOUTS | ALIAS_TERRACES, the maps the cells read so), else nil. `ref`: an adapter over
 --- the General tileset (L.cell of its rock).
 function Roles.aliasOf(L, ref)
-  if not (Roles.ALIAS_LAYOUTS[L.id] and ALIAS_TILESETS[Roles.tilesetName(L.secondary)]) then return nil end
+  if Roles.game or not (Roles.ALIAS_LAYOUTS[L.id] and ALIAS_TILESETS[Roles.tilesetName(L.secondary)]) then return nil end
   if not (ref and ref.cell and L.cell) then return nil end
   local known = {}
   local sorted = {}
@@ -562,7 +600,7 @@ function Roles.new(L, opt)
     if signs[x .. "," .. y] then return true end
     local m = metatile(x, y)
     if m >= Roles.NUM_PRIMARY and NOT_POSTS[secondary] and NOT_POSTS[secondary][m] then return false end
-    if m < Roles.NUM_PRIMARY and primary == "general" and m >= MOUNTAIN_ROCK_FIRST and m <= MOUNTAIN_ROCK_LAST then
+    if m < Roles.NUM_PRIMARY and primary == GENERAL_NAME and m >= MOUNTAIN_ROCK_FIRST and m <= MOUNTAIN_ROCK_LAST then
       return false
     end
     if m >= Roles.NUM_PRIMARY and mountainDrawn(m) then return false end

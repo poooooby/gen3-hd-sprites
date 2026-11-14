@@ -20,11 +20,21 @@
 local Buildings = {}
 
 Buildings.TILE = 16
+-- The game's tileset family (src/scene/family.lua; nil: Emerald's), set by Buildings.useFamily
+Buildings.family = nil
+function Buildings.useFamily(F) Buildings.family = F end
 
 local floor, max, min = math.floor, math.max, math.min
 
 local function primaryOf(pair)
-  return type(pair) == "string" and (pair:match("^(.-)__") or pair) or nil
+  if type(pair) ~= "string" then return nil end
+  -- (a pair the engine names otherwise: FireRed's "pallet_outdoor" is General's)
+  local F = Buildings.family
+  if F and F.namespace and not pair:find("__", 1, true) then
+    local p = F.pairNames(pair)
+    if p then return p:sub(#F.namespace + 1) end
+  end
+  return pair:match("^(.-)__") or pair
 end
 Buildings.primaryOf = primaryOf
 
@@ -227,6 +237,10 @@ function Buildings.find(grid, models, alike, at)
   end
   local function hasSecondary(pair)
     local sec = type(pair) == "string" and pair:match("__(.+)$")
+    -- (a pair the engine names otherwise: FireRed's "pallet_outdoor")
+    if not sec and type(pair) == "string" and Buildings.family and Buildings.family.namespace then
+      sec = select(2, Buildings.family.pairNames(pair))
+    end
     return sec ~= nil and sec ~= "0" and sec ~= "NULL"
   end
   -- the look-alike check, once per model, cell of it, metatile and pair
@@ -293,6 +307,33 @@ function Buildings.find(grid, models, alike, at)
         end
       end
     end
+  end
+  -- (FireRed's own specs, read off look-alike tiles - its towns draw one kit in several sizes: one
+  -- building a place. A placement lying wholly inside a larger one, or on the same rectangle as an
+  -- earlier spec's, is that building read again. Emerald 3DS's finder has no such rule, and
+  -- Emerald's placements stay as its)
+  if Buildings.family and Buildings.family.namespace and #found > 1 then
+    local byArea = {}
+    for k, p in ipairs(found) do byArea[k] = p end
+    local function area(p) return p.model.ref.w * p.model.ref.h end
+    table.sort(byArea, function(p, q)
+      if area(p) ~= area(q) then return area(p) > area(q) end
+      return order[p.model] < order[q.model]
+    end)
+    local keep = {}
+    for _, p in ipairs(byArea) do
+      local x0, y0 = p.cx, p.cy
+      local x1, y1 = x0 + p.model.ref.w, y0 + p.model.ref.h
+      local inside = false
+      for _, q in ipairs(keep) do
+        if x0 >= q.cx and y0 >= q.cy and x1 <= q.cx + q.model.ref.w and y1 <= q.cy + q.model.ref.h then
+          inside = true
+          break
+        end
+      end
+      if not inside then keep[#keep + 1] = p end
+    end
+    found = keep
   end
   table.sort(found, function(p, q)
     if p.model ~= q.model then return order[p.model] < order[q.model] end
@@ -786,7 +827,7 @@ function Buildings.groundPlan(md, m)
     if spec.component then
       for k in pairs(owned) do
         local b = at(k % w, (k - k % w) / w)
-        if b and b % 1024 >= 512 then fixed = nil end
+        if b and b % 1024 >= (Buildings.family and Buildings.family.primaryMetatiles or 512) then fixed = nil end
       end
     end
   else

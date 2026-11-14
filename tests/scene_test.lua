@@ -1287,5 +1287,52 @@ do
   package.loaded["src.core.game3.cache_paths"], package.loaded["src.core.game3.dataset"] = savedP, savedD
 end
 
+-- the game's tileset family (src/scene/family.lua): Emerald's cuts and FireRed's
+do
+  local Family = dofile("src/scene/family.lua")
+  local R, K = Family.of("emerald"), Family.of("firered")
+  check(R == Family.RSE and Family.of("ruby") == R and Family.of("nope") == R, "Hoenn's games and anything unknown are RSE")
+  check(K == Family.FRLG and Family.of("leafgreen") == K and Family.kanto("firered") and not Family.kanto("emerald"),
+    "FireRed and LeafGreen are FRLG")
+  check(R.primaryMetatiles == 512 and K.primaryMetatiles == 640 and R.primaryPals == 6 and K.primaryPals == 7,
+    "the primaries end at 512 / 640 metatiles and 6 / 7 palettes")
+  local a, b = R.split(511)
+  local c, d = K.split(600)
+  local e, f = K.split(641)
+  check(a == 0 and b == 511 and c == 0 and d == 600 and e == 1 and f == 1, "a metatile splits by its family's cut")
+  -- an Emerald attribute: behaviour 0x21 (sand), layer 1; a FireRed one: behaviour 0x1B9, layer 2
+  local em = string.char(0x00, 0x00, 0x21, 0x10)
+  check(R.attribute(em, 1) == 0x1021 and R.behaviour(R.attribute(em, 1)) == 0x21 and R.layer(0x1021) == 1,
+    "Emerald's attribute is a u16: behaviour its low byte, layer its top nibble")
+  check(R.attribute(em, 2) == 0, "...and 0 past the table")
+  local fr = string.char(0, 0, 0, 0, 0xB9, 0x01, 0x00, 0x40)
+  local av = K.attribute(fr, 1)
+  check(av == 0x400001B9 and K.behaviour(av) == 0x1B9 and K.layer(av) == 2,
+    "FireRed's attribute is a u32: behaviour bits 0-8, layer bits 29-30")
+  local p, s = R.pairNames("general__petalburg")
+  check(p == "general" and s == "petalburg", "Emerald's pair names as they always were")
+  local p2, s2 = K.pairNames("general__rom_082d4b0c")
+  check(p2 == "fr:general" and s2 == "fr:rom_082d4b0c", "FireRed's are its own: Hoenn's General is never them")
+  check(Family.prefixOf(K, "SEVII_ONE_ISLAND") == "SEVII_" and Family.prefixOf(K, "EM_X") == nil
+    and Family.prefixOf(R, "EM_ROUTE101") == "EM_", "each family's map prefixes")
+  check(Family.normal(K, "FR_ROUTE_2_VIRIDIAN_FOREST_NORTH_ENTRANCE") == Family.normal(K, "Route2_ViridianForest_NorthEntrance"),
+    "a baked layout's name and pret's match as the engine matches them")
+  -- relief_art's pair reads FireRed's cuts: a metatile past 512 is still the primary's
+  local Art = dofile("src/scene/relief_art.lua")
+  local function ts(name, family)
+    local meta = {}
+    for _ = 1, 700 do meta[#meta + 1] = string.rep("\0", 16) end
+    local attrs = {}
+    for i = 0, 699 do attrs[#attrs + 1] = family.attrBytes == 4 and string.char(i % 256, 0, 0, 0) or string.char(i % 256, 0) end
+    return { name = name, tiles = "", palettes = {}, metatiles = table.concat(meta), attributes = table.concat(attrs),
+             family = family }
+  end
+  local Pk = Art.pair(ts("p", K), ts("s", K))
+  check(Pk.NUM_PRIMARY == 640 and Pk.behaviour(600) == 600 % 256 and Pk.behaviour(650) == 10,
+    "a FireRed pair reads metatile 600 off its primary, 650 off its secondary")
+  local Pr = Art.pair(ts("p", R), ts("s", R))
+  check(Pr.NUM_PRIMARY == 512 and Pr.behaviour(600) == 88, "an Emerald pair cuts at 512")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

@@ -1,5 +1,5 @@
--- Driver: WoobleView's first-run prompt in Emerald. Boots a new game, stands the player on Route
--- 101 and waits for the question (WoobleView's flag file must be gone from its cache, and Battle
+-- Driver: WoobleView's first-run prompt (Emerald; FireRed and LeafGreen with FIRST_RUN_SPOT).
+-- Boots a new game, stands the player on Route 101 and waits for the question (WoobleView's flag file must be gone from its cache, and Battle
 -- Scene on CLASSIC); then answers it (FIRST_RUN_ANSWERS, default "a,a": turn on, build now),
 -- shooting each step and the progress bar every FIRST_RUN_EVERY frames (default 240) until the
 -- prompt closes. FIRST_RUN_CLEAR=1 clears the 3D cache first; FIRST_RUN_ANSWERS=a,a,b with
@@ -43,7 +43,9 @@ local function body(game, log)
     loader.modOptions["gen3-hd-sprites"] = loader.modOptions["gen3-hd-sprites"] or {}
     loader.modOptions["gen3-hd-sprites"].battle_scene = "classic"
   end
-  pcall(Map.load, nil, game, "EM_ROUTE101", { x = 10, y = 10, facing = "down" })
+  -- (FIRST_RUN_SPOT=MAP:x:y: another game's field, FireRed's Route 1)
+  local spotMap, sx, sy = (env("FIRST_RUN_SPOT") or "EM_ROUTE101:10:10"):match("([^:]+):(%d+):(%d+)")
+  pcall(Map.load, nil, game, spotMap, { x = tonumber(sx), y = tonumber(sy), facing = "down" })
   local s = Runtime.getSession()
   if s then s.x, s.y = 10, 10 end
   Player.cellX, Player.cellY, Player.px, Player.py = 10, 10, 160, 160

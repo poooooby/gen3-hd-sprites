@@ -157,6 +157,17 @@ return function(mod, hd, state)
     end
     return rows
   end
+  -- (dev: a readied model, built afresh with its texture kept: { tris, art, tex, spec }, for the
+  -- proofs, tests/model_check.lua)
+  exports._sceneModel = function(name)
+    local s = hd.scene
+    return s and s.modelOf and s.modelOf(name, true) or nil
+  end
+  -- (dev: every building spec's name, in order)
+  exports._sceneSpecNames = function()
+    local s = hd.scene
+    return s and s.specNames and s.specNames() or {}
+  end
   -- (dev: a model's art itself, { w, h, px }, built afresh)
   exports._sceneModelArtRaw = function(name)
     local s = hd.scene
