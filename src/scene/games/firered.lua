@@ -108,6 +108,13 @@ F.terraces = {
 --   * the crown's tip is drawn in the cell above the tree: 00E / 00F, grass under it (001's).
 -- Every variant stands as the one tree (its art, Trees.kantoArt, read off the alone tree's three
 -- rows); 01A-01B and 012-013 / 022-023 (a one-wide tree, a handful of cells in all) stay as drawn.
+-- It stands as its own model (Trees.kantoTree): its crown a cone, its trunk upright, its shadow on
+-- the ground. In texels of the alone tree drawn from its tip row's top (32 x 48), read off the
+-- drawing: the crown's tip drawn at row 3, its skirt's front edge at row 41 (its last leaves,
+-- and their shade, over the trunk's top), the tree standing about column 16 on row 40 (the middle of its shadow's ellipse, rows
+-- 32-47); its skirt's sides end at row 34 two texels in, which a crown squashed to 0.65 of its
+-- width in depth gives. The trunk is drawn in its two colours (413931, 736262), its foot (its
+-- front, on the ground) at row 44.
 F.trees = {
   general = F.general,
   parts = {
@@ -116,6 +123,8 @@ F.trees = {
     [0x015] = 3, [0x017] = 3, [0x025] = 3, [0x027] = 3,
   },
   alone = { tip = { 0x00E, 0x00F }, crown = { 0x01E, 0x01F }, trunk = { 0x024, 0x025 } },
+  cone = { axis = 16, depth = 40, radius = 16, squash = 0.65, tip = 3, skirt = 41 },
+  trunk = { rgb(0x41, 0x39, 0x31), rgb(0x73, 0x62, 0x62) },
   ground = { [0x00E] = 0x001, [0x00F] = 0x001 },
 }
 

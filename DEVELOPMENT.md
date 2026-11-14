@@ -1133,19 +1133,37 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - **The proof (`tests/drivers/room_check.lua`, `Check.render` in `tests/model_check.lua`):** every piece standing in a room drawn together at 45 degrees, the nearer over the farther, against the room's drawing (`exports._roomLayout`): wrong (a covered pixel in another colour, but for `over`: a top rising over what another piece owns), missing (a piece's own pixels left bare), stretched faces. Emerald's own rooms, ported number for number and confirmed against Emerald 3DS's release, set the bar: 0-10% of covered pixels wrong (the Center 0.8%, the Mart 5.0%, the lab 10.6%), nothing missing, only the cut corners stretched. FireRed's: the Center 0.4% and 0.0%, the Mart 0.9%, the gyms 0-2.2% (Pewter 2.2, Vermilion 0.6, Viridian and Cinnabar 0.1, Celadon, Cerulean, Fuchsia and Saffron 0.0). A piece reused in a later room is listed with the room it was modelled in (its `reused_at`, or `bare_at` when found by its own pixels): the proof looks through every room's pieces. `ROOM_VERBOSE=<text>` lists what each room places. `ROOM_CHECK=name,...` picks rooms; each writes `room_<name>.ppm` (drawing | the room at 45 degrees | marks).
 - **First run (`src/prompt.lua`):** the question and Build 3D Cache come up in the games whose world is built in 3D (`P.GAMES_3D`: Emerald, FireRed, LeafGreen). `Run.TICKS` holds each game's measured build (FireRed 62,662 ticks against Emerald's 117,030; LeafGreen draws the same maps). Measured in the scratch engine: FireRed's whole build in 46 s, LeafGreen's in 41 s. `tests/drivers/first_run.lua` takes `FIRST_RUN_SPOT=MAP:x:y` for another game's field (`FR_ROUTE_1:10:20`).
 - **FireRed's sea rocks (`props.lua`):** `fr_sea_rock` and `fr_sea_rock_pale`, each four General tiles in a square at the corner four metatiles share (as Emerald's sea rock): tiles 420-423 in palette 4 (metatiles 0x110-0x119) and 173/174 over 189/190 in palette 2 (0x1CB-0x1D4). They stand as Mounds on the General's plain water (0x12B), their pale outline the foam. The relief solver's own copy of the objects is unchanged (FireRed's relief bytes stay the same); the rocks' cells are water to it.
-- **Kanto's trees (`src/scene/trees.lua`, `games/firered.lua` `trees`):** Kanto's General tree is
-  built as Hoenn's is (2x2: a crown row whose upper layer covers the player, over a trunk row,
-  stacked through the woods), so it stands as Emerald 3DS's tree model: leaned crown cards, the
-  trunk's ground under them. `Trees.useGame` takes the game's table: its parts (crown row `01C`-`01F`,
-  trunk row `014`-`017`, `024`-`027`), the tree alone on grass (`alone`: tip `00E`/`00F`, crown
-  `01E`/`01F`, trunk `024`/`025`) and the tip cells' ground (`00E`/`00F` lay `001`). Every variant
-  stands as the one tree. Its art is read off the player's own tiles at the scene's first build,
-  once a game (`Trees.kantoArt`, into a 128x128 atlas, `init.lua` `treesArt`): the crown is the tip's
-  and crown row's upper layers plus the trunk row's pixels in the crown's own colours (the colours
-  those upper layers use; trunk, shadow and grass use others); the ground is each row's lower layer,
-  the trunk row's with the crown's pixels replaced by the crown row's grass at the same place. The
-  crown card carries a third strip, the tip (`art.tip`), above the crown row. It is graded as
-  Hoenn's tree texture is, over its own crowns (`Light.gradeTrees(data, Trees.KANTO_CROWNS)`).
+- **Kanto's trees (`src/scene/trees.lua`, `games/firered.lua` `trees`):** Kanto's General tree (2x2:
+  a crown row whose upper layer covers the player, over a trunk row, stacked through the woods, its
+  tip drawn in the cell above) stands as its own model, built off its drawing as the rooms' pieces
+  are: seen at 45 degrees it is its drawing, texel for texel. `Trees.useGame` takes the game's
+  table: its parts (crown row `01C`-`01F`, trunk row `014`-`017`, `024`-`027`), the tree alone on
+  grass (`alone`: tip `00E`/`00F`, crown `01E`/`01F`, trunk `024`/`025`), the tip cells' ground
+  (`00E`/`00F` lay `001`), the trunk's colours, and `cone`: numbers read off the drawing (the tip's
+  row 3, the skirt's front edge 41 (its last leaves and their shade over the trunk's top), the tree standing on row 40, the middle of its shadow's
+  ellipse, the squash 0.65 that puts the skirt's sides where they're drawn). Every variant stands
+  as the one tree, from its crown row's west cell (or its trunk row's, the crown row drawn over or
+  past the scene's window: `partAt`'s second value).
+  - **The model (`Trees.kantoTree`, `Trees.kantoFront`):** the crown is turned about its axis, as
+    wide at each height as the drawn crown is on the row its side is drawn on (`KANTO_PROFILE`), so
+    its outline is the drawing's. Its front is cut into quads on a grid of the drawing's columns and
+    rows (`KANTO_QUADS`, those holding a texel of it); each corner is the point the 45-degree view
+    puts there (solved up the height: past the outline, the plane through the axis; under the
+    skirt, straight down from its edge), so every quad's uvs are a rectangle of the drawing. The
+    trunk is a card upright at its drawn foot, from the ground into the skirt. The shadow lies flat.
+  - **The art (`Trees.kantoArt`, read off the player's tiles once a game, into a 128x128 atlas,
+    `init.lua` `treesArt`):** the crown (0, 0) is the tip and crown rows' upper layers and, of the
+    trunk row, what the cone covers; the ground (32, 0) is each row's lower layer, the trunk row's
+    with the cone's and the trunk's texels replaced: behind the tree's foot (row 40) by the shadow's drawn front turned about that row, so its back is as round as its front; else by the first ground below them,
+    and grass (the tip row's) under the leaves of the rows above, as a reader may give the crown
+    row's lower layer with its leaves; the trunk (64, 0) is its colours, carried up each column
+    where the cone hides it, with what is drawn between the skirt and the trunk's top. Colours are
+    compared at 5 bits a channel: the engine and the tests' reader widen them differently. It is
+    graded as Hoenn's tree texture is, over its crown (`Light.gradeTrees(data,
+    Trees.KANTO_CROWNS)`). The proof: one tree's emitted quads rendered at 45 degrees
+    (`Check.render`) against the alone tree's drawing, 0 of 1,536 texels wrong.
+  - The workshop's tree settings (lean, height, foot, sink) shape Hoenn's crown cards; Kanto's tree
+    takes none of them (it is exact as it stands), only `hide`.
   With `Trees.kanto` set, `Trees.tilesets` finds the General by the family's name (`fr:general`),
   so the scene's tree passes (shadows, the stage's tree heights, the relief's trunk ground) run in
   Kanto as in Hoenn.

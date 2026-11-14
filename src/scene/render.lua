@@ -715,7 +715,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
           -- lays its ground: src/scene/init.lua, src/scene/relief.lua treeStep)
           Trees.emit(putTree, sec, cell.mid, cell.cx, cell.cy, part, function(x, y)
             local o = grid.at(x, y)
-            if not o or o.pair ~= cell.pair then return false end
+            -- (false: outside this map; and true besides when outside the scene's window)
+            if not o then return false, true end
+            if o.pair ~= cell.pair then return false end
             return Trees.part(sec, o.mid)
           end, { rock = cell.treeRock, noGround = cell.treeGround ~= nil, mark = cell.treeMark })
         end

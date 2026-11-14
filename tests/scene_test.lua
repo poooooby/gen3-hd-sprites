@@ -1390,35 +1390,73 @@ do
     "...nothing of Hoenn's tables, nor a secondary's")
   check(Trees.groundMetatile(sec, 0x00E) == 0x001 and Trees.groundMetatile(sec, 0x024) == 0x024,
     "the tip over grass lays grass; a tree's cell its own")
-  local plain = cards(sec, 0x01E)
-  check(select(2, plain:gsub("card", "")) == 2, "a crown-row cell stands its row and the tip above it")
-  check(cards(sec, 0x01E, { trees = { lean = 25 } }) ~= plain, "a mark's lean changes its cards")
-  check(cards(sec, 0x01E, { hide = true }):find("card") == nil, "a hidden tree keeps its ground alone")
-  -- the art: a 4-colour tree on grass, read apart by the crown's colours
-  local GRASS, LEAF, TRUNK = { 0.4, 0.8, 0.6 }, { 0.2, 0.6, 0.1 }, { 0.3, 0.3, 0.3 }
+  -- the art: a tree on grass - its crown in the upper layers, its skirt over its shadow and its
+  -- trunk (the game's trunk colour) in the trunk row's lower layer
+  local GRASS, LEAF, SHADE = { 0.4, 0.8, 0.6 }, { 0.2, 0.6, 0.1 }, { 0.1, 0.3, 0.1 }
+  local TRUNK = { 0x41 / 255, 0x39 / 255, 0x31 / 255 }
   local function px(mid, layer, x, y)
     if mid == 0x00E or mid == 0x00F then
-      if layer == 1 then if y >= 12 then return LEAF[1], LEAF[2], LEAF[3], 1 end return nil end
+      if layer == 1 then if y >= 4 then return LEAF[1], LEAF[2], LEAF[3], 1 end return nil end
       return GRASS[1], GRASS[2], GRASS[3], 1
     elseif mid == 0x01E or mid == 0x01F then
       if layer == 1 then return LEAF[1], LEAF[2], LEAF[3], 1 end
       return GRASS[1], GRASS[2], GRASS[3], 1
     elseif mid == 0x024 or mid == 0x025 then
       if layer == 1 then return nil end
-      if y < 8 then return LEAF[1], LEAF[2], LEAF[3], 1 end
-      if y < 12 and x >= 6 and x < 10 then return TRUNK[1], TRUNK[2], TRUNK[3], 1 end
+      local cx = mid == 0x024 and x or x + 16
+      if y >= 8 and y < 12 and cx >= 13 and cx < 19 then return TRUNK[1], TRUNK[2], TRUNK[3], 1 end
+      if y < 6 then return LEAF[1], LEAF[2], LEAF[3], 1 end
+      if y < 14 then return SHADE[1], SHADE[2], SHADE[3], 1 end
       return GRASS[1], GRASS[2], GRASS[3], 1
     end
   end
   local img = {}
   local n = Trees.kantoArt(px, function(x, y, r, g, b, a) img[y * 128 + x] = { r, g, b, a } end)
   local function at(x, y) return img[y * 128 + x] end
-  check(n == 2 * 16 * 4 + 2 * 16 * 16 + 2 * 16 * 8, "the crown: the tip's leaves, the crown row's, the trunk row's (" .. n .. ")")
-  check(at(3, 14) and at(3, 14)[2] == LEAF[2] and at(3, 2) == nil, "...the tip's leaves on the crown, its sky clear")
-  check(at(3, 32 + 4) and at(3, 32 + 4)[2] == LEAF[2] and at(7, 32 + 10) == nil,
-    "the trunk row's leaves on the crown, its trunk not")
-  check(at(32 + 7, 32 + 10)[1] == TRUNK[1] and at(32 + 3, 32 + 4)[2] == GRASS[2],
-    "the trunk on the ground, and the grass where the crown was")
+  check(n > 0 and Trees.KANTO_QUADS and #Trees.KANTO_QUADS > 0, "Kanto's tree: its crown read, cut into quads (" .. n .. ")")
+  check(at(3, 14) and at(3, 14)[2] == LEAF[2] and at(3, 2) == nil, "...the tip's leaves on the crown, the sky over it clear")
+  check(at(16, 33) and at(16, 33)[2] == LEAF[2] and at(16, 45) == nil,
+    "the skirt the cone covers on the crown; the shadow below it not")
+  check(at(32 + 16, 41)[2] == SHADE[2] and at(32 + 16, 33)[2] == at(32 + 16, 46)[2] and at(32 + 1, 46)[2] == GRASS[2],
+    "the ground: the shadow flat under the trunk; behind the tree's foot its front turned about it; the grass round it")
+  local tr = Trees.KANTO_TRUNK
+  check(tr and tr.x0 == 13 and tr.x1 == 19 and at(64 + 15, 41) and at(64 + 15, 41)[1] == TRUNK[1],
+    "the trunk on its own card, upright")
+  -- the model: stood once a tree, from its crown row's west cell
+  local function count(m, part, above)
+    local quads, standing = 0, 0
+    Trees.emit(function(a, b, c, d, u0, v0, u1, v1, kind)
+      quads = quads + 1
+      if kind == "card" then standing = standing + 1 end
+    end, sec, m, 5, 5, part, function(x, y) if y == 4 then return above end return nil end, {})
+    return quads, standing
+  end
+  local _, west = count(0x01E, 0)
+  local eq, east = count(0x01F, 1)
+  local _, trunkRow = count(0x024, 2, 0)
+  check(west == #Trees.KANTO_QUADS + 1 and east == 0 and eq == 1 and trunkRow == 0,
+    "the tree stands from its crown row's west cell (its crown and its trunk); the others lay their ground")
+  local _, lone = count(0x024, 2, nil)
+  check(lone == west, "a trunk row with no crown row over it (something drawn over it) stands the tree")
+  local function edge(outside)
+    local standing = 0
+    Trees.emit(function(a, b, c, d, u0, v0, u1, v1, kind) if kind == "card" then standing = standing + 1 end end,
+      sec, 0x024, 5, 5, 2, function() return false, outside end, {})
+    return standing
+  end
+  check(edge(true) == west and edge(nil) == 0,
+    "a trunk row whose crown row is past the scene's window stands the tree; one across a map's edge doesn't")
+  check(select(2, cards(sec, 0x01E, { hide = true }):gsub("card", "")) == 0, "a hidden tree keeps its ground alone")
+  -- seen at 45 degrees, every point of the crown is drawn where its texel is
+  local C = Trees.kantoCone()
+  local exact = true
+  for _, q in ipairs(Trees.KANTO_QUADS) do
+    for _, c in ipairs({ { q[1], q[2] }, { q[3], q[4] } }) do
+      local y, z = Trees.kantoFront(C, c[1], c[2])
+      if math.abs((z - y) - c[2]) > 1e-3 then exact = false end
+    end
+  end
+  check(exact, "the crown's corners stand where the drawing puts them at 45 degrees")
   Trees.useGame(nil)
   Trees.useFamily(nil)
 end

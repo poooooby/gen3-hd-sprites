@@ -210,8 +210,8 @@ local OWN_ART = {
   [OWN_SOIL] = { crownX = 96, crownY = 64, rowPx = 16, groundX = 0, groundY = 80, foot = 1.00 },
   [OWN_ASH] = { crownX = 96, crownY = 64, rowPx = 16, groundX = 32, groundY = 80, foot = 1.00 },
 }
--- Kanto's tree in its art (Trees.kantoArt, its top left 64 x 48): the crown's three rows down the left half (its
--- tip, the crown row, the trunk row's leaves), the ground of its rows down the right
+-- Kanto's tree in its art (Trees.kantoArt): the ground of its rows (tip, crown, trunk) at (32, 0), each
+-- part cell's from its row (the crown and the trunk: Trees.kantoTree)
 local KANTO_ART = { crownX = 0, crownY = 16, rowPx = 16, groundX = 32, groundY = 16, foot = 0.70, tip = 16 }
 -- (laid in an atlas of the Hoenn art's size: the tree meshes' uvs are texels over Trees.DIM)
 Trees.KANTO_W, Trees.KANTO_H = 128, 128
@@ -316,12 +316,31 @@ function Trees.groundArt(sec, m, part)
 end
 
 --- Emit a tree part's cell at (x, y) (map cells). partAt(x, y) -> the tree part of another cell
---- of the same map, or nil (for the crown's other row). o: { rock (it stands against rock or
+--- of the same map, or nil (for the crown's other row); false outside this map (and a second
+--- value, true, outside the scene's window). o: { rock (it stands against rock or
 --- higher ground: AgainstRock), noGround (the relief lays its ground: on the rock of a band, or
 --- on a one-level slope), mark (the cell's workshop mark, src/scene/tune.lua: its settings, or
 --- hide: its ground alone) }, or nil.
 function Trees.emit(put, sec, m, x, y, part, partAt, o)
   o = o or {}
+  if Trees.kanto and part ~= Trees.SMALL and part ~= Trees.GRASS then
+    -- Kanto's: each cell lays its row's ground (the shadow flat), and the tree stands once, from
+    -- its crown row's west cell (or its trunk row's: a crown row drawn over by something else, or
+    -- past the scene's window)
+    local art = KANTO_ART
+    local col, row = part % 2, math.floor(part / 2)
+    if not o.noGround then
+      local u0, v0 = art.groundX + col * 16, art.groundY + row * 16
+      ground(put, x, y, u0, v0, u0 + 16, v0 + 16, 0)
+    end
+    if o.mark and o.mark.hide then return end
+    local above, outside
+    if part == 2 then above, outside = partAt(x, y - 1) end
+    if part == 0 or (part == 2 and (above == nil or outside == true)) then
+      Trees.kantoTree(put, x, (part == 0 and y or y - 1) - 1)
+    end
+    return
+  end
   if part == Trees.SMALL or part == Trees.GRASS then
     smallCell(put, sec, m, x, y, part, o)
     return
@@ -352,60 +371,228 @@ function Trees.emit(put, sec, m, x, y, part, partAt, o)
   crownCard(put, art, x, other, col, 1 - row, steep, mark)
 end
 
+-- ── Kanto's tree as its own model ─────────────────────────────────────────
+-- Built off its drawing as the rooms' pieces are (src/scene/models/interiors.lua): every texel of
+-- it stands where the GBA's 45-degree view puts it, so seen from there the tree is its drawing.
+-- In texels of the alone tree from its tip row's top (32 x 48; x east, v the drawing's row, y up,
+-- z south, v = z - y):
+--   * the crown is turned about the axis (axis, depth), squashed to `squash` of its width in depth:
+--     `radius` wide at its skirt, which stands so its front edge is drawn at row `skirt`, rising to
+--     its tip at row `tip`, as wide at each height as the drawn crown is on the row its side is
+--     drawn on (its outline the drawing's). Its front is cut into quads by the drawing's columns and rows, each
+--     corner the point of the cone (or, past its outline, of the plane through its axis; under its
+--     skirt, of the skirt's edge straight down) that the view puts there, its texels the drawing's:
+--     the tip and crown rows' upper layers, and of the trunk row what the cone covers;
+--   * the trunk is a card upright at its drawn foot (its front), from the ground into the cone, its texels the
+--     trunk's colours (the game's `trunk`), carried up each column where the cone hides it;
+--   * the ground under each row is that row's lower layer: the trunk row's with what the cone and
+--     the trunk cover taken off it: behind the tree's foot the shadow's drawn front turned about
+--     that row (its back, as round as its front), else the first of the ground below it in its
+--     column (the shadow, laid flat); under the leaves of the rows above, the tip row's grass.
+-- the crown's half-width on each row of the drawing (Trees.kantoArt), its outline's
+Trees.KANTO_PROFILE = nil
+local function coneOf()
+  local c = Trees.kanto and Trees.kanto.cone
+  if not c then return nil end
+  local C = { ax = c.axis, cz = c.depth, s = c.squash, R0 = c.radius, w = Trees.KANTO_PROFILE }
+  -- (read off the drawing, the skirt is as wide as the crown's widest row: the radius meets it)
+  if C.w and C.w[31] then C.R0 = C.w[31] end
+  C.h0 = C.cz + C.s * C.R0 - c.skirt
+  C.top = C.cz - c.tip
+  return C
+end
+Trees.kantoCone = coneOf
+-- (its side, seen at 45 degrees, is drawn on the row cz - y: the radius there is the drawn
+-- crown's half-width on that row, or a straight cone's without the drawing)
+local function coneRadius(C, y)
+  if y <= C.h0 then return C.R0 end
+  if y >= C.top then return 0 end
+  local w = C.w
+  if w then
+    local v = C.cz - y - 0.5
+    local v0 = math.floor(v)
+    local a, b = w[v0] or 0, w[v0 + 1] or C.R0
+    return math.min(C.R0, a + (b - a) * (v - v0))
+  end
+  return C.R0 * (C.top - y) / (C.top - C.h0)
+end
+--- The point of the crown's front the 45-degree view draws at (x, v): y, z (texels), and whether
+--- it is on the cone (not under its skirt nor past its outline).
+function Trees.kantoFront(C, x, v)
+  local dx = x - C.ax
+  local function at(y)
+    local R = coneRadius(C, y)
+    local d = R * R - dx * dx
+    return C.cz + (d > 0 and C.s * math.sqrt(d) or 0), d
+  end
+  -- (z - y falls as y rises: the one y it is v)
+  local lo, hi = -64, 192
+  for _ = 1, 32 do
+    local mid = (lo + hi) / 2
+    if at(mid) - mid > v then lo = mid else hi = mid end
+  end
+  local y = (lo + hi) / 2
+  local z, d = at(y)
+  return y, z, y >= C.h0 - 1e-6 and y <= C.top and d >= 0
+end
+
+-- the art's places: the crown's texels at (0, 0), the ground's at (32, 0), the trunk's at (64, 0)
+local KANTO_TRUNK_X = 64
+-- the crown's quads (Trees.kantoArt: those holding a texel of it) and the trunk's card, in texels
+Trees.KANTO_QUADS = nil
+Trees.KANTO_TRUNK = nil
+local QUAD_W, QUAD_H = 4, 3
+
+--- Kanto's tree standing with the top left of its tip row at the cell (x, z) (map cells).
+function Trees.kantoTree(put, x, z)
+  local C = coneOf()
+  if not C then return end
+  local function P(u, v)
+    local y, zz = Trees.kantoFront(C, u, v)
+    return { x + u / 16, y / 16, z + zz / 16 }
+  end
+  local quads = Trees.KANTO_QUADS
+  if not quads then
+    quads = {}
+    for v = 0, 47, QUAD_H do
+      for u = 0, 31, QUAD_W do quads[#quads + 1] = { u, v, u + QUAD_W, math.min(48, v + QUAD_H) } end
+    end
+  end
+  for _, q in ipairs(quads) do
+    put(P(q[1], q[2]), P(q[3], q[2]), P(q[3], q[4]), P(q[1], q[4]), q[1], q[2], q[3], q[4], "card")
+  end
+  local tr = Trees.KANTO_TRUNK
+  if tr then
+    -- (upright at its foot, from the ground into the cone)
+    local y1 = tr.foot - tr.top
+    local zz = z + tr.foot / 16
+    put({ x + tr.x0 / 16, y1 / 16, zz }, { x + tr.x1 / 16, y1 / 16, zz },
+        { x + tr.x1 / 16, 0, zz }, { x + tr.x0 / 16, 0, zz },
+        KANTO_TRUNK_X + tr.x0, tr.top, KANTO_TRUNK_X + tr.x1, tr.foot, "card")
+  end
+end
+
 --- Kanto's tree art (Trees.KANTO_W x KANTO_H), read off the player's own tiles: px(mid, layer, x, y)
 --- -> r, g, b, a (0-1; nil or a < 0.5 where that layer draws nothing), set(x, y, r, g, b, a).
---- The tree alone on grass (Trees.kanto.alone) gives each row:
----   * the crown: the tip row's and crown row's upper layers (what covers the player), and of the
----     trunk row what is drawn in the crown's own colours (the colours its upper layers use: its
----     trunk, its shadow and the grass are other colours);
----   * the ground: each row's lower layer, the trunk row's with the crown's pixels taken off it -
----     the grass under them the crown row's own, at the same place.
---- Returns the number of crown texels (0: nothing read).
+--- Read off the tree alone on grass (Trees.kanto.alone), as above; sets Trees.KANTO_QUADS and
+--- KANTO_TRUNK. Returns the number of crown texels (0: nothing read).
 function Trees.kantoArt(px, set)
   local K = Trees.kanto
   local A = K and K.alone
-  if not (A and A.tip and A.crown and A.trunk) then return 0 end
-  local function key(r, g, b) return math.floor(r * 255 + 0.5) * 65536 + math.floor(g * 255 + 0.5) * 256 + math.floor(b * 255 + 0.5) end
-  local crownColours, n = {}, 0
-  for _, row in ipairs({ A.tip, A.crown }) do
-    for col = 0, 1 do
-      for y = 0, 15 do
-        for x = 0, 15 do
-          local r, g, b, a = px(row[col + 1], 1, x, y)
-          if r and a and a >= 0.5 then crownColours[key(r, g, b)] = true end
+  local C = coneOf()
+  if not (A and A.tip and A.crown and A.trunk and C) then return 0 end
+  -- (colours told apart as the GBA draws them, 5 bits a channel: readers widen them to 8 bits
+  -- their own ways)
+  local function key(r, g, b)
+    return math.floor(r * 31 + 0.5) * 1024 + math.floor(g * 31 + 0.5) * 32 + math.floor(b * 31 + 0.5)
+  end
+  local trunkColour = {}
+  for _, c in ipairs(K.trunk or {}) do
+    trunkColour[key(math.floor(c / 65536) / 255, math.floor(c / 256) % 256 / 255, c % 256 / 255)] = true
+  end
+  local rows = { A.tip, A.crown, A.trunk }
+  local function layer(x, v, l)
+    local m = rows[math.floor(v / 16) + 1][math.floor(x / 16) + 1]
+    local r, g, b, a = px(m, l, x % 16, v % 16)
+    if r and (l == 0 or (a and a >= 0.5)) then return r, g, b end
+  end
+  -- the crown's outline: its half-width on each row of the tip and crown rows (never narrowing
+  -- down the drawing)
+  local w, widest = {}, 0
+  for v = 0, 31 do
+    for x = 0, 31 do
+      if layer(x, v, 1) then widest = math.max(widest, math.abs(x + 0.5 - C.ax) + 0.5) end
+    end
+    w[v] = widest
+  end
+  Trees.KANTO_PROFILE = w
+  C = coneOf()
+  local crown, n = {}, 0
+  local covered, trunk = {}, {}
+  local tx0, tx1, ttop, tfoot = math.huge, -math.huge, math.huge, -math.huge
+  for v = 0, 47 do
+    for x = 0, 31 do
+      local r, g, b = layer(x, v, 1)
+      if r then
+        crown[v * 32 + x] = { r, g, b }
+      elseif v >= 32 then
+        local lr, lg, lb = layer(x, v, 0)
+        if lr and trunkColour[key(lr, lg, lb)] then
+          trunk[v * 32 + x] = { lr, lg, lb }
+          tx0, tx1, ttop, tfoot = math.min(tx0, x), math.max(tx1, x + 1), math.min(ttop, v), math.max(tfoot, v + 1)
+        elseif lr and select(3, Trees.kantoFront(C, x + 0.5, v + 0.5)) then
+          crown[v * 32 + x] = { lr, lg, lb }
+          covered[v * 32 + x] = true
         end
       end
     end
   end
-  for col = 0, 1 do
-    local ox = col * 16
-    for y = 0, 15 do
-      for x = 0, 15 do
-        -- the tip and the crown rows: upper layers on the crown, lower layers on the ground
-        for k, row in ipairs({ A.tip, A.crown }) do
-          local oy = (k - 1) * 16
-          local r, g, b, a = px(row[col + 1], 1, x, y)
-          if r and a and a >= 0.5 then set(ox + x, oy + y, r, g, b, 1); n = n + 1 end
-          local lr, lg, lb, la = px(row[col + 1], 0, x, y)
-          if lr then set(32 + ox + x, oy + y, lr, lg, lb, 1) end
+  for k, c in pairs(crown) do set(k % 32, math.floor(k / 32), c[1], c[2], c[3], 1); n = n + 1 end
+  -- the ground: each row's lower layer, the trunk row's with the cone and the trunk taken off it;
+  -- under the tip and crown rows' leaves the grass the tip row draws there (a reader may give a
+  -- crown row's lower layer with its leaves)
+  -- (the shadow is an ellipse about where the tree stands: its back, hidden under the crown, is
+  -- its drawn front turned about that row)
+  local function bare(x, v)
+    return v >= 32 and v <= 47 and not covered[v * 32 + x] and not trunk[v * 32 + x]
+  end
+  for x = 0, 31 do
+    local fill
+    for v = 47, 0, -1 do
+      local r, g, b = layer(x, v, 0)
+      if v < 32 and layer(x, v, 1) then r, g, b = layer(x, v % 16, 0) end
+      if v >= 32 and (covered[v * 32 + x] or trunk[v * 32 + x]) then
+        local mv = math.floor(2 * C.cz - v - 1 + 0.5)
+        if v < C.cz and bare(x, mv) then
+          r, g, b = layer(x, mv, 0)
+        elseif fill then
+          r, g, b = fill[1], fill[2], fill[3]
         end
-        -- the trunk row: its crown's colours on the crown, the rest (and the grass under the crown)
-        -- on the ground
-        local m = A.trunk[col + 1]
-        local r, g, b, a = px(m, 1, x, y)
-        if not (r and a and a >= 0.5) then r, g, b, a = px(m, 0, x, y) end
-        if r then
-          if crownColours[key(r, g, b)] then
-            set(ox + x, 32 + y, r, g, b, 1); n = n + 1
-            local gr, gg, gb = px(A.crown[col + 1], 0, x, y)
-            if gr then set(32 + ox + x, 32 + y, gr, gg, gb, 1) end
+      elseif v >= 32 and r then
+        fill = { r, g, b }
+      end
+      if r then set(32 + x, v, r, g, b, 1) end
+    end
+  end
+  -- the trunk's card: its texels, carried up each column into the cone
+  Trees.KANTO_TRUNK = nil
+  if tx1 > tx0 then
+    -- (it reaches 2 texels into the skirt)
+    local top = math.floor(tfoot - C.h0 - 2)
+    for x = tx0, tx1 - 1 do
+      -- (the column's own topmost trunk texel, carried up)
+      local colTop
+      for v = 32, 47 do if not colTop and trunk[v * 32 + x] then colTop = v end end
+      for v = top, 47 do
+        local c = trunk[v * 32 + x]
+        if not c and colTop and v < colTop then
+          if select(3, Trees.kantoFront(C, x + 0.5, v + 0.5)) then
+            -- (up the column where the cone hides it: seen at 45 degrees, nothing of it shows)
+            c = trunk[colTop * 32 + x]
           else
-            set(32 + ox + x, 32 + y, r, g, b, 1)
+            -- (between the skirt and the trunk's top: what is drawn there, the shade under the crown)
+            local r, g, b = layer(x, v, 0)
+            if r then c = { r, g, b } end
           end
         end
+        if c and v < tfoot then set(KANTO_TRUNK_X + x, v, c[1], c[2], c[3], 1) end
       end
     end
+    Trees.KANTO_TRUNK = { x0 = tx0, x1 = tx1, top = top, foot = tfoot }
   end
+  -- the crown's quads: those holding a texel of it
+  local quads = {}
+  for v = 0, 47, QUAD_H do
+    for u = 0, 31, QUAD_W do
+      local v1 = math.min(48, v + QUAD_H)
+      local any = false
+      for yy = v, v1 - 1 do
+        for xx = u, u + QUAD_W - 1 do if crown[yy * 32 + xx] then any = true end end
+      end
+      if any then quads[#quads + 1] = { u, v, u + QUAD_W, v1 } end
+    end
+  end
+  Trees.KANTO_QUADS = quads
   return n
 end
 
