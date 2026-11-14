@@ -58,6 +58,11 @@ Props.OBJECTS = {
   -- a white picket fence (Pallet Town, Celadon, ...): every post is one 8-pixel column of the
   -- General's upper layer, tile 14 over 30, whatever town tileset's metatiles carry it
   fr_picket = { land = true, tileset = "fr:general", palette = 2, grid = { { 14 }, { 30 } } },
+  -- a log fence's post (Four Island, ...): tile 46 over 62 of the General, palette 1; and the same
+  -- fence seen down its length (a column of posts 8 rows apart, each mostly behind the next):
+  -- tile 63, a post's top and the body of the one behind it
+  fr_log = { land = true, tileset = "fr:general", palette = 1, grid = { { 46 }, { 62 } } },
+  fr_log_side = { land = true, tileset = "fr:general", palette = 1, grid = { { 63 } } },
   -- a house's mailbox: tiles 336 / 337 over 352 / 353 over 368 / 369 of the General
   fr_mailbox = { land = true, tileset = "fr:general", palette = 2, grid = { { 336, 337 }, { 352, 353 }, { 368, 369 } } },
 }
@@ -81,6 +86,13 @@ Props.SPECS = {
   -- (a picket: a post 6 px across, its cap drawn from row 2, its foot at row 12 - a short round post)
   { name = "fr_picket", props = "fr_picket", clip_art = true, ground = { 0x001 }, shape = "lathe",
     lathe = { cx = 4, cz = 10.2, squash = 0.6, seg = 8, profile = { { 0, 3 }, { 6.4, 3 } } } },
+  -- (a log post: 6 px across, its cut top drawn rows 2-6, its front's foot at row 12, its grey
+  -- shadow under it the ground's; seen down the fence, its top rows 3-6 and the body of the post
+  -- behind it over it, each post standing where its top is drawn)
+  { name = "fr_log", props = "fr_log", clip_art = true, ground = { 0x001 }, shape = "lathe", ring = { { 123, 123, 131 } },
+    lathe = { cx = 3.5, cz = 10.6, squash = 0.8, seg = 8, profile = { { 0, 3.2 }, { 6.1, 3.2 } } } },
+  { name = "fr_log_side", props = "fr_log_side", clip_art = true, ground = { 0x001 }, shape = "lathe", ring = { { 123, 123, 131 } },
+    lathe = { cx = 3.5, cz = 10, squash = 1.0, seg = 8, profile = { { 0, 3.6 }, { 6, 3.6 } } } },
   -- (the mailbox: 12 px across, its arched top drawn from row 2, its front's foot at row 19)
   { name = "fr_mailbox", props = "fr_mailbox", clip_art = true, ground = { 0x001 }, shape = "lathe",
     lathe = { cx = 8, cz = 15.4, squash = 0.6, seg = 12, profile = { { 0, 6 }, { 8, 6 }, { 9.8, 4.5 } } } },

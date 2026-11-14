@@ -387,11 +387,14 @@ return function(deps)
   --- A layout's upper layer in subtiles (voxel_props.upper_subtiles), off the raw metatiles:
   --- { at = { [sy * 4096 + sx] = tile + palette * 1024 + flips * 16384 }, order = { keys, row by
   --- row } }, or nil.
-  function World.subtiles(L)
+  --- (remap(m) -> the metatile to read a cell as, optional: a tree's tip cell as the ground it
+  --- lays, src/scene/init.lua placeProps)
+  function World.subtiles(L, remap)
     local s = load()
     if not (s and L and L.grid and L.tilesets) then return nil end
-    if L._subs ~= nil then return L._subs or nil end
-    L._subs = false
+    local slot = remap and "_subsR" or "_subs"
+    if L[slot] ~= nil then return L[slot] or nil end
+    L[slot] = false
     local Dataset = req("src.core.game3.dataset")
     local cache = Dataset and Dataset.cache()
     if not cache then return nil end
@@ -406,6 +409,7 @@ return function(deps)
       for x = 0, W - 1 do
         local i = (y * W + x) * 2 + 1
         local m = (grid:byte(i) + grid:byte(i + 1) * 256) % 1024
+        if remap then m = remap(m) end
         local ts, k = pt, m
         if m >= NM then ts, k = st, m - NM end
         if (k + 1) * 16 <= #ts then
@@ -421,8 +425,8 @@ return function(deps)
         end
       end
     end
-    L._subs = { at = at, order = order }
-    return L._subs
+    L[slot] = { at = at, order = order }
+    return L[slot]
   end
 
   --- A layout's tilesets as pret composes them (src/scene/relief_art.lua's Art.pair over its two

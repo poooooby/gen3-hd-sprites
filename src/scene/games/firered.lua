@@ -237,19 +237,20 @@ end
 -- 0E6, is its ground). Its crown row is drawn under the player (its layer type), over the grass,
 -- the fence and their shadows: its leaves are what is drawn on either layer, less their colours
 -- (groundColours, leavesBelow). Read off the drawing (16 x 48 from its tip row's top): the crown's tip at row
--- 11, its skirt's front edge at row 37 (its last leaves over the trunk's top), the tree standing at
+-- 11, its skirt's front edge at row 40 (its last leaves and their shade over the trunk's top), the
+-- grass under its crown the island's (008, its tip's lower layer the fence), the tree standing at
 -- column 8 on row 42 (its shadow's ellipse, rows 37-47), 0.65 of its width in depth as the General
 -- tree; its trunk in the General's two colours.
 F.trees.forests[3] = {
   layouts = { "LAYOUT_FOUR_ISLAND" }, w = 1,
   parts = { [0x01B] = 0, [0x023] = 1 },
   alone = { tip = { 0x2BF }, crown = { 0x01B }, trunk = { 0x023 } },
-  cone = { axis = 8, depth = 42, radius = 8, squash = 0.65, tip = 11, skirt = 37 },
+  cone = { axis = 8, depth = 42, radius = 8, squash = 0.65, tip = 11, skirt = 40 },
   trunk = { rgb(0x41, 0x39, 0x31), rgb(0x73, 0x62, 0x62) },
   groundColours = { rgb(0x73, 0xCD, 0xA4), rgb(0x18, 0xA4, 0x6A), rgb(0x41, 0xB4, 0x8B),
                     rgb(0x7B, 0x4A, 0x4A), rgb(0x5A, 0x39, 0x41), rgb(0x94, 0x6A, 0x6A), rgb(0xDE, 0xC5, 0xA4),
                     rgb(0xBD, 0x94, 0x8B), rgb(0x7B, 0x7B, 0x83) },
-  ground = { [0x2BF] = 0x0E6 }, leavesBelow = true,
+  ground = { [0x2BF] = 0x0E6 }, leavesBelow = true, leafGround = 0x008,
 }
 
 return F

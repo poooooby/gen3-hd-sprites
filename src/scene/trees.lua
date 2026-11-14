@@ -84,6 +84,7 @@ function Trees.useGame(G)
       if k * 64 + 48 <= Trees.KANTO_H and (f.w or 3) * 16 * 2 + 16 <= 128 then
         S[k] = { w = f.w or 3, parts = f.parts, alone = f.alone, ground = f.ground, cone = f.cone, trunk = f.trunk,
                  layouts = f.layouts, tipToo = f.tipToo, groundColours = f.groundColours, leavesBelow = f.leavesBelow,
+                 leafGround = f.leafGround,
                  art = speciesArt(k, f.w or 3) }
       end
     end
@@ -707,7 +708,11 @@ function Trees.kantoArt(px, set, k)
     local fill
     for v = 47, 0, -1 do
       local r, g, b = drawn(x, v)
-      if v < low and leaf(x, v) then r, g, b = layer(x, v % 16, 0) end
+      if v < low and leaf(x, v) then
+        -- (or the species' own grass, where its tip row's lower layer is something else: Four
+        -- Island's sapling's tip is drawn over the fence)
+        if K.leafGround then r, g, b = px(K.leafGround, 0, x % 16, v % 16) else r, g, b = layer(x, v % 16, 0) end
+      end
       if v >= low and (covered[v * W + x] or trunk[v * W + x]) then
         local mv = math.floor(2 * C.cz - v - 1 + 0.5)
         if v < C.cz and bare(x, mv) then

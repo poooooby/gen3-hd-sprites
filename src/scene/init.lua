@@ -917,6 +917,16 @@ return function(deps)
   local function propSpec(name)
     for _, sp in ipairs(Props.SPECS) do if sp.props == name then return sp end end
   end
+  -- (a tree's tip cell is read as the ground it lays - Four Island's saplings' tips drawn over the
+  -- fence, whose posts are its props: src/scene/trees.lua groundMetatile; another cell as itself)
+  local function propMid(pair, m)
+    local Tr = deps.Trees
+    if not (Tr and Tr.kanto and pair and m) then return m end
+    local sec = Tr.tilesets(pair)
+    local k = sec and Tr.forestBySec and Tr.forestBySec[sec]
+    local S = k and Tr.species and Tr.species[k]
+    return S and not S.failed and S.ground and S.ground[m] or m
+  end
   -- a variant's model (its offset in its cells and what is drawn of it), once a session: the
   -- object's subtiles as the map draws them, a Mound off them
   local function propModel(sp, f, cells, gx0, gy0, w, h, grid)
@@ -936,7 +946,7 @@ return function(deps)
       local qx, qy = sx % 2, sy % 2
       local c = grid.at(gx0 + ci, gy0 + cj)
       local wa = c and c.mid and World.art(c.pair)
-      local upper = wa and wa.pixels(c.mid, 1)
+      local upper = wa and wa.pixels(propMid(c.pair, c.mid), 1)
       if not upper then return nil end
       for y = 0, 7 do
         for x = 0, 7 do
@@ -1050,7 +1060,7 @@ return function(deps)
       for i = 0, grid.w - 1 do
         local c = grid.rows[j][i]
         local _, _, _, id, ox, oy = where(c.cx, c.cy)
-        if id and not maps[id] then maps[id] = { ox, oy } end
+        if id and not maps[id] then maps[id] = { ox, oy, c.pair } end
       end
     end
     local ids = {}
@@ -1060,10 +1070,17 @@ return function(deps)
       local L = World.layout(id)
       local list = L and propFinds[L.id]
       if L and not list then
-        list = Props.find(L, World.subtiles, World.neighbours)
+        local pair = maps[id][3]
+        list = Props.find(L, function(LL)
+          if LL ~= L then return World.subtiles(LL) end
+          return World.subtiles(LL, function(m) return propMid(pair, m) end)
+        end, World.neighbours)
         propFinds[L.id] = list
       end
-      for _, f in ipairs(list or {}) do
+      -- (the quarters every prop here leaves out of each cell's drawing: a cell two props share -
+      -- a log fence's two posts - lays neither of them flat)
+      local prepared, leftOut = {}, {}
+      for n, f in ipairs(list or {}) do
         local sp = propSpec(f.name)
         local cells, x0, y0, w, h = Props.cellsOf(f.name, f.sx, f.sy)
         local gx0, gy0 = x0 + maps[id][1], y0 + maps[id][2]
@@ -1073,6 +1090,21 @@ return function(deps)
           if not g or not g.mid then ok = false end
         end
         local md = ok and propModel(sp, f, cells, gx0, gy0, w, h, grid)
+        prepared[n] = { cells, x0, y0, w, h, gx0, gy0, md }
+        if md then
+          for _, c in ipairs(cells) do
+            local g = grid.at(gx0 + c[1] - x0, gy0 + c[2] - y0)
+            local q, have = md.quads[(c[1] - x0) .. "," .. (c[2] - y0)] or 0, leftOut[g] or 0
+            for b = 0, 3 do
+              local bit = 2 ^ b
+              if math.floor(q / bit) % 2 == 1 and math.floor(have / bit) % 2 == 0 then have = have + bit end
+            end
+            leftOut[g] = have
+          end
+        end
+      end
+      for n in ipairs(list or {}) do
+        local cells, x0, y0, w, h, gx0, gy0, md = unpack(prepared[n], 1, 8)
         if md then
           local pl = { model = md, cx = gx0, cy = gy0 }
           local tops = Buildings.tops(md)
@@ -1091,8 +1123,9 @@ return function(deps)
               local g = grid.at(gx0 + i, gy0 + j)
               local src = pixelSource(NativeTileset, g.pair)
               local wa = World.art(g.pair)
-              local lower = wa and wa.pixels(g.mid, 0)
-              local q = md.quads[i .. "," .. j] or 0
+              local gm = propMid(g.pair, g.mid)
+              local lower = wa and wa.pixels(gm, 0)
+              local q = leftOut[g] or md.quads[i .. "," .. j] or 0
               for y = 0, 15 do
                 for x = 0, 15 do
                   local r, gg, b
@@ -1102,8 +1135,8 @@ return function(deps)
                   if p then
                     r, gg, b = p[1] / 255, p[2] / 255, p[3] / 255
                   elseif src then
-                    r, gg, b = src.under(g.mid, x, y)
-                    local r1, g1, b1, a1 = src.over(g.mid, x, y)
+                    r, gg, b = src.under(gm, x, y)
+                    local r1, g1, b1, a1 = src.over(gm, x, y)
                     if a1 and a1 > 0.5 and not mine then r, gg, b = r1, g1, b1 end
                   end
                   if r then data:setPixel(i * 16 + x, j * 16 + y, r, gg, b, 1) end
