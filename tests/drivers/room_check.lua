@@ -56,9 +56,26 @@ local function body(game, log)
         local img = A.cellImage(A.metatile(math.floor(x / 16), math.floor(y / 16)))
         return img[(y % 16) * 16 + x % 16]
       end
+      if env("ROOM_VERBOSE") then
+        for _, pc in ipairs(r.pieces) do
+          if pc.name:find(env("ROOM_VERBOSE"), 1, true) or not pc.name:find(r.name, 1, true) then
+            local pl = {}
+            for _, p in ipairs(pc.placed or {}) do pl[#pl + 1] = tostring(p[1]) .. "@" .. p[2] .. "," .. p[3] end
+            local ru = {}
+            for _, p in ipairs(pc.reused_at or {}) do ru[#ru + 1] = tostring(p[1]) .. "@" .. tostring(p[2]) .. "," .. tostring(p[3]) end
+            log(("    piece %s layout %s rect %s,%s placed %s reused %s found %s"):format(pc.name, tostring(pc.layout),
+              tostring(pc.rect and pc.rect[1]), tostring(pc.rect and pc.rect[2]), table.concat(pl, " "),
+              table.concat(ru, " "), tostring(pc.found)))
+          end
+        end
+      end
       -- every piece standing in this room, where it stands
       local meshes, stretched = {}, {}
-      for _, pc in ipairs(r.pieces) do
+      -- (a piece stands in later rooms through its reuse records, listed with the room it was
+      -- modelled in: every room's pieces are looked through)
+      local all = {}
+      for _, r2 in ipairs(rooms) do for _, pc in ipairs(r2.pieces or {}) do all[#all + 1] = pc end end
+      for _, pc in ipairs(all) do
         local at = {}
         if pc.placed then
           for _, p in ipairs(pc.placed) do if p[1] == r.layout then at[#at + 1] = { p[2], p[3] } end end
@@ -66,6 +83,22 @@ local function body(game, log)
           at[#at + 1] = { pc.rect[1], pc.rect[2] }
         end
         for _, p in ipairs(pc.reused_at or {}) do if p[1] == r.layout then at[#at + 1] = { p[2], p[3] } end end
+        -- (found by its own pixels in a room drawn otherwise round it: its bare twin stands there)
+        local bare = {}
+        for _, p in ipairs(pc.bare_at or {}) do if p[1] == r.layout then bare[#bare + 1] = { p[2], p[3] } end end
+        if #bare > 0 then
+          local okT, twin = xpcall(hd._roomBuild, debug.traceback, pc, true)
+          if okT then
+            local tex = twin.tex
+            for _, p in ipairs(bare) do
+              meshes[#meshes + 1] = { tris = twin.tris, ox = p[1] * 16, oy = p[2] * 16, piece = pc,
+                at = function(u, v)
+                  if u < 0 or v < 0 or u >= tex.w or v >= tex.h then return nil end
+                  return colourOf(tex.px, tex.w, u, v)
+                end }
+            end
+          end
+        end
         if #at > 0 then
           local okB, md = xpcall(hd._roomBuild, debug.traceback, pc)
           if not okB then
@@ -129,6 +162,14 @@ local function body(game, log)
       for _ in pairs(color) do covered = covered + 1 end
       log(("%-24s %s  %d pieces  wrong %d (%.1f%% of %d covered) missing %d  stretched %d  (over %d)%s"):format(r.name,
         ok and "OK  " or "FAIL", #meshes, wrong, 100 * wrong / math.max(1, covered), covered, missing, #stretched, over, r.error and ("  error " .. tostring(r.error)) or ""))
+      if env("ROOM_VERBOSE") then
+        local n = {}
+        for _, m in ipairs(meshes) do n[m.piece.name] = (n[m.piece.name] or 0) + 1 end
+        local l = {}
+        for k, v in pairs(n) do l[#l + 1] = k .. (v > 1 and ("x" .. v) or "") end
+        table.sort(l)
+        log("    placed: " .. table.concat(l, " "))
+      end
       if not ok then
         local names = {}
         for name, n in pairs(byPiece) do names[#names + 1] = ("%s w%d m%d"):format(name, n.wrong, n.missing) end

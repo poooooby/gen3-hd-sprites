@@ -163,15 +163,49 @@ local MART = {
 
 -- ── the gyms ────────────────────────────────────────────────────────────────
 
--- a piece drawn the same at more cells (`cells`, its top left cell first), each copy textured as
--- drawn there
+-- the top left of a shape's bounds (rectangles, ellipses, polygons), pixels
+local function shapeTopLeft(shape)
+  local x0, y0 = math.huge, math.huge
+  for _, s in ipairs(shape) do
+    if s[1] == "ellipse" then
+      x0, y0 = math.min(x0, s[2] - s[4]), math.min(y0, s[3] - s[5])
+    elseif type(s[1]) == "table" then
+      for _, p in ipairs(s) do x0, y0 = math.min(x0, p[1]), math.min(y0, p[2]) end
+    else
+      x0, y0 = math.min(x0, s[1]), math.min(y0, s[2])
+    end
+  end
+  return x0, y0
+end
+
+-- a piece drawn the same at more cells (`cells`: the cell each copy is drawn in, the first the
+-- shape's own), each copy textured as drawn there. The copies stand by the cell their shape's
+-- bounds start in (a shape drawn over the cell above starts a row up)
 local function repeated(name, cells, height, o)
   o = o or {}
   local c0 = cells[1]
+  local shape = o.shape or { { c0[1] * 16, c0[2] * 16, c0[1] * 16 + 16, c0[2] * 16 + 16 } }
+  local x0, y0 = shapeTopLeft(shape)
+  local dx, dy = math.floor(x0 / 16) - c0[1], math.floor(y0 / 16) - c0[2]
   local at = {}
-  for i = 2, #cells do at[#at + 1] = { cells[i][1], cells[i][2] } end
+  for i = 2, #cells do at[#at + 1] = { cells[i][1] + dx, cells[i][2] + dy } end
   o.at, o.variants = at, true
-  return piece(name, o.shape or { { c0[1] * 16, c0[2] * 16, c0[1] * 16 + 16, c0[2] * 16 + 16 } }, height, o)
+  return piece(name, shape, height, o)
+end
+
+-- the two statues by a gym's door (every gym has them, each drawn with its own tileset): at cell
+-- columns xs, their pedestals in cell row `row` - each a figure (a card, 18 rows) on a pedestal 16
+-- rows to its foot, as deep as it is tall
+local function gymStatues(xs, row, leave)
+  local out = {}
+  local y = row * 16
+  for i, cx in ipairs(xs) do
+    local x, side = cx * 16, i == 1 and "w" or "e"
+    out[#out + 1] = piece("statue_" .. side .. "_figure", { { x, y - 18, x + 16, y } }, 18,
+      { base = 16, card = true, leave = leave })
+    out[#out + 1] = piece("statue_" .. side, { { x, y, x + 16, y + 16 } }, 16, { back = y, leave = leave })
+  end
+  return out
 end
 
 -- Pewter's gym (13 x 16): the back wall's 32 rows from 16 to 48 under its teal top, its thick side
@@ -181,7 +215,7 @@ end
 -- bounded by their shapes.
 local PEWTER_GROUND = { "c5bd8b", "a48b73", "836a52", "624a31" }
 local function pewterGym()
-  return {
+  local out = {
     -- (each boulder its drawn ellipse in its cell: rows 2-14, a row lower on the stone and the
     -- back row, whose edges cross the cell's top)
     repeated("rock", { { 4, 5 }, { 8, 5 }, { 3, 7 }, { 9, 7 }, { 11, 8 }, { 11, 10 } }, 12,
@@ -190,13 +224,173 @@ local function pewterGym()
     repeated("rock_dirt", { { 1, 8 }, { 1, 10 } }, 12, { shape = { { "ellipse", 24, 136.5, 7.5, 6.5 } } }),
     repeated("rock_back", { { 5, 3 }, { 7, 3 } }, 12, { shape = { { "ellipse", 88, 57.5, 7.5, 6.5 } } }),
     piece("boulder", { { "ellipse", 104, 92, 16, 12 } }, 18, {}),
-    -- each statue: its figure a card on its pedestal, the pedestal 16 rows to its foot at 208
-    piece("statue_w_figure", { { 64, 174, 80, 192 } }, 18, { base = 16, card = true, leave = PEWTER_GROUND }),
-    piece("statue_w", { { 64, 192, 80, 208 } }, 16, { back = 192, leave = PEWTER_GROUND }),
-    piece("statue_e_figure", { { 128, 174, 144, 192 } }, 18, { base = 16, card = true, leave = PEWTER_GROUND }),
-    piece("statue_e", { { 128, 192, 144, 208 } }, 16, { back = 192, leave = PEWTER_GROUND }),
     piece("wall", { { 16, 0, 192, 48 } }, 32, { fill = 16, foot = 48 }),
   }
+  for _, pc in ipairs(gymStatues({ 4, 8 }, 12, PEWTER_GROUND)) do out[#out + 1] = pc end
+  return out
+end
+
+-- Vermilion's gym (11 x 21): the upper room's back wall (24 rows to 32 under its white top), its
+-- two pillars by the mat; the wall across the room (its top rows 88-104, its front 24 rows to 128)
+-- and the power units against it either side of the barrier (whose beams the switches swap in
+-- and out: it stays as drawn); the fifteen trash cans in their rows
+local VERMILION_FLOOR = { "dede94", "cdc57b", "bdb46a" }
+local function vermilionGym()
+  local cans = {}
+  for _, y in ipairs({ 10, 12, 14 }) do
+    for _, x in ipairs({ 1, 3, 5, 7, 9 }) do cans[#cans + 1] = { x, y } end
+  end
+  local out = {
+    repeated("can", cans, 10, { leave = VERMILION_FLOOR }),
+    piece("unit_w", { { 32, 104, 48, 136 } }, 24, { back = 128, leave = VERMILION_FLOOR }),
+    piece("unit_e", { { 128, 104, 144, 136 } }, 24, { back = 128, leave = VERMILION_FLOOR }),
+    piece("pillar_w", { { 48, 16, 64, 56 } }, 40, { back = 54, leave = VERMILION_FLOOR }),
+    piece("pillar_e", { { 112, 16, 128, 56 } }, 40, { back = 54, leave = VERMILION_FLOOR }),
+    piece("divider_w", { { 0, 88, 56, 128 } }, 24, { fill = 16, foot = 128 }),
+    piece("divider_e", { { 120, 88, 176, 128 } }, 24, { fill = 16, foot = 128 }),
+    piece("wall", { { 16, 0, 160, 32 } }, 24, { fill = 8, foot = 32 }),
+  }
+  for _, pc in ipairs(gymStatues({ 3, 7 }, 17, VERMILION_FLOOR)) do out[#out + 1] = pc end
+  return out
+end
+
+-- Celadon's gym (13 x 20): the back wall (24 rows to 32 under its frame), the round bushes on the
+-- grass - each a ball 16 px across drawn 6 px above its own cell, some over the next one down (each
+-- textured as drawn) - and the statues on the sand by the door; the flowers stay as drawn
+local CELADON_GRASS = { "41e6bd", "31bdac", "299c9c" }
+local CELADON_SAND = { "decd62", "cdb46a", "e6de6a" }
+local CELADON_BUSHES = {
+  { 3, 3 }, { 4, 3 }, { 5, 3 }, { 6, 3 }, { 7, 3 }, { 8, 3 }, { 9, 3 }, { 1, 4 }, { 3, 4 }, { 4, 4 }, { 9, 4 },
+  { 11, 4 }, { 9, 5 }, { 3, 6 }, { 3, 7 }, { 9, 7 }, { 3, 8 }, { 4, 8 }, { 5, 8 }, { 7, 8 }, { 8, 8 }, { 9, 8 },
+  { 3, 9 }, { 4, 9 }, { 8, 9 }, { 9, 9 }, { 11, 10 }, { 1, 11 }, { 3, 13 }, { 4, 13 }, { 8, 13 }, { 9, 13 },
+  { 3, 14 }, { 4, 14 }, { 8, 14 }, { 9, 14 },
+}
+local function celadonGym()
+  local c0 = CELADON_BUSHES[1]
+  local out = {
+    repeated("bush", CELADON_BUSHES, 16, { round = "ball",
+      shape = { { "ellipse", c0[1] * 16 + 8, c0[2] * 16 + 2, 8, 8 } } }),
+    piece("wall", { { 16, 0, 192, 32 } }, 24, { fill = 8, foot = 32 }),
+  }
+  for _, pc in ipairs(gymStatues({ 4, 8 }, 16, CELADON_SAND)) do out[#out + 1] = pc end
+  return out
+end
+
+-- Cerulean's gym (17 x 20): the back wall (33 rows to 48 under its 15-row top), the two ladders
+-- standing over the pool's edge (cards: two posts and their rungs), the statues on the walkway;
+-- the pool, its water and the walkways across it stay as drawn
+local CERULEAN_FLOOR = { "bdcde6", "ffffff", "dee6f6", "9ccdf6", "629cee", "fff6d5", "f6e6b4" }
+local function ceruleanGym()
+  local out = {
+    piece("ladder_w", { { 44, 72, 68, 90 } }, 18, { card = true, leave = CERULEAN_FLOOR }),
+    piece("ladder_e", { { 204, 72, 228, 90 } }, 18, { card = true, leave = CERULEAN_FLOOR }),
+    piece("wall", { { 16, 0, 256, 48 } }, 33, { fill = 15, foot = 48 }),
+  }
+  for _, pc in ipairs(gymStatues({ 6, 10 }, 17, CERULEAN_FLOOR)) do out[#out + 1] = pc end
+  return out
+end
+
+-- Fuchsia's gym (15 x 23): its walls are invisible (drawn as floor: as drawn); the back wall, 32
+-- rows of yellow panels and green posts, and the statues
+local FUCHSIA_FLOOR = { "eeb4a4", "cda49c", "c59c94", "ffdec5", "ffeeee" }
+local function fuchsiaGym()
+  local out = { piece("wall", { { 0, 0, 240, 32 } }, 32, { foot = 32 }) }
+  for _, pc in ipairs(gymStatues({ 4, 10 }, 19, FUCHSIA_FLOOR)) do out[#out + 1] = pc end
+  return out
+end
+
+-- a maze wall of a gym: its cells (a group of the layout's blocked cells, read off the drawing),
+-- each drawn from `above` rows north of its cell to its foot, `height` rows of front
+local function gymBlock(name, cells, height, above, side, leave)
+  local shape = {}
+  for i, c in ipairs(cells) do shape[i] = { c[1] * 16, c[2] * 16 - above, c[1] * 16 + 16, c[2] * 16 + 16 } end
+  return piece(name, shape, height, { side = side, leave = leave })
+end
+
+-- Viridian's gym (20 x 24): a maze of low walls, each a grey top from 4 rows above its cells over
+-- 13 rows of brown front; the back wall (23 rows to 32 under its 9-row top); the statues. The
+-- spinning arrows stay as drawn
+local VIRIDIAN_FLOOR = { "8bbdb4", "b4ded5", "6a9c94" }
+local VIRIDIAN_SIDE = { 32, 147, 48, 160 }
+local VIRIDIAN_WALLS = {
+  { { 0, 2 }, { 0, 3 }, { 0, 4 }, { 0, 5 }, { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 8 }, { 2, 8 }, { 3, 8 }, { 4, 8 }, { 5, 8 },
+    { 0, 9 }, { 1, 9 }, { 2, 9 }, { 3, 9 }, { 4, 9 }, { 5, 9 }, { 5, 10 }, { 5, 11 }, { 5, 12 }, { 5, 13 } },
+  { { 4, 2 }, { 4, 3 }, { 4, 4 }, { 5, 4 }, { 6, 4 }, { 4, 5 }, { 5, 5 }, { 6, 5 } },
+  { { 8, 4 }, { 9, 4 }, { 8, 5 }, { 9, 5 }, { 8, 6 }, { 7, 7 }, { 8, 7 }, { 9, 7 }, { 7, 8 }, { 8, 8 }, { 9, 8 }, { 10, 8 },
+    { 11, 8 }, { 12, 8 }, { 13, 8 }, { 14, 8 }, { 7, 9 }, { 9, 9 }, { 10, 9 }, { 11, 9 }, { 12, 9 }, { 13, 9 }, { 14, 9 },
+    { 7, 10 }, { 7, 11 }, { 7, 12 }, { 7, 13 }, { 7, 14 }, { 5, 15 }, { 6, 15 }, { 7, 15 }, { 8, 15 }, { 9, 15 }, { 10, 15 },
+    { 11, 15 }, { 12, 15 }, { 13, 15 }, { 5, 16 }, { 6, 16 }, { 7, 16 }, { 8, 16 }, { 9, 16 }, { 10, 16 }, { 11, 16 },
+    { 12, 16 }, { 13, 16 } },
+  { { 11, 4 }, { 12, 4 }, { 13, 4 }, { 14, 4 }, { 15, 4 }, { 16, 4 }, { 17, 4 }, { 11, 5 }, { 12, 5 }, { 13, 5 }, { 14, 5 },
+    { 15, 5 }, { 16, 5 }, { 17, 5 }, { 11, 6 }, { 17, 6 }, { 17, 7 }, { 17, 8 }, { 17, 9 }, { 17, 10 }, { 17, 11 }, { 17, 12 },
+    { 17, 13 }, { 17, 14 } },
+  { { 14, 11 }, { 15, 11 }, { 14, 12 }, { 15, 12 }, { 15, 13 }, { 15, 14 } },
+  { { 2, 12 }, { 3, 12 }, { 2, 13 }, { 3, 13 }, { 2, 14 }, { 3, 14 }, { 2, 15 }, { 3, 15 }, { 2, 16 }, { 3, 16 }, { 2, 17 },
+    { 3, 17 }, { 2, 18 }, { 3, 18 }, { 2, 19 }, { 3, 19 }, { 4, 19 }, { 5, 19 }, { 6, 19 }, { 7, 19 }, { 8, 19 }, { 9, 19 },
+    { 10, 19 }, { 11, 19 }, { 12, 19 }, { 13, 19 }, { 2, 20 }, { 3, 20 }, { 4, 20 }, { 5, 20 }, { 6, 20 }, { 7, 20 },
+    { 8, 20 }, { 9, 20 }, { 10, 20 }, { 11, 20 }, { 12, 20 }, { 13, 20 } },
+}
+local function viridianGym()
+  local out = { piece("wall", { { 0, 0, 320, 32 } }, 23, { fill = 9, foot = 32 }) }
+  for i, cells in ipairs(VIRIDIAN_WALLS) do
+    out[#out + 1] = gymBlock("block_" .. i, cells, 13, 4, VIRIDIAN_SIDE, VIRIDIAN_FLOOR)
+  end
+  for _, pc in ipairs(gymStatues({ 15, 19 }, 20, VIRIDIAN_FLOOR)) do out[#out + 1] = pc end
+  return out
+end
+
+-- Saffron's gym (29 x 25): nine rooms in three rows, each row's back wall 26 rows to its foot under
+-- a 6-row top (at 32, 160, 288); the statues. The partitions between the rooms (a white rail each
+-- side of a dark channel, capped where they meet the next row's wall), the glass tubes on the
+-- walls and the warp pads stay as drawn
+local SAFFRON_FLOOR = { "9cace6", "8394c5", "6a7bac" }
+local function saffronGym()
+  local out = {}
+  for r = 0, 2 do
+    out[#out + 1] = piece("wall_" .. (r + 1), { { 0, r * 128, 464, r * 128 + 32 } }, 26, { fill = 6, foot = r * 128 + 32 })
+  end
+  for _, pc in ipairs(gymStatues({ 12, 16 }, 20, SAFFRON_FLOOR)) do out[#out + 1] = pc end
+  return out
+end
+
+-- Cinnabar's gym (30 x 25): nine rooms whose walls are green-topped blocks (their tops from 3 rows
+-- above their cells, 17 rows of grey front); the back wall (24 rows to 32 under its 8-row top); a
+-- quiz machine in each room (two cells wide, 20 rows of front under 12 of top); the statues. The
+-- doors the quizzes open, the tube down the middle and the carpets stay as drawn
+local CINNABAR_FLOOR = { "d5ac5a", "ac835a", "947352", "e6b45a", "6a5a52" }
+local CINNABAR_SIDE = { 48, 143, 64, 160 }
+local CINNABAR_WALLS = {
+  { { 0, 2 }, { 0, 3 }, { 0, 4 }, { 0, 5 }, { 0, 6 }, { 0, 7 }, { 0, 8 }, { 1, 8 }, { 2, 8 }, { 3, 8 }, { 4, 8 }, {
+    0, 9 }, { 1, 9 }, { 2, 9 }, { 3, 9 }, { 4, 9 }, { 0, 10 }, { 0, 11 }, { 0, 12 }, { 0, 13 }, { 0, 14 }, { 0, 15
+    }, { 0, 16 }, { 1, 16 }, { 2, 16 }, { 3, 16 }, { 4, 16 }, { 0, 17 }, { 1, 17 }, { 2, 17 }, { 3, 17 }, { 4, 17 },
+    { 0, 18 }, { 0, 19 }, { 0, 20 }, { 0, 21 }, { 0, 22 }, { 0, 23 } },
+  { { 29, 2 }, { 29, 3 }, { 29, 4 }, { 29, 5 }, { 29, 6 }, { 29, 7 }, { 28, 8 }, { 29, 8 }, { 28, 9 }, { 29, 9 }, {
+    29, 10 }, { 29, 11 }, { 29, 12 }, { 29, 13 }, { 29, 14 }, { 29, 15 }, { 29, 16 }, { 29, 17 }, { 29, 18 }, { 29,
+    19 }, { 29, 20 }, { 29, 21 }, { 29, 22 }, { 29, 23 } },
+  { { 21, 5 }, { 21, 6 }, { 21, 7 }, { 19, 8 }, { 20, 8 }, { 21, 8 }, { 22, 8 }, { 23, 8 }, { 24, 8 }, { 25, 8 }, {
+    19, 9 }, { 20, 9 }, { 21, 9 }, { 22, 9 }, { 23, 9 }, { 24, 9 }, { 25, 9 }, { 21, 10 }, { 21, 11 }, { 21, 12 }, {
+    21, 13 }, { 21, 14 }, { 22, 14 }, { 23, 14 }, { 24, 14 }, { 25, 14 }, { 19, 15 }, { 20, 15 }, { 21, 15 }, { 22,
+    15 }, { 23, 15 }, { 24, 15 }, { 25, 15 }, { 19, 16 }, { 20, 16 }, { 21, 16 }, { 21, 17 }, { 21, 18 }, { 21, 19
+    }, { 21, 20 }, { 21, 21 }, { 21, 22 }, { 21, 23 } },
+  { { 10, 7 }, { 7, 8 }, { 8, 8 }, { 9, 8 }, { 10, 8 }, { 7, 9 }, { 8, 9 }, { 9, 9 } },
+  { { 12, 7 }, { 12, 8 }, { 13, 8 }, { 14, 8 }, { 15, 8 }, { 16, 8 }, { 13, 9 }, { 14, 9 }, { 15, 9 }, { 16, 9 } },
+  { { 12, 14 }, { 12, 15 }, { 13, 15 }, { 14, 15 }, { 15, 15 }, { 16, 15 }, { 13, 16 }, { 14, 16 }, { 15, 16 }, {
+    16, 16 } },
+  { { 10, 15 }, { 7, 16 }, { 8, 16 }, { 9, 16 }, { 10, 16 }, { 7, 17 }, { 8, 17 }, { 9, 17 } },
+  { { 10, 21 } },
+  { { 12, 21 } },
+}
+local CINNABAR_QUIZ = { { 1, 2 }, { 8, 2 }, { 15, 2 }, { 1, 10 }, { 13, 10 }, { 22, 10 }, { 1, 17 }, { 13, 17 } }
+local function cinnabarGym()
+  local out = { piece("wall", { { 0, 0, 480, 32 } }, 24, { fill = 8, foot = 32 }) }
+  local q = CINNABAR_QUIZ[1]
+  out[#out + 1] = repeated("quiz", CINNABAR_QUIZ, 20, { back = q[2] * 16 + 4, leave = CINNABAR_FLOOR,
+    shape = { { q[1] * 16, q[2] * 16 - 16, q[1] * 16 + 32, q[2] * 16 + 16 } } })
+  for i, cells in ipairs(CINNABAR_WALLS) do
+    out[#out + 1] = gymBlock("block_" .. i, cells, 17, 3, CINNABAR_SIDE, CINNABAR_FLOOR)
+  end
+  for _, pc in ipairs(gymStatues({ 23, 27 }, 20, CINNABAR_FLOOR)) do out[#out + 1] = pc end
+  return out
 end
 
 local ROOMS = {
@@ -207,6 +401,13 @@ local ROOMS = {
   { name = "fr_mart", interior = { layout = "LAYOUT_CERULEAN_CITY_MART", ground = { 0x281 }, pieces = MART,
                                    open = MART_OPEN } },
   { name = "fr_pewter_gym", interior = { layout = "LAYOUT_PEWTER_CITY_GYM", ground = { 0x294 }, pieces = pewterGym() } },
+  { name = "fr_vermilion_gym", interior = { layout = "LAYOUT_VERMILION_CITY_GYM", ground = { 0x281 }, pieces = vermilionGym() } },
+  { name = "fr_celadon_gym", interior = { layout = "LAYOUT_CELADON_CITY_GYM", ground = { 0x281 }, pieces = celadonGym() } },
+  { name = "fr_cerulean_gym", interior = { layout = "LAYOUT_CERULEAN_CITY_GYM", ground = { 0x281 }, pieces = ceruleanGym() } },
+  { name = "fr_fuchsia_gym", interior = { layout = "LAYOUT_FUCHSIA_CITY_GYM", ground = { 0x281 }, pieces = fuchsiaGym() } },
+  { name = "fr_viridian_gym", interior = { layout = "LAYOUT_VIRIDIAN_CITY_GYM", ground = { 0x281 }, pieces = viridianGym() } },
+  { name = "fr_saffron_gym", interior = { layout = "LAYOUT_SAFFRON_CITY_GYM", ground = { 0x281 }, pieces = saffronGym() } },
+  { name = "fr_cinnabar_gym", interior = { layout = "LAYOUT_CINNABAR_ISLAND_GYM", ground = { 0x281 }, pieces = cinnabarGym() } },
 }
 
 ROOMS.ids = {}

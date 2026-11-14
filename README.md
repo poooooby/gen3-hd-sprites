@@ -117,8 +117,10 @@ resolution, and the camera pulls back so even the biggest ones fit.
   own (the museums, the Space Center, secret bases), counters stand up as blocks and PCs as sets.
   In FireRed and LeafGreen, every Pokémon Center (the counter with its flowers, the healing
   machine, the PC and bookcase, stools and table, and upstairs the Cable Club's counters and link
-  terminals), every Poké Mart (its counters, fridges and tall shelves) and Brock's gym in Pewter
-  (its boulders and statues) are furnished too.
+  terminals), every Poké Mart (its counters, fridges and tall shelves) and all eight gyms are
+  furnished too: Brock's boulders, Misty's pool ladders, Lt. Surge's trash cans and power units,
+  Erika's round bushes, the walls of Sabrina's rooms, Blaine's quiz machines and walled rooms,
+  Giovanni's maze, and every gym's statues.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
