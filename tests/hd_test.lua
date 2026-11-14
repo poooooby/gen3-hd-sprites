@@ -850,6 +850,45 @@ do
     .. string.format("%.3f, then %.3f", before, after) .. ")")
 end
 
+-- a double battle's foes, each reported by its battler id: both count (the later report does
+-- not replace the earlier), and the target cursor hiding the tall one moves nothing
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.4
+  local base = canvas("ui", 240, 160)
+  local wall = canvas("wall", 256, 160)
+  local tall, small, page = canvas("tall", 64, 64), canvas("small", 64, 64), canvas("atlas", 4096, 4096)
+  hd.tag(tall, { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
+                 top = 52, side = "enemy" })
+  hd.tag(small, { texture = page, quad = quad(0, 0, 64, 64), pivot = { 32, 64 }, lowPivot = { 32, 64 },
+                  top = 30, side = "enemy" })
+  local function frame(reports, drawTall)
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    hd.backdrop(wall, 0, 0)
+    for _, r in ipairs(reports) do hd.prefit("enemy", r[1], r[2], 40, r[3]) end
+    if drawTall then G.draw(tall, 200, 40, 0, 1, 1, 32, 32) end
+    G.draw(small, 152, 32, 0, 1, 1, 32, 32)
+    hd.seam("ui")
+    hd.endPass()
+    hd.composite(base, function() end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+    hd.endFrame()
+    return hd.fit.target, hd.fit.artTop
+  end
+  local both = { { tall, 200, 1 }, { small, 152, 3 } }
+  local z1, top1 = frame(both, true)
+  local z2, top2 = frame(both, false)
+  local z3, top3 = frame(both, true)
+  local zSmall = frame({ { small, 152, 3 } }, false)
+  check(z1 < zSmall, "both foes count: the tall one frames the camera though the small one was "
+    .. "reported after it (" .. string.format("%.3f vs %.3f", z1, zSmall) .. ")")
+  check(near(z1, z2) and near(z2, z3) and near(top1, top2) and near(top2, top3),
+    "the target cursor hiding a reported foe moves neither the camera nor the HP box's hug ("
+    .. string.format("%.3f %.3f %.3f", z1, z2, z3) .. ")")
+end
+
 -- the intro's scrolling grass: a band repeated across the whole zoomed-out view
 do
   local G = fakeGraphics()

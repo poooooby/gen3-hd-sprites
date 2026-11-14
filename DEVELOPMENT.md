@@ -286,7 +286,13 @@ The target zoom:
   `Ui.battlerSpriteCenter` gives (origin 32, 32). The fit uses these resting placements for
   their sides instead of the drawn pics. So in a trainer battle the camera is framed for the
   Pokémon before they are sent out, and a send-out jump or an attack's lunge never moves it.
-  Singles only; drawn pics are used where nothing was reported.
+  In a double battle each battler still in (not `st.absent`, HP above 0) is reported on its own
+  unshifted spot (`home.doubles[id]`, `Ui.battlerSpriteCenter(id, ...)`), keyed by its id
+  (`hd.prefit(side, image, x, y, id)`); a side with any report is fitted by its reports alone.
+  Without this, the target cursor (which hides the picked foe every other beat:
+  `Ui.targetHidden`) moved the camera with each blink. Portrait was worst: Fill Screen's
+  growth and the foes' HP box (which hugs the highest art, `fit.artTop`) jumped every few
+  frames. Drawn pics are used where nothing was reported (Red to Crystal).
 - The zoom snaps to the target at a battle's first frame and eases out about 20% per frame.
   The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
@@ -299,7 +305,8 @@ The target zoom:
   does not grow back meanwhile either. Back at the menu the 45-frame hold applies and it eases
   in. Without this, a move that swells, lifts or lunges a Pokémon for a moment (Bulk Up,
   Growth, a jump) pulled the camera out and let it back in, move after move. That happened
-  wherever no resting pose is reported: double battles, and Red to Crystal.
+  wherever no resting pose is reported: Red to Crystal (and Gen 3's double battles, before
+  they reported theirs).
 - A frame with no UI seam (the post-catch Pokédex scene) is not zoomed; it fills as a whole
   screen (see Fill Screen).
 

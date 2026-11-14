@@ -1204,12 +1204,13 @@ function HD.new(G, opts)
   --- A battler in the battle, as it rests: its tagged pic as the battle draws it centred on
   --- (x, y) (origin 32, 32). The fit uses this for its side instead of the drawn pic, so the
   --- camera is framed for a trainer's Pokemon before its send-out and does not follow the
-  --- Pokemon's own movement (a jump, a lunge). Cleared each pass.
-  function self.prefit(side, image, x, y)
+  --- Pokemon's own movement (a jump, a lunge). Cleared each pass. key: one of several on a side
+  --- (a double battle's battler id); the side by default.
+  function self.prefit(side, image, x, y, key)
     local cur = self.cur
     local spec = image ~= nil and self.tags[image]
     if not (cur and spec and type(x) == "number" and type(y) == "number") then return end
-    cur.prefit[side] = {
+    cur.prefit[key or side] = {
       spec = spec, image = image, x = x, y = y, r = 0, sx = 1, sy = 1, ox = 32, oy = 32,
       tx = 0, ty = 0, tsx = 1, tsy = 1,
     }
@@ -1816,7 +1817,12 @@ function HD.new(G, opts)
     end
     -- a battler the engine reported (hd.prefit) is fitted where it rests, drawn yet or not:
     -- its send-out jump, a lunge or a shake never moves the camera
-    for _, rec in pairs(cur.prefit) do take(rec) end
+    -- (a side reported by any of its battlers is fitted by those alone)
+    local preE, preP = false, false
+    for _, rec in pairs(cur.prefit) do
+      take(rec)
+      if rec.spec.side == "enemy" then preE = true elseif rec.spec.side == "player" then preP = true end
+    end
     -- the platforms count as each side's art: the scene never crops them
     if fit.wantW and fit.pads then
       local pe, pp = fit.pads.enemy, fit.pads.player
@@ -1826,7 +1832,7 @@ function HD.new(G, opts)
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" and item.name == "ui" then break end
       local spec = item.kind == "hd" and item.rec.spec
-      if spec and not spec.trainer and not (spec.side and cur.prefit[spec.side]) then
+      if spec and not spec.trainer and not (spec.side == "enemy" and preE or spec.side == "player" and preP) then
         take(item.rec)
       end
     end

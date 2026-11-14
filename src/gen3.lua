@@ -304,7 +304,36 @@ function Gen3.wrapFit(Engine, hd)
       Engine.prefit = function()
         local B = BattleMod
         local st = B and B._st
-        if not st or st.double then return end
+        if not st then return end
+        if st.double then
+          -- each battler still in, on its own unshifted spot (the battle draws a tagged one
+          -- there): the target cursor hides the picked foe every other beat
+          -- (Ui.targetHidden), and a move lunges or swells one; neither moves the camera
+          if not (home.doubles and Pokemon.speciesOf) then return end
+          for id = 0, 3 do
+            local h = home.doubles[id]
+            local battler = (id == 0 and st.player) or (id == 1 and st.enemy)
+              or (st.battlers and st.battlers[id])
+            local mon = battler and battler.mon
+            if h and mon and not (st.absent and st.absent[id]) and (tonumber(mon.hp) or 1) > 0 then
+              local sp = Pokemon.speciesOf(mon)
+              if sp then
+                local picSp, shiny, personality = Ui.picArgs(battler, sp)
+                local entry
+                if id % 2 == 1 then
+                  entry = Pokemon.frontPic and Pokemon.frontPic(picSp, nil, shiny, personality)
+                else
+                  entry = Pokemon.backPic and Pokemon.backPic(picSp, nil, shiny)
+                end
+                if entry and entry.image then
+                  local cx, cy = Ui.battlerSpriteCenter(id, sp, { x = h.x, y = h.y }, nil, false)
+                  hd.prefit(id % 2 == 1 and "enemy" or "player", entry.image, cx, cy, id)
+                end
+              end
+            end
+          end
+          return
+        end
         for side, spot in pairs(spots) do
           local battler = st[side]
           local mon = battler and battler.mon
