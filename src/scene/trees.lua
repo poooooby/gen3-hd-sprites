@@ -69,11 +69,15 @@ function Trees.useGame(G)
   if K and K == Trees.kanto and Trees.species then return end
   Trees.kanto = K
   Trees.species, Trees.forestBySec, Trees.forestsResolved = nil, {}, false
+  -- (the atlas: the General tree's and one forest's in 128 x 128 as Hoenn's art; more forests, 256)
+  local more = K and #(K.forests or {}) > 1
+  Trees.KANTO_W, Trees.KANTO_H = more and 256 or 128, more and 256 or 128
+  Trees.DIM = K and Trees.KANTO_W or 128
   if K then
     local S = { [0] = { w = 2, parts = K.parts, alone = K.alone, ground = K.ground, cone = K.cone, trunk = K.trunk,
                         art = speciesArt(0, 2) } }
     for k, f in ipairs(K.forests or {}) do
-      if k * 64 + 48 <= 128 and (f.w or 3) * 16 * 2 + 16 <= 128 then
+      if k * 64 + 48 <= Trees.KANTO_H and (f.w or 3) * 16 * 2 + 16 <= 128 then
         S[k] = { w = f.w or 3, parts = f.parts, alone = f.alone, ground = f.ground, cone = f.cone, trunk = f.trunk,
                  layouts = f.layouts, tipToo = f.tipToo, groundColours = f.groundColours,
                  art = speciesArt(k, f.w or 3) }
@@ -496,6 +500,7 @@ local function coneOf(k)
   if C.w and C.w[31] then C.R0 = C.w[31] end
   C.h0 = C.cz + C.s * C.R0 - c.skirt
   C.top = C.cz - c.tip
+  C.lid = c.lid
   return C
 end
 Trees.kantoCone = coneOf
@@ -565,6 +570,16 @@ function Trees.kantoTree(put, x, z, k)
   local tx, ty = art.texX, art.texY
   for _, q in ipairs(quads) do
     put(P(q[1], q[2]), P(q[3], q[2]), P(q[3], q[4]), P(q[1], q[4]), tx + q[1], ty + q[2], tx + q[3], ty + q[4], "card")
+  end
+  -- (a dome's lid, `cone.lid` texels up: the crown's texels laid level there, each where the
+  -- 45-degree view draws it, so it hides behind the front there and closes the crown seen from
+  -- above; only the quads whose front stands at least that high)
+  local lid = C.lid
+  if lid and S.lidQuads then
+    local function L(u, v) return { x + u / 16, lid / 16, z + (v + lid) / 16 } end
+    for _, q in ipairs(S.lidQuads) do
+      put(L(q[1], q[2]), L(q[3], q[2]), L(q[3], q[4]), L(q[1], q[4]), tx + q[1], ty + q[2], tx + q[3], ty + q[4], "card")
+    end
   end
   local tr = S.trunkCard
   if tr then
@@ -730,6 +745,18 @@ function Trees.kantoArt(px, set, k)
   end
   K.quads = quads
   if k == 0 then Trees.KANTO_QUADS = quads end
+  K.lidQuads = nil
+  if C.lid then
+    local lidQuads = {}
+    for _, q in ipairs(quads) do
+      local high = true
+      for _, c in ipairs({ { q[1], q[2] }, { q[3], q[2] }, { q[3], q[4] }, { q[1], q[4] } }) do
+        if Trees.kantoFront(C, c[1], c[2]) < C.lid then high = false end
+      end
+      if high then lidQuads[#lidQuads + 1] = q end
+    end
+    K.lidQuads = lidQuads
+  end
   return n
 end
 

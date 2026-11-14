@@ -209,6 +209,8 @@ F.trees = {
   -- trunk's middle 34), its crown 0.4 of its width in depth (a crown that stood at its shadow's
   -- middle, row 38, at the General tree's 0.65, stood on a trunk 1.4 tiles tall); the trunk in its
   -- three colours.
+  -- Three Island's Berry Forest draws the same tree in its own tileset, its leaves golden: the
+  -- same species data, its art read off its own tiles.
   forests = {
     { layouts = { "LAYOUT_VIRIDIAN_FOREST", "LAYOUT_SIX_ISLAND_PATTERN_BUSH" }, w = 3,
       parts = {
@@ -216,7 +218,7 @@ F.trees = {
         [0x298] = 3, [0x2A3] = 3, [0x299] = 4, [0x2A4] = 4, [0x29A] = 5, [0x2A5] = 5,
       },
       alone = { tip = { 0x288, 0x289, 0x28A }, crown = { 0x28E, 0x2A1, 0x28F }, trunk = { 0x2A3, 0x2A4, 0x2A5 } },
-      cone = { axis = 24, depth = 34, radius = 22, squash = 0.4, tip = -6, skirt = 30 },
+      cone = { axis = 24, depth = 34, radius = 22, squash = 0.4, tip = -6, skirt = 30, lid = 25 },
       trunk = { rgb(0x41, 0x39, 0x31), rgb(0x83, 0x6A, 0x52), rgb(0x62, 0x41, 0x4A) },
       groundColours = { rgb(0x73, 0xCD, 0xA4), rgb(0x41, 0xB4, 0x8B), rgb(0x18, 0xA4, 0x6A), rgb(0x39, 0x73, 0x18) },
       ground = { [0x288] = 0x009, [0x289] = 0x009, [0x28A] = 0x009 },
@@ -224,5 +226,11 @@ F.trees = {
     },
   },
 }
+do
+  local berry = {}
+  for k, v in pairs(F.trees.forests[1]) do berry[k] = v end
+  berry.layouts = { "LAYOUT_THREE_ISLAND_BERRY_FOREST" }
+  F.trees.forests[2] = berry
+end
 
 return F

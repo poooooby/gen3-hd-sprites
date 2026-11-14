@@ -1158,8 +1158,14 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   is also the middle of a stack's top tip row (`tipToo`: no crown row over it, it lays the tip's
   ground and stands nothing). Lighting finds a wider crown's middle by `crownCol` / `crownRow` /
   `crownW`. Checked at 45 degrees with the scratchpad's `tree_check2.lua` (species k): 0 of 2304
-  texels wrong (the General tree still 0 of 1536). Three Island's Berry Forest has a tileset of its
-  own.
+  texels wrong (the General tree still 0 of 1536). Three Island's Berry Forest draws the same tree
+  (same ids, trunk and shadow) golden in a tileset of its own: a second species from the same data
+  (`forests[2]`), its art read off its own tiles. With more than one forest the atlas is 256 x 256
+  (`Trees.KANTO_W/H`, and `Trees.DIM`, which the tree meshes' uvs are divided by; Hoenn's stays
+  128). A dome's crown is its front only, as the General tree's cone is: seen from above (the
+  swoop) it read as a crescent. `cone.lid` (25) closes it: the crown's quads whose front stands at
+  least that high, laid level at that height, each texel where the 45-degree view draws it, so the
+  lid hides behind the front at 45 degrees (still 0 wrong) and fills the crown from above.
 - **Kanto's trees (`src/scene/trees.lua`, `games/firered.lua` `trees`):** Kanto's General tree (2x2:
   a crown row whose upper layer covers the player, over a trunk row, stacked through the woods, its
   tip drawn in the cell above) stands as its own model, built off its drawing as the rooms' pieces
