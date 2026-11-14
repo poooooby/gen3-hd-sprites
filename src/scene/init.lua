@@ -123,6 +123,51 @@ return function(deps)
       end
       return nil
     end
+    -- which layout each map is drawn with (World.settle: the one a script swapped into this map,
+    -- the one Emerald 3DS draws a neighbour with); a neighbour's cells read off its own (its
+    -- metatile, the engine's collision code, the behaviour its pair gives the metatile)
+    local World = deps.World
+    if World and World.settle then
+      local okS, errS = pcall(World.settle, env.mapId, function(x, y) return layout:midAt(x, y) end)
+      hd.stats.sceneSwapError = not okS and tostring(errS) or nil
+      -- (hd.stats.sceneSwaps: "map=layout" for each map drawn with another than its own)
+      local sw = {}
+      for _, id in ipairs({ env.mapId }) do
+        local A = id and World.swapped(id)
+        if A then sw[#sw + 1] = id .. "=" .. A.name end
+      end
+      for id in pairs(World.NEIGHBOUR_SWAPS or {}) do
+        local A = id ~= env.mapId and World.swapped(id)
+        if A then sw[#sw + 1] = id .. "=" .. A.name end
+      end
+      table.sort(sw)
+      hd.stats.sceneSwaps = #sw > 0 and table.concat(sw, " ") or nil
+      local baseMid, baseCell = env.mid, env.cell
+      local IS = req("src.core.game3.scripting.interaction_scripts")
+      local function swappedAt(cx, cy)
+        local d, lx, ly, id = env.where(cx, cy)
+        local A = d and d ~= def and World.swapped(id)
+        if not A then return nil end
+        local i = ly * A.w + lx
+        return A, (A.grid:byte(i * 2 + 1) + A.grid:byte(i * 2 + 2) * 256) % 1024, i, d
+      end
+      function env.mid(cx, cy)
+        local A, m = swappedAt(cx, cy)
+        if A then
+          local _, pair = baseMid(cx, cy)
+          return m, pair
+        end
+        return baseMid(cx, cy)
+      end
+      function env.cell(cx, cy)
+        local A, m, i, d = swappedAt(cx, cy)
+        if A then
+          local beh = IS and IS.behaviors and IS.behaviors[d.pair or (d.midLayout and d.midLayout.pair)]
+          return A.codes[i], beh and beh[m]
+        end
+        return baseCell(cx, cy)
+      end
+    end
     -- the events of the maps the window shows (the battle's, its neighbours, the world round it),
     -- by world cell: sign events and warps
     local signsAt, warpsAt, seenDef = {}, {}, {}
@@ -2800,10 +2845,13 @@ return function(deps)
     return #warmQueue
   end
 
-  -- a map's layout id (the cartridge's: its map header's), as the engine's cache keeps it
+  -- a map's layout id: the one a script swapped in or Emerald 3DS draws the neighbour with
+  -- (World.settle), else the cartridge's (its map header's), as the engine's cache keeps it
   local layoutIds = {}
   local function layoutIdOf(mapId)
     if mapId == nil then return nil end
+    local A = World and World.swapped and World.swapped(mapId)
+    if A then return A.id end
     local hit = layoutIds[mapId]
     if hit ~= nil then return hit or nil end
     layoutIds[mapId] = false

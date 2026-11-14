@@ -679,14 +679,12 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   not the drawing. Everything the battle's window places over the 100 layouts the pak has
   placements in (`bridge_dump.lua` with `BRIDGE_RUNS=all`: `placeBuildings` over a whole layout -
   buildings, kits, props, the Cycling Road's blocks, the components' blocks) is checked against the
-  pak: 4302 of its 4634 placements stand at the same place and equal its triangles, the 891
-  with a ground plan lay its ground metatile and number of patches (`P` and `G` lines; the pak's
-  patch field six vertices a patch). The rest: the layouts a script swaps in (Route 131's Sky
-  Pillar, Route 111 without the Mirage Tower, Route 130's Mirage Island, Sky Pillar's mended
-  floors, Sootopolis in the legends' battle; not read yet - World knows each map's own layout
-  only), sea rocks and stacks across a map's seam (they stand in the window, the next map in it;
-  a lone layout has no next map), the Abandoned Ship's two underwater rooms and a 5x6 building
-  at Sky Pillar's foot. `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
+  pak: 4620 of its 4634 placements stand at the same place and equal its triangles - the
+  layouts a script swaps in too (World's alternates, read by name) - and the 986 with a ground
+  plan lay its ground metatile and number of patches (`P` and `G` lines; the pak's patch field
+  six vertices a patch). The rest: sea rocks and stacks across a map's seam (they stand in the
+  window, the next map in it; a lone layout has no next map), the Abandoned Ship's two
+  underwater rooms and a 5x6 building at Sky Pillar's foot. `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
   not (`_findWhy`: each core cell's metatile, sign, and the pixels it draws otherwise). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
   driver's `SCENE_GROUND_OLD=1`, for before-and-after shots), the old rule: the commonest spec
   ground round it, the map's paint in every cell it paints otherwise.
@@ -816,7 +814,22 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   joined as `voxel_cells.MapEvents` joins them, `roles.lua` adapters over them, the game's sign
   posts and each layout's roles, cached once a game. `signs.lua` asks it in Emerald
   (`opt.signpostAt`). The raw tilesets are in the cache too (`map_tree/tilesets/ts_<ptr>/`:
-  `metatiles.bin`, `tiles.4bpp`, `palettes.bin`, `attributes.bin`).
+  `metatiles.bin`, `tiles.4bpp`, `palettes.bin`, `attributes.bin`). The layouts a script swaps
+  in (`setmaplayoutindex`; no map is drawn with them): the engine bakes them as
+  `native/layouts/alt_<id>.mid` and writes their cells over the live map (`ops_a.lua`
+  `set_map_layout`), keeping no layout id. World reads them as the relief does
+  (`relief_input`'s `Input.ALTERNATES`, `Input.baked`, `Input.alternateBlocks`; the rooms' in
+  `World.ROOM_ALTERNATES`), with their base's tilesets and events, no connections, and the
+  engine's collision codes (`codes`). `World.settle(mapId, liveMid)`, once a scene (the window's
+  environment, init.lua), picks the layout each map is drawn with, as voxel_world.c's
+  FillInstance and NeighbourLayoutId do: the current map, the alternate (or `MAP_SWAPS`'
+  other map's layout: Shoal Cave at high tide) every cell of which that differs from the base
+  the live map draws so (`World.swappedIn`); a neighbour, `NEIGHBOUR_SWAPS` (sLayoutSwaps: Route
+  111 without the Mirage Tower when FLAG_MIRAGE_TOWER_VISIBLE is clear, Route 130's Mirage
+  Island when the game's IsMirageIslandPresent says so, Route 131's Sky Pillar always).
+  `World.layout(mapId)` then answers with it, and so do the relief's lookup (init.lua
+  `layoutIdOf`) and the window's cells of a neighbour (`env.mid`, `env.cell`: its metatile,
+  collision code and behaviour). `hd.stats.sceneSwaps` lists them.
 - `render.lua`: static meshes per atlas and layer (ground quads, then cards, then trees, then
   buildings); a shader that
   outputs screen pixel x depth through LOVE's own projection with the view depth as w (so the

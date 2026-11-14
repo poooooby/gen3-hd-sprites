@@ -118,7 +118,8 @@ return function(mod)
   local json = Post and function(text) return (Post.json(text)) end or nil
   if type(worldOf) == "function" and sceneDeps.Roles and json then
     local okW, world = pcall(worldOf, { Roles = sceneDeps.Roles, json = json, Art = sceneDeps.Art,
-                                              Signs = sceneDeps.Signs })
+                                              Signs = sceneDeps.Signs,
+                                              Input = loadSibling(mod, "src/scene/relief_input.lua") })
     if okW and type(world) == "table" then sceneDeps.World = world end
   end
   if SceneInit and sceneDeps.Camera and sceneDeps.Cells and sceneDeps.Stage and sceneDeps.Render then

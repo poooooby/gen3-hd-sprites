@@ -13,6 +13,8 @@
 return function(deps)
   local Roles, json = deps.Roles, deps.json      -- (json(text) -> table or nil)
   local Signs = deps.Signs                        -- (optional: src/scene/signs.lua, for signMetatiles)
+  local Input = deps.Input                        -- (optional: src/scene/relief_input.lua, for the
+                                                  -- layouts a script swaps in)
   local World = {}
 
   local function req(name)
@@ -21,6 +23,25 @@ return function(deps)
   end
 
   local state            -- per game data table: { layouts, byName, arts, roles, posts, ... }
+
+  -- the rooms' layouts a script swaps in, which no map is drawn with (pret's names and ids; the
+  -- engine bakes them as alt_<id>), and the map layout each stands in for - the outdoor ones are
+  -- relief_input's Input.ALTERNATES
+  World.ROOM_ALTERNATES = {
+    [432] = { "LAYOUT_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB_WITH_TABLE", "LAYOUT_LITTLEROOT_TOWN_PROFESSOR_BIRCHS_LAB" },
+    [433] = { "LAYOUT_SKY_PILLAR_1F_CLEAN", "LAYOUT_SKY_PILLAR_1F" },
+    [434] = { "LAYOUT_SKY_PILLAR_2F_CLEAN", "LAYOUT_SKY_PILLAR_2F" },
+    [435] = { "LAYOUT_SKY_PILLAR_3F_CLEAN", "LAYOUT_SKY_PILLAR_3F" },
+    [436] = { "LAYOUT_SKY_PILLAR_4F_CLEAN", "LAYOUT_SKY_PILLAR_4F" },
+    [437] = { "LAYOUT_SKY_PILLAR_5F_CLEAN", "LAYOUT_SKY_PILLAR_5F" },
+    [441] = { "LAYOUT_SOOTOPOLIS_CITY_MYSTERY_EVENTS_HOUSE_1F_STAIRS_UNBLOCKED",
+              "LAYOUT_SOOTOPOLIS_CITY_MYSTERY_EVENTS_HOUSE_1F" },
+  }
+  -- and the swaps to another map's own layout: Shoal Cave's rooms at high tide
+  World.MAP_SWAPS = {
+    LAYOUT_SHOAL_CAVE_LOW_TIDE_ENTRANCE_ROOM = "LAYOUT_SHOAL_CAVE_HIGH_TIDE_ENTRANCE_ROOM",
+    LAYOUT_SHOAL_CAVE_LOW_TIDE_INNER_ROOM = "LAYOUT_SHOAL_CAVE_HIGH_TIDE_INNER_ROOM",
+  }
 
   local function gameData()
     local Runtime = req("src.core.game3.runtime")
@@ -122,6 +143,41 @@ return function(deps)
     for name, L in pairs(s.byName) do
       if not L.name or name < L.name then L.name = name end
     end
+    -- the layouts a script swaps in (setmaplayoutindex), which no map is drawn with: the engine's
+    -- baked cells over their base's (relief_input's Input.ALTERNATES and alternateBlocks, as the
+    -- relief reads them), the base's tilesets, events and outdoor-ness; no connections (no map is
+    -- drawn with it: voxel_props.connections), and the engine's collision codes (`codes`)
+    local Perm = req("src.core.CollPermissions")
+    local alternates = {}
+    for id, row in pairs(Input and Input.ALTERNATES or {}) do alternates[id] = row end
+    for id, row in pairs(World.ROOM_ALTERNATES) do alternates[id] = row end
+    for id, row in pairs(Input and alternates or {}) do
+      local base = s.byName[row[2]]
+      if base and base.grid and Perm and not s.layouts[id] then
+        local function baked(name) return Input.baked(cache:read("data/generated/gba/native/layouts/" .. name .. ".mid")) end
+        local bb = {}
+        for i = 0, base.w * base.h - 1 do bb[i] = base.grid:byte(i * 2 + 1) + base.grid:byte(i * 2 + 2) * 256 end
+        local alt = baked("alt_" .. id)
+        local okA, blocks = pcall(Input.alternateBlocks, { w = base.w, h = base.h, blocks = bb }, alt,
+          baked("EM_" .. base.name:sub(8)), function(c) return Perm.isWall(c) or Perm.isLedge(c) end)
+        if okA and blocks then
+          local bytes, codes = {}, {}
+          for i = 0, base.w * base.h - 1 do
+            local v = blocks[i]
+            bytes[i + 1] = string.char(v % 256, math.floor(v / 256) % 256)
+            local _, code = alt.at(i % base.w, math.floor(i / base.w))
+            codes[i] = code
+          end
+          local L = { id = id, name = row[1], w = base.w, h = base.h, pair = base.pair, warps = base.warps,
+                      signs = base.signs, outdoor = base.outdoor, maps = {}, links = {},
+                      tilesets = base.tilesets, primary = base.primary, secondary = base.secondary,
+                      grid = table.concat(bytes), codes = codes, alternateOf = base }
+          s.layouts[id] = L
+          s.byName[row[1]] = L
+        end
+      end
+    end
+    s.drawn = {}
     -- Emerald's behaviour names as the engine's ids (src/core/game3/mb.lua: FireRed's value where
     -- FireRed has the behaviour, 0x100 + Emerald's otherwise)
     local MB, Constants = req("src.core.game3.mb"), req("src.core.game3.constants")
@@ -145,13 +201,82 @@ return function(deps)
     return out
   end
 
-  --- The layout of an Emerald map (EM_X), or of a layout id: { id, name, w, h, pair, warps,
-  --- signs, outdoor, maps, grid }, or nil.
+  --- The layout of an Emerald map (EM_X) - the one it is drawn with now (World.settle) - or of a
+  --- layout id or name: { id, name, w, h, pair, warps, signs, outdoor, maps, grid, alternateOf (a
+  --- layout a script swaps in: its base) }, or nil.
   function World.layout(key)
     local s = load()
     if not s then return nil end
     if type(key) == "number" then return s.layouts[key] end
-    return s.byMap[key] or s.byName[key]
+    return s.drawn[key] or s.byMap[key] or s.byName[key]
+  end
+
+  -- Emerald 3DS's voxel_world.c sLayoutSwaps: a neighbour is drawn with the layout its script
+  -- would swap in when the player enters it (Route 131's Sky Pillar, rising out of the sea only
+  -- once the player has crossed into the route otherwise)
+  World.NEIGHBOUR_SWAPS = {
+    EM_ROUTE111 = { 392, function(Rse, sess) return not Rse.flag("FLAG_MIRAGE_TOWER_VISIBLE", sess) end },
+    EM_ROUTE130 = { 46, function(_, sess, FieldRse) return FieldRse.isMirageIslandPresent(sess) == true end },
+    EM_ROUTE131 = { 319 },
+  }
+
+  --- Of `candidates` (layouts of `base`'s size), the one a script swapped into a map drawn with
+  --- `base`: every cell of it that differs from the base the map draws so now (liveMid(x, y) ->
+  --- metatile; the engine keeps no layout id, it writes the cells), or nil.
+  function World.swappedIn(base, candidates, liveMid)
+    local function mid(L, i) return (L.grid:byte(i * 2 + 1) + L.grid:byte(i * 2 + 2) * 256) % 1024 end
+    for _, L in ipairs(candidates) do
+      if L.w == base.w and L.h == base.h then
+        local differs, same = false, true
+        for i = 0, L.w * L.h - 1 do
+          local a = mid(L, i)
+          if a ~= mid(base, i) then
+            differs = true
+            if liveMid(i % L.w, math.floor(i / L.w)) ~= a then same = false; break end
+          end
+        end
+        if differs and same then return L end
+      end
+    end
+    return nil
+  end
+
+  --- Which layout each map is drawn with now, as voxel_world.c's FillInstance takes it: the
+  --- current map (`current`, its cells as the game draws them: liveMid(x, y) -> metatile) the one
+  --- a script swapped in (World.swappedIn over its alternates and MAP_SWAPS), a neighbour its
+  --- NEIGHBOUR_SWAPS one where the game's flags say so. Asked once a scene.
+  function World.settle(current, liveMid)
+    local s = load()
+    if not s then return end
+    s.drawn = {}
+    local base = current and s.byMap[current]
+    if base and liveMid then
+      local candidates = {}
+      for _, L in pairs(s.layouts) do
+        if L.alternateOf == base then candidates[#candidates + 1] = L end
+      end
+      table.sort(candidates, function(p, q) return p.id < q.id end)
+      local other = World.MAP_SWAPS[base.name] and s.byName[World.MAP_SWAPS[base.name]]
+      if other then candidates[#candidates + 1] = other end
+      s.drawn[current] = World.swappedIn(base, candidates, liveMid)
+    end
+    local Rse, FieldRse = req("src.core.game3.rse.init"), req("src.core.game3.scripting.natives_field_rse")
+    local Runtime = req("src.core.game3.runtime")
+    local sess = Runtime and Runtime.getSession and Runtime.getSession()
+    for mapId, sw in pairs(World.NEIGHBOUR_SWAPS) do
+      local L = s.layouts[sw[1]]
+      if mapId ~= current and L and s.byMap[mapId] and L.alternateOf == s.byMap[mapId] then
+        local ok, yes = true, true
+        if sw[2] then ok, yes = pcall(sw[2], Rse, sess, FieldRse) end
+        if ok and yes then s.drawn[mapId] = L end
+      end
+    end
+  end
+
+  --- The layout a map is drawn with in place of its own (World.settle), or nil.
+  function World.swapped(mapId)
+    local s = load()
+    return s and s.drawn[mapId] or nil
   end
 
   --- src/scene/roles.lua's adapter over a layout (World.layout's), or nil.
@@ -208,7 +333,7 @@ return function(deps)
     if not s.posts then
       local all = {}
       for _, L in pairs(s.layouts) do
-        if L.outdoor and next(L.signs) then
+        if L.outdoor and next(L.signs) and not L.alternateOf then
           local A = World.adapter(L)
           if A then all[#all + 1] = A end
         end

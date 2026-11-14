@@ -1077,5 +1077,28 @@ do
   check(#found == 0, "a spec with owned cells never stands as a look-alike")
 end
 
+-- the layouts a script swaps in (World.swappedIn, relief_input's alternateBlocks)
+do
+  local World = dofile("src/scene/world.lua")({ Roles = {}, json = function() end })
+  local function layout(mids)
+    local bytes = {}
+    for i, m in ipairs(mids) do bytes[i] = string.char(m % 256, math.floor(m / 256)) end
+    return { w = 2, h = 2, grid = table.concat(bytes) }
+  end
+  local base, alt = layout({ 1, 2, 3, 4 }), layout({ 1, 9, 3, 8 })
+  local function live(mids) return function(x, y) return mids[y * 2 + x + 1] end end
+  check(World.swappedIn(base, { alt }, live({ 1, 9, 3, 8 })) == alt, "a map drawing an alternate's cells is drawn with it")
+  check(World.swappedIn(base, { alt }, live({ 5, 9, 7, 8 })) == alt,
+    "...whatever else the game has written over the cells it shares with the base")
+  check(World.swappedIn(base, { alt }, live({ 1, 9, 3, 4 })) == nil, "...but not when one of its own cells is missing")
+  check(World.swappedIn(base, { alt }, live({ 1, 2, 3, 4 })) == nil, "a map drawing its own layout is its own")
+  local Input = dofile("src/scene/relief_input.lua")
+  local function baked(cells) return { w = 2, h = 1, at = function(x) return cells[x + 1][1], cells[x + 1][2], 0 end } end
+  local blocks = Input.alternateBlocks({ w = 2, h = 1, blocks = { [0] = 5 + 1024, [1] = 6 } },
+    baked({ { 5, 1 }, { 7, 4 } }), baked({ { 5, 1 }, { 6, 0 } }), function(c) return c == 4 end)
+  check(blocks[0] == 5 + 1024 and blocks[1] == 7 + 1024,
+    "an alternate's cell keeps the base's collision bits where it is the base's, else its code says")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

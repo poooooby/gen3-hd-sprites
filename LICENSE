@@ -127,6 +127,11 @@ run in the game once over the player's own cartridge data instead of offline, sl
 milliseconds a frame; Python's own arithmetic and ordering (its hash-ordered sets, compensated
 sums, rounding) reproduced where the result depends on them, so the bytes come out the same.
 
+Which layout a map is drawn with (src/scene/world.lua's settle) adapts Emerald 3DS's
+src/voxel/voxel_world.c (FillInstance, NeighbourLayoutId and its sLayoutSwaps): a neighbour drawn
+with the layout its script swaps in. Changes: the engine keeps no layout id for the current map,
+so the layout swapped into it is the one whose cells the map draws.
+
 The relief's last passes (src/scene/relief_post.lua) adapt Emerald 3DS's sea ramps and cut feet
 (3ds_port/scripts/gen_voxel_relief.py) and its hand corrections (voxel_relief_fixes.py: how
 relief.bin is read and written, how the corrections apply), and assets/scene/relief_fixes.json
