@@ -462,6 +462,47 @@ return function(deps)
   -- (for the dev drivers: a pair's layers, pixel by pixel)
   Scene._pixelSource = pixelSource
 
+  -- the sign step's layers of a metatile, both as pixel lists { [y * 16 + x] = { r, g, b } (0..1) }:
+  -- a reader with its own cache (the battle's build and tests/drivers/bridge_dump.lua share it)
+  local function signLayers(NativeTileset)
+    local layerCache = {}
+    return function(mid, pair)
+      local k = tostring(pair) .. ":" .. tostring(mid)
+      local e = layerCache[k]
+      if e == nil then
+        e = false
+        -- (Emerald's: the two layers exactly as pret draws them, off the atlas blobs - colour
+        -- index 0 left out, a COVERED metatile's upper its own; src/scene/world.lua artOf. The
+        -- drawn atlas paints index 0 with the backdrop and mixes a COVERED upper into its lower)
+        local wa = World and World.art and World.art(pair)
+        local lo0 = wa and wa.pixels(mid, 0)
+        local src = not lo0 and pixelSource(NativeTileset, pair) or nil
+        if lo0 then
+          local up0 = wa.pixels(mid, 1) or {}
+          local lo, up = {}, {}
+          for k, p in pairs(lo0) do lo[k] = { p[1] / 255, p[2] / 255, p[3] / 255 } end
+          for k, p in pairs(up0) do up[k] = { p[1] / 255, p[2] / 255, p[3] / 255 } end
+          e = { lo, next(up) and up or nil }
+        elseif src and src.under(mid, 0, 0) ~= nil then
+          local lo, up = {}, {}
+          for y = 0, 15 do
+            for x = 0, 15 do
+              local r0, g0, b0, a0 = src.under(mid, x, y)
+              local r1, g1, b1, a1 = src.over(mid, x, y)
+              if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
+              if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
+            end
+          end
+          e = { lo, next(up) and up or nil }
+        end
+        layerCache[k] = e
+      end
+      if not e then return nil, nil end
+      return e[1], e[2]
+    end
+  end
+  Scene._signLayers = signLayers
+
   -- a metatile less the quarters q of its upper layer (bit 2 * row + column): its whole drawing,
   -- and in those quarters the lower layer alone, read exactly off the atlas blobs (the engine's
   -- lower atlas has a COVERED metatile's upper layer drawn over it). Emerald 3DS's ground variant
@@ -3445,30 +3486,7 @@ return function(deps)
     -- the signposts: signs, lamps, posts and boulders as thin solids of their own pixels
     local signs = {}
     if Signs and not env.indoor then
-      local layerCache = {}
-      local function layersOf(mid, pair)
-        local k = tostring(pair) .. ":" .. tostring(mid)
-        local e = layerCache[k]
-        if e == nil then
-          e = false
-          local src = pixelSource(NativeTileset, pair)
-          if src and src.under(mid, 0, 0) ~= nil then
-            local lo, up = {}, {}
-            for y = 0, 15 do
-              for x = 0, 15 do
-                local r0, g0, b0, a0 = src.under(mid, x, y)
-                local r1, g1, b1, a1 = src.over(mid, x, y)
-                if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
-                if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
-              end
-            end
-            e = { lo, next(up) and up or nil }
-          end
-          layerCache[k] = e
-        end
-        if not e then return nil, nil end
-        return e[1], e[2]
-      end
+      local layersOf = signLayers(NativeTileset)
       -- the game's sign metatiles, and their upper layers: a primary tileset's read through a
       -- pair of the window with the same primary (the same drawing), a secondary's through its own
       -- pair where the window has it

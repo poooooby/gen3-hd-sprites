@@ -697,12 +697,16 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   six vertices a patch). The rest: sea rocks and stacks across a map's seam (they stand in the
   window, the next map in it; a lone layout has no next map). The signs (`BRIDGE_SIGNS=outdoor`,
   `signs_<LAYOUT>.txt`: each sign's cell, silhouette and head rows, head ground and ground)
-  against the pak's 292 signposts: all 292 found at the same cell, 279 equal in every field; one
-  of ours the pak has not (Verdanturf 0,16). The rest come from the layer pixels the build reads
-  (the engine's under-image mixes some metatiles' upper layer into the lower, or drops it, and
-  paints colour 0 with the backdrop): Dewford's sand 0x124 and sign 0x23A, Pacifidlog's
-  0x218/0x221/0x220/0x210, Verdanturf's 0x2BC, the Battle Frontier's 0x3AB and 0x226, Route
-  117's 0x291/0x020. A room spec's pieces stand in its own layout whatever its map's type (the
+  against the pak's 292 signposts: all 292 found at the same cell, 281 equal in every field; one
+  of ours the pak has not (Verdanturf 0,16). The sign step reads Emerald's layers off the atlas
+  blobs (`signLayers`: `World.art`, colour index 0 left out as pret leaves it; Kanto's through
+  `pixelSource`). The rest need what the engine's native pack drops (gen1recomp
+  `native_pack.lua`): a metatile's layer type, and a COVERED one's lower layer under its upper.
+  Its blobs cannot tell a COVERED metatile whose upper hides all its lower from a NORMAL one with
+  nothing on top (`Roles.blobPixels` reads it as the latter): Dewford's sand 0x124 (so 0x23A's
+  silhouette and four grounds), Verdanturf's 0x2BC (its upper fills the cell: a cover to theirs),
+  Pacifidlog 7,16; and the seam scores of a COVERED neighbour's lower layer: Route 117 49,5,
+  the Battle Frontier's 7,29. A room spec's pieces stand in its own layout whatever its map's type (the
   Abandoned Ship's flooded rooms are MAP_TYPE_UNDERWATER, outdoors to voxel_cells); a room
   nobody modelled is an indoor one (gen_voxel_buildings's reuse_everywhere). `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
   not (`_findWhy`: each core cell's metatile, sign, and the pixels it draws otherwise). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle

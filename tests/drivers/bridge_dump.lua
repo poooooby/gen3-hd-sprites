@@ -164,30 +164,8 @@ local function body(game, log)
       local okB, errB = pcall(placeBuildings, grid, NativeTileset, function(cx, cy) return nil, cx, cy, L.name, 0, 0 end)
       if not okB then log("signs " .. tostring(L.name) .. ": buildings error " .. tostring(errB)) end
       -- the sign step of init.lua's build
-      local layerCache = {}
-      local function layersOf(mid, pair)
-        local k = tostring(pair) .. ":" .. tostring(mid)
-        local e = layerCache[k]
-        if e == nil then
-          e = false
-          local src = pixelSource(NativeTileset, pair)
-          if src and src.under(mid, 0, 0) ~= nil then
-            local lo, up = {}, {}
-            for y = 0, 15 do
-              for x = 0, 15 do
-                local r0, g0, b0, a0 = src.under(mid, x, y)
-                local r1, g1, b1, a1 = src.over(mid, x, y)
-                if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
-                if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
-              end
-            end
-            e = { lo, next(up) and up or nil }
-          end
-          layerCache[k] = e
-        end
-        if not e then return nil, nil end
-        return e[1], e[2]
-      end
+      -- (init.lua's own reader: Emerald's layers off the atlas blobs)
+      local layersOf = Scene._signLayers(NativeTileset)
       local okPo, posts = pcall(signPosts, cenv)
       posts = okPo and posts or {}
       local windowPairs, byPrimary = {}, {}
