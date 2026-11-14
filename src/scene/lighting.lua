@@ -29,8 +29,8 @@ local floor, sqrt, abs = math.floor, math.sqrt, math.abs
 local function Tile(n) return floor(n) end
 
 --- A lighting for one build. o = {
----   cell(tx, tz) -> { base, lift, shift, top, bottom, crownPart, surface, sign, mask } (their
----     LightCell: heights over the cell's map base, tiles; crownPart a tree part 0..3, 4 a small
+---   cell(tx, tz) -> { base, lift, shift, top, bottom, crownPart, crownCol, crownRow, crownW, surface, sign, mask } (their
+---     LightCell: heights over the cell's map base, tiles; crownPart a tree part (Trees.partCell: crownCol, crownRow, crownW its place in a wider tree), 4 a small
 ---     tree, or -1; mask 16 rows of 16 bits, bit x of row z, a model's footprint),
 ---   surfaceAt(x, z) -> the drawn relief's height there over its base (VoxelRelief_SurfaceAt),
 ---   signOccludes(tx, tz, x, y, z) -> whether a sign's drawing stops the point (y over base),
@@ -80,9 +80,13 @@ function Lighting.new(o)
       return dx * dx + dz * dz + dy * dy < 1
     end
     if cell.crownPart >= 0 then
-      local crownX = (cell.x - cell.crownPart % 2) + 1
-      local crownZ = (cell.z - floor(cell.crownPart / 2)) + 0.65
-      local dx = (x - crownX) / 0.95
+      -- (a tree's crown about its middle: a 2x2 tree's from its part, a wider one's from its cell)
+      local col = cell.crownCol or cell.crownPart % 2
+      local row = cell.crownRow or floor(cell.crownPart / 2)
+      local half = (cell.crownW or 2) / 2
+      local crownX = (cell.x - col) + half
+      local crownZ = (cell.z - row) + 0.65
+      local dx = (x - crownX) / (0.95 * half)
       local dz = (z - crownZ) / 0.65
       local dy = (y - 0.95) / 0.67
       return dx * dx + dz * dz + dy * dy < 1

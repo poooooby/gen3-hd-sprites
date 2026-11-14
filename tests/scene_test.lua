@@ -1457,6 +1457,18 @@ do
     end
   end
   check(exact, "the crown's corners stand where the drawing puts them at 45 degrees")
+  -- a forest's own tree (Viridian Forest's, 3 wide): its parts only in its own tileset, found by
+  -- the maps drawn with it
+  Trees.resolveForests(function(id) return id == "LAYOUT_VIRIDIAN_FOREST" and "general__rom_forest" or nil end)
+  local fsec = Trees.tilesets("general__rom_forest")
+  local fp = Trees.part(fsec, 0x291)
+  local c1, r1, w1, k1 = Trees.partCell(fp)
+  local c2, r2 = Trees.partCell(Trees.part(fsec, 0x2A5))
+  check(fp and c1 == 1 and r1 == 0 and w1 == 3 and k1 == 1 and c2 == 2 and r2 == 1
+    and Trees.part("fr:rom_elsewhere", 0x291) == nil and Trees.partCell(2) == 0,
+    "a forest's tree: its 3x2 parts in its own tileset alone; the General tree's still 2x2")
+  check(Trees.groundMetatile(fsec, 0x289) == 0x009 and Trees.groundMetatile(sec, 0x289) == 0x289,
+    "...its tip over the grass lays the grass")
   Trees.useGame(nil)
   Trees.useFamily(nil)
 end

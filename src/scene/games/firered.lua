@@ -197,6 +197,32 @@ F.trees = {
   cone = { axis = 16, depth = 40, radius = 16, squash = 0.65, tip = 3, skirt = 41 },
   trunk = { rgb(0x41, 0x39, 0x31), rgb(0x73, 0x62, 0x62) },
   ground = { [0x00E] = 0x001, [0x00F] = 0x001 },
+  -- Viridian Forest's own tree (its tileset's, Six Island's Pattern Bush's too): 3x3 cells, a tip
+  -- row over the grass (288-28A), a crown row (290-292 in a stack, 2A0-2A2 at its foot, 28E / 2A1
+  -- / 28F alone) and a trunk row (298-29A in a stack, the next tree's crown behind; 2A3-2A5 alone),
+  -- stacked two rows apart. Drawn whole on the upper layer over plain grass, its grass and its
+  -- shadow's rings too (groundColours); 299 is drawn alike as the middle of a stack's top tip row
+  -- (tipToo: no crown row over it). Read off the alone tree in the forest's south (its tip row
+  -- 288-28A): a dome, its flat top drawn on row 0 (seen from above: the apex 6 texels over the
+  -- top row's height, tip -6), the skirt's front edge at row 30 (the leaves' last, over the trunk's
+  -- top at 31), the tree standing at its trunk about column 24 (its foot drawn at row 37, the
+  -- trunk's middle 34), its crown 0.4 of its width in depth (a crown that stood at its shadow's
+  -- middle, row 38, at the General tree's 0.65, stood on a trunk 1.4 tiles tall); the trunk in its
+  -- three colours.
+  forests = {
+    { layouts = { "LAYOUT_VIRIDIAN_FOREST", "LAYOUT_SIX_ISLAND_PATTERN_BUSH" }, w = 3,
+      parts = {
+        [0x290] = 0, [0x2A0] = 0, [0x28E] = 0, [0x291] = 1, [0x2A1] = 1, [0x292] = 2, [0x2A2] = 2, [0x28F] = 2,
+        [0x298] = 3, [0x2A3] = 3, [0x299] = 4, [0x2A4] = 4, [0x29A] = 5, [0x2A5] = 5,
+      },
+      alone = { tip = { 0x288, 0x289, 0x28A }, crown = { 0x28E, 0x2A1, 0x28F }, trunk = { 0x2A3, 0x2A4, 0x2A5 } },
+      cone = { axis = 24, depth = 34, radius = 22, squash = 0.4, tip = -6, skirt = 30 },
+      trunk = { rgb(0x41, 0x39, 0x31), rgb(0x83, 0x6A, 0x52), rgb(0x62, 0x41, 0x4A) },
+      groundColours = { rgb(0x73, 0xCD, 0xA4), rgb(0x41, 0xB4, 0x8B), rgb(0x18, 0xA4, 0x6A), rgb(0x39, 0x73, 0x18) },
+      ground = { [0x288] = 0x009, [0x289] = 0x009, [0x28A] = 0x009 },
+      tipToo = { [0x299] = true },
+    },
+  },
 }
 
 return F

@@ -349,6 +349,7 @@ return function(deps)
   local hoennRaw
   local kantoTrees = {}     -- [game] = { image, raw } or false
   local pixelSource
+  local layoutCtx
   local function treesArt(NativeTileset, grid)
     local Tr = deps.Trees
     if Tr and Tr.kanto then
@@ -366,10 +367,20 @@ return function(deps)
         local src = pair and NativeTileset and pixelSource(NativeTileset, pair)
         if src then
           local data = love.image.newImageData(Tr.KANTO_W, Tr.KANTO_H)
-          local n = Tr.kantoArt(function(mid, layer, x, y)
-            if layer == 1 then return src.over(mid, x, y) end
-            return src.under(mid, x, y)
-          end, function(x, y, r, g, b, a) data:setPixel(x, y, r, g, b, a) end)
+          local function setter(x, y, r, g, b, a) data:setPixel(x, y, r, g, b, a) end
+          local function reader(s)
+            return function(mid, layer, x, y)
+              if layer == 1 then return s.over(mid, x, y) end
+              return s.under(mid, x, y)
+            end
+          end
+          local n = Tr.kantoArt(reader(src), setter)
+          -- (each forest's own tree, read off its own tileset: none stands where it can't be read)
+          for k = 1, #(Tr.species or {}) do
+            local S = Tr.species[k]
+            local fs = S.pair and pixelSource(NativeTileset, S.pair)
+            if not (fs and Tr.kantoArt(reader(fs), setter, k) > 0) then S.failed = true end
+          end
           if n > 0 then
             local raw = data:clone()
             if Light then pcall(Light.gradeTrees, data, Tr.KANTO_CROWNS) end
@@ -452,6 +463,13 @@ return function(deps)
     if deps.Trees and deps.Trees.useGame then
       deps.Trees.useGame(deps.Games and deps.Games[famGame] or nil)
       deps.Trees.useTune(deps.Tune and deps.Tune.group(famGame, "trees") or nil)
+      -- (its forests' own trees: their tilesets, as this game names them, by the maps drawn with them)
+      if deps.Trees.resolveForests and deps.Trees.species and not deps.Trees.forestsResolved then
+        deps.Trees.resolveForests(function(id)
+          local ok, L = pcall(function() return layoutCtx().layout(id) end)
+          return ok and L and L.pair or nil
+        end)
+      end
     end
     -- (and its own buildings)
     local own = deps.SpecsByGame and deps.SpecsByGame[famGame]
@@ -461,7 +479,7 @@ return function(deps)
   end
 
   -- a reference layout, by its id (LAYOUT_X is the game's map EM_X; FireRed's FR_X or SEVII_X)
-  local function layoutCtx()
+  function layoutCtx()
     local Runtime, Map = req("src.core.game3.runtime"), req("src.core.game3.map")
     local game = Runtime and Runtime._game
     local F = family()
@@ -3305,6 +3323,7 @@ return function(deps)
             end
           end
           out.crownPart, out.top = part, Lighting.CROWN_TOP
+          out.crownCol, out.crownRow, out.crownW = Trees.partCell(part)
           return out
         end
         if Trees.groundMetatile(sec, c.mid) ~= c.mid then return out end
@@ -3980,8 +3999,10 @@ return function(deps)
               if top and top > (c.top or 0) then c.top = top end
               if part then
                 local rock = againstRock(c.cx, c.cy, part)
-                if not rock and (part == 2 or part == 3) then
-                  local ox = part == 2 and c.cx + 1 or c.cx - 1
+                local pcol, prow, pw = Trees.partCell(part)
+                if not rock and prow == 1 then
+                  -- (the trunk row's next cell of the same tree)
+                  local ox = pcol + 1 < pw and c.cx + 1 or c.cx - 1
                   local _, _, id = placeOf(c.cx, c.cy)
                   local _, _, oid = placeOf(ox, c.cy)
                   if id and oid == id then rock = againstRock(ox, c.cy, part) end

@@ -1142,6 +1142,24 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - **Taller or sheer (off):** `C.stand` (tiles a level) and `C.sheer` (sides as sheer walls) stand the rock apart from its drawing (`Caves.standing` heights, `Caves.depths` where each point of the drawing stands: a face's drawing a tile tall at the top of its wall, the wall below closed a course at a time). Tried and turned down in game: two tiles a level was too tall, sheer sides too vertical. They write the relief's optional depths (`DPTH` after the `EDGE` block: per cell, 25 depths; `Relief.view` → `L.depths`, `cell.s` in placement; `emitCell`, `cliffWalls`, `northFace` and the seam skirts place points by depth, heights by height). Without depths depth = height, and a relief with none writes nothing new (Emerald's bytes are unchanged). The stage search counts standing rock over the camera's line of sight (`sightBlocked`, only cells with depths).
   - **Build:** about 1 s and 3,850 ticks (`Run.TICKS.firered.finish` 3,993). FireRed's rules version is 10.
 - **FireRed's sea rocks (`props.lua`):** `fr_sea_rock` and `fr_sea_rock_pale`, each four General tiles in a square at the corner four metatiles share (as Emerald's sea rock): tiles 420-423 in palette 4 (metatiles 0x110-0x119) and 173/174 over 189/190 in palette 2 (0x1CB-0x1D4). They stand as Mounds on the General's plain water (0x12B), their pale outline the foam. The relief solver's own copy of the objects is unchanged (FireRed's relief bytes stay the same); the rocks' cells are water to it.
+- **A forest's own tree (`trees.forests`):** Viridian Forest's tileset (Six Island's Pattern Bush's
+  too) draws its own tree, 3x3 cells (tip 288-28A, crown 290-292 / 2A0-2A2 / 28E-2A1-28F, trunk
+  298-29A / 2A3-2A5), stacked two rows apart. It stands as the General tree does, as a species of
+  its own (`Trees.species[k]`, k >= 1; `[0]` the General tree): named by the maps drawn with it
+  (`layouts`, resolved to this game's tileset by `Trees.resolveForests` through `layoutCtx`: its
+  tilesets are named by ROM address, LeafGreen's apart), its parts numbered from 16
+  (`Trees.partCell(part)` -> col, row, width, species; the General tree's stay 0-3), its art at its
+  own place in the tree atlas (row 64: crown 0-47, ground 48-95, trunk 96-127), read off its own
+  tileset (`Trees.kantoArt(px, set, k)`; a species whose art can't be read is `failed` and lies
+  flat). It draws the whole tree on the upper layer, its grass and shadow too: `groundColours` are
+  read as ground, and rows under the skirt (`cone.skirt`) are read as the trunk row is (the
+  drawing: trunk, the cone's cover, or ground). Its crown is a dome whose flat top is drawn on row
+  0: the profile runs on above the drawing's top row to the apex (`tip` -6), seen from above. 299
+  is also the middle of a stack's top tip row (`tipToo`: no crown row over it, it lays the tip's
+  ground and stands nothing). Lighting finds a wider crown's middle by `crownCol` / `crownRow` /
+  `crownW`. Checked at 45 degrees with the scratchpad's `tree_check2.lua` (species k): 0 of 2304
+  texels wrong (the General tree still 0 of 1536). Three Island's Berry Forest has a tileset of its
+  own.
 - **Kanto's trees (`src/scene/trees.lua`, `games/firered.lua` `trees`):** Kanto's General tree (2x2:
   a crown row whose upper layer covers the player, over a trunk row, stacked through the woods, its
   tip drawn in the cell above) stands as its own model, built off its drawing as the rooms' pieces

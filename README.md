@@ -100,7 +100,7 @@ resolution, and the camera pulls back so even the biggest ones fit.
   with his machine on the roof, the route gatehouses, the Cycling Road's gate, and the islands'
   houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them, and
   Kanto's pine trees stand as real trees too, round crowns on their trunks with their shadows on the
-  grass, drawn from your own cartridge.
+  grass, and so do Viridian Forest's broad leafy trees, all drawn from your own cartridge.
 - 🛋️ **Furnished rooms:** In Emerald, battles indoors take place in furnished rooms, rebuilt
   from their own art: the Pokémon Centers and Poké Marts (the counter with its Poké Balls, the
   healing machine, stools, the escalator), the houses of Littleroot and the common houses of
