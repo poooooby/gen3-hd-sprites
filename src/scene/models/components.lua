@@ -4,10 +4,11 @@
 -- `height` rows tall) or a fence built post by post (src/scene/models/fence.lua).
 --
 -- Ported from Emerald 3DS's scripts/voxel_building_specs.py (the `components` specs, numbers
--- unchanged) and gen_voxel_buildings.py (component_specs, building_art, close_gaps, trim_outline,
--- join_corners, fill_behind, pick_side, flank_band, clear_rgb), by Zallax and contributors,
--- CC BY-NC-SA 4.0 (https://github.com/ZallaxDev/emerald-3ds; see LICENSE). Changes: a run is
--- found in the window around the battle and built whole (not cut into blocks); colours are
+-- unchanged) and gen_voxel_buildings.py (component_specs, piece_spec, building_art, seam_art,
+-- close_gaps, trim_outline, join_corners, fill_behind, pick_side, flank_band, clear_rgb), by Zallax
+-- and contributors, CC BY-NC-SA 4.0 (https://github.com/ZallaxDev/emerald-3ds; see LICENSE).
+-- Changes: a run is found in the window around the battle (one reaching past it ends at its edge)
+-- and cut into blocks there, aligned on its map; colours are
 -- compared at the GBA's 5 bits a channel (the generator's are the decomp's 8-bit palettes).
 
 return function(K, Fence)
@@ -36,10 +37,10 @@ return function(K, Fence)
   -- tileset names as the engine's pairs spell them, lower case without underscores
   -- (gTileset_BattleFrontierOutsideWest, battle_frontier_outside_west: battlefrontieroutsidewest)
   C.SPECS = {
-    { name = "frontier_planter_west", secondary = "battlefrontieroutsidewest",
+    { name = "frontier_planter_west", block = 4, secondary = "battlefrontieroutsidewest",
       tiles = set({ 0x208, 0x209, 0x20A, 0x210, 0x211, 0x212, 0x218, 0x219, 0x21A }), height = 6,
       ground = { 0x05E, 0x05D, 0x05F } },
-    { name = "frontier_planter_east", secondary = "battlefrontieroutsideeast",
+    { name = "frontier_planter_east", block = 4, secondary = "battlefrontieroutsideeast",
       tiles = set({ 0x2C8, 0x2CB, 0x2F7, 0x2D0, 0x2CC, 0x2FF, 0x2C9, 0x2CD, 0x307 }), height = 6,
       ground = { 0x05E, 0x101, 0x109 } },
     { name = "hedge", secondary = "petalburg",
@@ -50,12 +51,12 @@ return function(K, Fence)
       under = { [0x23d] = 0x245 },
       side_longest = true, close = 2, outline = { 57, 82, 0 },
       ground = { GRASS } },
-    { name = "railing", secondary = "rustboro",
+    { name = "railing", block = 4, secondary = "rustboro",
       tiles = set({ 0x2A7, 0x2FC, 0x318, 0x319, 0x31A, 0x315, 0x31D, 0x320, 0x321, 0x32C, 0x32D, 0x2BE, 0x2BF, 0x2CD, 0x352, 0x2E9,
                     0x2B7, 0x2C6, 0x2C7, 0x2D5, 0x2D7, 0x2DC, 0x2DE, 0x2DF, 0x2E6, 0x2E7, 0x2EC, 0x31B }),
       height = 12, hull = 12, bridge = 3, upper = true, flank = 0x2A7,
       ground = { 0x2BB, 0x2C3, GRASS } },
-    { name = "fence", primary = "general",
+    { name = "fence", block = 4, primary = "general",
       ground_fixed = true,
       tiles = set({ 0x132, 0x133, 0x134, 0x138, 0x139, 0x13A, 0x140, 0x141, 0x142, 0x148, 0x149, 0x14A }),
       also = {
@@ -69,38 +70,38 @@ return function(K, Fence)
       posts = { kind = "box", ref = 0x149, find = { 2, 3, 4, 2 }, post = { 2, 6 }, top = 3, depth = 2,
                 scan = 3, hidden = 10, rail = { 4, 6 }, body = { 2, 3, 6, 13 }, trunk = { 2, 5, 6, 13 }, strip = { 3, 5, 5, 13 } },
       ground = { GRASS } },
-    { name = "railing_lilycove", secondary = "lilycove",
+    { name = "railing_lilycove", block = 4, secondary = "lilycove",
       tiles = set({ 0x249, 0x250, 0x251, 0x252, 0x258, 0x25A }),
       height = 12, hull = 12, bridge = 3, upper = true, flank = 0x251,
       ground = { GRASS } },
-    { name = "curb", primary = "general",
+    { name = "curb", block = 4, primary = "general",
       patch_own = true,
       tiles = set({ 0x03D, 0x03E, 0x03F, 0x045, 0x047, 0x04D, 0x04E, 0x04F, 0x055, 0x056, 0x057, 0x05D, 0x05E, 0x05F }),
       height = 3, fill = set({ 0x05E }),
       skip = set({ "battlefrontieroutsidewest", "battlefrontieroutsideeast" }),
       ground = { GRASS, 0x001 } },
-    { name = "stakes", secondary = "mauville",
+    { name = "stakes", block = 4, secondary = "mauville",
       tiles = set({ 0x273, 0x27A, 0x27B, 0x27C, 0x27D, 0x280, 0x282, 0x288, 0x28A, 0x290, 0x291, 0x292, 0x2B1, 0x2B2, 0x2B9, 0x2BA }),
       upper = true,
       posts = { kind = "log", ref = 0x291, find = { 1, 5, 5, 2 }, log = { 3.5, 2.5, 2.0 }, top = 6,
                 scan = 3, trunk_row = 8, hidden = 7, sides = 16, body = { 1, 4, 6, 14 }, trunk = { 1, 8, 6, 14 }, strip = { 1, 8, 6, 14 } },
       ground = { GRASS } },
-    { name = "sootopolis_wall", secondary = "sootopolis", tiles = set(SOOTOPOLIS_WALL), height = 8,
+    { name = "sootopolis_wall", block = 4, secondary = "sootopolis", tiles = set(SOOTOPOLIS_WALL), height = 8,
       ground = SOOTOPOLIS_GROUND, ground_rgb = rgb(SOOTOPOLIS_ROCK) },
     { name = "spring_rim", secondary = "lavaridge",
       tiles = set({ 0x299, 0x29A, 0x29B, 0x2A1, 0x2A5, 0x2A9, 0x2AD, 0x2B1, 0x2B2, 0x2B3, 0x2B4, 0x2B5 }), height = 4,
       ground = { 0x2A3, 0x31D, 0x2A8, 0x2BC } },
-    { name = "spring_bench", secondary = "lavaridge", tiles = set({ 0x29C, 0x29E }), height = 4,
+    { name = "spring_bench", block = 1, secondary = "lavaridge", tiles = set({ 0x29C, 0x29E }), height = 4,
       ground = { 0x2A8, 0x274, 0x2AE } },
-    { name = "slateport_curb", secondary = "slateport",
+    { name = "slateport_curb", block = 4, secondary = "slateport",
       patch_own = true, ground_fixed = true,
       tiles = set({ 0x245, 0x24D, 0x255, 0x25D, 0x2FF, 0x2FE, 0x23C, 0x234, 0x2CF }), height = 3,
       ground = { 0x202 },
       ground_rgb = rgb({ { 65, 180, 131 }, { 115, 197, 164 }, { 164, 213, 197 }, { 205, 205, 222 }, { 230, 230, 238 } }) },
-    { name = "crate", secondary = "slateport", tiles = set({ 0x33E, 0x33F }), height = 8, upper = true, ground = { 0x211 } },
+    { name = "crate", block = 1, secondary = "slateport", tiles = set({ 0x33E, 0x33F }), height = 8, upper = true, ground = { 0x211 } },
     { name = "crate_stack", secondary = "slateport", tiles = set({ 0x32E, 0x32F, 0x336, 0x337 }), height = 24, upper = true,
       ground = { 0x211 } },
-    { name = "flower_crate", secondary = "slateport", tiles = set({ 0x20B, 0x28D, 0x213, 0x214 }), height = 3, upper = true,
+    { name = "flower_crate", block = 1, secondary = "slateport", tiles = set({ 0x20B, 0x28D, 0x213, 0x214 }), height = 3, upper = true,
       ground = { 0x211 } },
   }
 
@@ -129,9 +130,15 @@ return function(K, Fence)
   end
   C.tilesIn = tilesIn
 
-  --- Every run of every spec's metatiles in the grid (src/scene/cells.lua), skipping cells a
-  --- building already stands on: { spec, pair, x0, y0, w, h, owned = { ["i,j"] = true }, cells }.
-  function C.find(grid, specs)
+  --- Every run of every spec's metatiles in the grid (src/scene/cells.lua), whatever stands on its
+  --- cells (a building's own cell stays the building's: its first placement keeps it), a spec
+  --- with `block` cut into blocks of that many cells aligned
+  --- on its map (gen_voxel_buildings.component_specs; at(cx, cy) -> the cell's place in its map,
+  --- the grid's own cells if nil): { spec, pair, x0, y0, w, h, owned = { ["i,j"] = true }, cells,
+  --- south, north = { { i, j } } (cells whose neighbour that way is the run's, another block's),
+  --- east, west = { [j] = true } (rows the run goes on in past that side) } (piece_spec). A run
+  --- reaching past the grid ends at its edge.
+  function C.find(grid, specs, at)
     specs = specs or C.SPECS
     local runs = {}
     local seen = {}
@@ -140,7 +147,7 @@ return function(K, Fence)
         for i = 0, grid.w - 1 do
           local cell = grid.rows[j][i]
           local k = spec.name .. ":" .. cell.cx .. "," .. cell.cy
-          local tiles = cell.mid and not cell.model and not seen[k] and tilesIn(spec, cell.pair)
+          local tiles = cell.mid and not seen[k] and tilesIn(spec, cell.pair)
           if tiles and tiles[cell.mid] then
             local pair = cell.pair
             local todo, cells = { cell }, {}
@@ -151,7 +158,7 @@ return function(K, Fence)
               for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
                 local n = grid.at(c.cx + d[1], c.cy + d[2])
                 local nk = n and (spec.name .. ":" .. n.cx .. "," .. n.cy)
-                if n and not seen[nk] and not n.model and n.pair == pair and n.mid and tiles[n.mid] then
+                if n and not seen[nk] and n.pair == pair and n.mid and tiles[n.mid] then
                   seen[nk] = true
                   todo[#todo + 1] = n
                 end
@@ -160,14 +167,47 @@ return function(K, Fence)
             local allFill = spec.fill ~= nil
             for _, c in ipairs(cells) do if not (spec.fill and spec.fill[c.mid]) then allFill = false end end
             if not allFill then
-              local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
-              for _, c in ipairs(cells) do
-                x0, y0, x1, y1 = min(x0, c.cx), min(y0, c.cy), max(x1, c.cx), max(y1, c.cy)
+              -- a thin object of long runs: blocks aligned on the map, so a stretch that repeats is
+              -- one model placed many times
+              local pieces = { cells }
+              local size = spec.block
+              if size then
+                local by, order = {}, {}
+                for _, c in ipairs(cells) do
+                  local lx, ly = c.cx, c.cy
+                  if at then
+                    local ax, ay = at(c.cx, c.cy)
+                    if ax then lx, ly = ax, ay end
+                  end
+                  local key = floor(lx / size) .. "," .. floor(ly / size)
+                  if not by[key] then by[key] = {}; order[#order + 1] = key end
+                  local list = by[key]
+                  list[#list + 1] = c
+                end
+                pieces = {}
+                for _, key in ipairs(order) do pieces[#pieces + 1] = by[key] end
               end
-              local owned = {}
-              for _, c in ipairs(cells) do owned[(c.cx - x0) .. "," .. (c.cy - y0)] = true end
-              runs[#runs + 1] = { spec = spec, pair = pair, x0 = x0, y0 = y0, w = x1 - x0 + 1, h = y1 - y0 + 1,
-                                  owned = owned, cells = cells }
+              local inRun = {}
+              for _, c in ipairs(cells) do inRun[c.cx .. "," .. c.cy] = true end
+              for _, pc in ipairs(pieces) do
+                local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+                for _, c in ipairs(pc) do
+                  x0, y0, x1, y1 = min(x0, c.cx), min(y0, c.cy), max(x1, c.cx), max(y1, c.cy)
+                end
+                local owned = {}
+                for _, c in ipairs(pc) do owned[(c.cx - x0) .. "," .. (c.cy - y0)] = true end
+                -- where the run goes on into another block: no end there
+                local south, north, east, west = {}, {}, {}, {}
+                for _, c in ipairs(pc) do
+                  local i, j = c.cx - x0, c.cy - y0
+                  if inRun[c.cx .. "," .. (c.cy + 1)] and not owned[i .. "," .. (j + 1)] then south[#south + 1] = { i, j } end
+                  if inRun[c.cx .. "," .. (c.cy - 1)] and not owned[i .. "," .. (j - 1)] then north[#north + 1] = { i, j } end
+                  if inRun[(c.cx + 1) .. "," .. c.cy] and not owned[(i + 1) .. "," .. j] then east[j] = true end
+                  if inRun[(c.cx - 1) .. "," .. c.cy] and not owned[(i - 1) .. "," .. j] then west[j] = true end
+                end
+                runs[#runs + 1] = { spec = spec, pair = pair, x0 = x0, y0 = y0, w = x1 - x0 + 1, h = y1 - y0 + 1,
+                                    owned = owned, cells = pc, south = south, north = north, east = east, west = west }
+              end
             end
           end
         end
@@ -458,7 +498,20 @@ return function(K, Fence)
     local quarters, pixels = groundOf(src, spec.ground)
     local cells = {}
     for _, c in ipairs(run.cells) do cells[#cells + 1] = { c.cx, c.cy } end
+    local south, north = run.south or {}, run.north or {}
     if spec.posts then
+      -- (and the run's cells north and south of the block: their posts draw into its rows, or
+      -- its posts into theirs)
+      local extra, northOf = {}, {}
+      for _, c in ipairs(north) do
+        cells[#cells + 1] = { run.x0 + c[1], run.y0 + c[2] - 1 }
+        extra[#extra + 1] = { c[1], c[2] - 1 }
+        northOf[c[1] .. "," .. c[2]] = true
+      end
+      for _, c in ipairs(south) do
+        cells[#cells + 1] = { run.x0 + c[1], run.y0 + c[2] + 1 }
+        extra[#extra + 1] = { c[1], c[2] + 1 }
+      end
       local fam = spec.posts
       local rs = refSrc(fam.ref)
       if not rs then return nil end
@@ -492,9 +545,17 @@ return function(K, Fence)
             end
           end
         end
+        -- (what another model keeps of these cells - a building's wall - is not the fence's)
+        if run.kept then
+          for v = 0, img.h - 1 do
+            for u = 0, img.w - 1 do
+              if run.kept(run.x0 * 16 + u, (run.y0 - 1) * 16 + v) then clear(img, u, v) end
+            end
+          end
+        end
         return img
       end
-      local built = Fence.build(run.w, run.h, run.owned, compose, ref, fam)
+      local built = Fence.build(run.w, run.h, run.owned, compose, ref, fam, { drawn = extra, north = northOf })
       return { art = built.tex, parts = built.parts }
     end
     local art = C.compose(src, run.x0, run.y0, run.w, run.h, cells, mid,
@@ -514,10 +575,65 @@ return function(K, Fence)
       end
     end
     local side = pickSide(art, spec.height, spec.side_longest)
+    -- a block's drawing with the run it goes on into (seam_art): `height` rows of the cell south
+    -- of each seam below it, so its top runs on to where the next block's own starts; the columns
+    -- that carry on past those rows (no front at the seam) and those that come in from the block
+    -- north (no back)
+    local openS, openN = {}, {}
+    if #south > 0 or #north > 0 then
+      local H = spec.height
+      local function carries(img, u, rows)
+        local finish, gap = 0, 0
+        for v = 0, img.h - 1 do
+          if opaque(img, u, v) then
+            finish, gap = v + 1, 0
+          else
+            gap = gap + 1
+            if gap > (spec.hull or 0) then break end
+          end
+        end
+        return opaque(img, u, 0) and finish >= rows
+      end
+      local function cellArt(X, Y)
+        return C.compose(src, X, Y, 1, 1, { { X, Y } }, mid, { quarters = quarters, pixels = pixels, upper = spec.upper })
+      end
+      if #south > 0 then
+        local out = newArt(run.w * 16, run.h * 16 + H)
+        for v = 0, art.h - 1 do
+          for u = 0, art.w - 1 do setP(out, u, v, getP(art, u, v)) end
+        end
+        for _, c in ipairs(south) do
+          local cell = cellArt(run.x0 + c[1], run.y0 + c[2] + 1)
+          for k = 0, 15 do
+            local u = c[1] * 16 + k
+            if opaque(art, u, run.h * 16 - 1) and opaque(cell, k, 0) then
+              for v = 0, H - 1 do setP(out, u, run.h * 16 + v, getP(cell, k, v)) end
+              if carries(cell, k, H + 1) then openS[u] = true end
+            end
+          end
+        end
+        art = out
+      end
+      for _, c in ipairs(north) do
+        local cell = cellArt(run.x0 + c[1], run.y0 + c[2] - 1)
+        for k = 0, 15 do
+          local u = c[1] * 16 + k
+          if opaque(art, u, 0) and opaque(cell, k, 15) then openN[u] = true end
+        end
+      end
+      -- (and the run's next rows: the colours the object never has)
+      if spec.ground_rgb then
+        for v = 0, art.h - 1 do
+          for u = 0, art.w - 1 do
+            if opaque(art, u, v) and spec.ground_rgb[key5(getP(art, u, v))] then clear(art, u, v) end
+          end
+        end
+      end
+    end
     local flank
     if spec.flank then art, flank = flankBand(art, src, spec.flank, spec.height) end
     local relief = K.Relief("relief", art, spec.height, side, { hull = spec.hull, bridge = spec.bridge,
-      seam = { run.h * 16, {}, {} }, flank_tile = flank })
+      seam = { run.h * 16, openS, openN }, flank_tile = flank, seam_x = { run.west or {}, run.east or {} } })
     return { art = art, parts = { relief } }
   end
 

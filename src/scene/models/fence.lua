@@ -10,8 +10,9 @@
 -- paints round them on the ground (the rails' shadow) lies flat on it (a Decal).
 --
 -- Ported from Emerald 3DS's scripts/voxel_fence.py (by Zallax and contributors, CC BY-NC-SA 4.0,
--- https://github.com/ZallaxDev/emerald-3ds; see LICENSE). A run is built whole here (not cut into
--- blocks), so no post stands across a block's seam.
+-- https://github.com/ZallaxDev/emerald-3ds; see LICENSE). A run is cut into blocks (the
+-- components' `block`): a block's posts are those whose tops it draws, the run's cells north and
+-- south of it drawn too (their posts reach into its rows, or its posts into theirs).
 --
 -- Art images are { w, h, px = { r, g, b, a, ... } } (0..1, row major).
 
@@ -130,7 +131,11 @@ return function(K)
   ---                    their upper layer, and lower-layer pixels of the colours in `keep`
   ---   ref             the family's reference metatile's upper layer (16 x 16 art)
   ---   family          the spec's `posts` table
-  function Fence.build(w, h, owned, compose, ref, family)
+  ---   opts            { drawn = { { i, j } } (the run's cells north and south of the block, drawn
+  ---                    by compose too), north = { [i .. "," .. j] = true } (its cells the run goes
+  ---                    on north of) } or nil
+  function Fence.build(w, h, owned, compose, ref, family, opts)
+    opts = opts or {}
     local fu, fv, fw, fh = family.find[1], family.find[2], family.find[3], family.find[4]
     local pattern = {}
     for b = 1, fh do
@@ -145,6 +150,7 @@ return function(K)
       local i, j = c:match("(-?%d+),(-?%d+)")
       drawn[tonumber(i) .. "," .. (tonumber(j) + 1)] = true
     end
+    for _, c in ipairs(opts.drawn or {}) do drawn[c[1] .. "," .. (c[2] + 1)] = true end
     local W, H0 = w * CELL, h * CELL
     local posts = {}
     for _, at in ipairs(find(ext, pattern)) do
@@ -188,7 +194,8 @@ return function(K)
       local ry0, ry1 = family.rail[1], family.rail[2]
       for _, p in ipairs(posts) do
         if p.own then
-          parts[#parts + 1] = K.PlanPrism("post", { { p.x0, p.z0 }, { p.x1, p.z0 }, { p.x1, p.z1 }, { p.x0, p.z1 } }, -1, p.h, side)
+          parts[#parts + 1] = K.PlanPrism("post", { { p.x0, p.z0 }, { p.x1, p.z0 }, { p.x1, p.z1 }, { p.x0, p.z1 } }, -1, p.h,
+            side, { art = tex })
         end
       end
       -- rails along a row: between the posts of one row, wherever the drawing has their top and
@@ -253,7 +260,8 @@ return function(K)
         end
       end
       for _, r in ipairs(rails) do
-        parts[#parts + 1] = K.PlanPrism("rail", { { r[1], r[3] }, { r[2], r[3] }, { r[2], r[4] }, { r[1], r[4] } }, ry0, ry1, side)
+        parts[#parts + 1] = K.PlanPrism("rail", { { r[1], r[3] }, { r[2], r[3] }, { r[2], r[4] }, { r[1], r[4] } }, ry0, ry1,
+          side, { art = tex })
       end
     else
       local bark = K.Tile(0, R, st.w, R + CELL)
@@ -279,7 +287,9 @@ return function(K)
     for cell in pairs(owned) do
       local i, j = cell:match("(-?%d+),(-?%d+)")
       i, j = tonumber(i), tonumber(j)
-      if not owned[i .. "," .. (j - 1)] then
+      -- (a cell with no fence north of it: posts standing there draw their fronts into its rows;
+      -- not where the run goes on north, in the block there)
+      if not owned[i .. "," .. (j - 1)] and not (opts.north and opts.north[i .. "," .. j]) then
         for u = i * CELL, i * CELL + CELL - 1 do
           for v = j * CELL, j * CELL + CELL - 1 do
             if covered[v * W + u] then break end

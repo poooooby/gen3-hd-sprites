@@ -190,8 +190,8 @@ return function(mod, hd, state)
   exports.sceneDecks = function(name)
     return hd.scene and hd.scene.decks and hd.scene.decks(name) or nil
   end
-  exports._layoutModels = function(name)
-    return hd.scene and hd.scene._layoutModels and hd.scene._layoutModels(name) or nil
+  exports._layoutModels = function(name, runs)
+    return hd.scene and hd.scene._layoutModels and hd.scene._layoutModels(name, runs) or nil
   end
   -- (dev: the rooms read afresh up to `upto`, and a piece's model)
   exports._rooms = function(upto)

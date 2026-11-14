@@ -721,6 +721,27 @@ end
 
 -- ── Plan solids ───────────────────────────────────────────────────────────
 
+-- the (u, v) of a texel of the tile when all of its rectangle is one opaque colour in art, else nil
+-- (PlanPrism._plain_texel)
+local function plainTexel(art, tile)
+  if not art then return nil end
+  local r = tile.rect
+  local u0, v0 = floor(r[1] + EPS), floor(r[2] + EPS)
+  local u1, v1 = ceil(r[3] - EPS), ceil(r[4] - EPS)
+  if u1 <= u0 or v1 <= v0 or u0 < 0 or v0 < 0 or u1 > art.w or v1 > art.h then return nil end
+  local px = art.px
+  local o = (v0 * art.w + u0) * 4
+  local fr, fg, fb, fa = px[o + 1], px[o + 2], px[o + 3], px[o + 4]
+  if not fa or fa < 0.5 then return nil end
+  for v = v0, v1 - 1 do
+    for u = u0, u1 - 1 do
+      local q = (v * art.w + u) * 4
+      if px[q + 4] < 0.5 or px[q + 1] ~= fr or px[q + 2] ~= fg or px[q + 3] ~= fb then return nil end
+    end
+  end
+  return { u0 + 0.5, v0 + 0.5 }
+end
+
 local function planPrismEmit(self, mesh)
   local pl = self.plan
   local n = #pl
@@ -729,6 +750,9 @@ local function planPrismEmit(self, mesh)
   local u0, u1, foot = self.side[1], self.side[2], self.side[3]
   -- a wall taller than the drawing above its foot: the strip's rows repeat up it
   local tile = K.Tile(u0, max(0, foot - (y1 - y0)), u1, foot)
+  -- (where every texel of the strip a side face reads is one colour: the face is one polygon
+  -- reading it - a fence rail's back, 2 px of strip, was a pair of triangles every 2 px)
+  local plain = plainTexel(self.art, tile)
   local cx, cz = 0, 0
   for _, p in ipairs(pl) do cx, cz = cx + p[1], cz + p[2] end
   cx, cz = cx / n, cz / n
@@ -760,13 +784,22 @@ local function planPrismEmit(self, mesh)
         local off = (-(y1 - y0)) % ph
         local face = { { 0, off }, { L, off }, { L, off + y1 - y0 }, { 0, off + y1 - y0 } }
         local shade = nx > 0.3 and K.SHADE_EAST or nx < -0.3 and K.SHADE_WEST or K.SHADE_BACK
-        for _, piece in ipairs(tilePieces(face, tile)) do
+        if plain then
           local pts = {}
-          for k, q in ipairs(piece) do
+          for k, q in ipairs(face) do
             local x, y, z = at(i, q[1], y1 - (q[2] - off))
-            pts[k] = { x, y, z, q[3], q[4] }
+            pts[k] = { x, y, z, plain[1], plain[2] }
           end
-          mesh:poly(pts, shade, self.name .. ".side~behind")
+          mesh:poly(pts, shade, self.name .. ".side~behind~clamp")
+        else
+          for _, piece in ipairs(tilePieces(face, tile)) do
+            local pts = {}
+            for k, q in ipairs(piece) do
+              local x, y, z = at(i, q[1], y1 - (q[2] - off))
+              pts[k] = { x, y, z, q[3], q[4] }
+            end
+            mesh:poly(pts, shade, self.name .. ".side~behind")
+          end
         end
       end
     end
@@ -811,11 +844,12 @@ end
 --- An upright prism on a plan polygon (x, z) from y0 to y1: a face the 45-degree view sees takes
 --- the drawing projected; a side or back the drawing never shows is dressed with `side` =
 --- { u0, u1, foot } (columns u0-u1 of a straight stretch of the facade standing on row `foot`).
---- o = { top = Tile (a roof the drawing does not show), shrink, open_top, inward }
+--- o = { top = Tile (a roof the drawing does not show), shrink, open_top, inward, art (the texture
+--- the strip is in: a side face reading one colour throughout is one polygon) }
 function K.PlanPrism(name, plan, y0, y1, side, o)
   o = o or {}
   return { name = name, plan = plan, y0 = y0, y1 = y1, side = side, top = o.top, shrink = o.shrink or 1,
-           open_top = o.open_top or false, inward = o.inward or false, emit = planPrismEmit }
+           open_top = o.open_top or false, inward = o.inward or false, art = o.art, emit = planPrismEmit }
 end
 
 local function cross3(a, b, c)

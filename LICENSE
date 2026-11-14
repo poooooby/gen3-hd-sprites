@@ -90,10 +90,11 @@ The battle scene's hedges, fences, curbs, railings and walls (src/scene/models/c
 src/scene/models/fence.lua, the Relief and Decal primitives in src/scene/models/kernel.lua) and
 Rustboro's office blocks (the kits in src/scene/models/specs.lua) adapt Emerald 3DS's
 `components` and `kit` specs and how gen_voxel_buildings.py builds them (component_specs,
-kit_specs, close_gaps, trim_outline, join_corners, fill_behind, pick_side, flank_band), its
-Relief primitive (voxel_building.py) and its fence builder (voxel_fence.py). Changes: run in the
-game on the window around the battle; a run built whole instead of cut into repeating blocks;
-colours compared at the GBA's 5 bits a channel.
+piece_spec, kit_specs, close_gaps, trim_outline, join_corners, fill_behind, pick_side,
+seam_art, flank_band, kept_by_others), its Relief and PlanPrism primitives (voxel_building.py)
+and its fence builder (voxel_fence.py). Changes: run in the game on the window around the
+battle (a run reaching past it ends at its edge); colours compared at the GBA's 5 bits a
+channel.
 
 The battle scene's signposts (src/scene/signs.lua) adapt Emerald 3DS's sign masks and sign
 solids (3ds_port/scripts/voxel_sign_mask.py, gen_voxel_sign_masks.py, src/voxel/voxel_sign.c,

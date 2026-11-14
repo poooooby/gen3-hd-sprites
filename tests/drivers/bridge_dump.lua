@@ -118,7 +118,8 @@ local function body(game, log)
   end
   for lname in (env("BRIDGE_FP_LAYOUTS") or "LAYOUT_RUSTBORO_CITY,LAYOUT_FORTREE_CITY,LAYOUT_SLATEPORT_CITY"):gmatch("[^,]+") do
     local out = {}
-    for _, m in ipairs(hd._layoutModels(lname) or {}) do
+    -- (BRIDGE_RUNS=1: the runs of hedges, fences and curbs too)
+    for _, m in ipairs(hd._layoutModels(lname, env("BRIDGE_RUNS") ~= nil) or {}) do
       local fps = {}
       for j = 0, m.h - 1 do
         for i = 0, m.w - 1 do fps[#fps + 1] = fpText(m.footprints[i .. "," .. j] or nil) end

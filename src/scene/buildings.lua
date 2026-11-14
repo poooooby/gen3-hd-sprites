@@ -449,6 +449,17 @@ function Buildings.drawn(md, X, Y)
   return X >= 0 and Y >= 0 and X < t.w and Y < t.h and t[Y * t.w + X] == true
 end
 
+--- The model's height over cell (i, j) as Emerald 3DS keeps it (buildings.bin's height byte: the
+--- clipped height rounded to the pixel, half to even as Python rounds, at most 255; a bridge's
+--- block its own), in tiles. What voxel_building.c's VoxelBuildings_CellAt answers as `top`.
+function Buildings.cellTop(md, i, j)
+  if md.bridge then return md.tops and md.tops[i .. "," .. j] or 0 end
+  local px = Buildings.cellHeights(md)[j * md.ref.w + i] or 0
+  local r = floor(px + 0.5)
+  if r - px == 0.5 and r % 2 == 1 then r = r - 1 end
+  return min(255, r) / 16
+end
+
 --- Cell (i, j) of a model as a mask: true where its texture has nothing (_exposed), which the
 --- map's own drawing shows there; nil if the texture fills the cell.
 function Buildings.exposed(md, i, j)

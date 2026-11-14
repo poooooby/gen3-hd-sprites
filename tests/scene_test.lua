@@ -531,6 +531,29 @@ do
   end
   check(hedges == 1, "...only in its own tileset's towns")
   check(curbs == 0, "a run of nothing but a curb's plain middle is the road, not a curb")
+  -- a curb of six cells across: cut into the map's blocks of 4 (cells 1-3, 4-6), each told that
+  -- the run goes on past its seam
+  local cg = grid({ ["1,4"] = { 0x03D }, ["2,4"] = { 0x03D }, ["3,4"] = { 0x03D }, ["4,4"] = { 0x03D },
+                    ["5,4"] = { 0x03D }, ["6,4"] = { 0x03D } })
+  local pieces = {}
+  for _, r in ipairs(C.find(cg)) do
+    if r.spec.name == "curb" then pieces[r.x0] = r end
+  end
+  local a, b = pieces[1], pieces[4]
+  check(a and b and a.w == 3 and b.w == 3 and a.east[0] and not a.west[0] and b.west[0] and not b.east[0],
+    "a long run is cut into blocks aligned on its map, each open where the run goes on")
+  -- a side face reading one colour throughout is one polygon (PlanPrism's `art`)
+  local plainArt = Fence.newArt(4, 16)
+  for i = 1, #plainArt.px, 4 do plainArt.px[i], plainArt.px[i + 1], plainArt.px[i + 2], plainArt.px[i + 3] = 0.5, 0.5, 0.5, 1 end
+  local function sides(o)
+    local n = 0
+    for _, t in ipairs(K.build({ K.PlanPrism("post", { { 0, 0 }, { 8, 0 }, { 8, 2 }, { 0, 2 } }, 0, 10, { 0, 2, 16 }, o) }).tris) do
+      if t[1][3] == 0 and t[2][3] == 0 and t[3][3] == 0 then n = n + 1 end
+    end
+    return n
+  end
+  check(sides({ art = plainArt }) == 2 and sides() > 2,
+    "a post's plain back is one quad, not a piece every repeat of its strip")
   -- built from a fake drawing: every cell's upper layer a block 12 rows tall from row 4
   local src = {
     under = function(m) if m then return 0.2, 0.6, 0.2, 1 end end,
@@ -986,6 +1009,9 @@ do
     for k, val in pairs(extra or {}) do m[k] = val end
     return m
   end
+  local md0 = model({ ground = { 5 } })
+  check(Buildings.cellTop(md0, 0, 0) == 1 and Buildings.cellTop(md0, 1, 0) == 0,
+    "a model's height over a cell, as Emerald 3DS keeps it: its box's 16 pixels, nothing beside it")
   local plan = Buildings.groundPlan(model({ ground = { 5 } }), ctx())
   check(plan.patched[1] and not plan.patched[0],
     "the map's paint is laid in a cell it paints otherwise only where nothing of the model stands")

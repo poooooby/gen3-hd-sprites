@@ -666,23 +666,32 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   those quarters, `lessQuarters`; `cell.reliefDrawn` then drops the model's ground quad), and off
   the relief that drawing lies flat (Emerald 3DS's dev branch, de38764). Masks and the patches
   read the model's texture (`texCover`: a `parts_art` texture of its own, as their `model.art`),
-  not the drawing. Every one of the 283 placements in the 100 outdoor layouts lays the pak's
-  ground metatile and its number of patches (`bridge_dump.lua`'s `P` and `G` lines, the pak's
-  patch field six vertices a patch); components are placed in the window only and not in that
-  check. Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
+  not the drawing. Every one of the 838 placements in the 100 outdoor layouts - 283 buildings,
+  555 blocks of hedges, fences, curbs and the rest - lays the pak's ground metatile and its number
+  of patches and equals its triangles (`bridge_dump.lua`'s `P` and `G` lines with `BRIDGE_RUNS=1`,
+  the components placed over the whole layout through `placeComponents`; the pak's patch field
+  six vertices a patch). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
   driver's `SCENE_GROUND_OLD=1`, for before-and-after shots), the old rule: the commonest spec
   ground round it, the map's paint in every cell it paints otherwise.
 - `models/components.lua` and `models/fence.lua`: the `components` specs (hedges, fences, curbs,
   railings, Sootopolis's walls, Lavaridge's spring, Slateport's crates), found at runtime as
   connected runs of their metatiles in one pair (`tilesIn`: `primary`/`secondary` names as the
-  engine's pairs spell them, lower case without underscores; `also`, `skip`, `fill`), each run
-  built whole: a `Relief` (the kernel's, column by column off the run's own drawing, after
-  close_gaps, trim_outline, join_corners, fill_behind, pick_side and flank_band) or, with
-  `posts`, `Fence.build` (posts found by their drawn caps, rails between them, logs, a ground
-  Decal). A fence's reference metatile is read from any pair of its primary that draws it.
-  `Buildings.kits` finds Rustboro's blocks by corner, top row, end and foot (`specs.kits`).
-  Component cells lay the map's own drawing where the model draws nothing, and under it the
-  ground metatile (or, for what is drawn on the upper layer, the cell's own lower layer).
+  engine's pairs spell them, lower case without underscores; `also`, `skip`, `fill`), whatever
+  stands on their cells (a building's cell stays the building's, the first placement keeping
+  it). A spec with `block` is cut into blocks of that many cells aligned on its map
+  (component_specs; `env.where` gives the map cells), each told where the run goes on (`south`,
+  `north` cells, `east`, `west` rows: piece_spec); identical blocks (the same cells round them,
+  the same seams) share one model. Each is built: a `Relief` (the kernel's, column by column off
+  the block's own drawing, after close_gaps, trim_outline, join_corners, fill_behind, pick_side,
+  seam_art - `height` rows of the next block's drawing south, the columns open at a seam - and
+  flank_band) or, with `posts`, `Fence.build` (posts found by their drawn caps, the run's cells
+  north and south of the block drawn too, rails between them, logs, a ground Decal; what the
+  map's own buildings keep of its cells cleared, `keptPixels`: kept_by_others, the Game Corner's
+  wall in Mauville's stakes). Its art reads the map's two layers through `layerSource`, its
+  fence reference post too (the post pattern matched in the same colours). A run reaching past
+  the battle's window ends at its edge. A post's or rail's side reading one colour throughout is
+  one polygon (`PlanPrism`'s `art`, `_plain_texel`). `Buildings.kits` finds Rustboro's blocks by
+  corner, top row, end and foot (`specs.kits`). Their ground is `Buildings.groundPlan`'s.
 - The atlases are split by draw order, not by metatile layer: `pixelSource` takes `image` as
   the lower layer and `overImage` as the upper, except for a metatile with nothing over whose
   `image` shows more than one colour where `midImage` is clear (a NORMAL one shows only the
@@ -696,7 +705,11 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `map_tree/maps/G_N/header.json`), places the maps by their bases and seam steps, and sets
   `cell.g` (heights), `cell.dy` (how high what stands on it is, tiles: a point h up also stands
   h south), `cell.lifted`; `emitRelief` draws the lifted cells from one texture of the drawings
-  they lay (two passes). Trees, models, signs and flat cells are lifted by `dy`. For now the
+  they lay (two passes). A model's cell is the model's (laid flat at its middle) unless the model
+  stands lower than a level there on a face a level tall (`B.modelTop`: `Buildings.cellTop`, its
+  clipped height rounded to the pixel as buildings.bin keeps it; Lavaridge's spring rim and
+  benches) or it is a `relief_bare` cell; the relief then draws it (`cell.reliefDrawn`, no ground
+  of the model's). Trees, models, signs and flat cells are lifted by `dy`. For now the
   heights come only from a dev driver: `WOOBLE_RELIEF_BIN` names a relief.bin (Emerald 3DS's
   own, read locally to check the renderer, never shipped), which `scene_battle.lua` hands over
   through `exports._sceneRelief`; the solver's port comes next. `Relief.decode` / `encode` are
