@@ -3385,6 +3385,8 @@ return function(deps)
           end
           c.rmap, c.lx, c.ly = m, lx, ly
           c.g = m.L and m.L.cells[ly * m.L.w + lx] or nil
+          -- (its depths where its drawing stands apart from its heights: a cave's rock stood taller)
+          c.s = c.g and m.L.depths and m.L.depths[ly * m.L.w + lx] or nil
           -- (its cut record, and for the seam skirts which stretches of its north edge a wall may
           -- stand on: not where its cut tile clears the north row, voxel_mesh_builder.c SeamEdge)
           c.cut = c.g and m.L.cuts[ly * m.L.w + lx] or nil
@@ -3430,6 +3432,8 @@ return function(deps)
           c.lifted = c.g ~= nil
           -- (for the stage search: its ground's height at its middle, tiles; rock or stairs)
           c.liftT = c.mapLift + Relief.centre(c.g) / 16
+          -- (and how far south its middle stands, where that is not its height: c.s)
+          c.depthT = c.mapLift + Relief.centre(c.s or c.g) / 16
           c.slope = Relief.isSlope(c.g)
           -- (a sign at the foot of a face stands on the ground under its board)
           local at = c.g and (c.sign and Relief.isSlope(c.g)) and c.g[3 * Relief.SIDE + 2] or Relief.centre(c.g)
@@ -3529,6 +3533,10 @@ return function(deps)
             function B.cell(x, y)
               local o = grid.at(x, y)
               return o and o.rmap == m and o.g or nil
+            end
+            function B.depth(x, y)
+              local o = grid.at(x, y)
+              return o and o.rmap == m and (o.s or o.g) or nil
             end
             function B.cut(x, y)
               local o = grid.at(x, y)

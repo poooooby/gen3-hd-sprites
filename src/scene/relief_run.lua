@@ -10,7 +10,8 @@
 -- pipeline's version), so every later session reads it in a frame.
 --
 -- Run.install(deps) hooks core.update. deps = { Relief, Post, WorldMaps, Terraces (the three
--- relief_terraces* modules, optional: without them only a cached relief is served), models(name)
+-- relief_terraces* modules, optional: without them only a cached relief is served), Caves
+-- (src/scene/relief_caves.lua, optional), models(name)
 -- -> { [Solve.K(x, y)] = true } the cells the building models own in a layout (or nil), fixes
 -- (the hand marks' JSON text), cache
 -- (mod.cache), hooks (mod.hooks), version (GameVersion-like: get() -> game id), readCache(rel)
@@ -42,13 +43,13 @@ return function(deps)
   Run.TICKS = {
     emerald = { groups = 1165, world = 8601, export = 82851, terraces = 24157, finish = 256 },
     -- (FireRed's, measured the same way; LeafGreen draws the same maps)
-    firered = { groups = 426, world = 5230, export = 45288, terraces = 11093, finish = 625 },
-    leafgreen = { groups = 426, world = 5230, export = 45288, terraces = 11093, finish = 625 },
+    firered = { groups = 426, world = 5230, export = 45288, terraces = 12843, finish = 3993 },
+    leafgreen = { groups = 426, world = 5230, export = 45288, terraces = 12843, finish = 3993 },
   }
   -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
   -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
   -- rules are Emerald 3DS's, its key as it always was
-  Run.RULES = { firered = 2, leafgreen = 2 }
+  Run.RULES = { firered = 8, leafgreen = 8 }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end
@@ -202,6 +203,12 @@ return function(deps)
           tick()
         end
       end
+    end
+    -- (another game's caves, counted off their own tilesets' pieces: src/scene/relief_caves.lua)
+    local G = S.Solve and S.Solve.game
+    if keyId ~= "emerald" and deps.Caves and G and G.caves then
+      deps.Caves.apply(model, S.input, G.caves, tick)
+      phase("caves")
     end
     -- the last passes, over the maps as the solver read them
     local input = S.input

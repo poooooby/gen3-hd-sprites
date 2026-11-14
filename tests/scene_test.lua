@@ -1479,5 +1479,95 @@ do
   check(type(R.ids) == "table" and type(R.swaps) == "table", "...with the ids and swaps tables the rooms job reads")
 end
 
+-- ── caves (src/scene/relief_caves.lua): levels counted off the pieces ──
+do
+  local Caves = dofile("src/scene/relief_caves.lua")
+  -- a 7 x 7 cave: floor (1); a ridge 3 wide (rim 2-4, its top 5 between sides 6 / 7, its face 8-10)
+  -- standing one level; void (0): a column at its west edge, and a cell against the ridge's east side
+  local P = { [2] = "NW", [3] = "N", [4] = "NE", [6] = "W", [7] = "E", [5] = nil, [8] = "SW", [9] = "F", [10] = "SE",
+              [0] = "void" }
+  local rows = {
+    { 0, 1, 1, 1, 1, 1, 1 },
+    { 0, 1, 2, 3, 4, 1, 1 },
+    { 0, 1, 6, 5, 7, 0, 1 },
+    { 0, 1, 6, 5, 7, 1, 1 },
+    { 0, 1, 8, 9, 10, 1, 1 },
+    { 0, 1, 1, 1, 1, 1, 1 },
+    { 0, 1, 1, 1, 1, 1, 1 },
+  }
+  local blocks = {}
+  for y = 0, 6 do for x = 0, 6 do blocks[y * 7 + x] = rows[y + 1][x + 1] end end
+  local L = { name = "LAYOUT_TEST_CAVE", w = 7, h = 7, blocks = blocks }
+  local C = { layouts = { "LAYOUT_TEST_" }, face = 9, ground = 1, pieces = P }
+  local lv, kinds, conf = Caves.read(L, C)
+  check(#conf == 0, "a cave's ridge: every join agrees (" .. #conf .. " disagree)")
+  check(lv[0 * 7 + 1] == 0 and lv[6 * 7 + 6] == 0, "...its floor is level 0")
+  check(lv[2 * 7 + 3] == 1 and lv[1 * 7 + 3] == 1, "...its top and its rim stand a level up (the face one row deep)")
+  check(lv[2 * 7 + 2] == 0 and lv[4 * 7 + 3] == 0, "...its sides and its face rise from the floor (their base 0)")
+  check(lv[2 * 7 + 5] == 1 and lv[0] == 0 and lv[6 * 7] == 0,
+    "...the void stands as high as the rock it meets (the side's top), and at the floor's level beside the floor")
+  local g = Caves.lattice(lv[4 * 7 + 3], kinds[4 * 7 + 3])
+  check(g[0] == 16 and g[20] == 0, "...a face's lattice falls a level from its north edge to its south")
+  g = Caves.lattice(lv[2 * 7 + 2], kinds[2 * 7 + 2])
+  check(g[0] == 0 and g[4] == 16, "...a west side's rises a level from its west edge to its east")
+  -- the rim's back: not joined to the floor behind it, whatever the floor says
+  check(lv[1 * 7 + 2] == 1 and lv[0 * 7 + 2] == 0, "...a rim's north edge is a step (the top's back)")
+  -- the model: the ridge's cells lifted, a wall record where a cell stands over its neighbour, the rim's back
+  local M = { layouts = {}, cuts = {}, variants = {}, nVariants = 0 }
+  local n = Caves.apply(M, { layouts = { [5] = L } }, C)
+  local t = M.layouts[5]
+  check(n == 1 and t and t.cells[2 * 7 + 3] ~= nil and t.cells[6 * 7 + 6] == nil,
+    "Caves.apply: the cave added, its rock lifted, its floor left flat")
+  local back = M.cuts[5 * 65536 + 3 * 256 + 1]
+  check(back and back[3] == 1 and back[4] == 9 and back[2] == 0, "...a rim's record: the floor behind run on, the face's drawing for its wall")
+  local side = M.cuts[5 * 65536 + 4 * 256 + 3]
+  check(side == nil, "...a side falling to the floor needs no wall")
+  check(Caves.covers(C, "LAYOUT_TEST_CAVE") and not Caves.covers(C, "LAYOUT_ROUTE_1"), "...only the layouts the table names")
+  -- a thin wall's head against a taller face: its north edge a step
+  local P2 = { [9] = "F", [11] = "NW", [12] = "NE", [13] = "TW", [14] = "TE" }
+  local rows2 = { { 9, 9, 9, 9 }, { 9, 9, 9, 9 }, { 1, 11, 12, 1 }, { 1, 13, 14, 1 }, { 1, 1, 1, 1 } }
+  local b2 = {}
+  for y = 0, 4 do for x = 0, 3 do b2[y * 4 + x] = rows2[y + 1][x + 1] end end
+  local lv2, _, conf2 = Caves.read({ name = "LAYOUT_TEST_2", w = 4, h = 5, blocks = b2 }, { pieces = P2 })
+  check(#conf2 == 0 and lv2[4 * 4] == 0 and lv2[2 * 4] == 0 and lv2[0] == 1,
+    "a wall two faces deep stands two levels over the floor at its foot")
+  -- a side's head (the rim's corner over a side): it falls as the side does, its north edge a step
+  local P3 = { [2] = "HW", [3] = "N", [4] = "HE", [6] = "W", [7] = "E", [8] = "SW", [9] = "F", [10] = "SE" }
+  local rows3 = { { 1, 1, 1, 1, 1 }, { 1, 2, 3, 4, 1 }, { 1, 6, 5, 7, 1 }, { 1, 8, 9, 10, 1 }, { 1, 1, 1, 1, 1 } }
+  local b3 = {}
+  for y = 0, 4 do for x = 0, 4 do b3[y * 5 + x] = rows3[y + 1][x + 1] end end
+  local L3 = { name = "LAYOUT_TEST_3", w = 5, h = 5, blocks = b3 }
+  local lv3, k3, conf3 = Caves.read(L3, { pieces = P3 })
+  local hw = Caves.lattice(lv3[1 * 5 + 1], k3[1 * 5 + 1])
+  local w0 = Caves.lattice(lv3[2 * 5 + 1], k3[2 * 5 + 1])
+  check(#conf3 == 0 and lv3[1 * 5 + 2] == 1 and hw[0] == 0 and hw[4] == 16 and hw[20] == w0[0] and hw[24] == w0[4],
+    "a side's head falls as its side does, meeting it and the rim beside it")
+  -- standing taller or sheer (C.stand, C.sheer): heights apart from the drawing's depths
+  local g2 = Caves.standing(0, "F", 2)
+  local d2 = Caves.depths(0, "F", 2)
+  check(g2[0] == 32 and g2[20] == 16 and d2[0] == 16 and d2[20] == 0,
+    "standing two tiles a level: a face's drawing a tile tall at the top of its wall, at its drawn depths")
+  local gs, ds = Caves.standing(0, "W", 1, true), Caves.depths(0, "W", 1, true)
+  check(gs[0] == 16 and gs[4] == 16 and ds[0] == 16, "...a sheer side: a flat top, standing back with its top")
+  check(Caves.standing(0, "W")[0] == 0 and Caves.standing(0, "W")[4] == 16, "...neither: the lattice, as drawn")
+  -- the depths through the relief file and back
+  local Relief = dofile("src/scene/relief.lua")
+  local g = {}
+  for k = 0, 24 do g[k] = 16 end
+  local d = {}
+  for k = 0, 24 do d[k] = k % 5 * 2 end
+  local M2 = { layouts = { [7] = { w = 4, h = 4, flags = 0x8000, base = 0, belt = 0, ease = 0, level = false,
+                                   cells = { [5] = g } } }, cuts = {}, variants = {}, nVariants = 0,
+               depths = { [7 * 65536 + 1 * 256 + 1] = d } }
+  local back = Relief.decode(Relief.encode(M2))
+  local dd = back and back.depths and back.depths[7 * 65536 + 1 * 256 + 1]
+  check(dd and dd[0] == 0 and dd[4] == 8 and dd[24] == 8, "a relief's depths: written and read back")
+  local V = Relief.view(back)
+  check(V.layouts[7].depths and V.layouts[7].depths[5] == dd, "...and the renderer's view keys them by cell")
+  local M3 = { layouts = { [7] = { w = 4, h = 4, flags = 0, base = 0, belt = 0, ease = 0, level = false,
+                                   cells = { [5] = g } } }, cuts = {}, variants = {}, nVariants = 0 }
+  check(not Relief.encode(M3):find("DPTH", 1, true), "...a relief with none writes no depths (Emerald's bytes unchanged)")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

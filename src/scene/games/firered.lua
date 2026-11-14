@@ -99,6 +99,64 @@ F.terraces = {
   groups = "drawn",
 }
 
+-- The caves (src/scene/relief_caves.lua). FireRed's cave tilesets (Mt Moon's, Rock Tunnel's,
+-- Cerulean Cave's, Diglett's Cave's, Seafoam's, Mt Ember's, Navel Rock's) draw their rock alike up
+-- to 2E0, each in its own colours, the same piece at the same id; past it each has its own. Read
+-- off Mt Moon's, Victory Road's and Rock Tunnel's drawing, and each shared piece checked in every
+-- cave tileset against Mt Moon's by its pixels (its top, face and floor colours):
+--   * a block of rock: its rim 289 (the top's north edge, the ground behind showing past it) and
+--     its corners 288 / 28A (each the head of the side under it, falling as it does), its top 291,
+--     its sides 290 (west) / 292 (east), a slope a tile across a level; its south face 299 and the face's
+--     ends 298 / 29A; the inside corners 29B (the rock north and west) and 29C (north and east);
+--     the outer walls' faces 2C3-2C5 / 2CE and sides 2C6 (west) / 2C7 (east); faces drawn with a
+--     cave mouth 28C, stairs 284, a ladder 28F, falls 2EE / 2EF;
+--   * a thin wall (a path on the rock, its sides sheer): its rim 2DF, 29D / 29E and 2F0 / 2F1 its
+--     corners, 2EA / 2EB its head against a taller face; its sides 2E6 / 2A5 (west), 2E7 (east);
+--   * a raised floor: its rim 2D0 / 2D1 / 2D2 (and 2B5 / 2B6, 2C8-2CA, 2D7 along a rim), its floor
+--     2D8-2DA, 2E0-2E2, faced as a block;
+--   * the dark past the rock 280 / 2F2;
+--   * the floor 281, the sand, the boulders, ladders and holes: flat.
+F.caves = {
+  layouts = { "LAYOUT_MT_MOON_", "LAYOUT_VICTORY_ROAD_", "LAYOUT_ROCK_TUNNEL_", "LAYOUT_CERULEAN_CAVE_",
+              "LAYOUT_DIGLETTS_CAVE_", "LAYOUT_SEAFOAM_ISLANDS_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
+              "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL", "LAYOUT_SIX_ISLAND_ALTERING_CAVE",
+              "LAYOUT_FOUR_ISLAND_ICEFALL_CAVE_", "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_",
+              "LAYOUT_NAVEL_ROCK_", "LAYOUT_SIX_ISLAND_DOTTED_HOLE_" },
+  face = 0x299,
+  ground = 0x281,
+  -- the pieces every cave tileset draws alike
+  pieces = {
+    [0x299] = "F", [0x28B] = "F", [0x28D] = "F", [0x293] = "F", [0x295] = "F", [0x2C3] = "F", [0x2C4] = "F",
+    [0x2C5] = "F", [0x2CE] = "F", [0x284] = "F", [0x28C] = "F", [0x28F] = "F",
+    [0x2EE] = "F", [0x2EF] = "F",
+    [0x290] = "W", [0x2C6] = "W", [0x292] = "E", [0x2C7] = "E",
+    [0x298] = "SW", [0x29A] = "SE", [0x29B] = "FE", [0x29C] = "FW",
+    [0x289] = "N", [0x2D1] = "N", [0x2C8] = "N", [0x2C9] = "N", [0x2CA] = "N", [0x2D7] = "N", [0x2B5] = "N",
+    [0x2B6] = "N", [0x2DF] = "N",
+    [0x288] = "HW", [0x28A] = "HE", [0x2D0] = "NW", [0x2EA] = "NW", [0x29D] = "NW", [0x2F0] = "NW",
+    [0x2D2] = "NE", [0x2EB] = "NE", [0x29E] = "NE", [0x2F1] = "NE",
+    [0x2E6] = "TW", [0x2A5] = "TW", [0x2E7] = "TE",
+    [0x280] = "void", [0x2F2] = "void",
+  },
+  -- and each tileset's own (its layouts by name): where the tilesets part, past 2E0
+  groups = {
+    -- Mt Moon's (Victory Road, the Lost Cave, the Dunsparce Tunnel) and Mt Ember's
+    { layouts = { "LAYOUT_MT_MOON_", "LAYOUT_VICTORY_ROAD_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
+                  "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL", "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_" },
+      pieces = { [0x2E3] = "F", [0x2E4] = "F", [0x2E5] = "F", [0x2ED] = "W", [0x2EC] = "E" } },
+    -- Mt Moon's alone
+    { layouts = { "LAYOUT_MT_MOON_", "LAYOUT_VICTORY_ROAD_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
+                  "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL" },
+      pieces = { [0x310] = "F", [0x311] = "F", [0x312] = "F", [0x314] = "F", [0x315] = "W", [0x313] = "W", [0x30D] = "W",
+                 [0x316] = "E", [0x30E] = "E", [0x31E] = "E", [0x319] = "TW", [0x31A] = "TE" } },
+    -- Rock Tunnel's (and the Altering Cave's): its sides 306 / 316 / 30E (west) and 307 / 317 / 30F
+    -- (east), a ridge's foot 308 / 309 / 30A, the north wall's face 309
+    { layouts = { "LAYOUT_ROCK_TUNNEL_", "LAYOUT_SIX_ISLAND_ALTERING_CAVE" },
+      pieces = { [0x306] = "W", [0x316] = "W", [0x30E] = "W", [0x307] = "E", [0x317] = "E", [0x30F] = "E",
+                 [0x308] = "SW", [0x309] = "F", [0x30A] = "SE" } },
+  },
+}
+
 -- Kanto's General tree (src/scene/trees.lua, Trees.useGame): built as Hoenn's is - 2x2, a crown row
 -- whose upper layer covers the player over a trunk row, stacked through the woods - and stood as
 -- the same model. Read off FireRed's drawing on Route 2, Pallet Town and Viridian Forest:

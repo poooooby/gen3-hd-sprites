@@ -66,7 +66,11 @@ end
 -- { w, h, flags (DRAWN, UNIT2), base, belt, ease, level, cells = { [y * w + x] = heights (0..24,
 -- pixels) } } }, variants = { [k] = { layout, metatile, rows } } (k from 0; nVariants of them),
 -- cuts = { [layout * 65536 + x * 256 + y] = { variant, foot, ground, wall, sides, flags } },
--- edges = { { layout, edge, flags, first, last, top, m0, m1, m2, m3 } } }.
+-- edges = { { layout, edge, flags, first, last, top, m0, m1, m2, m3 } }, depths (optional) = {
+-- [layout * 65536 + x * 256 + y] = depths (0..24, pixels) } }: a cell whose drawing stands where
+-- its heights would not put it (a cave's rock stood taller than drawn, src/scene/relief_caves.lua):
+-- each point at (x + a / 4, height / 16, y + c / 4 + depth / 16). Without them depth = height, and
+-- the GBA's 45-degree view of the cell is its drawing.
 Relief.DRAWN, Relief.UNIT2 = 0x8000, 0x4000
 local LEVEL_BIT, WIDE_BIT, HEIGHT_MASK = 0x8000, 0x4000, 0x03FF
 
@@ -128,6 +132,17 @@ function Relief.decode(s, tick)
         M.edges[#M.edges + 1] = { u16(s, at), s:byte(at + 3), s:byte(at + 4), s16(s, at + 4), s16(s, at + 6),
                                   s16(s, at + 8), u16(s, at + 10), u16(s, at + 12), u16(s, at + 14), u16(s, at + 16) }
         at = at + 18
+      end
+      if s:sub(at + 1, at + 4) == "DPTH" then
+        local n = u16(s, at + 4)
+        at = at + 8
+        M.depths = {}
+        for _ = 1, n do
+          local d = {}
+          for i = 0, 24 do d[i] = s16(s, at + 4 + 2 * i) end
+          M.depths[u16(s, at) * 65536 + s:byte(at + 3) * 256 + s:byte(at + 4)] = d
+          at = at + 54
+        end
       end
     end
   end
@@ -233,11 +248,24 @@ function Relief.encode(M, eases, tick)
     tab[#tab + 1] = p16(floor(key / 65536)) .. string.char(floor(key / 256) % 256, key % 256) .. p16(c[1])
       .. p16(c[2]) .. p16(c[3]) .. p16(c[4]) .. string.char(c[5], c[6])
   end
-  if M.edges and #M.edges > 0 then
-    tab[#tab + 1] = "EDGE" .. p16(#M.edges) .. p16(0)
-    for _, e in ipairs(M.edges) do
+  if (M.edges and #M.edges > 0) or (M.depths and next(M.depths)) then
+    tab[#tab + 1] = "EDGE" .. p16(M.edges and #M.edges or 0) .. p16(0)
+    for _, e in ipairs(M.edges or {}) do
       tab[#tab + 1] = p16(e[1]) .. string.char(e[2], e[3]) .. p16(e[4]) .. p16(e[5]) .. p16(e[6]) .. p16(e[7])
         .. p16(e[8]) .. p16(e[9]) .. p16(e[10])
+    end
+  end
+  -- (a cell drawn where its heights would not put it: its depths, Relief.DEPTHS)
+  if M.depths and next(M.depths) then
+    local dkeys = {}
+    for k in pairs(M.depths) do dkeys[#dkeys + 1] = k end
+    table.sort(dkeys)
+    tab[#tab + 1] = "DPTH" .. p16(#dkeys) .. p16(0)
+    for _, key in ipairs(dkeys) do
+      local d = M.depths[key]
+      local r = { p16(floor(key / 65536)), string.char(floor(key / 256) % 256, key % 256) }
+      for i = 0, 24 do r[#r + 1] = p16(pyround(d[i])) end
+      tab[#tab + 1] = table.concat(r)
     end
   end
   return blob .. table.concat(tab) .. p32(#blob) .. "CUTS"
@@ -279,6 +307,13 @@ function Relief.view(M)
     local best
     for _, w in ipairs(t.order) do if not best or t.n[w] > t.n[best] then best = w end end
     layouts[lay].faceTile = best
+  end
+  for key, d in pairs(M.depths or {}) do
+    local L = layouts[floor(key / 65536)]
+    if L then
+      L.depths = L.depths or {}
+      L.depths[(key % 256) * L.w + floor(key / 256) % 256] = d
+    end
   end
   return { layouts = layouts, variants = M.variants, edges = M.edges or {} }
 end
@@ -963,7 +998,7 @@ function Relief.cliffWalls(B, x, y, g, s, wall, art, artY, sides, backed)
       local o, os
       if B.sameMap(nx, ny) then
         o = B.cell(nx, ny)
-        os = o
+        os = (B.depth and B.depth(nx, ny)) or o
       end
       if not o then o, os = LEVEL, LEVEL end
       if d < 2 and band(sides, Relief.THIN_DECK) == 0 and o ~= LEVEL then
@@ -1085,7 +1120,7 @@ end
 function Relief.northFace(B, x, y, g, s, wallTile, groundTile)
   if not northFaceStands(B, x, y, g) then return end
   local o = B.cell(x, y - 1) or LEVEL
-  local os = o
+  local os = (B.cell(x, y - 1) and B.depth and B.depth(x, y - 1)) or o
   local lo, hi = 32767, -32768
   for k = 0, N do
     lo = min(lo, o[N * SIDE + k])
@@ -1209,6 +1244,8 @@ end
 --- drew the cell (false: the cell is a model's, laid flat by the caller at Relief.centre).
 function Relief.emitCell(B, x, y, g)
   B.lift, B.shift = 0, 0
+  -- (its depths: where its drawing stands, its heights' own but where a relief says otherwise)
+  local d = B.depth and B.depth(x, y) or g
   -- a building's cells are its model's: not under a model lower than a level on a face a level tall
   local top = B.modelTop and B.modelTop(x, y)
   if top then
@@ -1345,20 +1382,20 @@ function Relief.emitCell(B, x, y, g)
   local artY = sign and y + 1 or y
   local a = art or { B.tileUV(x, artY) }
   if a[1] then
-    Relief.reliefUV(B, x, y, g, g, a[1], a[2], a[3], a[4], cut ~= nil, floor(foot * 16 + 0.5), cutRows)
+    Relief.reliefUV(B, x, y, g, d, a[1], a[2], a[3], a[4], cut ~= nil, floor(foot * 16 + 0.5), cutRows)
   end
-  if wall then Relief.cliffWalls(B, x, y, g, g, wall, art, artY, sides, back ~= nil and backStands) end
+  if wall then Relief.cliffWalls(B, x, y, g, d, wall, art, artY, sides, back ~= nil and backStands) end
   if back then
     local faceT = (backWall and backWall < Relief.NO_FACE) and backWall or B.faceTile
-    Relief.northFace(B, x, y, g, g, backStands and (faceT or back) or nil, back)
+    Relief.northFace(B, x, y, g, d, backStands and (faceT or back) or nil, back)
   end
   -- what stands on it: on a slope, at the ground under a sign's board (three quarters down)
   if B.standing then
     if Relief.isSlope(g) then
       local under = 3 * SIDE + 2
-      B.standing(x, y, g[under] / 16, g[under] / 16)
+      B.standing(x, y, g[under] / 16, d[under] / 16)
     else
-      B.standing(x, y, g[2 * SIDE + 2] / 16, g[2 * SIDE + 2] / 16)
+      B.standing(x, y, g[2 * SIDE + 2] / 16, d[2 * SIDE + 2] / 16)
     end
   end
   return true

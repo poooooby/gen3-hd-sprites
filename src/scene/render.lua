@@ -510,9 +510,11 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
         for k = 0, LAST do
           local i = d == 1 and k or k * SIDE + (d == 2 and 0 or LAST)
           local h = (g and g[i] or 0) / 16
+          -- (where it stands: its depths, a cave's rock stood taller than drawn)
+          local hs = (cell.s and cell.s[i] or (g and g[i]) or 0) / 16
           along[k] = k / LAST
           fh[k] = lift + h
-          fz[k] = y + (d == 1 and 0 or along[k]) + lift + h
+          fz[k] = y + (d == 1 and 0 or along[k]) + lift + hs
           if fh[k] < lowest then lowest = fh[k] end
         end
         if lowest < belt - 0.05 then

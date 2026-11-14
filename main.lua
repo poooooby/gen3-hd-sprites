@@ -210,6 +210,7 @@ return function(mod)
       local okV, GameVersion = pcall(require, "src.core.GameVersion")
       local okR, run = pcall(runOf, {
         Relief = sceneDeps.Relief, Post = Post, WorldMaps = WorldMaps, Terraces = Terraces, Roles = sceneDeps.Roles,
+        Caves = loadSibling(mod, "src/scene/relief_caves.lua", true),
         fixes = mod:read("assets/scene/relief_fixes.json"),
         cache = mod.cache, hooks = mod.hooks, log = mod.log,
         version = okV and GameVersion or nil,

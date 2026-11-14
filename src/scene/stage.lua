@@ -28,7 +28,7 @@ local W = {
   void = -60, tall = -16, blocked = -6, waterWanted = 8, waterUnwanted = -12, waterMissing = -8,
   kind = 4, slope = -4, lift = -3,
   nVoid = -3, nTall = -1, nKind = 0.5, nWater = -0.8, nSlope = -0.4,
-  occlude = -24, voidLow = -1.2, voidHigh = -0.5,
+  occlude = -24, voidLow = -1.2, voidHigh = -0.5, sight = -6,
   distance = -0.5,
 }
 Stage.WEIGHTS = W
@@ -86,19 +86,24 @@ end
 -- how much of a side's sprite the cards standing in front of its feet cover (0..1)
 local function occlusion(Camera, grid, pose, foot, rect)
   local share = 0
+  local fc = grid.at(foot.cx, foot.cy)
+  local footT = fc and fc.liftT or 0
   for cy = foot.cy + 1, foot.cy + 7 do
     for cx = foot.cx - 5, foot.cx + 5 do
       local c = grid.at(cx, cy)
       local y0, y1, z
+      local dy = c and c.dy or 0
       if c and (c.model or c.sign or c.border) then
         -- a model: as tall as it stands over the cell, from the cell's southern edge
         if (c.top or 0) > 0 then y0, y1, z = 0, c.top, cy + 1 end
       elseif c and c.up then
         y0, y1, z = c.up, c.up + 1, c.base + 1
+      elseif c and c.s and (c.liftT or 0) > footT + 0.5 then
+        -- rock stood taller than drawn (a cave's: its drawing stands back at its depths, cell.depthT)
+        y0, y1, z, dy = footT, c.liftT, cy + 1 + (c.depthT or c.liftT), 0
       end
       if z then
         -- (lifted with its cell: a point h up stands h south)
-        local dy = c.dy or 0
         y0, y1, z = y0 + dy, y1 + dy, z + dy
         local u0, v0 = Camera.project(pose, cx, y1, z)
         local u1, v1 = Camera.project(pose, cx + 1, y0, z)
@@ -110,6 +115,27 @@ local function occlusion(Camera, grid, pose, foot, rect)
     end
   end
   return share
+end
+
+-- how many cells of rock stood taller than drawn (a cave's: cell.s, its drawing at its depths)
+-- rise over the camera's line of sight to the target, between the two: the rock would fill the view
+local function sightBlocked(Camera, grid, pose)
+  local ex, ey, ez = Camera.basis(pose)
+  if ez <= pose.tz + 0.5 then return 0 end
+  local n = 0
+  for cy = floor(pose.tz), floor(ez) do
+    for cx = floor(pose.tx) - 2, floor(pose.tx) + 2 do
+      local c = grid.at(cx, cy)
+      if c and c.s and c.liftT then
+        local z = cy + 0.5 + (c.depthT or c.liftT)
+        if z > pose.tz and z < ez then
+          local yr = pose.ty + (ey - pose.ty) * (z - pose.tz) / (ez - pose.tz)
+          if c.liftT > yr then n = n + 1 end
+        end
+      end
+    end
+  end
+  return n
 end
 
 -- the void on the screen around a target
@@ -167,6 +193,7 @@ function Stage.search(Camera, grid, opts)
           s = s + W.occlude * occlusion(Camera, grid, pose, ef, opts.sprites.enemy)
         end
         if opts.void then s = s + voidOnScreen(Camera, grid, pose, tx, tz) end
+        s = s + W.sight * sightBlocked(Camera, grid, pose)
         if not best or s > best.score then
           best = { tx = tx, tz = tz, ty = groundT, score = s,
                    feet = { player = { tx + px, tz + pz }, enemy = { tx + ex, tz + ez } } }
