@@ -179,6 +179,24 @@ function Input.build(io, palettesOf)
         if had == nil or k:sub(#prefixOf(k) + 1) < had:sub(#prefixOf(had) + 1) then files[id] = k end
       end
     end
+    -- (a map the engine names otherwise - Pallet's rooms keep Gen 1's names: FR_OAKS_LAB for
+    -- PalletTown_ProfessorOaksLab - by the longest name no map took that its own name ends with)
+    local taken = {}
+    for _, name in pairs(files) do taken[name] = true end
+    for _, slot in ipairs(slots) do
+      local h = headers[slot]
+      local id = h and tonumber(h.layoutId)
+      if id and files[id] == nil then
+        local full = Fam.normal(F, tostring(h.pretName or h.id or ""))
+        local best, bestK
+        for k, name in pairs(byNormal) do
+          if not taken[name] and #k >= 6 and #k < #full and full:sub(-#k) == k and (not bestK or #k > #bestK) then
+            best, bestK = name, k
+          end
+        end
+        if best then files[id], taken[best] = best, true end
+      end
+    end
   end
   local OUTDOOR = { [1] = true, [2] = true, [3] = true, [5] = true, [6] = true }
   for _, slot in ipairs(slots) do

@@ -760,6 +760,29 @@ local function trainerTowerFloor(first)
   return out
 end
 
+-- ── Professor Oak's lab (Pallet Town) ─────────────────────────────────────
+-- 13 x 14 (208 x 224 px; the engine names it FR_OAKS_LAB): its back wall a 7-row rim over 25 rows
+-- of front to its foot at 32 (D5D5AC under a white rim, its skirting dark), the floor (metatile
+-- 0x289) white with grey diagonals, a grey shade under the walls and the furniture. Against the
+-- wall: the two machines (fronts 18 and 15 rows to 40), the yellow desks (5 rows of front to 38,
+-- the PC and its tower standing at their back), the bookshelves (20 rows of front to 40). In the
+-- room: the Poke Ball machine (its dome over a body to 96), the green table (7 rows of front and
+-- legs to 92), two rows of bookshelves (20 rows of front to 152), the potted plants by the door
+local LAB_FLOOR = { "eeeef6", "cdcdd5", "a4a4ac" }
+local OAKS_LAB = {
+  piece("machine_1", { { 0, 12, 16, 40 } }, 18, { back = 32, leave = LAB_FLOOR }),
+  piece("machine_2", { { 16, 18, 32, 40 } }, 15, { back = 32, leave = LAB_FLOOR }),
+  piece("desks", { { 32, 14, 96, 38 } }, 5, { back = 32, leave = cat({ "d5d5ac" }, LAB_FLOOR) }),
+  piece("shelves_back", { { 144, 10, 208, 40 } }, 20, { back = 32, leave = cat({ "d5d5ac" }, LAB_FLOOR) }),
+  piece("ball_machine", { { 16, 56, 48, 96 } }, 22, { leave = LAB_FLOOR }),
+  piece("table", { { 129, 67, 175, 68 }, { 128, 68, 176, 92 } }, 7, { back = 74, leave = LAB_FLOOR }),
+  piece("shelves_w", { { 0, 121, 80, 152 } }, 20, { back = 141, leave = LAB_FLOOR }),
+  piece("shelves_e", { { 128, 121, 208, 152 } }, 20, { back = 141, leave = LAB_FLOOR }),
+  piece("plant_w", { { 0, 176, 16, 208 } }, 28, { card = true, leave = LAB_FLOOR }),
+  piece("plant_e", { { 192, 176, 208, 208 } }, 28, { card = true, leave = LAB_FLOOR }),
+  piece("wall", { { 0, 0, 208, 32 } }, 25, { foot = 32, alone = true }),
+}
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -767,6 +790,7 @@ local ROOMS = {
                                    pieces = CENTER_2F, open = CENTER_OPEN } },
   { name = "fr_mart", interior = { layout = "LAYOUT_CERULEAN_CITY_MART", ground = { 0x281 }, pieces = MART,
                                    open = MART_OPEN } },
+  { name = "fr_oaks_lab", interior = { layout = "LAYOUT_OAKS_LAB", ground = { 0x289 }, pieces = OAKS_LAB } },
   { name = "fr_pewter_gym", interior = { layout = "LAYOUT_PEWTER_CITY_GYM", ground = { 0x294 }, pieces = pewterGym() } },
   { name = "fr_vermilion_gym", interior = { layout = "LAYOUT_VERMILION_CITY_GYM", ground = { 0x281 }, pieces = vermilionGym() } },
   { name = "fr_celadon_gym", interior = { layout = "LAYOUT_CELADON_CITY_GYM", ground = { 0x281 }, pieces = celadonGym() } },
