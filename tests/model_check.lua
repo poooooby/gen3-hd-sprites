@@ -90,6 +90,53 @@ function Check.ortho(mesh, art, exact, margin)
   return wrong, missing, extra, { w = RW, h = RH, color = color, marks = marks, margin = M }
 end
 
+--- A room's pieces drawn together in the GBA's projection, the nearer over the farther:
+--- meshes = { { tris, at(u, v) -> colour or nil (the piece's texture), ox, oy (where its art's
+--- top left stands in the room, pixels) } }, over a W x H room. -> colour, owner (by y * W + x;
+--- owner the mesh's index), each pixel's tag.
+function Check.render(meshes, W, H)
+  local depth, color, owner, tags = {}, {}, {}, {}
+  for k, m in ipairs(meshes) do
+    for _, t in ipairs(m.tris) do
+      if judged(t.tag) then
+        local v0, v1, v2 = t[1], t[2], t[3]
+        local x0, y0, d0 = v0[1] + m.ox, v0[3] - v0[2] + m.oy, v0[2] + v0[3] + m.oy
+        local x1, y1, d1 = v1[1] + m.ox, v1[3] - v1[2] + m.oy, v1[2] + v1[3] + m.oy
+        local x2, y2, d2 = v2[1] + m.ox, v2[3] - v2[2] + m.oy, v2[2] + v2[3] + m.oy
+        local area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+        if abs(area) >= 1e-9 then
+          local inv = 1.0 / area
+          local shade = t.shade or 1.0
+          for py = max(0, floor(min(y0, y1, y2))), min(H - 1, ceil(max(y0, y1, y2))) do
+            local cy = py + 0.5
+            for px = max(0, floor(min(x0, x1, x2))), min(W - 1, ceil(max(x0, x1, x2))) do
+              local cx = px + 0.5
+              local a = ((x1 - cx) * (y2 - cy) - (x2 - cx) * (y1 - cy)) * inv
+              local b = ((x2 - cx) * (y0 - cy) - (x0 - cx) * (y2 - cy)) * inv
+              local c = 1.0 - a - b
+              if a >= -1e-7 and b >= -1e-7 and c >= -1e-7 then
+                local d = a * d0 + b * d1 + c * d2
+                local idx = py * W + px
+                if d > (depth[idx] or -1e30) then
+                  local tu = floor(a * v0[4] + b * v1[4] + c * v2[4])
+                  local tv = floor(a * v0[5] + b * v1[5] + c * v2[5])
+                  local col = m.at(tu, tv)
+                  if col then
+                    depth[idx], owner[idx], tags[idx] = d, k, t.tag
+                    local r, g, bl = floor(col / 65536), floor(col / 256) % 256, col % 256
+                    color[idx] = floor(r * shade) * 65536 + floor(g * shade) * 256 + floor(bl * shade)
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  return color, owner, tags
+end
+
 function Check.density(mesh, tolerance)
   tolerance = tolerance or 1e-3
   local bad = {}

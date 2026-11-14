@@ -226,6 +226,9 @@ return function(mod, hd, state)
   exports._roomsJob = function(budget, fresh, watch)
     return hd.scene and hd.scene._roomsJob and hd.scene._roomsJob(budget, fresh, watch)
   end
+  exports._roomLayout = function(name)
+    return hd.scene and hd.scene._roomLayout and hd.scene._roomLayout(name)
+  end
   exports._roomBuild = function(piece, bare)
     return hd.scene and hd.scene._roomBuild and hd.scene._roomBuild(piece, bare)
   end

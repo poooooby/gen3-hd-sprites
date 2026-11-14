@@ -1423,5 +1423,23 @@ do
   Trees.useFamily(nil)
 end
 
+-- ------------------------------------------------------------------ FireRed's rooms
+do
+  local R = dofile("src/scene/models/interior_specs_firered.lua")
+  local ok, names = true, {}
+  for _, r in ipairs(R) do
+    local seen = {}
+    if not (r.name and r.interior and r.interior.layout and r.interior.layout:match("^LAYOUT_") and #r.interior.pieces > 0) then ok = false end
+    for _, pc in ipairs(r.interior.pieces) do
+      if seen[pc.name] then ok = false end
+      seen[pc.name] = true
+      if type(pc.shape) ~= "table" then ok = false end
+    end
+    names[#names + 1] = r.name
+  end
+  check(ok and #R >= 4, "FireRed's room specs: each names its layout, its pieces named once (" .. table.concat(names, ", ") .. ")")
+  check(type(R.ids) == "table" and type(R.swaps) == "table", "...with the ids and swaps tables the rooms job reads")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

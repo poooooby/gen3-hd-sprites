@@ -1524,6 +1524,8 @@ return function(deps)
   -- (dev: the rooms read afresh, in order, up to and with `upto`: { { name, layout, pieces,
   -- error } }, and the registry of their pieces)
   function Scene._rooms(upto)
+    family()
+    RoomSpecs = deps.RoomSpecsByGame and deps.RoomSpecsByGame[famGame] or hoennTilesets() and deps.RoomSpecs or nil
     if not (Interiors and RoomSpecs and World) then return nil end
     local io, reg, out = roomIo(), Interiors.registry(), {}
     for _, spec in ipairs(RoomSpecs) do
@@ -1535,6 +1537,14 @@ return function(deps)
     return out, reg
   end
   function Scene._roomBuild(piece, bare) return Interiors.build(piece, bare) end
+  -- (dev: a room's layout as the rooms read it - w, h, metatile(cx, cy), cellImage(m): its
+  -- drawing - for the room proof, tests/drivers/room_check.lua)
+  function Scene._roomLayout(name)
+    family()
+    RoomSpecs = deps.RoomSpecsByGame and deps.RoomSpecsByGame[famGame] or hoennTilesets() and deps.RoomSpecs or nil
+    if not (Interiors and RoomSpecs and World) then return nil end
+    return roomIo().layout(name)
+  end
 
   -- the rooms read once a game, in their order, a slice a frame (warm), and kept in the model cache
   -- (Scene Cache): { co, ready (read, and the known furniture stood in every room nobody

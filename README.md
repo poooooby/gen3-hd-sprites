@@ -115,6 +115,10 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Tate and Liza's islands in the dark and Juan's tiers of ice. The walls close every room in, and
   the same furniture stands wherever another room draws it. In the rooms with no model of their
   own (the museums, the Space Center, secret bases), counters stand up as blocks and PCs as sets.
+  In FireRed and LeafGreen, every Pokémon Center (the counter with its flowers, the healing
+  machine, the PC and bookcase, stools and table, and upstairs the Cable Club's counters and link
+  terminals), every Poké Mart (its counters, fridges and tall shelves) and Brock's gym in Pewter
+  (its boulders and statues) are furnished too.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
@@ -197,7 +201,7 @@ Open **OPTIONS → MODS → WoobleView**.
   Rocks and buildings in Ruby and Sapphire, and the few buildings not yet rebuilt in FireRed and
   LeafGreen (the harbour cranes, Trainer Tower), lie flat on the ground as the game draws them.
   Indoors, Emerald's few rooms not rebuilt show their furniture flat, but for the pieces they
-  share with the rooms that are; FireRed's and LeafGreen's rooms are drawn flat for now. A battle
+  share with the rooms that are; FireRed's and LeafGreen's other rooms are drawn flat for now. A battle
   with no overworld around it, or no open ground near you, keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With
   the game's own sprites the battle keeps its original framing, and Fill Screen still fits it
