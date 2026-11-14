@@ -460,6 +460,68 @@ local function championsRoom()
   }
 end
 
+-- ── Silph Co. ───────────────────────────────────────────────────────────────
+-- Its offices are walled by bands two rows deep (beige over a purple trim, a white edge along the
+-- top: the wall's top), read off each floor's drawing: the blocked cells drawn at least half in the
+-- band's colours, in runs two rows deep (a plant's crown over a band leaves the wall whole behind
+-- it). Each band { first column, last column, top row } stands 30 rows to its foot under its edge.
+-- The partitions seen from above and the dark between the rooms stay as drawn. Its furniture is
+-- modelled on 2F, and stands as it is on every floor (and in the Rocket Hideout's) that draws it.
+local SILPH_BANDS = {
+  ["1F"] = { { 30, 33, 0 }, { 0, 29, 2 }, { 34, 35, 2 } },
+  ["2F"] = { { 26, 32, 0 }, { 0, 10, 2 }, { 13, 25, 2 }, { 33, 35, 2 }, { 0, 4, 8 }, { 7, 28, 8 }, { 31, 35, 8 }, { 28, 35, 13 }, { 0, 4, 15 }, { 7, 11, 15 }, { 26, 27, 15 } },
+  ["3F"] = { { 26, 32, 0 }, { 0, 25, 2 }, { 33, 35, 2 }, { 0, 8, 8 }, { 11, 19, 8 }, { 28, 35, 8 }, { 9, 10, 10 }, { 20, 21, 10 }, { 26, 27, 10 }, { 32, 33, 12 }, { 0, 21, 16 }, { 26, 35, 16 } },
+  ["4F"] = { { 26, 32, 0 }, { 0, 8, 2 }, { 11, 18, 2 }, { 21, 25, 2 }, { 33, 35, 2 }, { 26, 28, 9 }, { 31, 35, 9 }, { 11, 13, 11 }, { 16, 18, 11 }, { 29, 31, 13 }, { 0, 2, 16 }, { 5, 13, 16 }, { 16, 20, 16 }, { 29, 31, 17 } },
+  ["5F"] = { { 26, 32, 0 }, { 0, 6, 2 }, { 9, 25, 2 }, { 33, 35, 2 }, { 7, 8, 7 }, { 20, 27, 7 }, { 30, 32, 7 }, { 13, 17, 9 }, { 18, 19, 11 }, { 0, 6, 13 }, { 7, 8, 16 }, { 11, 34, 18 } },
+  ["6F"] = { { 12, 15, 0 }, { 25, 28, 0 }, { 0, 4, 2 }, { 7, 11, 2 }, { 16, 24, 2 }, { 29, 30, 2 }, { 5, 6, 5 }, { 13, 21, 6 }, { 24, 26, 6 }, { 0, 4, 10 }, { 5, 6, 13 }, { 11, 15, 15 }, { 18, 28, 15 } },
+  ["7F"] = { { 17, 20, 0 }, { 26, 29, 0 }, { 0, 5, 2 }, { 21, 25, 2 }, { 15, 16, 4 }, { 22, 23, 7 }, { 26, 30, 7 }, { 8, 10, 8 }, { 13, 14, 8 }, { 0, 5, 10 }, { 22, 24, 13 }, { 27, 30, 13 }, { 6, 16, 16 } },
+  ["8F"] = { { 14, 17, 0 }, { 27, 30, 0 }, { 0, 4, 2 }, { 7, 11, 2 }, { 18, 26, 2 }, { 19, 30, 6 }, { 5, 6, 8 }, { 9, 11, 8 }, { 0, 6, 14 }, { 9, 13, 14 }, { 17, 23, 14 }, { 26, 30, 14 } },
+  ["9F"] = { { 14, 20, 0 }, { 0, 11, 2 }, { 21, 30, 2 }, { 4, 11, 6 }, { 18, 20, 6 }, { 23, 26, 6 }, { 2, 3, 8 }, { 18, 20, 12 }, { 23, 27, 12 }, { 0, 3, 14 }, { 7, 8, 14 }, { 12, 13, 14 }, { 28, 29, 15 } },
+  ["10F"] = { { 4, 10, 0 }, { 0, 3, 2 }, { 11, 16, 2 }, { 9, 11, 6 }, { 14, 16, 6 }, { 0, 2, 11 }, { 5, 6, 11 }, { 9, 11, 11 }, { 14, 16, 11 } },
+  ["11F"] = { { 5, 9, 0 }, { 0, 2, 2 }, { 10, 16, 2 }, { 5, 12, 6 }, { 3, 4, 16 }, { 7, 12, 16 } },
+}
+local SILPH_FLOOR = { "83bdc5", "acdee6", "6a9ca4" }
+local SILPH_WALL = { "d5d5b4", "ffffff", "b473a4", "7b7b7b", "b4b4a4", "eeb4de", "9494a4", "52526a" }
+local function silphFloor(f, more)
+  local out = {}
+  for i, b in ipairs(SILPH_BANDS[f]) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1] * 16, b[3] * 16, b[2] * 16 + 16, b[3] * 16 + 32 } }, 30,
+      { fill = 2, foot = b[3] * 16 + 32 })
+  end
+  for _, pc in ipairs(more or {}) do table.insert(out, 1, pc) end
+  return out
+end
+-- 2F's furniture: the potted plants against the walls (cards, two cells), the desks (a grey top
+-- 27 rows deep over 8 rows of front and legs), their stools, the computer tables
+local SILPH_2F = {
+  repeated("plant", { { 0, 3 }, { 1, 3 }, { 2, 3 }, { 14, 3 }, { 15, 3 }, { 17, 9 }, { 18, 9 }, { 19, 9 }, { 20, 9 },
+    { 21, 9 }, { 22, 9 } }, 36, { card = true, leave = cat(SILPH_FLOOR, SILPH_WALL), shape = { { 0, 44, 16, 80 } } }),
+  repeated("desk", { { 16, 14 }, { 21, 14 }, { 16, 18 }, { 21, 18 } }, 8,
+    { back = 235, leave = SILPH_FLOOR, shape = { { 256, 226, 304, 264 } } }),
+  repeated("stool", { { 19, 14 }, { 24, 14 }, { 19, 18 }, { 24, 18 } }, 8,
+    { leave = SILPH_FLOOR, shape = { { 304, 238, 320, 258 } } }),
+  repeated("table", { { 2, 18 }, { 29, 17 } }, 10, { leave = SILPH_FLOOR, shape = { { 32, 296, 80, 336 } } }),
+}
+
+-- the Rocket Hideout (under Celadon's Game Corner, Silph's tileset): its walls are bands as Silph's
+-- in its own colours (grey-blue over a teal skirting, a 4-row white edge: 28 rows of wall), read
+-- the same way; its furniture is Silph's and the Game Corner's where drawn alike. The spinning
+-- floors, the stairs and the lift stay as drawn
+local ROCKET_BANDS = {
+  ["B1F"] = { { 0, 8, 6 }, { 21, 27, 6 }, { 0, 2, 11 }, { 5, 8, 11 }, { 18, 21, 11 }, { 25, 27, 11 }, { 3, 5, 15 }, { 0, 18, 20 }, { 4, 9, 24 }, { 23, 27, 24 }, { 4, 9, 29 } },
+  ["B2F"] = { { 13, 16, 3 }, { 18, 26, 10 }, { 27, 31, 15 } },
+  ["B3F"] = { { 0, 21, 0 }, { 0, 10, 5 }, { 14, 18, 5 }, { 17, 21, 10 }, { 2, 3, 12 }, { 11, 12, 14 }, { 0, 3, 23 }, { 6, 8, 23 } },
+  ["B4F"] = { { 15, 23, 0 }, { 8, 14, 3 }, { 19, 23, 12 }, { 3, 5, 13 }, { 0, 14, 18 }, { 5, 10, 22 }, { 19, 23, 22 } },
+}
+local function rocketFloor(f)
+  local out = {}
+  for i, b in ipairs(ROCKET_BANDS[f]) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1] * 16, b[3] * 16, b[2] * 16 + 16, b[3] * 16 + 32 } }, 28,
+      { fill = 4, foot = b[3] * 16 + 32 })
+  end
+  return out
+end
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -485,6 +547,21 @@ local ROOMS = {
                                           pieces = lancesRoom() } },
   { name = "fr_champions_room", interior = { layout = "LAYOUT_POKEMON_LEAGUE_CHAMPIONS_ROOM", ground = { 0x38F },
                                              pieces = championsRoom() } },
+  { name = "fr_silph_2f", interior = { layout = "LAYOUT_SILPH_CO_2F", ground = { 0x334 }, pieces = silphFloor("2F", SILPH_2F) } },
+  { name = "fr_silph_1f", interior = { layout = "LAYOUT_SILPH_CO_1F", ground = { 0x334 }, pieces = silphFloor("1F") } },
+  { name = "fr_silph_3f", interior = { layout = "LAYOUT_SILPH_CO_3F", ground = { 0x334 }, pieces = silphFloor("3F") } },
+  { name = "fr_silph_4f", interior = { layout = "LAYOUT_SILPH_CO_4F", ground = { 0x334 }, pieces = silphFloor("4F") } },
+  { name = "fr_silph_5f", interior = { layout = "LAYOUT_SILPH_CO_5F", ground = { 0x334 }, pieces = silphFloor("5F") } },
+  { name = "fr_silph_6f", interior = { layout = "LAYOUT_SILPH_CO_6F", ground = { 0x334 }, pieces = silphFloor("6F") } },
+  { name = "fr_silph_7f", interior = { layout = "LAYOUT_SILPH_CO_7F", ground = { 0x334 }, pieces = silphFloor("7F") } },
+  { name = "fr_silph_8f", interior = { layout = "LAYOUT_SILPH_CO_8F", ground = { 0x334 }, pieces = silphFloor("8F") } },
+  { name = "fr_silph_9f", interior = { layout = "LAYOUT_SILPH_CO_9F", ground = { 0x334 }, pieces = silphFloor("9F") } },
+  { name = "fr_silph_10f", interior = { layout = "LAYOUT_SILPH_CO_10F", ground = { 0x334 }, pieces = silphFloor("10F") } },
+  { name = "fr_silph_11f", interior = { layout = "LAYOUT_SILPH_CO_11F", ground = { 0x334 }, pieces = silphFloor("11F") } },
+  { name = "fr_rocket_b1f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B1F", ground = { 0x281 }, pieces = rocketFloor("B1F") } },
+  { name = "fr_rocket_b2f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B2F", ground = { 0x281 }, pieces = rocketFloor("B2F") } },
+  { name = "fr_rocket_b3f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B3F", ground = { 0x281 }, pieces = rocketFloor("B3F") } },
+  { name = "fr_rocket_b4f", interior = { layout = "LAYOUT_ROCKET_HIDEOUT_B4F", ground = { 0x281 }, pieces = rocketFloor("B4F") } },
 }
 
 ROOMS.ids = {}
