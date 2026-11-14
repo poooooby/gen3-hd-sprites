@@ -827,6 +827,26 @@ local function gameCorner()
   }
 end
 
+-- the S.S. Anne's deck (24 x 19, 384 x 304 px; sailors battle there): the cabin on its east side,
+-- a block (its purple roof from row 64, 32 rows of white front and portholes to 208; its west face,
+-- drawn light, and the doors' notch in it lie on its top), the two stacks of barrels by it (16 rows
+-- of barrel side under their tops), the two deck chairs and three round tables (white tops over 6
+-- rows of legs). The railings and the hull stay as drawn
+local DECK = { "cdb47b", "a48b52", "836229" }
+local ANNE_DECK = {
+  piece("cabin", { { 256, 64, 384, 208 } }, 32, { back = 96, leave = DECK }),
+  -- (each row of barrels its own block: a block's top is its bounds')
+  piece("barrels_n_back", { { 224, 68, 256, 95 } }, 12, { back = 80, leave = DECK }),
+  piece("barrels_n_front", { { 240, 89, 256, 111 } }, 12, { back = 101, leave = DECK }),
+  piece("barrels_s_back", { { 240, 185, 256, 201 } }, 12, { back = 197, leave = DECK }),
+  piece("barrels_s_front", { { 224, 201, 256, 217 } }, 12, { back = 213, leave = DECK }),
+  piece("chair_n", { { 144, 96, 160, 128 } }, 8, { back = 104, leave = DECK }),
+  piece("chair_s", { { 144, 177, 160, 208 } }, 8, { back = 185, leave = DECK }),
+  piece("table_1", { { 128, 112, 145, 128 } }, 6, { back = 118, leave = DECK }),
+  piece("table_2", { { 192, 112, 209, 128 } }, 6, { back = 118, leave = DECK }),
+  piece("table_3", { { 160, 192, 177, 208 } }, 6, { back = 198, leave = DECK }),
+}
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -835,6 +855,7 @@ local ROOMS = {
   { name = "fr_mart", interior = { layout = "LAYOUT_CERULEAN_CITY_MART", ground = { 0x281 }, pieces = MART,
                                    open = MART_OPEN } },
   { name = "fr_oaks_lab", interior = { layout = "LAYOUT_OAKS_LAB", ground = { 0x289 }, pieces = OAKS_LAB } },
+  { name = "fr_anne_deck", interior = { layout = "LAYOUT_SSANNE_DECK", ground = { 0x350 }, pieces = ANNE_DECK } },
   { name = "fr_game_corner", interior = { layout = "LAYOUT_CELADON_CITY_GAME_CORNER", ground = { 0x291 },
                                           pieces = gameCorner() } },
   { name = "fr_pewter_gym", interior = { layout = "LAYOUT_PEWTER_CITY_GYM", ground = { 0x294 }, pieces = pewterGym() } },

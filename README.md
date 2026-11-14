@@ -128,7 +128,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   their desks, stools, plants and computers. The Pokémon Tower's stepped walls rise round rows of
   standing graves (the gold ones and the statues at the top too), the Pokémon Mansion's walls,
   pillars, tables, statues and lab machines stand on all four floors, the S.S. Anne's decks and
-  cabins have their walls, beds, tables and the kitchen's long counters, the Fighting Dojo its
+  cabins have their walls, beds, tables and the kitchen's long counters (and its open deck its
+  cabin, barrels, deck chairs and tables), the Fighting Dojo its
   partitions and statues, Trainer Tower's halls their walls, console and white posts, and Professor
   Oak's lab, where your first rival battle happens, its machines, bookshelves and table, and
   Celadon's Game Corner its rows of slot machines and stools and its prize counter.
