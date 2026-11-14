@@ -783,6 +783,50 @@ local OAKS_LAB = {
   piece("wall", { { 0, 0, 208, 32 } }, 25, { foot = 32, alone = true }),
 }
 
+-- ── Celadon's Game Corner ─────────────────────────────────────────────────
+-- 18 x 15 (288 x 240 px): the back wall a 4-row rim over 28 rows of front (sky blue over a salmon
+-- band) to its foot at 32; the floor orange (metatile 0x291) with darker shade under the walls and
+-- the furniture. The prize counter: a green L each side (its top from row 24, 10 rows of front to
+-- 64), the shelves on it standing at its back against the wall, a glass case between (6 rows of
+-- front); the purple counter (18 rows of front to 80); four columns of slot machines, two-sided,
+-- each a block (16 rows of front to 176; the outer two half drawn at the room's edges) with stools
+-- either side (30, five a column: a blue seat over 5 rows of legs); the plants and the machine by
+-- the door
+local GC_FLOOR = { "d5a400", "e6b400", "e6c541", "c57b00", "b46200", "cd8b00" }
+-- a slot column's outline (its west edge x0, 32 px wide, clipped to the room): its top's corners cut
+-- on the diagonal from 8 px in at row 82 to the side at 93
+local function slotsTop(x0, west, east)
+  local p = {}
+  if west then p[#p + 1] = { x0, 93 }; p[#p + 1] = { x0 + 8, 82 } else p[#p + 1] = { 0, 82 } end
+  if east then p[#p + 1] = { x0 + 24, 82 }; p[#p + 1] = { x0 + 32, 93 }; p[#p + 1] = { x0 + 32, 176 }
+  else p[#p + 1] = { 288, 82 }; p[#p + 1] = { 288, 176 } end
+  p[#p + 1] = { west and x0 or 0, 176 }
+  return p
+end
+local function gameCorner()
+  local stools = {}
+  for _, cx in ipairs({ 1, 4, 7, 10, 13, 16 }) do
+    for cy = 6, 10 do stools[#stools + 1] = { cx, cy } end
+  end
+  return {
+    piece("prize_w", { { 16, 7, 64, 64 } }, 10, { back = 32, leave = GC_FLOOR }),
+    piece("prize_e", { { 112, 7, 160, 64 } }, 10, { back = 32, leave = GC_FLOOR }),
+    piece("glass_case", { { 64, 44, 112, 64 } }, 6, { back = 50, leave = GC_FLOOR }),
+    piece("counter", { { 224, 51, 288, 80 } }, 18, { back = 69, leave = GC_FLOOR }),
+    -- (a column's top cut on the diagonal at its corners: its machines' side panels)
+    piece("slots_1", { slotsTop(80, true, true) }, 16, { back = 98, leave = GC_FLOOR }),
+    piece("slots_2", { slotsTop(176, true, true) }, 16, { back = 98, leave = GC_FLOOR }),
+    piece("slots_w", { slotsTop(-16, false, true) }, 16, { back = 98, leave = GC_FLOOR }),
+    piece("slots_e", { slotsTop(272, true, false) }, 16, { back = 98, leave = GC_FLOOR }),
+    repeated("stool", stools, 5, { back = 104, leave = GC_FLOOR, shape = { { 18, 99, 30, 112 } } }),
+    piece("plant_n", { { 0, 18, 16, 48 } }, 28, { card = true, leave = GC_FLOOR }),
+    piece("plant_s", { { 0, 194, 16, 224 } }, 28, { card = true, leave = GC_FLOOR }),
+    piece("machine", { { { 279, 194 }, { 288, 194 }, { 288, 224 }, { 272, 224 }, { 272, 208 } } }, 20,
+      { back = 214, leave = GC_FLOOR }),
+    piece("wall", { { 0, 0, 288, 32 } }, 28, { foot = 32, alone = true }),
+  }
+end
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -791,6 +835,8 @@ local ROOMS = {
   { name = "fr_mart", interior = { layout = "LAYOUT_CERULEAN_CITY_MART", ground = { 0x281 }, pieces = MART,
                                    open = MART_OPEN } },
   { name = "fr_oaks_lab", interior = { layout = "LAYOUT_OAKS_LAB", ground = { 0x289 }, pieces = OAKS_LAB } },
+  { name = "fr_game_corner", interior = { layout = "LAYOUT_CELADON_CITY_GAME_CORNER", ground = { 0x291 },
+                                          pieces = gameCorner() } },
   { name = "fr_pewter_gym", interior = { layout = "LAYOUT_PEWTER_CITY_GYM", ground = { 0x294 }, pieces = pewterGym() } },
   { name = "fr_vermilion_gym", interior = { layout = "LAYOUT_VERMILION_CITY_GYM", ground = { 0x281 }, pieces = vermilionGym() } },
   { name = "fr_celadon_gym", interior = { layout = "LAYOUT_CELADON_CITY_GYM", ground = { 0x281 }, pieces = celadonGym() } },
