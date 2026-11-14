@@ -109,7 +109,8 @@ F.terraces = {
 --     its sides 290 (west) / 292 (east), a slope a tile across a level; its south face 299 and the face's
 --     ends 298 / 29A; the inside corners 29B (the rock north and west) and 29C (north and east);
 --     the outer walls' faces 2C3-2C5 / 2CE and sides 2C6 (west) / 2C7 (east); faces drawn with a
---     cave mouth 28C, stairs 284, a ladder 28F, falls 2EE / 2EF;
+--     cave mouth 28C, stairs 284 (and the General's 091, Cerulean Cave's), a ladder 28F, falls
+--     2EE / 2EF;
 --   * a thin wall (a path on the rock, its sides sheer): its rim 2DF, 29D / 29E and 2F0 / 2F1 its
 --     corners, 2EA / 2EB its head against a taller face; its sides 2E6 / 2A5 (west), 2E7 (east);
 --   * a raised floor: its rim 2D0 / 2D1 / 2D2 (and 2B5 / 2B6, 2C8-2CA, 2D7 along a rim), its floor
@@ -124,11 +125,14 @@ F.caves = {
               "LAYOUT_NAVEL_ROCK_", "LAYOUT_SIX_ISLAND_DOTTED_HOLE_" },
   face = 0x299,
   ground = 0x281,
+  -- (water besides the relief's own: Seafoam's currents and fast water, drawn as water)
+  water = { "MB_FAST_WATER", "MB_EASTWARD_CURRENT", "MB_WESTWARD_CURRENT", "MB_NORTHWARD_CURRENT",
+            "MB_SOUTHWARD_CURRENT" },
   -- the pieces every cave tileset draws alike
   pieces = {
     [0x299] = "F", [0x28B] = "F", [0x28D] = "F", [0x293] = "F", [0x295] = "F", [0x2C3] = "F", [0x2C4] = "F",
     [0x2C5] = "F", [0x2CE] = "F", [0x284] = "F", [0x28C] = "F", [0x28F] = "F",
-    [0x2EE] = "F", [0x2EF] = "F",
+    [0x2EE] = "F", [0x2EF] = "F", [0x091] = "F",
     [0x290] = "W", [0x2C6] = "W", [0x292] = "E", [0x2C7] = "E",
     [0x298] = "SW", [0x29A] = "SE", [0x29B] = "FE", [0x29C] = "FW",
     [0x289] = "N", [0x2D1] = "N", [0x2C8] = "N", [0x2C9] = "N", [0x2CA] = "N", [0x2D7] = "N", [0x2B5] = "N",
@@ -149,6 +153,12 @@ F.caves = {
                   "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL" },
       pieces = { [0x310] = "F", [0x311] = "F", [0x312] = "F", [0x314] = "F", [0x315] = "W", [0x313] = "W", [0x30D] = "W",
                  [0x316] = "E", [0x30E] = "E", [0x31E] = "E", [0x319] = "TW", [0x31A] = "TE" } },
+    -- Seafoam's (and the Icefall Cave's): a raised floor's west side over the sand 365 / 35D, its
+    -- face's west end there 36D; the outer rock's tops rimmed where its side steps 355 / 356, and along
+    -- the south wall over the floor 2A3 / 2A4
+    { layouts = { "LAYOUT_SEAFOAM_ISLANDS_", "LAYOUT_FOUR_ISLAND_ICEFALL_CAVE_" },
+      pieces = { [0x365] = "W", [0x35D] = "W", [0x36D] = "SW", [0x355] = "N", [0x356] = "N", [0x2A3] = "N",
+                 [0x2A4] = "N" } },
     -- Rock Tunnel's (and the Altering Cave's): its sides 306 / 316 / 30E (west) and 307 / 317 / 30F
     -- (east), a ridge's foot 308 / 309 / 30A, the north wall's face 309
     { layouts = { "LAYOUT_ROCK_TUNNEL_", "LAYOUT_SIX_ISLAND_ALTERING_CAVE" },

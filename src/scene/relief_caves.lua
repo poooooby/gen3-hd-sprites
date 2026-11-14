@@ -21,7 +21,8 @@
 --
 -- Caves.apply(model, input, C, tick) adds the caves to a relief model (src/scene/relief.lua's):
 --   C = { layouts = { prefix, ... } (the layouts read as caves, by name), face (the metatile
---         whose drawing closes a step), ground (the floor's), stand (tiles a level the rock stands:
+--         whose drawing closes a step), ground (the floor's), water (behaviours read as water
+--         besides waterNames), stand (tiles a level the rock stands:
 --         1 or none, as drawn; more, taller), sheer (its sides sheer walls, not ramps a tile across:
 --         Caves.standing), pieces = { [metatile] = kind },
 --         groups = { { layouts, pieces }, ... } (a tileset's own pieces, over the shared ones) }
@@ -29,8 +30,9 @@
 --         falling west / east; "FE" / "FW" an inside corner, the rock north and west / east;
 --         "N" / "NW" / "NE" a rim (flat, its north edge / and its west or east edge a step); "TW" /
 --         "TE" a top whose west / east edge is a step (a thin wall's, its side sheer); "void" the
---         dark past the rock; "HW" / "HE" a side's head (the rim's corner over a west / east side,
---         falling as it does, its north edge a step)
+--         dark past the rock; "water" (the water test's: it joins nothing and lies at the lowest
+--         of its banks); "HW" / "HE" a side's head (the rim's corner over a west / east side,
+--         falling as it does, its north edge a step; over anything else, "NW" / "NE")
 -- Caves.read(L, C) -> { [y * w + x] = level } and the shapes, for one layout (tests, probes).
 
 local Caves = {}
@@ -81,11 +83,23 @@ end
 --- One layout's levels: { [y * w + x] = level (the cell's base, levels) }, kinds { [y * w + x] =
 --- kind or nil }, and the constraints that disagreed (a list of { x, y, side }). tick: optional,
 --- called every row.
-function Caves.read(L, C, tick)
+function Caves.read(L, C, tick, isWater)
   local w, h = L.w, L.h
   local pieces = Caves.piecesFor(C, L.name)
   local kinds = {}
-  for i = 0, w * h - 1 do kinds[i] = pieces[L.blocks[i] % 1024] end
+  for i = 0, w * h - 1 do
+    local m = L.blocks[i] % 1024
+    kinds[i] = pieces[m] or (isWater and isWater(L, m) and "water") or nil
+  end
+  -- a side's head only over its side (a rim's corner over more rock is the rim's flat corner)
+  for i = 0, w * h - 1 do
+    local k = kinds[i]
+    if k == "HW" or k == "HE" then
+      local below = i + w < w * h and kinds[i + w] or nil
+      local side = k == "HW" and "W" or "E"
+      if below ~= side and below ~= "S" .. side then kinds[i] = k == "HW" and "NW" or "NE" end
+    end
+  end
   local function shapeOf(k) return k and SHAPES[k] or flat end
   -- (the profile of a cell's edge: "e" its east edge top to bottom, "s" its south edge west to east...)
   local memo = {}
@@ -125,7 +139,7 @@ function Caves.read(L, C, tick)
     parent[rb], off[rb] = ra, oa + d - ob
   end
   local function breaks(k, side)
-    if k == "void" then return true end
+    if k == "void" or k == "water" then return true end
     local b = k and BREAKS[k]
     return b and b[side] or false
   end
@@ -215,6 +229,47 @@ function Caves.read(L, C, tick)
       end
     end
   end
+  -- the water lies at the lowest of the ground round it (its banks may stand at several levels:
+  -- a raised floor's edge over the water), spread through it
+  local wq = {}
+  for i = 0, w * h - 1 do
+    if kinds[i] == "water" then
+      levels[i] = nil
+      wq[#wq + 1] = i
+    end
+  end
+  local function low(j)
+    local f, lo = SHAPES[kinds[j]] or flat, math.huge
+    for t = 0, N do for s = 0, N do lo = min(lo, f(s, t)) end end
+    return levels[j] + lo
+  end
+  for _, i in ipairs(wq) do
+    local x, y = i % w, floor(i / w)
+    for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
+      local nx, ny = x + d[1], y + d[2]
+      local j = ny * w + nx
+      if nx >= 0 and ny >= 0 and nx < w and ny < h and kinds[j] ~= "water" and kinds[j] ~= "void" then
+        local v = low(j)
+        if levels[i] == nil or v < levels[i] then levels[i] = v end
+      end
+    end
+  end
+  local changed = true
+  while changed do
+    changed = false
+    for _, i in ipairs(wq) do
+      local x, y = i % w, floor(i / w)
+      for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
+        local nx, ny = x + d[1], y + d[2]
+        local j = ny * w + nx
+        if nx >= 0 and ny >= 0 and nx < w and ny < h and kinds[j] == "water" and levels[j] ~= nil
+          and (levels[i] == nil or levels[j] < levels[i]) then
+          levels[i] = levels[j]
+          changed = true
+        end
+      end
+    end
+  end
   for i = 0, w * h - 1 do levels[i] = levels[i] or 0 end
   return levels, kinds, conflicts
 end
@@ -276,8 +331,33 @@ function Caves.depths(level, kind, stand, sheer)
   return g
 end
 
+--- A water test for Caves.read: isWater(L, metatile), true where the layout's tilesets give the
+--- metatile one of the behaviours `names` (src/scene/roles.lua's Roles.WATER_NAMES), read through
+--- the tileset family (src/scene/family.lua). nil without the behaviours or a family.
+function Caves.waterTest(input, names)
+  local MB = input and input.behaviours
+  if not (MB and names) then return nil end
+  local raw = {}
+  for _, n in ipairs(names) do if MB[n] then raw[MB[n]] = true end end
+  return function(L, m)
+    local F = L.primary and L.primary.family
+    if not F then return false end
+    local NP = F.primaryMetatiles or 512
+    local ts = m < NP and L.primary or L.secondary
+    local a = ts and ts.attributes
+    if not (a and #a > 0) then return false end
+    return raw[F.behaviour(F.attribute(a, m - (m < NP and 0 or NP)))] == true
+  end
+end
+
 --- The caves of `input` (src/scene/relief_input.lua's) added to `model`. Returns how many.
-function Caves.apply(model, input, C, tick)
+--- waterNames: the behaviours read as water (Caves.waterTest), optional.
+function Caves.apply(model, input, C, tick, waterNames)
+  -- (the caves' own water besides: Seafoam's currents)
+  local names = {}
+  for _, n in ipairs(waterNames or {}) do names[#names + 1] = n end
+  for _, n in ipairs(C.water or {}) do names[#names + 1] = n end
+  local isWater = Caves.waterTest(input, names)
   local n = 0
   local ids = {}
   for id, L in pairs(input.layouts) do
@@ -287,7 +367,7 @@ function Caves.apply(model, input, C, tick)
   for _, id in ipairs(ids) do
     local L = input.layouts[id]
     local w, h = L.w, L.h
-    local levels, kinds = Caves.read(L, C, tick)
+    local levels, kinds = Caves.read(L, C, tick, isWater)
     -- (heights standing as C.stand says; depths where the drawing puts each point)
     local grids, depths = {}, {}
     for i = 0, w * h - 1 do

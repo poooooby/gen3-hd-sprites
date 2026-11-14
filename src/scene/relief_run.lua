@@ -49,7 +49,7 @@ return function(deps)
   -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
   -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
   -- rules are Emerald 3DS's, its key as it always was
-  Run.RULES = { firered = 8, leafgreen = 8 }
+  Run.RULES = { firered = 9, leafgreen = 9 }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end
@@ -207,7 +207,7 @@ return function(deps)
     -- (another game's caves, counted off their own tilesets' pieces: src/scene/relief_caves.lua)
     local G = S.Solve and S.Solve.game
     if keyId ~= "emerald" and deps.Caves and G and G.caves then
-      deps.Caves.apply(model, S.input, G.caves, tick)
+      deps.Caves.apply(model, S.input, G.caves, tick, deps.Roles and deps.Roles.WATER_NAMES)
       phase("caves")
     end
     -- the last passes, over the maps as the solver read them
