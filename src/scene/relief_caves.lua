@@ -170,9 +170,37 @@ function Caves.read(L, C, tick, isWater)
       end
     end
   end
-  for rank = 2, 0, -1 do
-    for _, j in ipairs(queued[rank]) do join(j[1], j[2], j[3], j[4], j[5], j[6]) end
+  -- the floors and tops first (flat beside flat), then the walls (piece beside piece: a wall two
+  -- tiles deep is two levels however its ends meet the floor), then each wall against the floors
+  -- it meets by vote: the offsets the most edges agree on first, so a wall's few odd edges (a
+  -- one-tile end of a two-tile wall) disagree, not the wall
+  for _, j in ipairs(queued[2]) do join(j[1], j[2], j[3], j[4], j[5], j[6]) end
+  for _, j in ipairs(queued[0]) do join(j[1], j[2], j[3], j[4], j[5], j[6]) end
+  local votes, order = {}, {}
+  for n, j in ipairs(queued[1]) do
+    j.n = n
+    local ra, oa = find(j[1])
+    local rb, ob = find(j[2])
+    if ra ~= rb then
+      -- (level(rb) = level(ra) + oa + j[3] - ob, keyed with the lower root first)
+      local d = oa + j[3] - ob
+      local key = ra < rb and (ra .. ":" .. rb .. ":" .. d) or (rb .. ":" .. ra .. ":" .. (-d))
+      local v = votes[key]
+      if not v then v = { n = 0, first = n }; votes[key] = v; order[#order + 1] = v end
+      v.n = v.n + 1
+      j.vote = v
+    end
   end
+  local rest = {}
+  for n, j in ipairs(queued[1]) do rest[n] = j end
+  table.sort(rest, function(a, b)
+    local va, vb = a.vote and a.vote.n or 0, b.vote and b.vote.n or 0
+    if va ~= vb then return va > vb end
+    local fa, fb = a.vote and a.vote.first or 0, b.vote and b.vote.first or 0
+    if fa ~= fb then return fa < fb end
+    return a.n < b.n
+  end)
+  for _, j in ipairs(rest) do join(j[1], j[2], j[3], j[4], j[5], j[6]) end
   -- each part counted from its floor: the level most of its flat cells stand at is 0
   local counts = {}
   for i = 0, w * h - 1 do

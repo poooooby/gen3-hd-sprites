@@ -1531,6 +1531,14 @@ do
   local lv2, _, conf2 = Caves.read({ name = "LAYOUT_TEST_2", w = 4, h = 5, blocks = b2 }, { pieces = P2 })
   check(#conf2 == 0 and lv2[4 * 4] == 0 and lv2[2 * 4] == 0 and lv2[0] == 1,
     "a wall two faces deep stands two levels over the floor at its foot")
+  -- a floor walled two faces deep along most of its edge and one tile at its end (a west side):
+  -- the wall's many edges outvote the end's one, so the floor lies two levels down
+  local rowsV = { { 1, 1, 1, 1, 1, 1 }, { 9, 9, 9, 9, 9, 1 }, { 9, 9, 9, 9, 9, 1 }, { 5, 5, 5, 5, 6, 1 } }
+  local bV = {}
+  for y = 0, 3 do for x = 0, 5 do bV[y * 6 + x] = rowsV[y + 1][x + 1] end end
+  local lvV, _, confV = Caves.read({ name = "LAYOUT_TEST_V", w = 6, h = 4, blocks = bV }, { pieces = { [9] = "F", [6] = "W" } })
+  check(lvV[0] == 0 and lvV[3 * 6] == -2 and #confV == 1,
+    "a two-face wall outvotes a one-tile end: the floor two levels under the rock")
   -- a side's head (the rim's corner over a side): it falls as the side does, its north edge a step
   local P3 = { [2] = "HW", [3] = "N", [4] = "HE", [6] = "W", [7] = "E", [8] = "SW", [9] = "F", [10] = "SE" }
   local rows3 = { { 1, 1, 1, 1, 1 }, { 1, 2, 3, 4, 1 }, { 1, 6, 5, 7, 1 }, { 1, 8, 9, 10, 1 }, { 1, 1, 1, 1, 1 } }

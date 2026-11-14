@@ -128,11 +128,11 @@ F.caves = {
   -- (water besides the relief's own: Seafoam's currents and fast water, drawn as water)
   water = { "MB_FAST_WATER", "MB_EASTWARD_CURRENT", "MB_WESTWARD_CURRENT", "MB_NORTHWARD_CURRENT",
             "MB_SOUTHWARD_CURRENT" },
-  -- the pieces every cave tileset draws alike
+  -- the pieces every cave tileset draws alike (a mouth drawn on a face, 294, is the face)
   pieces = {
     [0x299] = "F", [0x28B] = "F", [0x28D] = "F", [0x293] = "F", [0x295] = "F", [0x2C3] = "F", [0x2C4] = "F",
     [0x2C5] = "F", [0x2CE] = "F", [0x284] = "F", [0x28C] = "F", [0x28F] = "F",
-    [0x2EE] = "F", [0x2EF] = "F", [0x091] = "F",
+    [0x2EE] = "F", [0x2EF] = "F", [0x091] = "F", [0x294] = "F",
     [0x290] = "W", [0x2C6] = "W", [0x292] = "E", [0x2C7] = "E",
     [0x298] = "SW", [0x29A] = "SE", [0x29B] = "FE", [0x29C] = "FW",
     [0x289] = "N", [0x2D1] = "N", [0x2C8] = "N", [0x2C9] = "N", [0x2CA] = "N", [0x2D7] = "N", [0x2B5] = "N",
@@ -148,17 +148,20 @@ F.caves = {
     { layouts = { "LAYOUT_MT_MOON_", "LAYOUT_VICTORY_ROAD_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
                   "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL", "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_" },
       pieces = { [0x2E3] = "F", [0x2E4] = "F", [0x2E5] = "F", [0x2ED] = "W", [0x2EC] = "E" } },
-    -- Mt Moon's alone
+    -- Mt Moon's alone (its side walls' tunnel mouths, the Lost Cave's, drawn on the side: 30A east, 309 west)
     { layouts = { "LAYOUT_MT_MOON_", "LAYOUT_VICTORY_ROAD_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
                   "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL" },
       pieces = { [0x310] = "F", [0x311] = "F", [0x312] = "F", [0x314] = "F", [0x315] = "W", [0x313] = "W", [0x30D] = "W",
-                 [0x316] = "E", [0x30E] = "E", [0x31E] = "E", [0x319] = "TW", [0x31A] = "TE" } },
+                 [0x316] = "E", [0x30E] = "E", [0x31E] = "E", [0x319] = "TW", [0x31A] = "TE", [0x30A] = "E", [0x309] = "W" } },
     -- Seafoam's (and the Icefall Cave's): a raised floor's west side over the sand 365 / 35D, its
     -- face's west end there 36D; the outer rock's tops rimmed where its side steps 355 / 356, and along
     -- the south wall over the floor 2A3 / 2A4
     { layouts = { "LAYOUT_SEAFOAM_ISLANDS_", "LAYOUT_FOUR_ISLAND_ICEFALL_CAVE_" },
       pieces = { [0x365] = "W", [0x35D] = "W", [0x36D] = "SW", [0x355] = "N", [0x356] = "N", [0x2A3] = "N",
-                 [0x2A4] = "N" } },
+                 [0x2A4] = "N", [0x2A0] = "N", [0x2A1] = "N", [0x2A2] = "N" } },
+    -- Mt Ember's: its rims with ash on them 328 / 32A
+    { layouts = { "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_" },
+      pieces = { [0x328] = "N", [0x32A] = "N" } },
     -- Rock Tunnel's (and the Altering Cave's): its sides 306 / 316 / 30E (west) and 307 / 317 / 30F
     -- (east), a ridge's foot 308 / 309 / 30A, the north wall's face 309
     { layouts = { "LAYOUT_ROCK_TUNNEL_", "LAYOUT_SIX_ISLAND_ALTERING_CAVE" },
