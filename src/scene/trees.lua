@@ -60,8 +60,12 @@ local function speciesArt(k, w)
   end
   -- (below the General tree's: crown, ground and trunk side by side, each 48 tall)
   local y = 64 * k
+  -- (the trunk's card at trunkX + its own column, from column trunkMin: a tree 2 or more across
+  -- stands its trunk past its first 16 columns, over the ground's end; a one-wide tree's past it)
+  local trunkX, trunkMin = 32 * w - 16, 16
+  if w == 1 then trunkX, trunkMin = 32, 0 end
   return { crownX = 0, crownY = y + 16, rowPx = 16, groundX = 16 * w, groundY = y + 16, foot = 0.70, tip = 16,
-           texX = 0, texY = y, groundTexX = 16 * w, trunkX = 32 * w - 16 }
+           texX = 0, texY = y, groundTexX = 16 * w, trunkX = trunkX, trunkMin = trunkMin }
 end
 function Trees.useGame(G)
   local K = type(G) == "table" and type(G.trees) == "table" and G.trees or nil
@@ -79,7 +83,7 @@ function Trees.useGame(G)
     for k, f in ipairs(K.forests or {}) do
       if k * 64 + 48 <= Trees.KANTO_H and (f.w or 3) * 16 * 2 + 16 <= 128 then
         S[k] = { w = f.w or 3, parts = f.parts, alone = f.alone, ground = f.ground, cone = f.cone, trunk = f.trunk,
-                 layouts = f.layouts, tipToo = f.tipToo, groundColours = f.groundColours,
+                 layouts = f.layouts, tipToo = f.tipToo, groundColours = f.groundColours, leavesBelow = f.leavesBelow,
                  art = speciesArt(k, f.w or 3) }
       end
     end
@@ -227,7 +231,8 @@ local GENERAL = {
 --- The tree part a metatile is (0-3 a 2x2 tree's, SMALL, GRASS), or nil.
 function Trees.part(sec, m)
   if Trees.kanto then
-    if m < SECONDARY then return Trees.kanto.parts[m] end
+    if m < SECONDARY and Trees.kanto.parts[m] then return Trees.kanto.parts[m] end
+    -- (a species drawn in the primary's tiles, in its maps' tilesets only: Four Island's saplings)
     local k = Trees.forestBySec[sec]
     local S = k and Trees.species and Trees.species[k]
     local loc = S and not S.failed and S.parts[m]
@@ -617,7 +622,7 @@ function Trees.kantoArt(px, set, k)
   local tx, ty, gx, trX = art.texX, art.texY, art.groundTexX, art.trunkX
   -- (each texel at its place in the atlas: the trunk's only where its card's room is)
   local function put(x0, x, v, r, g, b, a)
-    if x0 == trX and (trX + x < trX + (k == 0 and 0 or 16) or trX + x >= Trees.KANTO_W) then return end
+    if x0 == trX and (x < (k == 0 and 0 or art.trunkMin or 16) or trX + x >= Trees.KANTO_W) then return end
     set(x0 + x, ty + v, r, g, b, a)
   end
   -- (colours told apart as the GBA draws them, 5 bits a channel: readers widen them to 8 bits
@@ -641,8 +646,11 @@ function Trees.kantoArt(px, set, k)
   for _, c in ipairs(K.groundColours or {}) do
     groundColour[key(math.floor(c / 65536) / 255, math.floor(c / 256) % 256 / 255, c % 256 / 255)] = true
   end
+  -- (a species whose leaves the game draws under the player too - its metatiles' layer type -
+  -- takes them off either layer: what is drawn, less its ground's colours; `leavesBelow`)
   local function leaf(x, v)
     local r, g, b = layer(x, v, 1)
+    if not r and K.leavesBelow then r, g, b = layer(x, v, 0) end
     if r and not groundColour[key(r, g, b)] then return r, g, b end
   end
   -- (what is drawn there, the upper layer over the lower)
