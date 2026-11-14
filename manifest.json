@@ -20,6 +20,6 @@
   "optional_dependencies": [],
   "conflicts": [],
   "incompatible": [],
-  "description": "Sharp Pokemon and battles that fit any screen on FireRed, LeafGreen, Ruby, Sapphire and Emerald (Red, Blue, Yellow, Gold, Silver and Crystal in part). Fills the battle to your screen in any shape (Fill Screen). With a sprite mod that supports it, draws its battle, Pokedex and overworld Pokemon at your screen's full resolution and pulls the battle camera back so tall Pokemon fit (Battle Fit). On FireRed, LeafGreen, Ruby, Sapphire and Emerald, battles can take place in the world around you, in 2.5D (Battle Scene), with the towns and land of Emerald, FireRed and LeafGreen in 3D, Emerald's rooms, and Kanto's Centers, Marts and gyms.",
+  "description": "Sharp Pokemon and battles that fit any screen on FireRed, LeafGreen, Ruby, Sapphire and Emerald (Red, Blue, Yellow, Gold, Silver and Crystal in part). Fills the battle to your screen in any shape (Fill Screen). With a sprite mod that supports it, draws its battle, Pokedex and overworld Pokemon at your screen's full resolution and pulls the battle camera back so tall Pokemon fit (Battle Fit). On FireRed, LeafGreen, Ruby, Sapphire and Emerald, battles can take place in the world around you, in 2.5D (Battle Scene), with the towns and land of Emerald, FireRed and LeafGreen in 3D, Emerald's rooms, and Kanto's Centers, Marts, gyms and Pokemon League.",
   "github": "poooooby/gen3-hd-sprites"
 }

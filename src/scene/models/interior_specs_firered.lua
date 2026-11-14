@@ -393,6 +393,73 @@ local function cinnabarGym()
   return out
 end
 
+-- ── the Pokemon League ──────────────────────────────────────────────────────
+
+-- Lorelei's, Bruno's and Agatha's rooms (13 x 13, each in its own colours): the wooden back wall
+-- (32 rows to 48 under its 16-row top) with the door, the wall across the south either side of the
+-- way out (its top 160-176, its face to 208), the side walls between, and three pillars down each
+-- side (ice, stone, torches) at x 32 and 160: the first against the back wall (40-72), the next
+-- two 38 rows each to 112 and 160, each 30 rows of front under 8 of top
+local E4_WALL_SIDE = { 136, 16, 152, 48 }
+local function eliteFourRoom(floor)
+  local out = {}
+  for _, x in ipairs({ 32, 160 }) do
+    local side = x < 100 and "w" or "e"
+    out[#out + 1] = piece("pillar_" .. side .. "1", { { x, 40, x + 16, 72 } }, 30, { back = 70, leave = floor })
+    out[#out + 1] = repeated("pillar_" .. side, { { x / 16, 4 }, { x / 16, 7 } }, 30,
+      { back = 104, leave = floor, shape = { { x, 74, x + 16, 112 } } })
+  end
+  local more = {
+    piece("wall", { { 0, 0, 208, 48 } }, 32, { fill = 16, foot = 48, side = E4_WALL_SIDE }),
+    piece("wall_front_w", { { 0, 160, 88, 208 } }, 32, { fill = 16, foot = 208 }),
+    piece("wall_front_e", { { 120, 160, 208, 208 } }, 32, { fill = 16, foot = 208 }),
+    piece("side_w", {}, 32, { side = E4_WALL_SIDE, walls = { { { 0, 192 }, { 0, 48 } } } }),
+    piece("side_e", {}, 32, { side = E4_WALL_SIDE, walls = { { { 208, 48 }, { 208, 192 } } } }),
+  }
+  for _, pc in ipairs(more) do out[#out + 1] = pc end
+  return out
+end
+
+-- Lance's room (28 x 24): his battle room is the others' plan 48 rows lower (its back wall to 96,
+-- its south wall either side of the one-cell way out, 208-256), its pillars dragon horns: each a
+-- horn (a card) standing on its pedestal (16 rows to its foot), the first against the back wall;
+-- the halls beyond stay as drawn
+local LANCE_FLOOR = { "398b8b", "52a4a4", "6abdbd" }
+local function lancesRoom()
+  local out = {}
+  for _, x in ipairs({ 32, 160 }) do
+    local side = x < 100 and "w" or "e"
+    out[#out + 1] = piece("horn_" .. side .. "1", { { x, 96, x + 16, 120 } }, 20, { back = 116, leave = LANCE_FLOOR })
+    out[#out + 1] = repeated("horn_" .. side, { { x / 16, 7 }, { x / 16, 10 } }, 24,
+      { base = 16, card = true, leave = LANCE_FLOOR, shape = { { x, 118, x + 16, 142 } } })
+    out[#out + 1] = repeated("pedestal_" .. side, { { x / 16, 8 }, { x / 16, 11 } }, 16,
+      { back = 156, leave = LANCE_FLOOR, shape = { { x, 140, x + 16, 160 } } })
+  end
+  local more = {
+    piece("wall", { { 0, 48, 208, 96 } }, 32, { fill = 16, foot = 96, side = E4_WALL_SIDE }),
+    piece("wall_front_w", { { 0, 208, 96, 256 } }, 32, { fill = 16, foot = 256 }),
+    piece("wall_front_e", { { 112, 208, 240, 256 } }, 32, { fill = 16, foot = 256 }),
+    piece("side_w", {}, 32, { side = E4_WALL_SIDE, walls = { { { 0, 240 }, { 0, 96 } } } }),
+    piece("side_e", {}, 32, { side = E4_WALL_SIDE, walls = { { { 208, 96 }, { 208, 208 } } } }),
+  }
+  for _, pc in ipairs(more) do out[#out + 1] = pc end
+  return out
+end
+
+-- the Champion's room (13 x 20): an octagon - its tall purple back wall (55 rows to 61 under a
+-- 6-row rim) with the doorway and its steps, its corners cut on the diagonal 32 px wide (their top
+-- at 37 - x), and four lantern posts; the stepped seats and the way out stay as drawn
+local CHAMPION_FLOOR = { "a4c5c5", "e6d59c", "83a4a4", "fff69c", "deeeee" }
+local function championsRoom()
+  return {
+    repeated("post", { { 1, 4 }, { 10, 4 }, { 1, 11 }, { 10, 11 } }, 20,
+      { back = 92, leave = CHAMPION_FLOOR, shape = { { 24, 72, 40, 96 } } }),
+    facet("corner_w", { 0, 37, 92 }, { 32, 6, 61 }, 55),
+    facet("corner_e", { 176, 6, 61 }, { 208, 37, 92 }, 55),
+    piece("wall", { { 32, 0, 176, 61 } }, 55, { fill = 6, foot = 61 }),
+  }
+end
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -408,6 +475,16 @@ local ROOMS = {
   { name = "fr_viridian_gym", interior = { layout = "LAYOUT_VIRIDIAN_CITY_GYM", ground = { 0x281 }, pieces = viridianGym() } },
   { name = "fr_saffron_gym", interior = { layout = "LAYOUT_SAFFRON_CITY_GYM", ground = { 0x281 }, pieces = saffronGym() } },
   { name = "fr_cinnabar_gym", interior = { layout = "LAYOUT_CINNABAR_ISLAND_GYM", ground = { 0x281 }, pieces = cinnabarGym() } },
+  { name = "fr_loreleis_room", interior = { layout = "LAYOUT_POKEMON_LEAGUE_LORELEIS_ROOM", ground = { 0x2A8 },
+                                            pieces = eliteFourRoom({ "6294c5", "83acde", "8bc5e6" }) } },
+  { name = "fr_brunos_room", interior = { layout = "LAYOUT_POKEMON_LEAGUE_BRUNOS_ROOM", ground = { 0x2D0 },
+                                          pieces = eliteFourRoom({ "bdb45a", "d5cd6a", "e6de7b" }) } },
+  { name = "fr_agathas_room", interior = { layout = "LAYOUT_POKEMON_LEAGUE_AGATHAS_ROOM", ground = { 0x2F0 },
+                                           pieces = eliteFourRoom({ "bd94e6", "cdb4ee", "a483cd" }) } },
+  { name = "fr_lances_room", interior = { layout = "LAYOUT_POKEMON_LEAGUE_LANCES_ROOM", ground = { 0x310 },
+                                          pieces = lancesRoom() } },
+  { name = "fr_champions_room", interior = { layout = "LAYOUT_POKEMON_LEAGUE_CHAMPIONS_ROOM", ground = { 0x38F },
+                                             pieces = championsRoom() } },
 }
 
 ROOMS.ids = {}

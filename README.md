@@ -120,7 +120,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   terminals), every Poké Mart (its counters, fridges and tall shelves) and all eight gyms are
   furnished too: Brock's boulders, Misty's pool ladders, Lt. Surge's trash cans and power units,
   Erika's round bushes, the walls of Sabrina's rooms, Blaine's quiz machines and walled rooms,
-  Giovanni's maze, and every gym's statues.
+  Giovanni's maze, and every gym's statues, and so is the Pokémon League: Lorelei's ice pillars,
+  Bruno's stone pillars, Agatha's torches, Lance's dragon horns and the Champion's hall.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
