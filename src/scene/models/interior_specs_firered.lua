@@ -143,7 +143,8 @@ local MART = {
   piece("till", { { 48, 20, 64, 80 } }, 8, { back = 32, leave = cat(MART_WALL, MART_FLOOR) }),
   -- the glass counter: its glass top rows 60-70, its front nine rows to 80; the boxes on its end
   piece("counter", { { 0, 60, 48, 80 } }, 9, { back = 69, leave = MART_FLOOR }),
-  piece("boxes", { { 0, 48, 18, 64 } }, 8, { base = 9, leave = cat(MART_FLOOR, MART_WALL) }),
+  -- (on the counter, 9 rows up: its own alone - the Rocket Warehouse's crates draw the same boxes)
+  piece("boxes", { { 0, 48, 18, 64 } }, 8, { base = 9, leave = cat(MART_FLOOR, MART_WALL), alone = true }),
   -- the low glass case by the door: as the counter, its top rows 92-102, its front nine to 112
   piece("case", { { 16, 92, 48, 112 } }, 9, { back = 101, leave = MART_FLOOR }),
   -- the two fridges against the wall: their fronts 23 rows
@@ -941,6 +942,62 @@ local function powerPlant()
   return out
 end
 
+-- Five Island's Rocket Warehouse (29 x 27, 464 x 432 px; Team Rocket battles there): its rooms'
+-- walls (a 5-row white rim over 25 rows of front, pale panels between blue bands, to a dark line)
+-- and the white posts at the partitions' ends (13 rows of top over 25 of grey front), read off the
+-- drawing per pixel column - a wall's column 5 rows of its blue band over the dark line, a post's
+-- 20 rows of its grey or more over it - the columns with the same line grouped and kept as
+-- { x0, x1 (exclusive), the line's row }; the crate stacks, each a group of the layout's crate
+-- cells (metatiles 395 and 099, 4-connected), a box over its cells with 7 rows of front at its
+-- foot. The arrow tiles, the partitions seen from above and the rooms' furniture stay as drawn
+local WAREHOUSE_FLOOR = { "a4a462", "c5c59c", "838352", "62627b" }
+local WAREHOUSE_SIDE = { 16, 169, 32, 176 }
+local WAREHOUSE_CRATES = {
+  { { 27, 2 } },
+  { { 1, 9 }, { 1, 10 } },
+  { { 9, 9 }, { 8, 10 }, { 9, 10 } },
+  { { 19, 9 }, { 19, 10 } },
+  { { 15, 10 } },
+  { { 5, 11 }, { 6, 11 }, { 4, 12 }, { 5, 12 }, { 4, 13 }, { 5, 13 } },
+  { { 1, 13 }, { 1, 14 }, { 1, 15 } },
+  { { 12, 13 }, { 13, 13 } },
+  { { 19, 13 } },
+  { { 17, 14 } },
+  { { 5, 15 }, { 5, 16 }, { 5, 17 }, { 5, 18 }, { 5, 19 }, { 5, 20 } },
+  { { 10, 15 }, { 11, 15 }, { 10, 16 }, { 11, 16 }, { 12, 16 }, { 10, 17 }, { 11, 17 }, { 12, 17 }, { 12, 18 } },
+  { { 19, 15 } },
+  { { 7, 16 } },
+  { { 17, 16 }, { 17, 17 }, { 17, 18 }, { 18, 18 }, { 19, 18 }, { 19, 19 }, { 19, 20 } },
+  { { 15, 21 } },
+  { { 3, 22 }, { 4, 22 }, { 5, 22 }, { 6, 22 }, { 7, 22 }, { 3, 23 }, { 4, 23 }, { 3, 24 } },
+  { { 15, 23 }, { 6, 24 }, { 7, 24 }, { 8, 24 }, { 9, 24 }, { 10, 24 }, { 11, 24 }, { 12, 24 }, { 13, 24 }, { 14, 24 }, { 15, 24 }, { 5, 25 }, { 6, 25 }, { 7, 25 } },
+  { { 1, 25 } },
+  { { 18, 25 }, { 19, 25 } },
+}
+local WAREHOUSE_WALLS = {
+  { 55, 112, 30 }, { 240, 320, 30 }, { 384, 448, 30 }, { 16, 24, 142 }, { 72, 80, 142 }, { 112, 152, 142 },
+  { 200, 248, 142 }, { 312, 320, 142 }, { 376, 386, 142 }, { 414, 448, 142 }, { 352, 376, 254 }, { 424, 432, 254 },
+  { 328, 344, 270 }, { 328, 344, 350 }, { 392, 408, 350 },
+}
+local WAREHOUSE_POSTS = {
+  { 25, 31, 143 }, { 65, 71, 143 }, { 153, 159, 143 }, { 193, 199, 143 }, { 249, 255, 143 }, { 305, 311, 143 },
+  { 369, 375, 143 }, { 377, 383, 255 }, { 417, 423, 255 }, { 321, 327, 271 }, { 345, 351, 271 }, { 321, 327, 351 },
+  { 345, 351, 351 }, { 385, 391, 351 }, { 409, 415, 351 },
+}
+local function rocketWarehouse()
+  local out = {}
+  for i, b in ipairs(WAREHOUSE_WALLS) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1], math.max(0, b[3] - 30), b[2], b[3] } }, 25, { foot = b[3], alone = true })
+  end
+  for i, b in ipairs(WAREHOUSE_POSTS) do
+    out[#out + 1] = piece("post_" .. i, { { b[1], b[3] - 39, b[2], b[3] } }, 25, { foot = b[3], alone = true })
+  end
+  for i, cells in ipairs(WAREHOUSE_CRATES) do
+    out[#out + 1] = gymBlock("crates_" .. i, cells, 7, 0, WAREHOUSE_SIDE, WAREHOUSE_FLOOR)
+  end
+  return out
+end
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -963,6 +1020,8 @@ local ROOMS = {
                                           pieces = tanobyChamber("RIXY") } },
   { name = "fr_tanoby_viapois", interior = { layout = "LAYOUT_SEVEN_ISLAND_TANOBY_RUINS_VIAPOIS_CHAMBER", ground = { 0x288 },
                                           pieces = tanobyChamber("VIAPOIS") } },
+  { name = "fr_rocket_warehouse", interior = { layout = "LAYOUT_FIVE_ISLAND_ROCKET_WAREHOUSE", ground = { 0x281 },
+                                              pieces = rocketWarehouse() } },
   { name = "fr_power_plant", interior = { layout = "LAYOUT_POWER_PLANT", ground = { 0x29F }, pieces = powerPlant() } },
   { name = "fr_anne_deck", interior = { layout = "LAYOUT_SSANNE_DECK", ground = { 0x350 }, pieces = ANNE_DECK } },
   { name = "fr_game_corner", interior = { layout = "LAYOUT_CELADON_CITY_GAME_CORNER", ground = { 0x291 },
