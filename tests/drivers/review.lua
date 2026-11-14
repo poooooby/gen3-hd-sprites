@@ -394,7 +394,11 @@ kinds(); totals(); render();
 
 -- what still lies flat (no model yet), for the page's foot
 local FLAT = {
-  firered = {},
+  firered = {
+    "Mt Ember's volcano rock (no piece table for its tileset yet: it lies as drawn)",
+    "Rooms no battle is fought in (houses, the Dept. Store, the Museum, the Fan Club, ...): drawn flat",
+    "Cave edges marked red above: where the drawing's two sides disagree on the level, the rock steps",
+  },
 }
 
 local function body(game, log)
