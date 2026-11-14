@@ -1401,6 +1401,16 @@ return function(K)
         PlanPrism("plinth", { { 62, 116 }, { 72, 116 }, { 72, 128 }, { 62, 128 } }, 0, 32, { 64, 70, 128 }),
         PlanPrism("porch_eave", { { 14, 90 }, { 66, 90 }, { 66, 130 }, { 14, 130 } }, 42, 44, { 20, 26, 130 }),
         PlanHip("porch_roof", 14, 66, 90, 130, 44, 31, 49, 111, 55) } end) },
+    -- the Sky Pillar outside: the foot of the tower (80 x 96; the rest is above the map's top edge),
+    -- its middle 9 px before its corner posts (x 0-6 and 74-80, their feet on row 86, sand drawn
+    -- under them), the door in the middle's foot; as deep as it is wide and as tall as the Battle
+    -- Tower, its sides and roof laid with the brick beside its windows
+    { name = "sky_pillar_tower", layout = "LAYOUT_SKY_PILLAR_OUTSIDE", rect = { 12, 0, 5, 6 },
+      ground = { 0x121, 0x2B7, 0x2BA },
+      keep = { { 0, 0, 80, 86 }, { 6, 86, 74, 96 } },
+      parts_art = flat(function() return {
+        PlanPrism("tower", { { 0, 16 }, { 80, 16 }, { 80, 86 }, { 74, 86 }, { 74, 96 }, { 6, 96 }, { 6, 86 }, { 0, 86 } },
+          0, 320, { 8, 16, 96 }, { top = Tile(8, 8, 16, 24) }) } end) },
   }
 
   -- kits: buildings of one kit, any size, found by their top-left corner, their top row, its end

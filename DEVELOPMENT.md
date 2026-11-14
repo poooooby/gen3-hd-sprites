@@ -679,12 +679,11 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   not the drawing. Everything the battle's window places over the 100 layouts the pak has
   placements in (`bridge_dump.lua` with `BRIDGE_RUNS=all`: `placeBuildings` over a whole layout -
   buildings, kits, props, the Cycling Road's blocks, the components' blocks) is checked against the
-  pak: 4622 of its 4634 placements stand at the same place and equal its triangles - the
-  layouts a script swaps in too (World's alternates, read by name) - and the 986 with a ground
+  pak: 4623 of its 4634 placements stand at the same place and equal its triangles - the
+  layouts a script swaps in too (World's alternates, read by name) - and the 987 with a ground
   plan lay its ground metatile and number of patches (`P` and `G` lines; the pak's patch field
   six vertices a patch). The rest: sea rocks and stacks across a map's seam (they stand in the
-  window, the next map in it; a lone layout has no next map) and a 5x6 building at Sky
-  Pillar's foot. A room spec's pieces stand in its own layout whatever its map's type (the
+  window, the next map in it; a lone layout has no next map). A room spec's pieces stand in its own layout whatever its map's type (the
   Abandoned Ship's flooded rooms are MAP_TYPE_UNDERWATER, outdoors to voxel_cells); a room
   nobody modelled is an indoor one (gen_voxel_buildings's reuse_everywhere). `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
   not (`_findWhy`: each core cell's metatile, sign, and the pixels it draws otherwise). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
@@ -719,7 +718,11 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   cell's geometry (`emitCell`: its drawing on its 5x5 lattice at (u, h, v + h), a cut tile's flat
   layer and the ground run on under it, cliff walls, a back's north face; `treeStep`). In
   `init.lua`, `placeRelief` finds each cell's map (`env.where`) and layout id (the cache's
-  `map_tree/maps/G_N/header.json`), places the maps by their bases and seam steps, and sets
+  `map_tree/maps/G_N/header.json`; the engine pads a layout of odd size to even with a copy of
+  its last row or column, `width`/`height`, and places its neighbours by that, as `env.where`
+  does, but the map is `trueWidth` x `trueHeight`, its relief that size, and a padding cell is
+  in no map - Route 109, Mt Chimney, Mt Pyre, Sky Pillar's foot and the rest of odd size), places
+  the maps by their bases and seam steps, and sets
   `cell.g` (heights), `cell.dy` (how high what stands on it is, tiles: a point h up also stands
   h south), `cell.lifted`; `emitRelief` draws the lifted cells from one texture of the drawings
   they lay (two passes). A model's cell is the model's (laid flat at its middle) unless the model
@@ -835,8 +838,65 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
 - `render.lua`: static meshes per atlas and layer (ground quads, then cards, then trees, then
   buildings); a shader that
   outputs screen pixel x depth through LOVE's own projection with the view depth as w (so the
-  ground is perspective-correct and LOVE's canvas flip still applies), depth-tested, fogged
-  into a haze colour (the wallpaper's top colour outdoors, black indoors).
+  ground is perspective-correct and LOVE's canvas flip still applies), depth-tested, hazed
+  with distance, over the sky (the wallpaper's top colour outdoors, black indoors: Emerald 3DS
+  clears to the battle's backdrop colour). WoobleView's own, not Emerald 3DS's: land past every
+  map fades into the sky from the maps' edge to `Render.BORDER_FADE[2]` (3) tiles past it (the
+  distance from each border cell's centre to the nearest map cell's, read between the centres at
+  each vertex with its height taken off its row; `VertexFade`), so a mountain's rim carried on as
+  the border (Mt Chimney's) does not stand as ridges out to the horizon. Water belts and a belt
+  cell with a tree stay whole.
+- `light.lua`: Emerald 3DS's light by the weather (ctr_voxel.c's VoxelLight, BaseLightFor,
+  LightMix, FogLight, SetGrade; voxel_world.c's weather class, amount, fog density and lightning),
+  read each frame from the game's weather (`R.state` of the engine's field_weather_rse,
+  pokeemerald's gWeatherPtr). It gives the grade's sun and shade tints (the shader: a vertex's
+  shade picks t = clamp((shade - 0.62) / 0.38), its colour shade x lerp(shade tint, sun tint, t)),
+  the distance haze (from 1.05 eye distances off - the pose's `dist`, along the line of sight:
+  their `distance / cos(pitch)` - to 0.6 further, 0.14 at most, to a pale sky colour; sun 0.12,
+  rain 0.30 and 0.18 of its drops, ash and sandstorm mixed in by their blend - Mt Chimney's ash
+  0.5 warm grey from 0.75 - fog a pale veil, a blue-black underground, snow 0.36, shade 0.25), and
+  the dapples', rays', bloom's and motes' strengths. Their `indoor` (MAP_TYPE_INDOOR, SECRET_BASE):
+  the grade is the identity and nothing else. The texture grade (voxel_grade.c): every texel's
+  5-bit colour (the engine's c5 x 255 / 31) pushed 1.3x from its luma, in the shader; the tree art
+  graded as it loads instead, its crowns then brightened 1.12x (`gradeTrees`, BrightenCrowns), its
+  meshes left ungraded by the shader. The sun dapples (MakeDapple, DappleFrame, DappleUniforms): a
+  128x128 pattern of three octaves of tileable value noise (their 32-bit hash, exactly), laid from
+  above along the sun (a point slid along it by its height), 24 tiles a period, drifting 0.25 tiles
+  a second, scaling the lit texel from `dappleLow` to `dappleHigh`. Not ported: their day/night
+  cycle (its tint, moonlight and clock sun; their "day_night" setting, off by default).
+  `hd.stats.sceneHaze` (the driver logs it). Without light.lua, the old haze: 14 to 48 tiles, 0.9
+  at most, the sky's colour, and no grade.
+- `lighting.lua`: Emerald 3DS's sun (voxel_lighting.c), baked into each vertex's shade as the
+  meshes are built: the face term (n . sun over up . sun, the sun at (-0.85, 1, -0.55): ground 1,
+  a west wall 0.955, a north one 0.865, south and east the ambient 0.70), the cast shadow (a ray a
+  quarter tile of rise a step towards the sun, 32 steps, every point up to the casters' ceiling:
+  their reference march), and contact darkening (0.035 for each of four points a quarter tile out
+  that something stands in). The casters (their `Cell`/`CellOccludes`/`ObjectAt`) come from
+  `init.lua`'s `sceneLighting` over the battle's window, in their frame (ours lifted by
+  `grid.frameH`, the player's ground and the battle map's base, in height and rows): a tree's
+  crown an ellipsoid (a small tree's half as wide), a model's 16x16 footprint to its top
+  (`Buildings.cellTop`, `Buildings.footprints`; a deck over a wood casts instead), a sign's
+  drawing on its board (voxel_sign.c ShadowOf), a drawn map's relief as a height field (their
+  `BuildSurface`/`SurfaceAt`/`SurfaceTop`, built from the relief's lattices); past every map,
+  nothing, at the base of the map north whose drawing reaches it. How each face is lit is their
+  `LightFace` (`face4`): level ground a cell across refined into four quads where a shadow's edge
+  crosses it (not past every map), a crown's card as the rounded crown, a relief lattice's quads
+  from each point's own face term (`ReliefFace`, the slope a tile across; the lattice's shadows
+  read ahead, `Lattice`, and spans merged only where the light runs linearly, `SpanLinear`), the
+  drawing's own light kept on the relief (`artShaded`), an object lit as a whole (a sign: one
+  sample; the ground run on under a terrace: 1), a model's triangle by its outside's facing
+  alone (`ModelShade`: its drawn shade says which side). Terrain walls keep their baked shades,
+  the light multiplying them. The quad's cut follows the diagonal lit most alike (`RawQuad`).
+  Indoors (their `indoor`), no sun. Not ported: their cell skips and block bounds (the same
+  answers), the ease stretch.
+- `sunfx.lua`: the light in the air, drawn into the world's canvas after it (under the battle's
+  Pokemon, as their world is the battle's background): sun rays (MakeRays/DrawRays: an 8x5 mesh
+  from the top left, the dapple pattern stretched almost to lines, additive warm white, strength x
+  (1 - pattern)), sunlit dust (DrawMotes: 32 soft diamonds in a wrapped box round the camera's
+  target, drifting with the sun, depth tested), and bloom (VoxelBloomPrepare/Compose: the picture
+  at a quarter of their 400-wide screen keeping what is over 0.85, x4, stretched back and added at
+  the light's strength, and 0.7 x the landing's impact as the glide lands). The canvas is halved
+  to their 400 across first, so a large window averages as their screen does.
 
 In `src/gen3.lua`, `fitTerrain` records `hd.world(wallpaper, scene)` and two soft shadows as
 stage items instead of the wallpaper and pads; `drawEntry` skips the intro bands. The `"world"`

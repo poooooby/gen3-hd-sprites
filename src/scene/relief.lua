@@ -677,8 +677,25 @@ end
 local function groundRunOn(B, x, y, foot, u0, v0, u1, v1)
   B.lift = foot - (2 + 0.125 * ((x + y) % 2)) / 16
   B.shift = B.lift
+  -- (sunlit as the open ground it stands for: under the terrain's own heights every ray is
+  -- stopped, src/scene/lighting.lua)
+  B.constant = 1.0
   runOn(B, x, y, u0, v0, u1, v1)
+  B.constant = nil
   B.lift, B.shift = 0, 0
+end
+
+-- do the lattice's shades over the rectangle from (a0, c0), wa by wc, run as its corners' do (as
+-- one quad's triangles draw them), within half a step of the eight bits a colour is drawn in?
+local function spanLinear(shade, a0, c0, wa, wc)
+  local k0 = c0 * SIDE + a0
+  local du, dv = shade[k0 + wa] - shade[k0], shade[k0 + wc * SIDE] - shade[k0]
+  for c = 0, wc do
+    for a = 0, wa do
+      if math.abs(shade[k0 + c * SIDE + a] - (shade[k0] + du * a / wa + dv * c / wc)) >= 0.5 / 255 then return false end
+    end
+  end
+  return true
 end
 
 -- does the lattice rectangle from (a0, c0), wa by wc, lie on one plane? (whole pixels: exact)
@@ -708,7 +725,7 @@ local function reliefSpan(B, x, y, g, s, u0, v0, u1, v1, i0, j0, wa, wc, flr, fl
     local a, c = i0 + di[k] * wa, j0 + dj[k] * wc
     local at = c * SIDE + a
     p[k] = vtx(x + a / N, g[at] / 16 + raise, y + c / N + s[at] / 16, u0 + (u1 - u0) * a / N, v0 + (v1 - v0) * c / N,
-      SHADE_TOP)
+      B.vertexFace and B.faces[at] or SHADE_TOP)
     px[k] = { 16 * a / N, 16 * c / N }
   end
   -- split along the crease: a mountain's corner is two planes meeting on a diagonal of the cell
@@ -726,12 +743,58 @@ local SPANS = { { 4, 4 }, { 4, 2 }, { 2, 4 }, { 2, 2 }, { 4, 1 }, { 1, 4 }, { 2,
 --- background bits.
 function Relief.reliefUV(B, x, y, g, s, u0, v0, u1, v1, flr, fl, rows)
   local cut = Relief.cutDiagonals(rows)
+  -- (lit: the drawing's own light is in it, a face's included - shadows only; src/scene/lighting.lua)
+  B.artShaded = true
   if not Relief.isSlope(g) and not Relief.isSlope(s) then
     local h, d = g[0] / 16, s[0] / 16
+    -- (through the lit quad, as all ground is: what stands in the sun shades it)
     cutQuad(B, vtx(x, h, y + d, u0, v0, SHADE_TOP), vtx(x + 1, h, y + d, u1, v0, SHADE_TOP),
       vtx(x + 1, h, y + 1 + d, u1, v1, SHADE_TOP), vtx(x, h, y + 1 + d, u0, v1, SHADE_TOP),
       { { 0, 0 }, { 16, 0 }, { 16, 16 }, { 0, 16 } }, cut)
+    B.artShaded = nil
     return
+  end
+  -- lit, each lattice point brings the sun's face term of the slope a tile across (ReliefFace:
+  -- two points either side, into the cells round it), and the lattice's shadows are read ahead
+  local light = B.light
+  local latticeLit = light ~= nil and B.constant == nil
+  local lattice, shade
+  if light then
+    local cells = {}
+    for dz = -1, 1 do
+      cells[dz] = {}
+      for dx = -1, 1 do
+        cells[dz][dx] = (dx == 0 and dz == 0) and g or (B.sameMap(x + dx, y + dz) and B.cell(x + dx, y + dz) or nil)
+      end
+    end
+    local function height(a, c)
+      local cx = a < 0 and -1 or a > N and 1 or 0
+      local cz = c < 0 and -1 or c > N and 1 or 0
+      local gg = cells[cz][cx]
+      if not gg then return 0 end
+      return gg[(c - cz * N) * SIDE + (a - cx * N)]
+    end
+    local faces = {}
+    for c = 0, N do
+      for a = 0, N do
+        local hu = (height(a + 2, c) - height(a - 2, c)) / 16
+        local hv = (height(a, c + 2) - height(a, c - 2)) / 16
+        faces[c * SIDE + a] = light.face(-hu, 1 + hv, -hv)
+      end
+    end
+    B.faces, B.vertexFace = faces, true
+    if latticeLit then
+      lattice = {}
+      local L, S = B.lift or 0, B.shift or 0
+      for c = 0, N do
+        for a = 0, N do
+          local k = c * SIDE + a
+          local wx, wy, wz = B.world(x + a / N, g[k] / 16 + L, y + c / N + s[k] / 16 + S)
+          lattice[k] = { wx, wy, wz, faces[k] }
+        end
+      end
+      light.lattice(lattice, SIDE)
+    end
   end
   -- a rectangle of the lattice that is one plane and uncut is one quad: largest first
   local drawn = {}
@@ -754,6 +817,11 @@ function Relief.reliefUV(B, x, y, g, s, u0, v0, u1, v1, flr, fl, rows)
                   if flr and onFloor(g, i, j, fl) then merge = false end
                 end
               end
+              -- (lit, only where the lattice's light runs across it as its corners' does)
+              if merge and latticeLit then
+                shade = shade or light.latticeShades(lattice, SIDE)
+                merge = spanLinear(shade, i0, j0, wa, wc)
+              end
             end
             if merge then
               for j = j0, j0 + wc - 1 do
@@ -766,6 +834,7 @@ function Relief.reliefUV(B, x, y, g, s, u0, v0, u1, v1, flr, fl, rows)
       end
     end
   end
+  B.vertexFace, B.faces, B.artShaded = nil, nil, nil
 end
 
 -- ── cliff walls ──────────────────────────────────────────────────────────────
@@ -989,9 +1058,11 @@ function Relief.cliffWalls(B, x, y, g, s, wall, art, artY, sides, backed)
                   vtx(xe, ba, zc, wu(zc), wv(ba), shade), vtx(xe, bb, zd, wu(zd), wv(bb), shade))
               end
             else
-              -- the edge column of the drawing, half a pixel in, lit as the drawing
+              -- the edge column of the drawing, half a pixel in, lit as the drawing (its own
+              -- light is in it, so the outline reads as one with it)
               local ue = d == 0 and o0 + (o1 - o0) / 32 or o1 - (o1 - o0) / 32
               local va, vb = p0 + (p1 - p0) * k / N, p0 + (p1 - p0) * (k + st) / N
+              B.artShaded = true
               if d == 0 then
                 put(B, vtx(xe, ta, za, ue, va, SHADE_TOP), vtx(xe, tb, zb, ue, vb, SHADE_TOP),
                   vtx(xe, bb, zd, ue, vb, SHADE_TOP), vtx(xe, ba, zc, ue, va, SHADE_TOP))
@@ -999,6 +1070,7 @@ function Relief.cliffWalls(B, x, y, g, s, wall, art, artY, sides, backed)
                 put(B, vtx(xe, tb, zb, ue, vb, SHADE_TOP), vtx(xe, ta, za, ue, va, SHADE_TOP),
                   vtx(xe, ba, zc, ue, va, SHADE_TOP), vtx(xe, bb, zd, ue, vb, SHADE_TOP))
               end
+              B.artShaded = nil
             end
           end
         end
@@ -1064,6 +1136,7 @@ function Relief.northFace(B, x, y, g, s, wallTile, groundTile)
       end
     end
     if ground then
+      B.constant = 1.0
       bot[1], bot[2] = bot[1] - 1, bot[2] - 1
       local za, zz = min(zb[1], zb[2]), max(zt[1], zt[2])
       local row = floor(za)
@@ -1087,6 +1160,7 @@ function Relief.northFace(B, x, y, g, s, wallTile, groundTile)
         end
         row = row + 1
       end
+      B.constant = nil
     end
   end
 end
@@ -1228,7 +1302,10 @@ function Relief.emitCell(B, x, y, g)
           end
           B.lift = foot - (1 + 0.125 * (k - 1)) / 16
           B.shift = B.lift
+          -- (lit as the ground it is seen beside, this tile's own at its foot)
+          B.constant = B.sampleAt and B.sampleAt(x + 0.5, foot + 0.05, y + 0.5 + foot) or 1.0
           runOn(B, nx, ny, nu0, nv0, nu1, nv1)
+          B.constant = nil
         end
       end
     end

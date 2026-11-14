@@ -1100,5 +1100,76 @@ do
     "an alternate's cell keeps the base's collision bits where it is the base's, else its code says")
 end
 
+-- the light (src/scene/light.lua, Emerald 3DS's BaseLightFor / FogLight / SetGrade, voxel_grade.c)
+do
+  local Haze = dofile("src/scene/light.lua")
+  local W = Haze.WEATHER
+  local clear = Haze.light({})
+  check(clear.haze == 0.14 and clear.start == 1.05 and clear.ramp == 0.60, "no weather: their clear-day haze")
+  check(near(clear.rgb[1], 210 / 255) and near(clear.rgb[3], 250 / 255), "...fading to their pale sky colour")
+  check(Haze.light({ indoor = true }).haze == 0, "indoors no haze")
+  check(Haze.light({ weather = W.SUNNY }).haze == 0.12, "sun: a lighter haze")
+  local r = Haze.range(clear, 10)
+  check(near(r[1], 10.5) and near(r[2], 16.5) and r[3] == 0.14,
+    "the haze starts 1.05 eye distances off and is full 0.6 further")
+  local ash = { currWeather = W.VOLCANIC_ASH, ashSpritesCreated = true, currBlendEVA = 16 }
+  local a = Haze.light({ weather = W.VOLCANIC_ASH, state = ash })
+  check(a.haze == 0.50 and near(a.rgb[1], 0.66) and near(a.start, 0.75) and near(a.ramp, 0.90), "ash come in: their ash haze")
+  ash.currBlendEVA = 8
+  check(near(Haze.light({ weather = W.VOLCANIC_ASH, state = ash }).haze, 0.32), "...halfway in, halfway mixed")
+  ash.ashSpritesCreated = false
+  check(Haze.light({ weather = W.VOLCANIC_ASH, state = ash }).haze == 0.14, "...before its sprites, the clear haze")
+  local rain = { currWeather = W.RAIN, curRainSpriteIndex = 12 }
+  check(near(Haze.light({ weather = W.RAIN, state = rain }).haze, 0.39), "rain: 0.30 and 0.18 of its drops")
+  local fog = { currWeather = W.FOG_HORIZONTAL, fogHSpritesCreated = true, currBlendEVA = 12 }
+  check(near(Haze.light({ weather = W.FOG_HORIZONTAL, state = fog }).rgb[1], 0.80), "fog: a pale veil")
+  check(near(Haze.light({ weather = W.FOG_HORIZONTAL, state = fog, cave = true }).rgb[1], 0.10), "...blue-black underground")
+  local r5, g5, b5 = Haze.saturate5(20, 10, 5)
+  check(r5 == 22 and g5 == 9 and b5 == 3, "the texture grade pushes each 5-bit channel 1.3x from the luma")
+  check(select(1, Haze.saturate5(16, 16, 16)) == 16, "...and leaves a grey alone")
+  check(select(2, Haze.saturate5(31, 0, 0)) == 0 and Haze.saturate5(31, 0, 0) == 31, "...clamped to the 5 bits")
+  local sun = Haze.light({ weather = W.SUNNY })
+  check(near(sun.sun[1], 1.04) and near(sun.shade[3], 1.05) and near(sun.rays, 0.14), "sun: warm sun tint, the clear shade tint")
+  local inside = Haze.light({ indoor = true })
+  check(inside.sun[1] == 1 and inside.shade[3] == 1 and inside.bloom == 0, "indoors the grade is the identity")
+end
+
+-- the sun (src/scene/lighting.lua, Emerald 3DS's voxel_lighting.c)
+do
+  local Lighting = dofile("src/scene/lighting.lua")
+  -- flat ground, one box two tiles tall at (5, 5)
+  local L = Lighting.new({
+    cell = function(x, z) if x == 5 and z == 5 then return { top = 2 } end return {} end,
+    surfaceAt = function() return 0 end, signOccludes = function() return false end, ceiling = 2.01 })
+  check(near(L.face(0, 1, 0), 1), "level ground faces the sun fully")
+  check(near(L.face(0, 0, 1), 0.70), "a south wall is turned away: the ambient")
+  check(near(L.face(-1, 0, 0), 0.70 + 0.30 * 0.85), "a west wall: 0.85 of the sun")
+  check(L.lit(6.5, 0, 6.5) == false, "a point south-east of a box is in its shadow")
+  check(L.lit(4.5, 0, 6.5) == true and L.lit(6.5, 0, 4.5) == true, "...not one west or north of it")
+  check(L.lit(9.5, 0, 9.5) == true, "...nor one past its reach")
+  check(near(L.sample(6.5, 0, 6.5), 0.70), "a shadowed point gets the ambient")
+  check(near(L.sample(5.5, 0, 6.2), 0.70 * (1 - 0.035)), "...and a little less at the box's foot")
+  local tris = {}
+  L.face4(function(a, b, c) tris[#tris + 1] = { a, b, c } end, { off = { 0, 0, 0 }, refine = true },
+    { 6, 0, 5, 0, 0, 1, 1 }, { 7, 0, 5, 1, 0, 1, 1 }, { 7, 0, 6, 1, 1, 1, 1 }, { 6, 0, 6, 0, 1, 1, 1 })
+  check(#tris == 8, "level ground a shadow's edge crosses is cut in four")
+  local m = L.modelShade({ 0, 0, 0 }, { 0, 1, 0 }, { 0, 0, 1 }, 0.80)
+  check(near(m, 0.70 + 0.30 * 0.85), "a model's west-shaded face is lit as a west face")
+  local t = Lighting.buildSurface({ w = 1, h = 1, base = 0, heights = function()
+    local g = {}
+    for k = 0, 24 do g[k] = 16 end
+    return g
+  end }, 5)
+  check(near(t.top, 1) and near(Lighting.surfaceAt(t, 0.5, 1.5, 5, 0), 1), "a level's relief stands a tile high a row south")
+end
+
+-- the light in the air (src/scene/sunfx.lua)
+do
+  local F = dofile("src/scene/sunfx.lua")
+  check(near(F.rayStrength(0, 1), 1) and F.rayStrength(1, 0) == 0, "the rays: full in the top left corner, gone in the far one")
+  check(F.impact(0.5, 0.78) == 0 and F.impact(1, 0.78) == 0, "no landing burst in flight or once landed")
+  check(near(F.impact(0.78 + 0.22 * 0.1, 0.78), math.exp(-0.5) * 0.9, 1e-4), "...and its decay as it lands")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

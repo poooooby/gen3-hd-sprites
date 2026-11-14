@@ -16,6 +16,10 @@
 
 return function(deps)
   local Camera, Cells, Stage, Render, Trees = deps.Camera, deps.Cells, deps.Stage, deps.Render, deps.Trees
+  local Light = deps.Light                        -- (optional: src/scene/light.lua, Emerald 3DS's light)
+  local Lighting = deps.Lighting                  -- (optional: src/scene/lighting.lua, Emerald 3DS's sun)
+  -- (optional: src/scene/sunfx.lua, the sun's rays, dust and bloom, drawn by the renderer)
+  if Render and deps.SunFx then Render.SunFx = deps.SunFx end
   local hd = deps.hd
 
   local Scene = { enabled = false, Camera = Camera }
@@ -32,7 +36,10 @@ return function(deps)
   Scene.SPRITES = { enemy = { 144, 8, 208, 72 }, player = { 40, 48, 104, 112 } }
   Scene.SHADOW = { enemy = { 176, 70, 26, 6 }, player = { 72, 115, 32, 7 } }
   Scene.SHADOW_ALPHA = 0.42
+  -- (without src/scene/light.lua: the haze from 14 to 48 tiles, 0.9 at most, indoors 6 to 22)
   Scene.FOG = { outdoor = { 14, 48, 0.9 }, indoor = { 6, 22, 1 } }
+  -- the sky behind the world (Emerald 3DS clears to the battle's backdrop colour: the wallpaper's
+  -- top row here), and the haze's colour without light.lua
   Scene.HAZE = { outdoor = { 0.80, 0.87, 0.93 }, indoor = { 0, 0, 0 } }
   Scene.GLIDE_FRAMES = 100
 
@@ -95,11 +102,22 @@ return function(deps)
       return nil
     end
     -- which map holds a cell (as env.cell finds it): its def, the cell in it, the map's id and
-    -- where the map's north-west corner stands in the battle map's cells; nil outside every map
+    -- where the map's north-west corner stands in the battle map's cells; nil outside every map.
+    -- (The engine pads a layout of odd size to even with a copy of its last row or column -
+    -- `width`/`height` - and places and draws its neighbours by that size, as this does; the
+    -- map itself is `trueWidth` x `trueHeight`, the layout's own size, and a padding cell is in
+    -- no map, as on the GBA, where its border is drawn there)
     local Runtime = req("src.core.game3.runtime")
     local sess = Runtime and Runtime.getSession and Runtime.getSession()
     env.mapId = sess and sess.map
+    local whereAny
     function env.where(cx, cy)
+      local d, lx, ly, id, ox, oy = whereAny(cx, cy)
+      local L = d and d.midLayout
+      if not L or lx >= (L.trueWidth or L.width or 0) or ly >= (L.trueHeight or L.height or 0) then return nil end
+      return d, lx, ly, id, ox, oy
+    end
+    function whereAny(cx, cy)
       if inside(layout, cx, cy) then return def, cx, cy, env.mapId, 0, 0 end
       local dir = cy < 0 and "north" or cy >= H and "south" or cx < 0 and "west" or cx >= W and "east" or nil
       for _, n in ipairs(Map.neighborList or {}) do
@@ -319,7 +337,12 @@ return function(deps)
     if treeImage == nil then
       treeImage = false
       if Trees and deps.path then
-        local ok, img = pcall(G.newImage, deps.path .. "/assets/scene/trees.png")
+        local path = deps.path .. "/assets/scene/trees.png"
+        -- (graded as their tree texture loads: saturated, the crowns brightened; the shader
+        -- leaves the trees' meshes ungraded, src/scene/light.lua)
+        local okD, data = pcall(love.image.newImageData, path)
+        if okD and data and Light then pcall(Light.gradeTrees, data) end
+        local ok, img = pcall(G.newImage, okD and data or path)
         if ok and img then
           img:setFilter("nearest", "nearest")
           treeImage = img
@@ -347,7 +370,7 @@ return function(deps)
         local maps = game.data and game.data.maps
         local def = maps and maps[mapId]
         if not (ok and L and def and def.pair) then return nil end
-        local W, H = L.width or 0, L.height or 0
+        local W, H = L.trueWidth or L.width or 0, L.trueHeight or L.height or 0
         return { pair = def.pair, mid = function(x, y)
           if x < 0 or y < 0 or x >= W or y >= H then return nil end
           return L:midAt(x, y)
@@ -2534,7 +2557,7 @@ return function(deps)
               L = ok and l or false
             end
             if not L then break end
-            local w, h = L.width or 0, L.height or 0
+            local w, h = L.trueWidth or L.width or 0, L.trueHeight or L.height or 0
             local function blocked(cx, cy)
               if cx < 0 or cy < 0 or cx >= w or cy >= h then return false end
               return env.isWall(L:collAt(cx, cy)) == true
@@ -2574,8 +2597,8 @@ return function(deps)
     local okL, L = pcall(Map.ensureMidLayout, game, mapId)
     if not (okL and L) then return 0 end
     local mids = {}
-    for y = 0, (L.height or 0) - 1 do
-      for x = 0, (L.width or 0) - 1 do mids[L:midAt(x, y)] = true end
+    for y = 0, (L.trueHeight or L.height or 0) - 1 do
+      for x = 0, (L.trueWidth or L.width or 0) - 1 do mids[L:midAt(x, y)] = true end
     end
     local ctx = layoutCtx()
     local n = 0
@@ -2883,6 +2906,164 @@ return function(deps)
   -- (cell.dy, tiles: its map's level over the battle map's - its base and the lift its seam with
   -- the battle map asks - and its relief's at its middle; a point h up stands h south as well),
   -- less the player's cell's, so the battle stands where it did. Returns the maps placed.
+  -- The sun on the scene (src/scene/lighting.lua): Emerald 3DS's casters read off the battle's
+  -- window, in their frame (ours lifted by grid.frameH in height and rows): each cell's map base,
+  -- how high and how far south what stands on it is drawn (their LightCell's base, lift, shift), and
+  -- what it casts - a tree's crown (an ellipsoid), a model's footprint to its top, a sign's drawing,
+  -- a drawn map's relief as a height field; past every map, nothing, at the base of the map north
+  -- whose drawing reaches it. Indoors there is no sun (their `lighting = !indoor`). Returns
+  -- { L, H } for Render.vertices, or nil.
+  local function sceneLighting(grid, env, maps, signs)
+    if not (Lighting and Relief) or env.walled then return nil end
+    local SIDE = Relief.SIDE
+    local H = grid.frameH or 0
+    local curBase = grid.frameBase or 0
+    -- the drawn maps' surfaces, built as the sun first asks
+    local surfaces = {}
+    local function surfaceOf(m)
+      if not (m and m.L and m.L.drawn) then return nil end
+      local t = surfaces[m]
+      if t == nil then
+        local L = m.L
+        t = Lighting.buildSurface({ w = L.w, h = L.h, base = L.base,
+          heights = function(x, y) return L.cells[y * L.w + x] end }, SIDE) or false
+        surfaces[m] = t
+      end
+      return t or nil
+    end
+    -- (a map's lift in pixels, Emerald 3DS's inst->lift: its base less its layout's)
+    local function liftPx(m) return (m.rel or 0) - (m.L and m.L.base or 0) + curBase end
+    local function baseOf(c) return (c.mapLift or 0) + H end
+    local function drawnLift(c)
+      local m = c.rmap
+      return (m and m.L and m.L.drawn and c.g) and Relief.centre(c.g) / 16 or 0
+    end
+    -- the signs' shadows (voxel_sign.c ShadowOf): the drawing's rows (a head's over them), on the
+    -- board at its middle row's band
+    local signAt = {}
+    for _, sg in ipairs(signs or {}) do
+      local c = sg.cell
+      local rows, n = {}, 16
+      if sg.head then
+        for y = 0, 15 do rows[y], rows[16 + y] = sg.head[y] or 0, sg.rows[y] or 0 end
+        n = 32
+      else
+        for y = 0, 15 do rows[y] = sg.rows[y] or 0 end
+      end
+      local high, low = n, 0
+      for y = 0, n - 1 do
+        if rows[y] ~= 0 then
+          if high == n then high = y end
+          low = y
+        end
+      end
+      if high < n then
+        signAt[c.cy * 65536 + c.cx] = { rows = rows, high = high, low = low,
+          base = (c.g and c.g[3 * SIDE + 2] or 0) / 16,
+          zMid = (c.cy - (sg.head and 1 or 0)) + math.floor(low / 8) * 0.5 + 0.25 }
+      end
+    end
+    local function treeOf(c)
+      if not (Trees and not env.indoor and c.pair and c.mid) then return nil end
+      local sec, general = Trees.tilesets(c.pair)
+      if not general then return nil end
+      return sec
+    end
+    local function cell(x, z)
+      local c = grid.at(x, z)
+      if not c then return { base = H, shift = H } end
+      if c.border then
+        -- past every map: what is drawn here is the map north of it, as far south as it stands high
+        for k = 1, 16 do
+          local n = grid.at(x, z - k)
+          if n and not n.border and n.rmap then
+            local reach = baseOf(n) + drawnLift(n)
+            if reach > k - 1 then return { base = baseOf(n), shift = reach } end
+            break
+          end
+        end
+        return { base = 0, shift = 0 }
+      end
+      local out = { base = baseOf(c), lift = drawnLift(c) }
+      out.shift = out.lift + out.base
+      local sec = treeOf(c)
+      if sec then
+        local part = Trees.part(sec, c.mid)
+        if part == Trees.GRASS then part = nil end
+        if part then
+          -- a wood under a deck: the deck casts, over the crowns
+          local pl = c.model
+          if pl and pl.model and pl.cx then
+            local over = Buildings.cellTop(pl.model, c.cx - pl.cx, c.cy - pl.cy)
+            if over > Lighting.CROWN_TOP then
+              out.top = over
+              out.mask = Buildings.footprints(pl.model)[(c.cx - pl.cx) .. "," .. (c.cy - pl.cy)]
+              return out
+            end
+          end
+          out.crownPart, out.top = part, Lighting.CROWN_TOP
+          return out
+        end
+        if Trees.groundMetatile(sec, c.mid) ~= c.mid then return out end
+      end
+      -- a modelled building casts from its own solid, cell by cell
+      local pl = c.model
+      if pl and pl.model and pl.cx then
+        local i, j = c.cx - pl.cx, c.cy - pl.cy
+        out.top = Buildings.cellTop(pl.model, i, j)
+        out.mask = Buildings.footprints(pl.model)[i .. "," .. j]
+        return out
+      end
+      -- a sign or a lamp casts its own drawing
+      local sg = signAt[c.cy * 65536 + c.cx]
+      if sg then
+        out.top = sg.base + (sg.low - sg.high + 1) / 16
+        if out.top > 0 then
+          out.sign = true
+          return out
+        end
+      end
+      -- a drawn map casts from its relief as it stands
+      local m = c.rmap
+      local t = surfaceOf(m)
+      if t and c.lx then
+        out.top, out.bottom = Lighting.surfaceTop(t, c.lx, c.ly, SIDE, liftPx(m))
+        out.surface = out.top > 0.05
+      end
+      return out
+    end
+    local function surfaceAt(x, z)
+      local c = grid.at(math.floor(x), math.floor(z))
+      local m = c and not c.border and c.rmap
+      local t = surfaceOf(m)
+      if not t then return 0 end
+      return Lighting.surfaceAt(t, x - m.x, z - m.y, SIDE, liftPx(m))
+    end
+    local function signOccludes(tx, tz, x, y, z)
+      local sg = signAt[tz * 65536 + tx]
+      if not sg or z < sg.zMid - 0.125 or z > sg.zMid + 0.125 then return false end
+      local cx16 = (x - tx) * 16
+      local column = cx16 >= 0 and math.floor(cx16) or -math.floor(-cx16)
+      local yy = (y - sg.base) * 16
+      local row = sg.low - (yy >= 0 and math.floor(yy) or -math.floor(-yy))
+      if column < 0 or column > 15 or row < sg.high or row > sg.low then return false end
+      return math.floor((sg.rows[row] or 0) / 2 ^ column) % 2 == 1
+    end
+    -- the casters' ceiling: no ray climbs past the tallest of them
+    local ceiling = H + 2
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        local o = cell(c.cx, c.cy)
+        local top = (o.top or 0) + (o.base or 0) + (o.lift or 0)
+        if top > ceiling then ceiling = top end
+      end
+    end
+    local L = Lighting.new({ cell = cell, surfaceAt = surfaceAt, signOccludes = signOccludes,
+      ceiling = ceiling + 0.01 })
+    return { L = L, H = H }
+  end
+
   local function placeRelief(grid, env, R, px, py)
     local maps, clears = {}, {}
     for j = 0, grid.h - 1 do
@@ -2895,7 +3076,8 @@ return function(deps)
             local ML = d.midLayout
             m = { def = d, L = R.layouts[layoutIdOf(id) or -1], x = ox, y = oy,
                   w = ML and ML.width or 0, h = ML and ML.height or 0 }
-            if m.L and (m.L.w ~= m.w or m.L.h ~= m.h) then m.L = nil end
+            -- (its relief is the layout's own size: the engine's padding row or column has none)
+            if m.L and (m.L.w ~= (ML.trueWidth or m.w) or m.L.h ~= (ML.trueHeight or m.h)) then m.L = nil end
             maps[d] = m
           end
           c.rmap, c.lx, c.ly = m, lx, ly
@@ -2932,6 +3114,10 @@ return function(deps)
     end
     local here = grid.at(px, py)
     local h0 = here and here.rmap and here.rmap.rel + Relief.centre(here.g) or 0
+    -- (how far our frame lies under Emerald 3DS's world, in height and rows alike: their heights
+    -- count the battle map's base, ours start at the player's ground; the lighting works in theirs)
+    grid.frameH = (h0 + (cur.L and cur.L.base or 0)) / 16
+    grid.frameBase = cur.L and cur.L.base or 0
     for j = 0, grid.h - 1 do
       for i = 0, grid.w - 1 do
         local c = grid.rows[j][i]
@@ -2954,7 +3140,7 @@ return function(deps)
   -- the relief's vertices (into `l`, relative to the player's cell px, py) and the texture of the
   -- drawings it lays: each lifted cell as Relief.emitCell draws it, in two passes (the first only
   -- asks which drawings it needs: the cells' own, their grounds and walls, the cut tiles)
-  local function emitRelief(grid, R, NativeTileset, px, py)
+  local function emitRelief(grid, R, NativeTileset, px, py, light)
     local slots, order = {}, {}
     local function slotOf(key, make)
       local s = slots[key]
@@ -3004,15 +3190,37 @@ return function(deps)
             end
             local B = { lift = 0, shift = 0, faceTile = L.faceTile }
             local dyBase = c.mapLift
+            local LT = light and light.L
+            local function V(p) return { p[1] - px, p[2] + dyBase, p[3] - py + dyBase, p[4], p[5], p[6], 1 } end
+            local function emit(p, q, r)
+              for _, v in ipairs({ p, q, r }) do
+                local sh = v[6] > 1 and 1 or v[6]
+                out[#out + 1] = { v[1], v[2], v[3], v[4], v[5], sh, sh, sh, 1 }
+              end
+            end
+            -- (lit as the builder's flags say, src/scene/lighting.lua: a lattice's own face terms,
+            -- ground refined, the drawing's own light kept, an object lit as a whole)
+            local function kindOf()
+              return { off = { px, light.H, py + light.H }, refine = true, lift = dyBase + (B.lift or 0),
+                       artShaded = B.artShaded, vertexFace = B.vertexFace, constant = B.constant }
+            end
             function B.quad(a, b, cc, d)
+              if LT then LT.face4(emit, kindOf(), V(a), V(b), V(cc), V(d), 4); return end
               for _, p in ipairs({ a, b, cc, a, cc, d }) do
                 out[#out + 1] = { p[1] - px, p[2] + dyBase, p[3] - py + dyBase, p[4], p[5], p[6], p[6], p[6], 1 }
               end
             end
             function B.tri(a, b, cc)
+              if LT then LT.face4(emit, kindOf(), V(a), V(b), V(cc), nil, 3); return end
               for _, p in ipairs({ a, b, cc }) do
                 out[#out + 1] = { p[1] - px, p[2] + dyBase, p[3] - py + dyBase, p[4], p[5], p[6], p[6], p[6], 1 }
               end
+            end
+            if LT then
+              local baseTh = dyBase + light.H
+              B.light = LT
+              function B.world(x, y, z) return x, y + baseTh, z + baseTh end
+              function B.sampleAt(x, y, z) return LT.sample(x, y + baseTh, z + baseTh) end
             end
             B.sameMap = same
             function B.cell(x, y)
@@ -3414,9 +3622,12 @@ return function(deps)
     for _, pl in ipairs(placed) do names[#names + 1] = pl.model.spec.name .. "@" .. pl.cx .. "," .. pl.cy end
     hd.stats.sceneBuildings = table.concat(names, " ")
     phase("stage")
+    -- (the sun: src/scene/lighting.lua, every face lit as Emerald 3DS lights it)
+    local okLt, light = pcall(sceneLighting, grid, env, maps, signs)
+    if not okLt then hd.stats.sceneLightError, light = tostring(light), nil else hd.stats.sceneLightError = nil end
     local lists = Render.vertices(grid, tilesFor(NativeTileset), px, py,
       { Trees = Trees, image = treesArt(), outdoor = not env.indoor },
-      { Buildings = Buildings, placements = placed })
+      { Buildings = Buildings, placements = placed }, light)
     if lists.skirts and hd.stats.sceneRelief then
       local k = lists.skirts
       hd.stats.sceneRelief = hd.stats.sceneRelief .. ("; skirts: belt %d, seam %d, gap %d (%s)"):format(k.belt, k.seam, k.gap,
@@ -3458,16 +3669,37 @@ return function(deps)
           end
           local sdy = s.cell.dy or 0
           local wx, wz = s.cell.cx - px, s.cell.cy - py - (s.head and 1 or 0) + sdy
+          -- (lit as one object, voxel_sign.c VoxelSign_Emit: its one sample, times each face's
+          -- turn to the sun while the sample is in it)
+          local LT = light and light.L
+          local constant = LT and LT.sample(wx + 0.5 + px, sdy + 0.5 + light.H, wz + 0.5 + py + light.H)
+          local quadV = {}
           local top = Signs.emit(mask, n, function(x, y, z, u, v, shade)
-            l[#l + 1] = { wx + x, y + sdy, wz + z, ((k - 1) * 16 + u) / (16 * #signs), (row0 + v) / 32,
-                          shade, shade, shade, 1 }
+            local vt = { wx + x, y + sdy, wz + z, ((k - 1) * 16 + u) / (16 * #signs), (row0 + v) / 32,
+                         shade, shade, shade, 1 }
+            if not LT then l[#l + 1] = vt; return end
+            quadV[#quadV + 1] = vt
+            if #quadV == 6 then
+              local A, B, C = quadV[1], quadV[2], quadV[3]
+              local ux, uy, uz = B[1] - A[1], B[2] - A[2], B[3] - A[3]
+              local vx, vy, vz = C[1] - A[1], C[2] - A[2], C[3] - A[3]
+              local nx, ny, nz = uy * vz - uz * vy, uz * vx - ux * vz, ux * vy - uy * vx
+              if ny < 0 then nx, ny, nz = -nx, -ny, -nz end
+              local lit = constant > LT.ambient + 0.01 and constant * LT.face(nx, ny, nz) or constant
+              for _, q in ipairs(quadV) do
+                local sh = q[6] * lit
+                q[6], q[7], q[8] = sh, sh, sh
+                l[#l + 1] = q
+              end
+              quadV = {}
+            end
           end)
           s.cell.top = top
         end
       end
     end
     if R then
-      local okE, image, l = pcall(emitRelief, grid, R, NativeTileset, px, py)
+      local okE, image, l = pcall(emitRelief, grid, R, NativeTileset, px, py, light)
       if okE and image then
         lists.models[image] = l
       elseif not okE then
@@ -3493,6 +3725,8 @@ return function(deps)
       -- (on lifted ground: as high as it, and as far south again, src/scene/relief.lua)
       to = Camera.pose(stage.tx, stage.tz + (stage.ty or 0), nil, nil, stage.ty),
       progress = 0, frames = 0, haze = haze, fog = indoor and Scene.FOG.indoor or Scene.FOG.outdoor,
+      -- (Emerald 3DS's indoor, no haze: MAP_TYPE_INDOOR or SECRET_BASE; a cave's fog goes dark)
+      walled = env.walled, cave = tonumber(env.def and env.def.mapType) == 3, frameH = grid.frameH,
       shadows = shadows, live = live,
     }
   end
@@ -3541,6 +3775,61 @@ return function(deps)
 
   local function smooth(t) return t * t * (3 - 2 * t) end
 
+  -- the landing's strength at glide progress u (Emerald 3DS's intro impact, src/scene/sunfx.lua)
+  local function require_impact(u)
+    local SunFx = Render.SunFx
+    return SunFx and SunFx.impact(u, Camera.TRAVEL) or 0
+  end
+
+  -- the sun dapples' pattern (src/scene/light.lua MakeDapple), made once: linear, repeating
+  local dappleImg
+  local function dappleImage()
+    if dappleImg == nil then
+      dappleImg = false
+      if Light and Light.makeDapple then
+        local ok, img = pcall(function()
+          local D = Light.DAPPLE_DIM
+          local data = love.image.newImageData(D, D)
+          Light.makeDapple(function(x, y, v) data:setPixel(x, y, v / 255, v / 255, v / 255, 1) end)
+          local im = G.newImage(data)
+          im:setFilter("linear", "linear")
+          im:setWrap("repeat", "repeat")
+          return im
+        end)
+        if ok and img then dappleImg = img end
+      end
+    end
+    return dappleImg or nil
+  end
+
+  -- the light for a pose (src/scene/light.lua: Emerald 3DS's, by the game's weather as it is
+  -- this frame, as SetGrade sets it each frame): the haze's colour, the render's fog, the sky
+  -- behind, the grade (nil without light.lua: no grade, WoobleView's old haze)
+  local function hazeFor(s, pose)
+    if not Light then return s.haze, s.fog, nil, nil end
+    local state, weather
+    local W = req("src.core.game3.weather")
+    local R = W and W.rseEngine and W.rseEngine()
+    if R and R.getCurrentWeather then
+      state = R.state
+      weather = R.getCurrentWeather()
+    end
+    local light = Light.light({ indoor = s.walled, weather = weather, state = state, cave = s.cave })
+    -- (the sun's light in the air: src/scene/sunfx.lua; the landing's burst of bloom)
+    light.seconds = love.timer.getTime()
+    light.sunDir = Lighting and Lighting.SUN or nil
+    light.impact = Camera.TRAVEL and s.progress and require_impact(s.progress) or 0
+    -- (the sun dapples: their pattern, drifting, over the world as it stands in their frame)
+    light.dappleImage = dappleImage()
+    if light.dappleImage then
+      local H = s.frameH or 0
+      light.dappleU, light.dappleV = Light.dapplePlanes(Lighting and Lighting.SUN or { dx = 0.85, dz = 0.55 },
+        love.timer.getTime(), s.ox, H, s.oz + H)
+    end
+    hd.stats.sceneHaze = ("%s %.2f from %.2f over %.2f"):format(Light.class(weather), light.haze, light.start, light.ramp)
+    return light.rgb, Light.range(light, pose.dist), s.haze, light
+  end
+
   --- (tests) The last scene alone at its settled pose, w x h (the battle canvas scaled to it):
   --- image data, or nil.
   function Scene.snapshot(w, h)
@@ -3548,8 +3837,9 @@ return function(deps)
     if not (s and s.meshes) then return nil end
     local k = math.min(w / 240, h / 160)
     local proj, depth = Camera.screenProjection(0, 0, k, k)
-    local c = Render.draw(G, Camera, s, Camera.glide(s.from, s.to, 1), proj, depth, 1, s.haze, s.fog,
-      240 * k, 160 * k)
+    local pose = Camera.glide(s.from, s.to, 1)
+    local haze, fog, sky, light = hazeFor(s, pose)
+    local c = Render.draw(G, Camera, s, pose, proj, depth, 1, haze, fog, 240 * k, 160 * k, sky, light)
     return c and c:newImageData() or nil
   end
 
@@ -3595,7 +3885,8 @@ return function(deps)
     local u0, v0 = (x - bx) / bsx - shx, (y - by) / bsy - shy
     local proj, depth = Camera.screenProjection(u0, v0, bsx, bsy)
     local pose = Camera.glide(s.from, s.to, s.progress)
-    local c = Render.draw(G, Camera, s, pose, proj, depth, smooth(s.progress), s.haze, s.fog, w, h)
+    local haze, fog, sky, light = hazeFor(s, pose)
+    local c = Render.draw(G, Camera, s, pose, proj, depth, smooth(s.progress), haze, fog, w, h, sky, light)
     if not c then return nil end
     return c, x, y
   end

@@ -12,31 +12,56 @@
 -- The vertex shader puts a point on the screen as the camera puts it on the canvas: a screen
 -- pixel times the depth is linear in the view coordinates, so it goes through LOVE's own
 -- projection (which knows whether it draws to a canvas or the window) with the depth as w, and
--- the ground is interpolated perspective-correct. Distance fades into a haze colour.
+-- the ground is interpolated perspective-correct. Emerald 3DS's grade (src/scene/light.lua): a
+-- vertex's shade picks its tint between the light's shade and sun tints, every texel's 5-bit
+-- colour is saturated, and distance fades into the haze colour.
 
 local Render = {}
 
 Render.CARD_SHADE = 0.82
+Render.SHADE_LOW = 0.62     -- Emerald 3DS's VOXEL_GRADE_SHADE_LOW (src/scene/light.lua)
+Render.SATURATION = 1.30    -- and VOXEL_GRADE_SATURATION
 Render.BORDER_COURSES = 2   -- how tall the border round the map stands (Emerald 3DS's two courses)
 Render.SHADE = { south = 0.60, north = 0.50, west = 0.65, east = 0.55 }
 Render.UV_INSET = 0.02      -- texels kept off a tile's edge (no neighbour bleeding at an angle)
 Render.FLAT_MARK = 0.5      -- the vertex alpha of a standing cell's ground copy
+-- WoobleView's own (not Emerald 3DS's): land past every map fades into the sky from FADE[1] to
+-- FADE[2] tiles past the nearest map cell, so a mountain's rim (Mt Chimney's) carried on as the
+-- border does not stand as ridges out to the horizon; the maps themselves never fade
+Render.BORDER_FADE = { 0, 3 }
 Render.HIDE_AT = 2          -- the rise past which those copies are gone (above 1: never; a wide
                             -- block of trees is not wholly covered by its cards)
 
 local SHADER = [[
 varying float vDepth;
+varying vec3 vTint;
+varying vec2 vDapple;
+varying float vFade;
 #ifdef VERTEX
 uniform mat4 uView;
 uniform vec4 uProj;
 uniform vec2 uDepth;
 uniform float uRise;
+uniform vec3 uSunTint;
+uniform vec3 uShadeTint;
+uniform vec2 uGrade;
+uniform vec4 uDappleU;
+uniform vec4 uDappleV;
+attribute float VertexFade;
 vec4 position(mat4 transform_projection, vec4 vertex_position) {
+  vFade = VertexFade;
   vec4 q = vertex_position;
   q.y *= uRise;
+  // (the sun dapples' pattern, laid from above along the sun: src/scene/light.lua)
+  vDapple = vec2(dot(uDappleU.xyz, q.xyz) + uDappleU.w, dot(uDappleV.xyz, q.xyz) + uDappleV.w);
   vec4 c = uView * q;
   float w = c.z;
   vDepth = w;
+  // (Emerald 3DS's grade, voxel.v.pica: how sunlit the vertex is picks its tint, cool in
+  // shadow, warm in sun; the shade rides in the vertex colour)
+  float shade = VertexColor.r;
+  float t = clamp(shade * uGrade.x + uGrade.y, 0.0, 1.0);
+  vTint = shade * (uShadeTint + (uSunTint - uShadeTint) * t);
   vec4 p = transform_projection * vec4(uProj.x * c.x + uProj.y * w, -uProj.z * c.y + uProj.w * w, 0.0, w);
   p.z = uDepth.x * w + uDepth.y;
   return p;
@@ -46,13 +71,26 @@ vec4 position(mat4 transform_projection, vec4 vertex_position) {
 uniform vec3 uHaze;
 uniform vec3 uFog;
 uniform float uHideFlat;
+uniform float uSaturation;
+uniform Image uDapple;
+uniform vec3 uDappleRange;
+uniform vec3 uSky;
 vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
   // (a standing cell's own ground copy, marked by its alpha: gone once the cards stand)
   if (color.a < 0.75 && uHideFlat > 0.5) discard;
   vec4 t = Texel(tex, tc);
   if (t.a < 0.5) discard;
+  vec3 rgb = t.rgb;
+  if (uSaturation > 0.0) {
+    // (voxel_grade.c: each 5-bit channel pushed from the colour's luma, rounded, clamped)
+    vec3 c5 = floor(rgb * 31.0 + 0.5);
+    float y = dot(c5, vec3(0.299, 0.587, 0.114));
+    rgb = clamp(floor(y + (c5 - y) * uSaturation + 0.5), 0.0, 31.0) / 31.0;
+  }
+  vec3 lit = rgb * vTint;
+  if (uDappleRange.z > 0.5) lit *= mix(uDappleRange.x, uDappleRange.y, Texel(uDapple, vDapple).r);
   float f = clamp((vDepth - uFog.x) / (uFog.y - uFog.x), 0.0, 1.0) * uFog.z;
-  return vec4(mix(t.rgb * color.rgb, uHaze, f), 1.0);
+  return vec4(mix(mix(lit, uHaze, f), uSky, vFade), 1.0);
 }
 #endif
 ]]
@@ -61,6 +99,7 @@ Render.FORMAT = {
   { "VertexPosition", "float", 3 },
   { "VertexTexCoord", "float", 2 },
   { "VertexColor", "byte", 4 },
+  { "VertexFade", "float", 1 },
 }
 
 -- one quad (two triangles) into a vertex list: corners a (top left of the texture), b (top
@@ -88,21 +127,103 @@ end
 --- buildings (optional) = { Buildings = src/scene/buildings.lua, placements = { { model (with
 --- .image, its art), cx, cy, ground = image of its cells' ground } } }: each stands as its model
 --- (src/scene/buildings.lua); the cells it covers (cell.model) lay its ground and nothing else.
-function Render.vertices(grid, tiles, ox, oz, trees, buildings)
+--- light (optional) = { L = a src/scene/lighting.lua lighting, H = how far the mesh's frame lies
+--- under Emerald 3DS's world, in height and rows }: every face lit by the sun as theirs is.
+function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
   local out = { lower = {}, upper = {}, trees = {}, models = {} }
+  local LT = light and light.L
+  local OFF = light and { ox, light.H, oz + light.H }
+  -- a quad (corners { x, y, z }, uv rect) lit as `kind` says (src/scene/lighting.lua face4), or as
+  -- it is without light
+  local function litQuad(l, a, b, c, d, u0, v0, u1, v1, shade, alpha, kind)
+    if not (LT and kind) then
+      quad(l, a, b, c, d, u0, v0, u1, v1, shade, alpha)
+      return
+    end
+    local function V(p, u, v) return { p[1], p[2], p[3], u, v, shade, alpha or 1 } end
+    local function emit(p, q, r)
+      for _, v in ipairs({ p, q, r }) do
+        local s = v[6] > 1 and 1 or v[6]
+        l[#l + 1] = { v[1], v[2], v[3], v[4], v[5], s, s, s, v[7] }
+      end
+    end
+    kind.off = OFF
+    LT.face4(emit, kind, V(a, u0, v0), V(b, u1, v0), V(c, u1, v1), V(d, u0, v1), 4)
+  end
+  out.lit = LT ~= nil
+  local marks   -- (a fading border cell's lists, and where its vertices start in each)
   local function list(layer, image)
     local l = out[layer][image]
     if not l then
       l = {}
       out[layer][image] = l
     end
+    if marks and (layer == "lower" or layer == "upper") and not marks[l] then marks[l] = #l end
     return l
   end
-  local function put(layer, image, q, a, b, c, d, shade, alpha)
+  -- how far past the nearest map cell each border cell is (tiles, centre to centre), for the
+  -- border's fade (Render.BORDER_FADE)
+  local fadeField
+  do
+    local edges, any = {}, false
+    for j = 0, grid.h - 1 do
+      for i = 0, grid.w - 1 do
+        local c = grid.rows[j][i]
+        if c.border then any = true
+        elseif c.kind ~= "void" then
+          for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+            local o = grid.at(c.cx + d[1], c.cy + d[2])
+            if o and o.border then edges[#edges + 1] = c; break end
+          end
+        end
+      end
+    end
+    if any and #edges > 0 then
+      fadeField = {}
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local c = grid.rows[j][i]
+          if c.border then
+            local best = math.huge
+            for _, e in ipairs(edges) do
+              local dx, dz = c.cx - e.cx, c.cy - e.cy
+              local d = dx * dx + dz * dz
+              if d < best then best = d end
+            end
+            fadeField[c.cy * 65536 + c.cx] = math.sqrt(best)
+          end
+        end
+      end
+    end
+  end
+  local function fadeOf(v)
+    -- (the vertex's cell, its height taken off the row it is drawn on: a point h up stands h
+    -- south), the field read between the cell centres round it
+    local X, Z = v[1] + ox - 0.5, v[3] + oz - v[2] - 0.5
+    local x0, z0 = math.floor(X), math.floor(Z)
+    local fx, fz = X - x0, Z - z0
+    -- (a map cell is 0; past the window's edge, its edge's)
+    local function at(x, z)
+      local c = grid.at(x, z)
+      if not c then
+        local cx = x < grid.x0 and grid.x0 or x > grid.x0 + grid.w - 1 and grid.x0 + grid.w - 1 or x
+        local cz = z < grid.y0 and grid.y0 or z > grid.y0 + grid.h - 1 and grid.y0 + grid.h - 1 or z
+        return fadeField[cz * 65536 + cx] or 0
+      end
+      return fadeField[z * 65536 + x] or 0
+    end
+    local d = (at(x0, z0) * (1 - fx) + at(x0 + 1, z0) * fx) * (1 - fz)
+      + (at(x0, z0 + 1) * (1 - fx) + at(x0 + 1, z0 + 1) * fx) * fz
+    local a, b = Render.BORDER_FADE[1], Render.BORDER_FADE[2]
+    local t = (d - a) / (b - a)
+    t = t < 0 and 0 or t > 1 and 1 or t
+    return t * t * (3 - 2 * t)
+  end
+  local function put(layer, image, q, a, b, c, d, shade, alpha, kind)
     if not (image and q) then return end
     local iw, ih = image:getDimensions()
     local u0, v0, u1, v1 = uvOf(q, iw, ih)
-    quad(list(layer, image), a, b, c, d, u0, v0, u1, v1, shade, alpha)
+    litQuad(list(layer, image), a, b, c, d, u0, v0, u1, v1, shade, alpha, kind)
   end
   local Trees = trees and trees.Trees
   local timg = trees and trees.image
@@ -110,10 +231,12 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
   -- a tree's quad (corners in map cells, uvs in atlas texels), lifted with its cell (`lift`) and
   -- as far south (`shift`: a border tree's is its belt's, VoxelTree_EmitBorder)
   local lift, shift = 0, 0
-  local function putTree(a, b, c, d, u0, v0, u1, v1)
+  local function putTree(a, b, c, d, u0, v0, u1, v1, what)
     local function rel(p) return { p[1] - ox, p[2] + lift, p[3] - oz + shift } end
-    quad(list("trees", timg), rel(a), rel(b), rel(c), rel(d),
-      (u0 + e) / dim, (v0 + e) / dim, (u1 - e) / dim, (v1 - e) / dim, 1, 1)
+    -- (lit: a crown's card as the rounded crown it stands for, voxel_tree.c; its ground as ground)
+    litQuad(list("trees", timg), rel(a), rel(b), rel(c), rel(d),
+      (u0 + e) / dim, (v0 + e) / dim, (u1 - e) / dim, (v1 - e) / dim, 1, 1,
+      what == "card" and { rounded = true } or { refine = true, lift = lift })
   end
   -- the border round the battle map (Emerald 3DS's belt, voxel_mesh_builder.c VoxelMesh_EmitBorder,
   -- EmitBorderSteps, EmitBorderNorth): each cell past every map (cell.border, src/scene/init.lua:
@@ -149,9 +272,20 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
         local iw, ih = image:getDimensions()
         local u0, v0, u1, v1 = uvOf(q, iw, ih)
         local l = list(layer == 1 and "lower" or "upper", image)
-        for _, k in ipairs({ 1, 2, 3, 1, 3, 4 }) do
-          local v = p[k]
-          l[#l + 1] = { v[1], v[2], v[3], u0 + (u1 - u0) * v[4], v0 + (v1 - v0) * v[5], shade, shade, shade, 1 }
+        if LT then
+          local function V(v) return { v[1], v[2], v[3], u0 + (u1 - u0) * v[4], v0 + (v1 - v0) * v[5], shade, 1 } end
+          local function emit(a, b, c)
+            for _, v in ipairs({ a, b, c }) do
+              local s = v[6] > 1 and 1 or v[6]
+              l[#l + 1] = { v[1], v[2], v[3], v[4], v[5], s, s, s, v[7] }
+            end
+          end
+          LT.face4(emit, { off = OFF }, V(p[1]), V(p[2]), V(p[3]), V(p[4]), 4)
+        else
+          for _, k in ipairs({ 1, 2, 3, 1, 3, 4 }) do
+            local v = p[k]
+            l[#l + 1] = { v[1], v[2], v[3], u0 + (u1 - u0) * v[4], v0 + (v1 - v0) * v[5], shade, shade, shade, 1 }
+          end
         end
       end
     end
@@ -470,6 +604,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
         end
         -- (a sign's cell, and a lamp's head's, lay the ground round them: src/scene/signs.lua)
         local slot = t.slot(cell.groundMid or mid)
+        -- (land past every map fades into the sky with its distance from the maps)
+        -- (a tree's cell keeps its tree whole: a belt of trees never fades)
+        if fadeField and cell.border and not cell.border.water and not part then marks = {} end
         -- (lifted with its map and its relief: a point h up stands h south, src/scene/relief.lua)
         local dy = cell.dy or 0
         lift = dy
@@ -486,10 +623,18 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
         local flat = card and Render.FLAT_MARK or 1
         -- (a lifted cell's ground is its relief's: src/scene/relief.lua, but a tree's)
         if not treeGround and not cell.lifted then
-          put("lower", t.image, t.quad(slot), a, b, c, d, 1, flat)
-          put("upper", t.overImage, t.overQuad(slot), a, b, c, d, 1, flat)
+          -- (lit as ground: refined where a shadow's edge crosses it, not past every map)
+          local kind = { refine = not cell.border, lift = dy }
+          put("lower", t.image, t.quad(slot), a, b, c, d, 1, flat, kind)
+          put("upper", t.overImage, t.overQuad(slot), a, b, c, d, 1, flat, { refine = not cell.border, lift = dy })
         end
         if cell.border then block(cell, t, part) end
+        if marks then
+          for l, start in pairs(marks) do
+            for k = start + 1, #l do l[k][10] = fadeOf(l[k]) end
+          end
+          marks = nil
+        end
         if part then
           Trees.emit(putTree, sec, cell.mid, cell.cx, cell.cy, part, function(x, y)
             local o = grid.at(x, y)
@@ -503,8 +648,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
           local ca, cb = { x0, y0 + 1, z }, { x1, y0 + 1, z }
           local cc, cd = { x1, y0, z }, { x0, y0, z }
           local s = Render.CARD_SHADE
-          put("lower", t.image, t.quad(slot), ca, cb, cc, cd, s)
-          put("upper", t.overImage, t.overQuad(slot), ca, cb, cc, cd, s)
+          -- (lit as the south face it shows)
+          put("lower", t.image, t.quad(slot), ca, cb, cc, cd, s, nil, { normal = { 0, 0, 1 } })
+          put("upper", t.overImage, t.overQuad(slot), ca, cb, cc, cd, s, nil, { normal = { 0, 0, 1 } })
         end
       end
     end
@@ -517,9 +663,24 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
     local pdy = pl.dy or 0
     if md.image then
       local l = list("models", md.image)
+      -- (lit: each triangle's drawn shade gives way to the sun's facing of its outside, no cast
+      -- shadow; voxel_lighting.c ModelTri)
+      local tri = {}
       buildings.Buildings.emit(pl, ox, oz, function(v)
         v[2], v[3] = v[2] + pdy, v[3] + pdy
-        l[#l + 1] = v
+        if LT then
+          tri[#tri + 1] = v
+          if #tri == 3 then
+            local s = LT.modelShade(tri[1], tri[2], tri[3], tri[1][6])
+            for k = 1, 3 do
+              tri[k][6], tri[k][7], tri[k][8] = s, s, s
+              l[#l + 1] = tri[k]
+            end
+            tri = {}
+          end
+        else
+          l[#l + 1] = v
+        end
       end)
     end
     if pl.ground then
@@ -531,8 +692,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
           if cell and cell.model == pl and not cell.reliefDrawn then
             local cdy = cell.dy or 0
             local x0, z0 = pl.cx + i - ox, pl.cy + j - oz + cdy
-            quad(gl, { x0, cdy, z0 }, { x0 + 1, cdy, z0 }, { x0 + 1, cdy, z0 + 1 }, { x0, cdy, z0 + 1 },
-              (i + e / 16) / w, (j + e / 16) / h, (i + 1 - e / 16) / w, (j + 1 - e / 16) / h, 1, 1)
+            litQuad(gl, { x0, cdy, z0 }, { x0 + 1, cdy, z0 }, { x0 + 1, cdy, z0 + 1 }, { x0, cdy, z0 + 1 },
+              (i + e / 16) / w, (j + e / 16) / h, (i + 1 - e / 16) / w, (j + 1 - e / 16) / h, 1, 1,
+              { refine = true, lift = cdy })
           end
         end
       end
@@ -548,6 +710,7 @@ function Render.meshes(G, lists)
   for _, layer in ipairs({ "lower", "upper", "trees", "models" }) do
     for image, list in pairs(lists[layer] or {}) do
       if #list > 0 then
+        for _, v in ipairs(list) do if not v[10] then v[10] = 0 end end
         local ok, mesh = pcall(G.newMesh, Render.FORMAT, list, "triangles", "static")
         if not ok then return nil end
         mesh:setTexture(image)
@@ -572,8 +735,10 @@ local target, targetW, targetH
 --- Draw the scene into a canvas of ours w x h (screen pixels) and return it, or nil.
 ---   scene.meshes (Render.meshes), scene.ox, scene.oz (the meshes' origin, in map cells)
 ---   pose (Camera.pose, in map cells), proj/depth (Camera.screenProjection), rise (0..1)
----   haze { r, g, b }, fog { start, end, max }
-function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h)
+---   haze { r, g, b } (what the distance fades to), fog { start, end, max } (view depth, tiles),
+---   sky { r, g, b } (behind the world; the haze when not given), light (src/scene/light.lua:
+---   its sun and shade tints and the texture grade; nil: neither, the shade alone)
+function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h, sky, light)
   local sh = Render.shader(G)
   if not (sh and scene.meshes) then return nil end
   w, h = math.max(1, math.ceil(w)), math.max(1, math.ceil(h))
@@ -588,7 +753,8 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h)
   G.setCanvas({ target, depth = true })
   G.origin()
   G.setScissor()
-  G.clear(haze[1], haze[2], haze[3], 1, false, 1)
+  sky = sky or haze
+  G.clear(sky[1], sky[2], sky[3], 1, false, 1)
   G.setDepthMode("lequal", true)
   -- (cards face the camera, the ground faces up: neither may be culled)
   if G.setMeshCullMode then G.setMeshCullMode("none") end
@@ -600,9 +766,35 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h)
   sh:send("uDepth", depth)
   sh:send("uRise", math.max(0.001, rise or 1))
   sh:send("uHaze", haze)
+  sh:send("uSky", sky)
   sh:send("uFog", fog)
   sh:send("uHideFlat", (rise or 1) > Render.HIDE_AT and 1 or 0)
-  for _, m in ipairs(scene.meshes) do G.draw(m.mesh) end
+  sh:send("uSunTint", light and light.sun or { 1, 1, 1 })
+  sh:send("uShadeTint", light and light.shade or { 1, 1, 1 })
+  local low = Render.SHADE_LOW
+  sh:send("uGrade", { 1 / (1 - low), -low / (1 - low) })
+  -- the sun dapples (src/scene/light.lua: off where their light has none to speak of)
+  local dap = light and light.dappleImage and light.dappleHigh - light.dappleLow > 0.01
+  if dap then
+    sh:send("uDapple", light.dappleImage)
+    sh:send("uDappleU", light.dappleU)
+    sh:send("uDappleV", light.dappleV)
+  end
+  sh:send("uDappleRange", { light and light.dappleLow or 1, light and light.dappleHigh or 1, dap and 1 or 0 })
+  local sat = light and Render.SATURATION or 0
+  local sent
+  for _, m in ipairs(scene.meshes) do
+    -- (the trees' art is graded as it loads, src/scene/light.lua gradeTrees)
+    local want = m.layer == "trees" and 0 or sat
+    if want ~= sent then sh:send("uSaturation", want); sent = want end
+    G.draw(m.mesh)
+  end
+  -- the light in the air: rays, motes, bloom (src/scene/sunfx.lua)
+  if Render.SunFx and light then
+    pcall(Render.SunFx.draw, G, target, { light = light, impact = light.impact, Camera = Camera, pose = p,
+      view = Camera.viewRows(p), proj = proj, depth = depth, sun = light.sunDir or { dx = 0.85, dz = 0.55 },
+      seconds = light.seconds, w = w, h = h })
+  end
   G.pop()
   return target
 end

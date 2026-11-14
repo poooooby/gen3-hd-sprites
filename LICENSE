@@ -132,6 +132,22 @@ src/voxel/voxel_world.c (FillInstance, NeighbourLayoutId and its sLayoutSwaps): 
 with the layout its script swaps in. Changes: the engine keeps no layout id for the current map,
 so the layout swapped into it is the one whose cells the map draws.
 
+The scene's light: src/scene/light.lua adapts Emerald 3DS's src/voxel/ctr_voxel.c (the
+VoxelLight struct, BaseLightFor, LightMix, FogLight, SetGrade, MakeDapple, DappleFrame,
+DappleUniforms, BrightenCrowns), src/voxel/voxel_grade.c (the texture grade) and
+src/voxel/voxel_world.c (VoxelWorld_Weather, _WeatherAmount, _FogDensity, _Lightning);
+src/scene/lighting.lua adapts src/voxel/voxel_lighting.c whole (the face term, the cast shadows,
+contact darkening, LightFace, the relief lattice, ModelShade) and voxel_relief.c's BuildSurface,
+SurfaceAt and SurfaceTop, and src/scene/relief.lua takes voxel_mesh_builder.c's ReliefFace,
+SpanLinear and the builder's lighting flags; src/scene/sunfx.lua adapts ctr_voxel.c's MakeRays,
+DrawRays, DrawMotes, MoteRandom and the battle intro's impact, and src/3ds_video.c's
+VoxelBloomPrepare and VoxelBloomCompose. Changes: rewritten in Lua for LOVE; the casters read
+off the battle's own cell window; a ray marches every point up to the casters' ceiling (their
+cell skips and block bounds change no answer); the grade, the dapples and the haze worked out
+per pixel; the bloom made from a canvas halved to their screen's width first; the weather read
+from the engine's copy of the game's weather state; their day/night cycle (tint, moonlight and
+clock sun, behind their "day_night" setting, off by default) is not ported.
+
 The relief's last passes (src/scene/relief_post.lua) adapt Emerald 3DS's sea ramps and cut feet
 (3ds_port/scripts/gen_voxel_relief.py) and its hand corrections (voxel_relief_fixes.py: how
 relief.bin is read and written, how the corrections apply), and assets/scene/relief_fixes.json

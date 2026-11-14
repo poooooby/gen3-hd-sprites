@@ -58,6 +58,12 @@ return function(mod)
     Cells = loadSibling(mod, "src/scene/cells.lua"),
     Stage = loadSibling(mod, "src/scene/stage.lua"),
     Render = loadSibling(mod, "src/scene/render.lua"),
+    -- (optional: Emerald 3DS's light - grade and haze; without it a haze of WoobleView's own)
+    Light = loadSibling(mod, "src/scene/light.lua"),
+    -- (optional: Emerald 3DS's sun, its shadows baked into the meshes)
+    Lighting = loadSibling(mod, "src/scene/lighting.lua"),
+    -- (optional: the sun's rays, its dust in the air, bloom)
+    SunFx = loadSibling(mod, "src/scene/sunfx.lua"),
     -- (optional: without it trees stand as cut-outs too)
     Trees = loadSibling(mod, "src/scene/trees.lua"),
     -- (optional: without them buildings stand as cut-outs)

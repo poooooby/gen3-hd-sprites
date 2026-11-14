@@ -108,6 +108,13 @@ resolution, and the camera pulls back so even the biggest ones fit.
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
   Frontier's flags fly on their poles along its walls.
+- ☀️ **Sunlight and weather:** Outdoors the sun stands in the north-west: walls turned to it are
+  bright and the rest in shade, buildings, trees, signs and mountains cast soft shadows across
+  the ground, and patches of sunlight drift slowly over everything. Faint sun rays fall from the
+  top of the screen, specks of dust glint in the air, the brightest parts glow, and the scene
+  flares as the camera lands. The weather sets the light: warm and clear in sunshine, grey and
+  cold in rain, ochre in a sandstorm, a pale veil in fog, and the far slopes of Mt Chimney lost
+  in ash. Rooms are lit as the game draws them.
 - 🎥 **A camera that swoops in:** As the battle begins, the camera sweeps down from the
   overworld view to the battle, the houses and trees rising up as it goes.
 - 🎯 **A good spot every time:** Both Pokémon are placed on open ground of the kind you met
@@ -190,7 +197,8 @@ Open **OPTIONS → MODS → WoobleView**.
   artists, its buildings, fences, hedges, signs and rocks, each one rebuilt from its own overworld art,
   its rooms, cut into their walls and furniture,
   and the shape of the land: how it reads cliffs, terraces and stairs off the map's own drawing,
-  with the corrections its team made by hand, map by map.
+  with the corrections its team made by hand, map by map, and its lighting: the sun, its shadows,
+  the weather's light and haze, the drifting patches of sunlight, the rays, dust and glow.
 
 ---
 
