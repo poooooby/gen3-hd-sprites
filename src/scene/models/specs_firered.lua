@@ -1085,6 +1085,7 @@ return function(K, H)
       exact = { { 39, 0, 105, 103 }, { 13, 0, 32, 95 }, { 112, 0, 131, 95 } },
       parts = power_plant },
   }
-  specs.helpers = {}
+  -- (the props' shapes - a turned thing, a dome - from Emerald 3DS's helpers: geometry alone)
+  specs.helpers = { ProjLathe = H.ProjLathe, ProjDome = H.ProjDome }
   return specs
 end

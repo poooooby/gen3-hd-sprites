@@ -55,6 +55,11 @@ Props.OBJECTS = {
   -- the round boulder on land (Routes 11 and 23, Kindle Road, ...): four upper-layer tiles of the
   -- General over whatever ground its cell draws (metatiles 09F / 0A7 / 0AF / 0B7)
   fr_boulder = { land = true, tileset = "fr:general", palette = 1, grid = { { 120, 121 }, { 136, 137 } } },
+  -- a white picket fence (Pallet Town, Celadon, ...): every post is one 8-pixel column of the
+  -- General's upper layer, tile 14 over 30, whatever town tileset's metatiles carry it
+  fr_picket = { land = true, tileset = "fr:general", palette = 2, grid = { { 14 }, { 30 } } },
+  -- a house's mailbox: tiles 336 / 337 over 352 / 353 over 368 / 369 of the General
+  fr_mailbox = { land = true, tileset = "fr:general", palette = 2, grid = { { 336, 337 }, { 352, 353 }, { 368, 369 } } },
 }
 
 -- The props the scene models, in the specs' order. `shape`: a Mound (the default;
@@ -73,6 +78,12 @@ Props.SPECS = {
     ring = { { 246, 246, 255 } } },
   -- (FireRed's boulder on land: the same low dome as Emerald's, on its cell's own ground)
   { name = "fr_boulder", props = "fr_boulder", ground = { 0x001 }, rise = 1.0, step = 2 },
+  -- (a picket: a post 6 px across, its cap drawn from row 2, its foot at row 12 - a short round post)
+  { name = "fr_picket", props = "fr_picket", clip_art = true, ground = { 0x001 }, shape = "lathe",
+    lathe = { cx = 4, cz = 10.2, squash = 0.6, seg = 8, profile = { { 0, 3 }, { 6.4, 3 } } } },
+  -- (the mailbox: 12 px across, its arched top drawn from row 2, its front's foot at row 19)
+  { name = "fr_mailbox", props = "fr_mailbox", clip_art = true, ground = { 0x001 }, shape = "lathe",
+    lathe = { cx = 8, cz = 15.4, squash = 0.6, seg = 12, profile = { { 0, 6 }, { 8, 6 }, { 9.8, 4.5 } } } },
   -- a boulder on the sand or the grass, a cell across (Route 106's beach, Route 111's desert, the
   -- Safari Zone)
   { name = "sand_boulder", props = "sand_boulder", ground = { 0x124 }, rise = 1.0, step = 2 },

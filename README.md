@@ -208,7 +208,8 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
   trees stand as real trees with leafy crowns (Kanto's rare one-wide saplings as flat cut-outs of
   their overworld art), and in Emerald most of its town buildings, fences, hedges, curbs
-  and railings stand in 3D too, as do the buildings of FireRed and LeafGreen. Signs, street lamps
+  and railings stand in 3D too, as do the buildings of FireRed and LeafGreen and their white
+  picket fences, mailboxes and boulders. Signs, street lamps
   and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them, and in FireRed and
   LeafGreen so do the caves: Mt Moon's ridges, Rock Tunnel's and Victory Road's rock walls and
