@@ -184,20 +184,50 @@ end
 
 --- Where the specs' buildings stand in a grid (src/scene/cells.lua). models: { { spec, ref,
 --- core, primaryOnly } } (prepared by Buildings.prepare). Returns placements { model, cx, cy }
---- (the rectangle's top-left map cell), the first found keeping its cells.
+--- (the rectangle's top-left map cell) in Emerald 3DS's order: model by model as `models` lists
+--- them, each top to bottom and left to right (find_placements). Every one stands, overlapping or
+--- not (a cut sailboat on a whole one); where two hold a cell the first answers for it
+--- (voxel_building.c CellGridOf), which the caller keeps.
 --- alike(md, cell, i, j) (optional): whether the cell's metatile, another than the template's,
 --- draws the pixels the model owns in its cell (i, j) - the same building in a town's own tiles
---- (Rustboro's Center and Mart on its paving). Not asked of the anchor cell.
+--- (Rustboro's Center and Mart on its paving, Sootopolis's houses). The anchor, the first core
+--- cell, too, but for a spec with `owned` cells, in a layout with no secondary tileset, or at the
+--- top-left of another spec's own copy (`layout`, `rect`: Rustboro's gym; _canonical_at).
 --- A spec with `owned` cells stands only where it was drawn, or at its `repeat_at` places (its
---- map's own cells { x, y }; Fortree's houses): at(cx, cy) -> the cell's place in its map (the
---- grid's own cells if nil).
+--- map's own cells { x, y }; Fortree's houses): at(cx, cy) -> the cell's place in its map and its
+--- layout's name (the grid's own cells if nil).
 function Buildings.find(grid, models, alike, at)
-  local byAnchor = {}
-  for _, md in ipairs(models) do
+  local byAnchor, loose, order, canonical = {}, {}, {}, {}
+  for n, md in ipairs(models) do
     local a = md.core[1]
     local m = md.ref.template[a[2] * md.ref.w + a[1] + 1]
     byAnchor[m] = byAnchor[m] or {}
     table.insert(byAnchor[m], md)
+    if alike and not md.spec.owned then loose[#loose + 1] = md end
+    order[md] = n
+    local s = md.spec
+    if s.layout and s.rect then
+      local k = s.layout .. ":" .. s.rect[1] .. "," .. s.rect[2]
+      canonical[k] = canonical[k] or {}
+      canonical[k][s.name] = true
+    end
+  end
+  -- (another spec's own copy there: not this spec's to stand as a look-alike)
+  local function otherCopy(md, ox, oy)
+    if not at then return false end
+    local a = md.core[1]
+    local lx, ly, lname = at(ox + a[1], oy + a[2])
+    if not (lx and lname) then return false end
+    local names = canonical[lname .. ":" .. (lx - a[1]) .. "," .. (ly - a[2])]
+    if not names then return false end
+    for name in pairs(names) do
+      if name ~= md.spec.name then return true end
+    end
+    return false
+  end
+  local function hasSecondary(pair)
+    local sec = type(pair) == "string" and pair:match("__(.+)$")
+    return sec ~= nil and sec ~= "0" and sec ~= "NULL"
   end
   -- the look-alike check, once per model, cell of it, metatile and pair
   local memo = {}
@@ -218,57 +248,57 @@ function Buildings.find(grid, models, alike, at)
     end
     return r
   end
-  local taken, found = {}, {}
+  local found = {}
+  local function try(md, cell, lookalike)
+    local a = md.core[1]
+    local ox, oy = cell.cx - a[1], cell.cy - a[2]
+    local ok = true
+    if lookalike and otherCopy(md, ox, oy) then return end
+    if md.spec.owned then
+      local lx, ly = ox, oy
+      if at then
+        local ax, ay = at(cell.cx, cell.cy)
+        lx, ly = ax and ax - a[1], ay and ay - a[2]
+      end
+      ok = false
+      for _, p in ipairs(md.spec.repeat_at or { md.spec.rect }) do
+        if p[1] == lx and p[2] == ly then ok = true end
+      end
+    end
+    for _, c in ipairs(md.core) do
+      local o = grid.at(ox + c[1], oy + c[2])
+      if not o or not matches(md, o, c[1], c[2]) then ok = false; break end
+      -- (its primary tileset; and its secondary too unless it draws in the primary's tiles alone
+      -- or stands `anywhere`: the battle tent in Fallarbor's own tiles)
+      if primaryOf(o.pair) ~= primaryOf(md.ref.pair) then ok = false; break end
+      if not md.primaryOnly and not md.spec.anywhere and o.pair ~= md.ref.pair then ok = false; break end
+    end
+    if ok then found[#found + 1] = { model = md, cx = ox, cy = oy } end
+  end
   for j = 0, grid.h - 1 do
     local row = grid.rows[j]
     for i = 0, grid.w - 1 do
       local cell = row[i]
-      -- (the anchor, the first core cell, must be the template's own metatile)
-      local list = cell.mid and byAnchor[cell.mid]
-      if list then
-        for _, md in ipairs(list) do
-          local a = md.core[1]
-          local ox, oy = cell.cx - a[1], cell.cy - a[2]
-          local ok = true
-          if md.spec.owned then
-            local lx, ly = ox, oy
-            if at then
-              local ax, ay = at(cell.cx, cell.cy)
-              lx, ly = ax and ax - a[1], ay and ay - a[2]
+      if cell.mid then
+        local list = byAnchor[cell.mid]
+        for _, md in ipairs(list or {}) do try(md, cell, false) end
+        -- (an anchor drawn in other tiles: find_placements' `starts`)
+        if #loose > 0 and hasSecondary(cell.pair) then
+          for _, md in ipairs(loose) do
+            local a = md.core[1]
+            if md.ref.template[a[2] * md.ref.w + a[1] + 1] ~= cell.mid and matches(md, cell, a[1], a[2]) then
+              try(md, cell, true)
             end
-            ok = false
-            for _, p in ipairs(md.spec.repeat_at or { md.spec.rect }) do
-              if p[1] == lx and p[2] == ly then ok = true end
-            end
-          end
-          for _, c in ipairs(md.core) do
-            local o = grid.at(ox + c[1], oy + c[2])
-            if not o or not matches(md, o, c[1], c[2]) then ok = false; break end
-            if md.primaryOnly then
-              if primaryOf(o.pair) ~= primaryOf(md.ref.pair) then ok = false; break end
-            elseif o.pair ~= md.ref.pair then
-              ok = false; break
-            end
-          end
-          if ok then
-            for jj = 0, md.ref.h - 1 do
-              for ii = 0, md.ref.w - 1 do
-                if owns(md.spec, ii, jj) and taken[(ox + ii) .. "," .. (oy + jj)] then ok = false end
-              end
-            end
-          end
-          if ok then
-            for jj = 0, md.ref.h - 1 do
-              for ii = 0, md.ref.w - 1 do
-                if owns(md.spec, ii, jj) then taken[(ox + ii) .. "," .. (oy + jj)] = true end
-              end
-            end
-            found[#found + 1] = { model = md, cx = ox, cy = oy }
           end
         end
       end
     end
   end
+  table.sort(found, function(p, q)
+    if p.model ~= q.model then return order[p.model] < order[q.model] end
+    if p.cy ~= q.cy then return p.cy < q.cy end
+    return p.cx < q.cx
+  end)
   return found
 end
 
@@ -440,6 +470,28 @@ function Buildings.texCover(md)
     end
   end
   md.texCover = out
+  return out
+end
+
+--- The model's texture as Emerald 3DS's model.art is when it finds the placements: { w, h, px }
+--- (r, g, b, a in 0..1, 4 a texel, 1-based like Buildings.art's). Off the texture's image data
+--- where the model keeps it, its drawing otherwise.
+function Buildings.texPixels(md)
+  if md.texPx then return md.texPx end
+  local data = md._data
+  local out = md.art
+  if data and data.getPixel then
+    local w, h = data:getWidth(), data:getHeight()
+    local px = {}
+    for Y = 0, h - 1 do
+      for X = 0, w - 1 do
+        local o = (Y * w + X) * 4
+        px[o + 1], px[o + 2], px[o + 3], px[o + 4] = data:getPixel(X, Y)
+      end
+    end
+    out = { w = w, h = h, px = px }
+  end
+  md.texPx = out
   return out
 end
 

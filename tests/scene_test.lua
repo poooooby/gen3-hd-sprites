@@ -1040,5 +1040,42 @@ do
     "relief_bare: the cell it stands nothing over is bare (its quarters to leave out), no patch's")
 end
 
+-- where buildings stand (Buildings.find, find_placements): a 1 x 1 model drawn by metatile 600 of
+-- pair A; 700 draws it alike (alike says so). Every match stands, overlapping or not, model by
+-- model, top to bottom and left to right.
+do
+  local Buildings = dofile("src/scene/buildings.lua")
+  local function grid(cells)        -- cells: rows of { mid, pair }
+    local rows = {}
+    for j, row in ipairs(cells) do
+      rows[j - 1] = {}
+      for i, c in ipairs(row) do rows[j - 1][i - 1] = { cx = i - 1, cy = j - 1, mid = c[1], pair = c[2] } end
+    end
+    local g = { w = #cells[1], h = #cells, rows = rows }
+    function g.at(x, y) return rows[y] and rows[y][x] end
+    return g
+  end
+  local function md(name, extra)
+    local spec = { name = name }
+    for k, v in pairs(extra or {}) do spec[k] = v end
+    return { spec = spec, ref = { w = 1, h = 1, template = { 600 }, pair = "general__a" }, core = { { 0, 0 } },
+             primaryOnly = false }
+  end
+  local alike = function(_, cell) return cell.mid == 700 end
+  local A, B = "general__a", "general__b"
+  local a1, a2 = md("one"), md("two")
+  local found = Buildings.find(grid({ { { 600, A }, { 700, A } } }), { a1, a2 }, alike, function(x, y) return x, y, "L" end)
+  check(#found == 4 and found[1].model == a1 and found[1].cx == 0 and found[2].model == a1 and found[2].cx == 1
+    and found[3].model == a2, "two models over one cell both stand, model by model (no overlap rule)")
+  found = Buildings.find(grid({ { { 700, A } } }), { md("one", { layout = "L", rect = { 0, 0, 1, 1 } }), md("two") },
+    alike, function(x, y) return x, y, "L" end)
+  check(#found == 1 and found[1].model.spec.name == "one",
+    "a look-alike anchor stands, but not at another spec's own copy (_canonical_at)")
+  found = Buildings.find(grid({ { { 700, B } } }), { md("tent", { anywhere = true }), md("house") }, alike)
+  check(#found == 1 and found[1].model.spec.name == "tent", "`anywhere`: in another secondary tileset's tiles")
+  found = Buildings.find(grid({ { { 700, A } } }), { md("bush", { owned = { ["0,0"] = true } }) }, alike)
+  check(#found == 0, "a spec with owned cells never stands as a look-alike")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

@@ -614,4 +614,133 @@ function Signs.emit(mask, n, add)
   return top
 end
 
+--- The metatiles of a layout whose upper layer is a signpost's drawing (gen_voxel_buildings
+--- _sign_metatiles): a signpost's own metatile when it draws a post's sign, and the cell north of
+--- a signpost when the sign's head is drawn there over ground of that very metatile, or tops the
+--- wall a sign event stands against (gen_voxel_sign_masks.sign_record). A building drawn over one
+--- is asked only its lower layer there (same_building_pixels). L: { w, h, metatile(x, y),
+--- blocked(x, y), role(x, y), signs ({ ["x,y"] = true }), pixels(m, layer) ({ [y * 16 + x] =
+--- { r, g, b } } or nil), drawsPostSign(m) }. Returns { [metatile] = true }.
+function Signs.signMetatiles(L)
+  local W, H = L.w, L.h
+  local function offMap(x, y) return x < 0 or y < 0 or x >= W or y >= H end
+  local function px(m, layer) return L.pixels(m, layer) or {} end
+  local function any(t) return next(t) ~= nil end
+  local function rgb(p) return p[1] * 65536 + p[2] * 256 + p[3] end
+  local function sameLayer(a, b)
+    for k, p in pairs(a) do local q = b[k]; if not q or rgb(q) ~= rgb(p) then return false end end
+    for k in pairs(b) do if not a[k] then return false end end
+    return true
+  end
+  -- voxel_sign_mask.metatile_mask
+  local function metatileMask(x, y)
+    local m = L.metatile(x, y)
+    if L.drawsPostSign(m) then
+      local solid = {}
+      for k in pairs(px(m, 1)) do solid[k] = true end
+      return Signs.cutout(solid)
+    end
+    local ground = {}
+    for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, 1 }, { -1, 1 }, { 1, 1 } }) do
+      local nx, ny = x + d[1], y + d[2]
+      if not offMap(nx, ny) and not L.blocked(nx, ny) then
+        local n = L.metatile(nx, ny)
+        if not any(px(n, 1)) then
+          for _, p in pairs(px(n, 0)) do ground[rgb(p)] = true end
+        end
+      end
+    end
+    local solid = {}
+    for k, p in pairs(px(m, 0)) do if not ground[rgb(p)] then solid[k] = true end end
+    for k in pairs(px(m, 1)) do solid[k] = true end
+    return Signs.cutout(solid)
+  end
+  local function popcount(row)
+    local n = 0
+    for x = 0, 15 do if bit(row, x) then n = n + 1 end end
+    return n
+  end
+  -- voxel_sign_mask.head_mask / connected_head
+  local function headMask(rows, north)
+    if popcount(rows[0]) > Signs.HEAD_MAX_WIDTH then return nil end
+    local upper = px(north, 1)
+    local head, queue = {}, {}
+    for x = 0, 15 do
+      local k = 15 * 16 + x
+      if upper[k] and ((x > 0 and bit(rows[0], x - 1)) or bit(rows[0], x) or (x < 15 and bit(rows[0], x + 1))) then
+        head[k] = true
+        queue[#queue + 1] = k
+      end
+    end
+    local q = 1
+    while q <= #queue do
+      local p = queue[q]
+      q = q + 1
+      local hx, hy = p % 16, floor(p / 16)
+      for dy = -1, 1 do
+        for dx = -1, 1 do
+          local x, y = hx + dx, hy + dy
+          local k = y * 16 + x
+          if x >= 0 and x < 16 and y >= 0 and y < 16 and upper[k] and not head[k] then
+            head[k] = true
+            queue[#queue + 1] = k
+          end
+        end
+      end
+    end
+    local n, xmin, xmax = 0, 16, -1
+    for k in pairs(head) do
+      n = n + 1
+      xmin, xmax = math.min(xmin, k % 16), math.max(xmax, k % 16)
+    end
+    if n == 0 or xmax - xmin + 1 > Signs.HEAD_MAX_WIDTH or n > Signs.HEAD_MAX_PIXELS then return nil end
+    return head
+  end
+  -- gen_voxel_sign_masks.head_ground
+  local function headGround(x, y)
+    local own = px(L.metatile(x, y), 0)
+    local counts, order = {}, {}
+    for dy = -1, 1 do
+      for dx = -1, 1 do
+        local nx, ny = x + dx, y + dy
+        if not ((dx == 0 and dy == 0) or (dx == 0 and dy == 1)) and not offMap(nx, ny) and not L.blocked(nx, ny) then
+          local m = L.metatile(nx, ny)
+          if not any(px(m, 1)) then
+            if sameLayer(px(m, 0), own) then return m end
+            if not counts[m] then order[#order + 1] = m end
+            counts[m] = (counts[m] or 0) + 1
+          end
+        end
+      end
+    end
+    local best
+    for _, m in ipairs(order) do if not best or counts[m] > counts[best] then best = m end end
+    if best then return best end
+    return not offMap(x, y + 2) and L.metatile(x, y + 2) or 0
+  end
+  local found = {}
+  for y = 0, H - 1 do
+    for x = 0, W - 1 do
+      if L.role(x, y) == "signpost" then
+        local m = L.metatile(x, y)
+        if L.drawsPostSign(m) then found[m] = true end
+        if y > 0 then
+          local rows = metatileMask(x, y)
+          local north = L.metatile(x, y - 1)
+          local head = headMask(rows, north)
+          if head and not L.blocked(x, y - 1) then
+            if headGround(x, y - 1) == north then found[north] = true end
+          elseif head and L.signs[x .. "," .. y] then
+            -- (blocked_head: that cell's upper layer is the head and nothing else)
+            local all = true
+            for k in pairs(px(north, 1)) do if not head[k] then all = false; break end end
+            if all then found[north] = true end
+          end
+        end
+      end
+    end
+  end
+  return found
+end
+
 return Signs

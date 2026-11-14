@@ -190,6 +190,9 @@ return function(mod, hd, state)
   exports.sceneDecks = function(name)
     return hd.scene and hd.scene.decks and hd.scene.decks(name) or nil
   end
+  exports._findWhy = function(name, spec, x, y)
+    return hd.scene and hd.scene._findWhy and hd.scene._findWhy(name, spec, x, y) or nil
+  end
   exports._layoutModels = function(name, runs)
     return hd.scene and hd.scene._layoutModels and hd.scene._layoutModels(name, runs) or nil
   end

@@ -620,8 +620,10 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   the spec's `ring`, and its part by `shape`: a `Mound` (`rise`, `step`; the default), a
   `ProjLathe` (the urn, the baskets) or `ProjDome` (the fruit) moved by the variant's half-cell
   offset, or a `Card` (the Battle Frontier's flags), `clip_art` cutting it to the drawing's box.
-  Its cells lay their own drawing for ground, the object's quarters of the upper layer left out
-  (the lower layer there). The flags' cloth is `live` (every pixel of its `live_tiles`), its
+  It stands whatever else stands on its cells (Slateport's goods on the stalls); the cells of its
+  own map no placement before it holds are its (CellGridOf: the first placement answers; across a
+  seam the next map's), laying their own drawing for ground, the object's quarters of the upper
+  layer left out (the lower layer there). The flags' cloth is `live` (every pixel of its `live_tiles`), its
   frames read from the engine's upper-layer bank for it (`animFramesOf(pair, mid, true)`: those
   cells sit over animated water too, whose bank holds whole metatiles); `hd.stats.sceneLive`
   counts the live models in a scene.
@@ -636,18 +638,26 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   foot as a fringe, its plan cut in narrow cells (878 triangles against 528). Every model placed
   in the 100 outdoor layouts equals Emerald 3DS's `buildings.bin` triangle for triangle
   (`bridge_dump.lua` with `BRIDGE_FP_LAYOUTS`, against `bld_dump.py`), but WoobleView's own
-  `ever_grande_gate`. Only specs one of
-  whose template metatiles the window draws are read. `find` places a spec wherever its core
-  cells (match rows, drawn cells) repeat, but a spec with `owned` cells only where it is drawn or
-  at its `repeat_at` places (the cell's place in its own map, `env.where`; gen_voxel_buildings's
-  rule) (a primary-only core: any pair with the same primary;
-  else the same pair; WoobleView's own entries: `gym_sootopolis`, the shared `gym` parts over
-  Sootopolis's rect, its roof in the town's own tiles; `ever_grande_gate`, the gateway on the path
-  up to the League, an `Awning` on its stone legs): the anchor exactly, the others exactly or by a look-alike metatile that
-  draws the model's pixels in that cell, all but an eighth (Emerald 3DS's same_building_pixels,
-  with that slack for the ground drawn round a corner: Rustboro's Center and Mart on its paving;
-  a signpost's cell, or the cell its head tops, is asked its lower layer alone, off the atlas
-  blobs, as their same_building_pixels asks it: Lavaridge's gym sign on the gym's corner).
+  `ever_grande_gate`. Only specs that may stand in the window are read: one of whose template
+  metatiles the maps in the window draw, or that a copy drawn in other tiles may stand for (no
+  `owned` cells, the window's primary tileset, and its pair too unless `anywhere` or its core is
+  in the primary's tiles alone). `find` is gen_voxel_buildings's find_placements: a spec stands
+  wherever its core cells (match rows, drawn cells) repeat, model by model, each top to bottom and
+  left to right, every match standing whether or not it overlaps another (a cut sailboat on the
+  whole one) - the caller gives a cell two placements hold to the first (CellGridOf). Its primary
+  tileset always, its pair too but for a primary-only core or `anywhere` (the battle tent in
+  Fallarbor's tiles, the Frontier's houses). Each core cell, the anchor too, is the template's
+  metatile or a look-alike drawing every pixel the model's texture owns in that cell exactly
+  (same_building_pixels: `alikeOf`, the cell as pret composes it through `layerSource`, the
+  texture `Buildings.texPixels`; of a metatile its layout draws a signpost with,
+  `World.signMetatiles` - `Signs.signMetatiles`, _sign_metatiles over sign_record - the lower
+  layer alone: Lavaridge's gym sign on the gym's corner, Pacifidlog's Center). Not a look-alike
+  anchor: a spec with `owned` cells (it stands only where it is drawn or at its `repeat_at`
+  places, the cell's place in its own map, `env.where`: Fortree's houses, Ever Grande's bushes),
+  a layout with no secondary tileset, the top-left of another spec's own copy (`layout`, `rect`:
+  _canonical_at, Rustboro's gym). WoobleView's own entries: `gym_sootopolis`, the shared `gym`
+  parts over Sootopolis's rect, its roof in the town's own tiles; `ever_grande_gate`, the gateway
+  on the path up to the League, an `Awning` on its stone legs.
   A placed model's cells (`cell.model`) draw its ground image and stand no card, tree or tile;
   `cell.top` (its height there) feeds the stage search like a card. The ground is
   `Buildings.groundPlan` (gen_voxel_buildings's find_placements, placement_ground, patched_cells,
@@ -666,11 +676,18 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   those quarters, `lessQuarters`; `cell.reliefDrawn` then drops the model's ground quad), and off
   the relief that drawing lies flat (Emerald 3DS's dev branch, de38764). Masks and the patches
   read the model's texture (`texCover`: a `parts_art` texture of its own, as their `model.art`),
-  not the drawing. Every one of the 838 placements in the 100 outdoor layouts - 283 buildings,
-  555 blocks of hedges, fences, curbs and the rest - lays the pak's ground metatile and its number
-  of patches and equals its triangles (`bridge_dump.lua`'s `P` and `G` lines with `BRIDGE_RUNS=1`,
-  the components placed over the whole layout through `placeComponents`; the pak's patch field
-  six vertices a patch). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
+  not the drawing. Everything the battle's window places over the 100 layouts the pak has
+  placements in (`bridge_dump.lua` with `BRIDGE_RUNS=all`: `placeBuildings` over a whole layout -
+  buildings, kits, props, the Cycling Road's blocks, the components' blocks) is checked against the
+  pak: 4302 of its 4634 placements stand at the same place and equal its triangles, the 891
+  with a ground plan lay its ground metatile and number of patches (`P` and `G` lines; the pak's
+  patch field six vertices a patch). The rest: the layouts a script swaps in (Route 131's Sky
+  Pillar, Route 111 without the Mirage Tower, Route 130's Mirage Island, Sky Pillar's mended
+  floors, Sootopolis in the legends' battle; not read yet - World knows each map's own layout
+  only), sea rocks and stacks across a map's seam (they stand in the window, the next map in it;
+  a lone layout has no next map), the Abandoned Ship's two underwater rooms and a 5x6 building
+  at Sky Pillar's foot. `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
+  not (`_findWhy`: each core cell's metatile, sign, and the pixels it draws otherwise). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
   driver's `SCENE_GROUND_OLD=1`, for before-and-after shots), the old rule: the commonest spec
   ground round it, the map's paint in every cell it paints otherwise.
 - `models/components.lua` and `models/fence.lua`: the `components` specs (hedges, fences, curbs,

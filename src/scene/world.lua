@@ -12,6 +12,7 @@
 
 return function(deps)
   local Roles, json = deps.Roles, deps.json      -- (json(text) -> table or nil)
+  local Signs = deps.Signs                        -- (optional: src/scene/signs.lua, for signMetatiles)
   local World = {}
 
   local function req(name)
@@ -188,6 +189,19 @@ return function(deps)
 
   --- The game's sign posts (Roles.posts over every outdoor layout with sign events): posts,
   --- postDrawings. Once a game.
+  --- The metatiles of a layout drawn as a signpost's (Signs.signMetatiles), once a layout.
+  function World.signMetatiles(L)
+    if not L then return {} end
+    if L.signMetatiles then return L.signMetatiles end
+    L.signMetatiles = {}
+    local A, r = World.adapter(L), World.roles(L)
+    local art = World.art(L.pair)
+    if not (A and r and art and Signs and Signs.signMetatiles and r.drawsPostSign) then return L.signMetatiles end
+    L.signMetatiles = Signs.signMetatiles({ w = L.w, h = L.h, metatile = A.metatile, blocked = A.blocked,
+      role = r.role, signs = L.signs or {}, pixels = art.pixels, drawsPostSign = r.drawsPostSign })
+    return L.signMetatiles
+  end
+
   function World.posts()
     local s = load()
     if not s then return nil end

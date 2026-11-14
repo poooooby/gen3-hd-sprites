@@ -861,6 +861,7 @@ return function(K, specs)
 
   local list = {
     { name = "battle_tent", layout = "LAYOUT_SLATEPORT_CITY", rect = { 8, 8, 5, 5 }, ground = { GRASS }, ground_px = true,
+      anywhere = true,
       ground_fixed = { LAYOUT_SLATEPORT_CITY = GRASS }, patch_own = true,
       match_rows = { 1, 5 }, lod = { 6, 6, 3 }, parts_art = battle_tent },
     { name = "sailboat", layout = "LAYOUT_SLATEPORT_CITY", rect = { 34, 44, 3, 3 }, ground = { 0x170 }, ground_px = true,
@@ -935,9 +936,14 @@ return function(K, specs)
     { name = "pokemon_league", layout = "LAYOUT_EVER_GRANDE_CITY", rect = { 13, 0, 11, 8 },
       ground = { GRASS, 0x222, 0x221, 0x270, 0x271, 0x272 }, ground_px = true, lod = { 6, 6, 3 },
       parts_art = pokemon_league },
+    -- (each stands only where it is drawn: its own cell, at its repeat_at places)
     { name = "ever_grande_bush", layout = "LAYOUT_EVER_GRANDE_CITY", rect = { 14, 8, 1, 1 }, ground = { GRASS, 0x222, 0x221 },
+      owned = { ["0,0"] = true },
+      repeat_at = { { 14, 8 }, { 15, 8 }, { 14, 9 }, { 15, 9 }, { 14, 10 }, { 15, 10 }, { 21, 10 }, { 22, 10 },
+                    { 23, 24 }, { 29, 24 }, { 23, 25 }, { 24, 25 }, { 28, 25 }, { 29, 25 } },
       ground_px = true, lod = { 6, 6, 3 }, parts_art = small_round("bush", Volume():dome(8, 9, 8, 6.5, 8.5)) },
     { name = "ever_grande_bush_shade", layout = "LAYOUT_EVER_GRANDE_CITY", rect = { 21, 8, 1, 1 },
+      owned = { ["0,0"] = true }, repeat_at = { { 21, 8 }, { 22, 8 }, { 21, 9 }, { 22, 9 } },
       ground = { 0x221, 0x222, GRASS }, ground_px = true, lod = { 6, 6, 3 },
       parts_art = small_round("bush", Volume():dome(8, 9, 8, 6.5, 8.5)) },
     { name = "battle_dome", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 13, 4, 13, 14 },

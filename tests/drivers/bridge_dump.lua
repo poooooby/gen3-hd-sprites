@@ -35,6 +35,19 @@ local function body(game, log)
   local loader = game.mods
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
   if not (hd and hd._bridgeBlocks) then log("FAIL gen3-hd-sprites exports missing"); return end
+  -- (BRIDGE_WHY="LAYOUT,spec,x,y;...": why each stands or not, then nothing else)
+  if env("BRIDGE_WHY") then
+    local f = io.open(dir .. "/why.txt", "w")
+    for item in env("BRIDGE_WHY"):gmatch("[^;]+") do
+      local l, sp, x, y = item:match("([^,]+),([^,]+),(%-?%d+),(%-?%d+)")
+      for _, line in ipairs(hd._findWhy(l, sp, tonumber(x), tonumber(y)) or { "?" }) do
+        f:write(line, "\n")
+      end
+    end
+    f:close()
+    log("wrote why.txt")
+    return
+  end
   local clock = love.timer.getTime
   local t0 = clock()
   local ok, blocks, curbHeight, br = xpcall(hd._bridgeBlocks, debug.traceback, name)
@@ -118,8 +131,10 @@ local function body(game, log)
   end
   for lname in (env("BRIDGE_FP_LAYOUTS") or "LAYOUT_RUSTBORO_CITY,LAYOUT_FORTREE_CITY,LAYOUT_SLATEPORT_CITY"):gmatch("[^,]+") do
     local out = {}
-    -- (BRIDGE_RUNS=1: the runs of hedges, fences and curbs too)
-    for _, m in ipairs(hd._layoutModels(lname, env("BRIDGE_RUNS") ~= nil) or {}) do
+    -- (BRIDGE_RUNS=1: the runs of hedges, fences and curbs too; BRIDGE_RUNS=all: everything the
+    -- battle's window stands - kits, props, the bridge's blocks)
+    local runs = env("BRIDGE_RUNS")
+    for _, m in ipairs(hd._layoutModels(lname, runs == "all" and "all" or runs ~= nil) or {}) do
       local fps = {}
       for j = 0, m.h - 1 do
         for i = 0, m.w - 1 do fps[#fps + 1] = fpText(m.footprints[i .. "," .. j] or nil) end

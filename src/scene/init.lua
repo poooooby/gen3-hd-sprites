@@ -782,8 +782,10 @@ return function(deps)
     return md
   end
 
-  -- every prop of the maps the window shows, stood where it is drawn: its cells (no building's)
-  -- lay their own drawing for ground, the object's subtiles left out
+  -- every prop of the maps the window shows, stood where it is drawn, whatever else stands on its
+  -- cells (Slateport's goods on the stalls): the cells of its own map no placement before it
+  -- holds are its own (voxel_building.c CellGridOf, the first placement answering; across a seam
+  -- the next map's), laying their own drawing for ground, the object's subtiles left out
   local function placeProps(grid, NativeTileset, found, where)
     local maps = {}
     for j = 0, grid.h - 1 do
@@ -810,7 +812,7 @@ return function(deps)
         local ok = sp ~= nil
         for _, c in ipairs(cells) do
           local g = grid.at(gx0 + c[1] - x0, gy0 + c[2] - y0)
-          if not g or not g.mid or g.model then ok = false end
+          if not g or not g.mid then ok = false end
         end
         local md = ok and propModel(sp, f, cells, gx0, gy0, w, h, grid)
         if md then
@@ -819,8 +821,10 @@ return function(deps)
           for _, c in ipairs(cells) do
             local i, j = c[1] - x0, c[2] - y0
             local g = grid.at(gx0 + i, gy0 + j)
-            g.model = pl
-            g.top = tops[i .. "," .. j] or 0
+            if not g.model and select(4, where(g.cx, g.cy)) == id then
+              g.model = pl
+              g.top = tops[i .. "," .. j] or 0
+            end
           end
           -- the ground: each cell's own drawing, the object's quarters of its upper layer left out
           pl.ground = imageOf(w * 16, h * 16, function(data)
@@ -2209,59 +2213,73 @@ return function(deps)
   -- front of the building with a height of its own. Lavaridge's gym sign tops the gym's corner.
   -- The exact lower layer comes off the atlas blobs, src/scene/world.lua: the engine's lower
   -- atlas has a COVERED metatile's upper layer drawn over it)
-  local function alikeOf(NativeTileset, signCell)
+  -- does the cell's metatile draw every pixel the model owns in its cell (i, j)? Its drawing as
+  -- pret composes it (layerSource: the upper layer where it draws, the lower under it); of a
+  -- metatile its layout draws a signpost with (World.signMetatiles) the lower layer alone, the
+  -- signpost standing for its upper (gen_voxel_buildings.same_building_pixels). The model's
+  -- texture as it is built (Buildings.texPixels). layoutOf(cell) -> the cell's layout.
+  local function alikeOf(NativeTileset, layoutOf)
     return function(md, cell, i, j)
-      local src = pixelSource(NativeTileset, cell.pair)
+      local src0 = pixelSource(NativeTileset, cell.pair)
+      local src = src0 and layoutOf and layerSource(layoutOf(cell), src0) or src0
       if not src or src.under(cell.mid, 0, 0) == nil then return false end
-      local art = md.art
-      local lower
-      if signCell and World and signCell(cell) then
-        local wa = World.art(cell.pair)
-        lower = wa and wa.pixels(cell.mid, 0) or nil
-      end
-      local owned, bad = 0, 0
+      local art = Buildings.texPixels(md)
+      local L = World and layoutOf and World.layout(layoutOf(cell))
+      local lowerOnly = L and World.signMetatiles(L)[cell.mid] == true
+      local owned = 0
       for y = 0, 15 do
         for x = 0, 15 do
           local o = ((j * 16 + y) * art.w + i * 16 + x) * 4
           if art.px[o + 4] >= 0.5 then
             owned = owned + 1
             local r, g, b, a
-            if lower then
-              local p = lower[y * 16 + x]
-              if p then
-                r, g, b = p[1] / 255, p[2] / 255, p[3] / 255
-              else
-                -- (a colour-index-0 pixel the blobs keep no colour for: the lower atlas where
-                -- nothing is drawn over it; under the sign's pixels, not asked)
-                local _, _, _, a1 = src.over(cell.mid, x, y)
-                if a1 and a1 > 0.5 then owned = owned - 1; r = false else r, g, b = src.under(cell.mid, x, y) end
-              end
-            else
-              r, g, b, a = src.over(cell.mid, x, y)
-              if not (a and a > 0.5) then r, g, b = src.under(cell.mid, x, y) end
-            end
-            if r ~= false and (not r or key5(r, g, b) ~= key5(art.px[o + 1], art.px[o + 2], art.px[o + 3])) then
-              bad = bad + 1
-              if bad > 32 then return false end
-            end
+            if not lowerOnly then r, g, b, a = src.over(cell.mid, x, y) end
+            if not (a and a > 0.5) then r, g, b = src.under(cell.mid, x, y) end
+            if not r or key5(r, g, b) ~= key5(art.px[o + 1], art.px[o + 2], art.px[o + 3]) then return false end
           end
         end
       end
-      return owned > 0 and bad * 8 <= owned
+      return owned > 0
     end
   end
+  -- the metatiles a map's layout draws, once a layout
+  local layoutMidsOf = setmetatable({}, { __mode = "k" })
+  local function layoutMids(id)
+    local L = World and World.layout(id)
+    if not (L and L.grid) then return {} end
+    local hit = layoutMidsOf[L]
+    if hit then return hit end
+    hit = {}
+    local g = L.grid
+    for k = 1, #g - 1, 2 do hit[(g:byte(k) + g:byte(k + 1) * 256) % 1024] = true end
+    layoutMidsOf[L] = hit
+    return hit
+  end
   -- the buildings standing in the grid: placements, their cells marked (cell.model)
-  local function placeBuildings(grid, NativeTileset, signCell, where)
+  local function placeBuildings(grid, NativeTileset, where)
     if not (Buildings and Kernel and Specs) then return {} end
     local ctx = layoutCtx()
-    local mids = {}
+    local mids, seenMaps, pairSeen, primaries = {}, {}, {}, {}
     for j = 0, grid.h - 1 do
       for i = 0, grid.w - 1 do
         local c = grid.rows[j][i]
         if c.mid then mids[c.mid] = true end
+        if c.pair and not pairSeen[c.pair] then
+          pairSeen[c.pair] = true
+          primaries[Buildings.primaryOf(c.pair)] = true
+        end
+        local id = where and select(4, where(c.cx, c.cy))
+        if id and not seenMaps[id] then
+          seenMaps[id] = true
+          for m in pairs(layoutMids(id)) do mids[m] = true end
+        end
       end
     end
-    -- only the specs one of whose cells the window draws are read at all
+    -- only the specs that may stand in the window are read at all: one of whose cells the maps in
+    -- the window draw, or that a copy drawn in other tiles may stand for (Buildings.find's
+    -- look-alike anchor: no `owned` cells, the window's primary tileset, and its secondary too
+    -- unless it stands `anywhere` or its core is drawn in the primary's tiles alone - the battle
+    -- tent in Fallarbor's own tiles)
     local models = {}
     for _, spec in ipairs(Specs) do
       local ref = Buildings.reference(spec, ctx)
@@ -2270,15 +2288,26 @@ return function(deps)
         for _, m in ipairs(ref.template) do
           if mids[m] then seen = true; break end
         end
+        if not seen and not spec.owned and primaries[Buildings.primaryOf(ref.pair)] then
+          seen = spec.anywhere or pairSeen[ref.pair]
+          if not seen then
+            seen = true
+            for _, c in ipairs(Buildings.core(spec, ref)) do
+              if ref.template[c[2] * ref.w + c[1] + 1] >= 512 then seen = false; break end
+            end
+          end
+        end
       end
       if seen then
         local md = ready(spec, NativeTileset, ctx)
         if md then models[#models + 1] = md end
       end
     end
-    local found = Buildings.find(grid, models, alikeOf(NativeTileset, signCell), where and function(cx, cy)
-      local _, lx, ly = where(cx, cy)
-      return lx, ly
+    local layoutOf = where and function(c) return select(4, where(c.cx, c.cy)) end
+    local found = Buildings.find(grid, models, alikeOf(NativeTileset, layoutOf), where and function(cx, cy)
+      local _, lx, ly, id = where(cx, cy)
+      local L = id and World and World.layout(id)
+      return lx, ly, L and L.name or nil
     end)
     -- the kits' blocks (Rustboro's), each modelled from its own drawing where it stands
     local secondaryOf = function(pair)
@@ -2315,6 +2344,7 @@ return function(deps)
         found[#found + 1] = { model = md, cx = k.cx, cy = k.cy }
       end
     end
+    -- (a cell two placements hold is the first's: voxel_building.c CellGridOf)
     for _, pl in ipairs(found) do
       local md = pl.model
       local w, h = md.ref.w, md.ref.h
@@ -2322,7 +2352,7 @@ return function(deps)
         for i = 0, w - 1 do
           if not md.spec.owned or md.spec.owned[i .. "," .. j] then
             local c = grid.at(pl.cx + i, pl.cy + j)
-            if c then
+            if c and not c.model then
               c.model = pl
               c.top = Buildings.tops(md)[i .. "," .. j] or 0
             end
@@ -2343,7 +2373,7 @@ return function(deps)
         local g
         if plan then g = plan.ground
         else g = Buildings.groundOf(grid, pl, function(m) return src.ts.midToSlot[m] ~= nil end) end
-        if plan then pl.groundMid = g end
+        if plan then pl.groundMid, pl.plan = g, plan end
         -- (a relief_bare model's bare cells with quarters to leave out: the relief goes on there
         -- (cell.bareQ), drawn less them; where nothing lifts the cell, that drawing lies flat -
         -- voxel_building.c VoxelBuildings_CellAt as Emerald 3DS's dev branch has it, the model's
@@ -2559,11 +2589,9 @@ return function(deps)
       local row = rows[y]
       return row and row[x] or nil
     end
-    local r = World.roles(L)
-    local function signCell(c)
-      return r ~= nil and (r.role(c.cx, c.cy) == "signpost" or r.role(c.cx, c.cy + 1) == "signpost")
-    end
-    return Buildings.find(grid, models, alikeOf(NativeTileset, signCell)), grid, NativeTileset
+    return Buildings.find(grid, models, alikeOf(NativeTileset, function() return name end), function(cx, cy)
+      return cx, cy, L.name
+    end), grid, NativeTileset
   end
   -- (dev) how many cells a placement's ground lays a patch in: a ground of the spec's choosing, or
   -- the map's paint where the model leaves some of the cell (the pak's patches)
@@ -2585,6 +2613,18 @@ return function(deps)
     local out = {}
     local where = function(cx, cy) return nil, cx, cy, name end
     local found, grid, NativeTileset = layoutFind(name)
+    if runs == "all" and grid then
+      -- (everything the battle's window stands, over the whole layout: placeBuildings)
+      found = placeBuildings(grid, NativeTileset, function(cx, cy) return nil, cx, cy, name, 0, 0 end)
+      for _, pl in ipairs(found) do
+        local md = pl.model
+        out[#out + 1] = { name = md.spec.name, x = pl.cx, y = pl.cy, w = md.ref.w, h = md.ref.h,
+                          footprints = Buildings.footprints(md), tops = Buildings.tops(md), owned = md.spec.owned,
+                          tris = md.tris, ground = pl.plan and pl.plan.ground, patches = pl.plan and patchCount(md, pl.plan),
+                          plan = pl.plan }
+      end
+      return out
+    end
     local function add(pl, plan)
       local md = pl.model
       out[#out + 1] = { name = md.spec.name, x = pl.cx, y = pl.cy, w = md.ref.w, h = md.ref.h,
@@ -2604,13 +2644,71 @@ return function(deps)
         for j = 0, pl.model.ref.h - 1 do
           for i = 0, pl.model.ref.w - 1 do
             local c = Buildings.owns(pl.model.spec, i, j) and grid.at(pl.cx + i, pl.cy + j)
-            if c then c.model = pl end
+            if c and not c.model then c.model = pl end
           end
         end
       end
       local list = {}
       placeComponents(grid, NativeTileset, list, where)
       for _, pl in ipairs(list) do add(pl, pl.plan) end
+    end
+    return out
+  end
+  -- (dev) why a spec does or does not stand at (x, y) of a layout: each core cell's metatile, the
+  -- template's, whether it is a sign's, and the pixels it owns that the cell draws otherwise
+  -- (both layers, and the lower alone), the first of them
+  function Scene._findWhy(name, specName, x, y)
+    local _, grid, NativeTileset = layoutFind(name)
+    local L = World and World.layout(name)
+    if not (grid and L) then return { "no layout " .. tostring(name) } end
+    local md
+    for _, spec in ipairs(Specs) do
+      if spec.name == specName then md = ready(spec, NativeTileset, layoutCtx()) end
+    end
+    if not md then return { "no model " .. tostring(specName) } end
+    local out = { ("%s at %d,%d in %s: %dx%d, core %d cells, owned %s, anywhere %s, primary only %s, its pair %s, here %s"):format(
+      specName, x, y, name, md.ref.w, md.ref.h, #md.core, tostring(md.spec.owned ~= nil), tostring(md.spec.anywhere),
+      tostring(md.primaryOnly), tostring(md.ref.pair), tostring(L.pair)) }
+    -- (and whether the finder stands it there, over the layout)
+    local hit = false
+    for _, pl in ipairs(Buildings.find(grid, { md }, alikeOf(NativeTileset, function() return name end), function(cx, cy)
+      return cx, cy, L.name
+    end)) do
+      if pl.cx == x and pl.cy == y then hit = true end
+    end
+    out[#out + 1] = "  found by itself there: " .. tostring(hit)
+    local function k5(a, b, c) return ("%d,%d,%d"):format(math.floor(a * 31 + 0.5), math.floor(b * 31 + 0.5), math.floor(c * 31 + 0.5)) end
+    for _, c in ipairs(md.core) do
+      local cell = grid.at(x + c[1], y + c[2])
+      local want = md.ref.template[c[2] * md.ref.w + c[1] + 1]
+      if not cell then
+        out[#out + 1] = ("  %d,%d off the layout"):format(c[1], c[2])
+      else
+        local src = layerSource(name, pixelSource(NativeTileset, cell.pair))
+        local sign = World.signMetatiles(L)[cell.mid] == true
+        local owned, bad, badLow, first = 0, 0, 0, nil
+        local art = Buildings.texPixels(md)
+        for yy = 0, 15 do
+          for xx = 0, 15 do
+            local o = ((c[2] * 16 + yy) * art.w + c[1] * 16 + xx) * 4
+            if art.px[o + 4] >= 0.5 then
+              owned = owned + 1
+              local mine = k5(art.px[o + 1], art.px[o + 2], art.px[o + 3])
+              local r1, g1, b1, a1 = src.over(cell.mid, xx, yy)
+              local r0, g0, b0 = src.under(cell.mid, xx, yy)
+              local both = (a1 and a1 > 0.5) and k5(r1, g1, b1) or (r0 and k5(r0, g0, b0) or "-")
+              local low = r0 and k5(r0, g0, b0) or "-"
+              if both ~= mine then
+                bad = bad + 1
+                first = first or ("(%d,%d) art %s cell %s"):format(xx, yy, mine, both)
+              end
+              if low ~= mine then badLow = badLow + 1 end
+            end
+          end
+        end
+        out[#out + 1] = ("  %d,%d mid %03X want %03X%s sign %s owned %d differ %d (lower alone %d) %s"):format(
+          c[1], c[2], cell.mid, want, cell.mid == want and " same" or "", tostring(sign), owned, bad, badLow, first or "")
+      end
     end
     return out
   end
@@ -3028,20 +3126,8 @@ return function(deps)
       want.enemy = hereKind
     end
     phase("cells")
-    -- (Emerald's maps: a cell whose role in its own layout is a signpost's, or the cell north of
-    -- one: src/scene/roles.lua)
-    local function roleOf(cx, cy)
-      if not World then return nil end
-      local d, lx, ly, id = env.where(cx, cy)
-      local L = d and id and World.layout(id)
-      local r = L and World.roles(L)
-      return r and r.role(lx, ly) or nil
-    end
-    local function signCell(c)
-      return roleOf(c.cx, c.cy) == "signpost" or roleOf(c.cx, c.cy + 1) == "signpost"
-    end
     -- (a cell's place in its own map: a spec with owned cells stands only where it is drawn)
-    local okB, placed = pcall(placeBuildings, grid, NativeTileset, World and signCell or nil, env.where)
+    local okB, placed = pcall(placeBuildings, grid, NativeTileset, env.where)
     if not okB then
       hd.stats.sceneBuildingError = tostring(placed)
       placed = {}

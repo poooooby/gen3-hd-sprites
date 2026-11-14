@@ -637,6 +637,7 @@ function Roles.new(L, opt)
     return hit
   end
   self.role = role
+  self.drawsPostSign = drawsPostSign
   self.water, self.jumps = water, jumps
   return self
 end
