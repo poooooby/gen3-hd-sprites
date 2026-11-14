@@ -1,7 +1,7 @@
 {
   "id": "gen3-hd-sprites",
   "name": "WoobleView",
-  "version": "0.6.0",
+  "version": "0.7.0-beta.1",
   "api": 2,
   "entry": "main.lua",
   "options_schema": "options.lua",
@@ -20,6 +20,6 @@
   "optional_dependencies": [],
   "conflicts": [],
   "incompatible": [],
-  "description": "Sharp Pokemon and battles that fit any screen on FireRed, LeafGreen, Ruby, Sapphire and Emerald (Red, Blue, Yellow, Gold, Silver and Crystal in part). Fills the battle to your screen in any shape (Fill Screen). With a sprite mod that supports it, draws its battle, Pokedex and overworld Pokemon at your screen's full resolution and pulls the battle camera back so tall Pokemon fit (Battle Fit).",
+  "description": "Sharp Pokemon and battles that fit any screen on FireRed, LeafGreen, Ruby, Sapphire and Emerald (Red, Blue, Yellow, Gold, Silver and Crystal in part). Fills the battle to your screen in any shape (Fill Screen). With a sprite mod that supports it, draws its battle, Pokedex and overworld Pokemon at your screen's full resolution and pulls the battle camera back so tall Pokemon fit (Battle Fit). On FireRed, LeafGreen, Ruby, Sapphire and Emerald, battles can take place in the world around you, in 2.5D (Battle Scene), with Emerald's towns, rooms and land in 3D.",
   "github": "poooooby/gen3-hd-sprites"
 }
