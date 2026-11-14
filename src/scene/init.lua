@@ -353,7 +353,8 @@ return function(deps)
   local function treesArt(NativeTileset, grid)
     local Tr = deps.Trees
     if Tr and Tr.kanto then
-      local game = tostring(deps.Family and deps.Family.game() or "?")
+      -- (read again when the workshop's settings for its cone change: Trees.artKey)
+      local game = tostring(deps.Family and deps.Family.game() or "?") .. "|" .. (Tr.artKey and Tr.artKey() or "")
       local k = kantoTrees[game]
       if k == nil then
         k = false

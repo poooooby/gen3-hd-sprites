@@ -131,6 +131,11 @@ end
 -- models' own constants
 Trees.tune = nil
 function Trees.useTune(t) Trees.tune = t end
+--- What a Kanto tree's art is read for (its cone's settings): the art is read again when it changes.
+function Trees.artKey()
+  local t = Trees.tune
+  return ("%s:%s"):format(tostring(t and t.depth or 1), tostring(t and t.stand or 0))
+end
 
 --- The secondary tileset of an engine tileset pair ("general__petalburg" -> "petalburg"),
 --- without underscores; and whether the pair's primary is the General tileset.
@@ -495,7 +500,10 @@ local function coneOf(k)
   local S = Trees.species and Trees.species[k or 0]
   local c = S and S.cone
   if not c then return nil end
-  local C = { ax = c.axis, cz = c.depth, s = c.squash, R0 = c.radius, w = S.profile }
+  -- (the game's workshop settings: the crown's depth and where the tree stands, Tune.DEFS.trees)
+  local t = Trees.tune
+  local C = { ax = c.axis, cz = c.depth + (t and t.stand or 0), s = c.squash * (t and t.depth or 1), R0 = c.radius,
+              w = S.profile }
   -- (read off the drawing, the skirt is as wide as the crown's widest row: the radius meets it)
   if C.w and C.w[31] then C.R0 = C.w[31] end
   C.h0 = C.cz + C.s * C.R0 - c.skirt
@@ -514,6 +522,8 @@ local function coneRadius(C, y)
     local v = C.cz - y - 0.5
     -- (above the drawing's top row - a dome's top, seen from above - closing to its apex)
     if v < 0 then return math.min(C.R0, (w[0] or 0) * (C.top - y) / math.max(1e-6, C.top - (C.cz - 0.5))) end
+    -- (past the profile's rows - a tree stood further south: the workshop's stand - its widest)
+    if v >= 31 then return C.R0 end
     local v0 = math.floor(v)
     local a, b = w[v0] or 0, w[v0 + 1] or C.R0
     return math.min(C.R0, a + (b - a) * (v - v0))

@@ -24,6 +24,12 @@ Tune.DEFS = {
       help = "how far south of its trunk row's top edge the crown's foot stands (each tree art's own by default)" },
     { key = "sink", label = "Sink", default = 0.10, min = -0.5, max = 0.5, step = 0.02, unit = "tiles",
       help = "how far the crown's foot sinks into the ground" },
+    -- (Kanto's trees stand as models, exact at 45 degrees whatever these are: they shape the tree
+    -- seen from elsewhere; the whole game's only, not a tree's mark)
+    { key = "depth", label = "Kanto crown depth", default = 1, min = 0.25, max = 2, step = 0.05, unit = "x",
+      help = "a Kanto tree's crown, front to back, as a share of its own reading" },
+    { key = "stand", label = "Kanto stand", default = 0, min = -8, max = 8, step = 1, unit = "px",
+      help = "how far south of its own reading a Kanto tree stands (its trunk and the crown's axis)" },
   },
 }
 -- the keys a mark may hold besides a group's settings

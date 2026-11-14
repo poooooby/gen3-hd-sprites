@@ -1201,8 +1201,13 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     graded as Hoenn's tree texture is, over its crown (`Light.gradeTrees(data,
     Trees.KANTO_CROWNS)`). The proof: one tree's emitted quads rendered at 45 degrees
     (`Check.render`) against the alone tree's drawing, 0 of 1,536 texels wrong.
-  - The workshop's tree settings (lean, height, foot, sink) shape Hoenn's crown cards; Kanto's tree
-    takes none of them (it is exact as it stands), only `hide`.
+  - The workshop's tree settings (lean, height, foot, sink) shape Hoenn's crown cards. Kanto's
+    trees (the General's and the forests') take their own two, the game's alone (not a tree's
+    mark): `depth` (the crown front to back, a share of its reading: the cone's squash) and `stand`
+    (texels south of its reading: the trunk and the crown's axis). Whatever they are, the tree is
+    its drawing at 45 degrees (the cone is solved row by row; past its profile's rows its radius is
+    its widest); its art is read again when they change (`Trees.artKey`, the art's cache key).
+    Their `hide` mark hides a tree.
   With `Trees.kanto` set, `Trees.tilesets` finds the General by the family's name (`fr:general`),
   so the scene's tree passes (shadows, the stage's tree heights, the relief's trunk ground) run in
   Kanto as in Hoenn.

@@ -1457,6 +1457,22 @@ do
     end
   end
   check(exact, "the crown's corners stand where the drawing puts them at 45 degrees")
+  -- the workshop's settings for Kanto's trees (a shallower crown, standing further south) shape
+  -- the tree away from 45 degrees only
+  Trees.useTune({ depth = 0.5, stand = 3 })
+  local keyTuned = Trees.artKey()
+  Trees.kantoArt(px, function() end)
+  local C2, exact2 = Trees.kantoCone(), true
+  for _, q in ipairs(Trees.KANTO_QUADS) do
+    for _, c in ipairs({ { q[1], q[2] }, { q[3], q[4] } }) do
+      local y, z = Trees.kantoFront(C2, c[1], c[2])
+      if math.abs((z - y) - c[2]) > 1e-3 then exact2 = false end
+    end
+  end
+  Trees.useTune(nil)
+  check(exact2 and C2.s == C.s * 0.5 and C2.cz == C.cz + 3 and keyTuned ~= Trees.artKey(),
+    "the workshop's crown depth and stand reshape a Kanto tree, still exact at 45 degrees")
+  Trees.kantoArt(px, function() end)
   -- a forest's own tree (Viridian Forest's, 3 wide): its parts only in its own tileset, found by
   -- the maps drawn with it
   Trees.resolveForests(function(id) return id == "LAYOUT_VIRIDIAN_FOREST" and "general__rom_forest" or nil end)
