@@ -163,6 +163,35 @@ local function body(game, log)
       -- the buildings first (their cells marked: cell.model), as the build stands them
       local okB, errB = pcall(placeBuildings, grid, NativeTileset, function(cx, cy) return nil, cx, cy, L.name, 0, 0 end)
       if not okB then log("signs " .. tostring(L.name) .. ": buildings error " .. tostring(errB)) end
+      -- BRIDGE_FURNITURE=1: the cells Emerald 3DS's mesh builder stands up by their behaviour
+      -- where no model covers them (EmitTile: a counter, a PC or a television), to
+      -- furniture_<LAYOUT>.txt; and how many cells the models cover
+      if env("BRIDGE_FURNITURE") then
+        local machines = {}
+        for _, n in ipairs({ "COUNTER", "PC", "SECRET_BASE_PC", "PLAYER_ROOM_PC_ON", "SECRET_BASE_REGISTER_PC",
+                             "TELEVISION", "CABLE_BOX_RESULTS_1" }) do
+          local v = okMB and MB.id(n)
+          if v then machines[v] = n end
+        end
+        local lines, covered, bare = {}, 0, 0
+        for j = 0, grid.h - 1 do
+          for i = 0, grid.w - 1 do
+            local c = grid.rows[j][i]
+            local kind = machines[tonumber(c.beh) or -1]
+            if kind then
+              if c.model then covered = covered + 1 else
+                bare = bare + 1
+                lines[#lines + 1] = ("F %d %d %s %s"):format(c.cx, c.cy, kind, hex(c.mid))
+              end
+            end
+          end
+        end
+        local f = io.open(dir .. "/furniture_" .. L.name .. ".txt", "w")
+        if f then f:write(table.concat(lines, "\n"), "\n"); f:close() end
+        if covered + bare > 0 then
+          log(("furniture %s: %d under a model, %d bare"):format(L.name, covered, bare))
+        end
+      end
       -- the sign step of init.lua's build
       -- (init.lua's own reader: Emerald's layers off the atlas blobs)
       local layersOf = Scene._signLayers(NativeTileset)
@@ -232,10 +261,10 @@ local function body(game, log)
     -- which layouts
     local which = env("BRIDGE_SIGNS")
     local list = {}
-    if which == "outdoor" then
+    if which == "outdoor" or which == "all" then
       for _, id in ipairs(World.layoutIds()) do
         local L = World.layout(id)
-        if L and L.outdoor then list[#list + 1] = { L.name, L } end
+        if L and (L.outdoor or which == "all") then list[#list + 1] = { L.name, L } end
       end
     else
       local names = (which and which ~= "1") and which

@@ -33,7 +33,11 @@ them). Changes: rewritten in Lua for LOVE; a plain RGBA atlas instead of the 3DS
 RGBA5551; AgainstRock and EmitGround worked out ahead of the drawing, off the battle's own cell
 window, a trunk's ground on a slope laid from a slot of the relief's atlas; voxel_battle.c's
 ReadCell tree heights and KindOf ported to the stage search, a Kanto game's tall grass also its
-Cycling Road's; a secondary tileset told by the engine's tileset pair name.
+Cycling Road's; a secondary tileset told by the engine's tileset pair name. ReadCell's sign and
+furniture heights, and voxel_mesh_builder.c's EmitTile for the cells no model covers (a counter's
+block, ShapeHeight; a machine as EmitFurniture's television, EmitSolidBox, voxel_atlas.c's solid
+colours), are ported into src/scene/init.lua and src/scene/render.lua; changes: the shape read
+off the cell's behaviour in the engine's ids, the colours from a texture of their own.
 
 The battle scene's buildings (src/scene/models/kernel.lua, src/scene/models/specs.lua,
 src/scene/buildings.lua) adapt Emerald 3DS's building models: the modelling primitives of

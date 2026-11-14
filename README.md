@@ -103,7 +103,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   maze, Norman's rooms with their sliding doors, Wattson's coils with their electric beams
   standing lit or out as the switches leave them, Flannery's walls of brick, Winona's columns,
   Tate and Liza's islands in the dark and Juan's tiers of ice. The walls close every room in, and
-  the same furniture stands wherever another room draws it.
+  the same furniture stands wherever another room draws it. In the rooms with no model of their
+  own (the museums, the Space Center, secret bases), counters stand up as blocks and PCs as sets.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle

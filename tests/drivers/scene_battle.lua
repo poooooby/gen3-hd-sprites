@@ -243,6 +243,19 @@ local function body(game, log)
       U.wait(6)
       U.shot(game, ("%s/%s_scene_%s.png"):format(dir, mapId, fill and "fill" or "nofill"))
     end
+    -- SCENE_TILEANIM=1: whether the field's tile animation runs on in the battle (its banks'
+    -- frames, a second apart)
+    if env("SCENE_TILEANIM") then
+      local TA = require("src.core.game3.tileset_anim")
+      local function frames()
+        local st = TA._rse
+        return st and ("primary %s secondary %s"):format(tostring(st.primary), tostring(st.secondary)) or "no timers"
+      end
+      local a = frames()
+      U.wait(60)
+      local b = frames()
+      log(("%s tile animation in battle: %s (%s)"):format(mapId, a == b and "still" or "running", b:sub(1, 200)))
+    end
     -- SCENE_ANIM=NAME: a general battle animation played over the settled battle (e.g.
     -- SANDSTORM_CONTINUES), shot at frames 20, 50 and 80 of it
     if env("SCENE_ANIM") then

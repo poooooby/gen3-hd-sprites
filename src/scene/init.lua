@@ -535,6 +535,22 @@ return function(deps)
     return img, data
   end
 
+  -- the flat colours of a television's stand and body (Emerald 3DS's voxel_atlas.c sSolidColors:
+  -- GREY 14, 14, 15 and BLACK 8, 8, 9 of 31), for render.lua's machines: { image, grey, black }
+  -- (quads), made once
+  local solids
+  local function solidColours()
+    if solids == nil then
+      solids = false
+      local img = imageOf(2, 1, function(data)
+        data:setPixel(0, 0, 14 / 31, 14 / 31, 15 / 31, 1)
+        data:setPixel(1, 0, 8 / 31, 8 / 31, 9 / 31, 1)
+      end)
+      if img then solids = { image = img, grey = G.newQuad(0, 0, 1, 1, 2, 1), black = G.newQuad(1, 0, 1, 1, 2, 1) } end
+    end
+    return solids or nil
+  end
+
   -- a spec made ready to place: its reference, art (image), core cells and triangles (once)
   -- a model's cache (Scene Cache): its triangles, core cells and texture as bytes, under the
   -- game's key (Scene.modelCache, set by main.lua; Scene.MODELS_VERSION bumps when the specs or
@@ -3743,6 +3759,39 @@ return function(deps)
         end
       end
     end
+    -- the rest of ReadCell's heights, by VoxelWorld_ClassifyTile's shape (a tree's cell is flat
+    -- to it, so these never raise one): a signpost 1 tile, a counter or a machine (a PC, a
+    -- television, a cable box) 0.8 - whatever model stands there; and each cell's shape
+    -- (cell.furniture: "counter", "machine"), for the cells no model covers
+    do
+      local MBs = req("src.core.game3.mb")
+      -- (BehaviorShape: COUNTER, else FURNITURE - a machine)
+      local machines = {}
+      for _, name in ipairs({ "COUNTER", "PC", "SECRET_BASE_PC", "PLAYER_ROOM_PC_ON", "SECRET_BASE_REGISTER_PC",
+                              "TELEVISION", "CABLE_BOX_RESULTS_1" }) do
+        local v = MBs and MBs.id(name)
+        if v then machines[v] = name == "COUNTER" and "counter" or "machine" end
+      end
+      local signAt = {}
+      for _, s in ipairs(signs) do signAt[s.cell] = true end
+      local function treeCell(c)
+        if not (Trees and not env.indoor and c.pair and c.mid) then return false end
+        local sec, general = Trees.tilesets(c.pair)
+        return general and (Trees.part(sec, c.mid) ~= nil or Trees.groundMetatile(sec, c.mid) ~= c.mid)
+      end
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local c = grid.rows[j][i]
+          if c.pair and c.kind ~= "void" and not c.border and not treeCell(c) then
+            local shape = not signAt[c] and machines[tonumber(c.beh) or -1] or nil
+            local top = signAt[c] and 1.0 or (shape and 0.8) or nil
+            if top and top > (c.top or 0) then c.top = top end
+            -- (where no model covers it, render.lua stands it up: EmitTile)
+            c.furniture = shape
+          end
+        end
+      end
+    end
     hd.stats.sceneTrees = ("%d cells, %d steeper, ground on rock %d, on a slope %d (%s)"):format(treeTally.cells,
       treeTally.steep, treeTally.rock, treeTally.slope, table.concat(treeTally, " "))
     local stage = Stage.search(Camera, grid, {
@@ -3766,7 +3815,7 @@ return function(deps)
     if not okLt then hd.stats.sceneLightError, light = tostring(light), nil else hd.stats.sceneLightError = nil end
     local lists = Render.vertices(grid, tilesFor(NativeTileset), px, py,
       { Trees = Trees, image = treesArt(), outdoor = not env.indoor },
-      { Buildings = Buildings, placements = placed }, light)
+      { Buildings = Buildings, placements = placed, solids = solidColours() }, light)
     if lists.skirts and hd.stats.sceneRelief then
       local k = lists.skirts
       hd.stats.sceneRelief = hd.stats.sceneRelief .. ("; skirts: belt %d, seam %d, gap %d (%s)"):format(k.belt, k.seam, k.gap,

@@ -24,6 +24,12 @@ Render.SATURATION = 1.30    -- and VOXEL_GRADE_SATURATION
 Render.BORDER_COURSES = 2   -- how tall the border round the map stands (Emerald 3DS's two courses)
 Render.SHADE = { south = 0.60, north = 0.50, west = 0.65, east = 0.55 }
 Render.UV_INSET = 0.02      -- texels kept off a tile's edge (no neighbour bleeding at an angle)
+-- a counter's or a machine's block (Emerald 3DS's voxel_mesh_builder.c: ShapeHeight's COUNTER,
+-- EmitFurniture's stand and top, SHADE_* and SOLID_*)
+Render.COUNTER_HEIGHT = 0.70
+Render.TV_STAND, Render.TV_TOP = 0.3, 1.0
+Render.FACE_SHADE = { top = 1.00, south = 0.60, north = 0.50, west = 0.65, east = 0.55 }
+Render.SOLID_SHADE = { lit = 1.00, front = 0.94, back = 0.88, side = 0.91 }
 Render.FLAT_MARK = 0.5      -- the vertex alpha of a standing cell's ground copy
 -- WoobleView's own (not Emerald 3DS's): land past every map fades into the sky from FADE[1] to
 -- FADE[2] tiles past the nearest map cell, so a mountain's rim (Mt Chimney's) carried on as the
@@ -224,6 +230,73 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
     local iw, ih = image:getDimensions()
     local u0, v0, u1, v1 = uvOf(q, iw, ih)
     litQuad(list(layer, image), a, b, c, d, u0, v0, u1, v1, shade, alpha, kind)
+  end
+  -- a counter or a machine no model covers (cell.furniture, src/scene/init.lua), stood up from
+  -- its own drawing as Emerald 3DS's EmitTile stands it (voxel_mesh_builder.c): a counter a block
+  -- COUNTER_HEIGHT high, its drawing on its top and on each side facing a cell of another shape
+  -- (not the void); a machine a television - a grey stand, a black body, its drawing the screen
+  -- facing south. Shades as theirs (SHADE_*, SOLID_*). Returns true when it stood the cell up.
+  local solids = buildings and buildings.solids
+  local function shapeAt(x, y)
+    local o = grid.at(x, y)
+    if not o or o.kind == "void" then return "void" end
+    return o.furniture or "flat"
+  end
+  local function standFurniture(cell, t, slot, x0, z0, dy)
+    local what = cell.furniture
+    if not what or cell.model or cell.lifted or cell.border then return false end
+    local x1, z1 = x0 + 1, z0 + 1
+    local function art(a, b, c, d, shade, normal)
+      local kind = { normal = normal }
+      put("lower", t.image, t.quad(slot), a, b, c, d, shade, nil, kind)
+      put("upper", t.overImage, t.overQuad(slot), a, b, c, d, shade, nil, { normal = normal })
+    end
+    if what == "counter" then
+      local h = dy + Render.COUNTER_HEIGHT
+      art({ x0, h, z0 }, { x1, h, z0 }, { x1, h, z1 }, { x0, h, z1 }, Render.FACE_SHADE.top, { 0, 1, 0 })
+      local cx, cy = cell.cx, cell.cy
+      local function open(dx, dz)
+        local s = shapeAt(cx + dx, cy + dz)
+        return s ~= "void" and s ~= "counter"
+      end
+      if open(0, 1) then
+        art({ x0, h, z1 }, { x1, h, z1 }, { x1, dy, z1 }, { x0, dy, z1 }, Render.FACE_SHADE.south, { 0, 0, 1 })
+      end
+      if open(0, -1) then
+        art({ x1, h, z0 }, { x0, h, z0 }, { x0, dy, z0 }, { x1, dy, z0 }, Render.FACE_SHADE.north, { 0, 0, -1 })
+      end
+      if open(-1, 0) then
+        art({ x0, h, z0 }, { x0, h, z1 }, { x0, dy, z1 }, { x0, dy, z0 }, Render.FACE_SHADE.west, { -1, 0, 0 })
+      end
+      if open(1, 0) then
+        art({ x1, h, z1 }, { x1, h, z0 }, { x1, dy, z0 }, { x1, dy, z1 }, Render.FACE_SHADE.east, { 1, 0, 0 })
+      end
+      return true
+    end
+    -- a television: EmitSolidBox's faces (no bottom), then the screen
+    if not solids then return false end
+    local function box(q, bx0, bz0, bx1, bz1, y0, y1)
+      local ax0, ax1, az0, az1 = x0 + bx0, x0 + bx1, z0 + bz0, z0 + bz1
+      local Y0, Y1 = dy + y0, dy + y1
+      local S = Render.SOLID_SHADE
+      put("models", solids.image, q, { ax0, Y1, az0 }, { ax1, Y1, az0 }, { ax1, Y1, az1 }, { ax0, Y1, az1 }, S.lit, nil,
+        { normal = { 0, 1, 0 } })
+      put("models", solids.image, q, { ax0, Y1, az1 }, { ax1, Y1, az1 }, { ax1, Y0, az1 }, { ax0, Y0, az1 }, S.front, nil,
+        { normal = { 0, 0, 1 } })
+      put("models", solids.image, q, { ax1, Y1, az0 }, { ax0, Y1, az0 }, { ax0, Y0, az0 }, { ax1, Y0, az0 }, S.back, nil,
+        { normal = { 0, 0, -1 } })
+      put("models", solids.image, q, { ax0, Y1, az0 }, { ax0, Y1, az1 }, { ax0, Y0, az1 }, { ax0, Y0, az0 }, S.side, nil,
+        { normal = { -1, 0, 0 } })
+      put("models", solids.image, q, { ax1, Y1, az1 }, { ax1, Y1, az0 }, { ax1, Y0, az0 }, { ax1, Y0, az1 }, S.side, nil,
+        { normal = { 1, 0, 0 } })
+    end
+    local stand, top = Render.TV_STAND, Render.TV_TOP
+    box(solids.grey, 0, 0, 1, 1, 0, stand)
+    box(solids.black, 0, 0.3, 1, 0.8, stand, top)
+    local zs = z0 + 0.79
+    art({ x0, dy + top, zs }, { x1, dy + top, zs }, { x1, dy + stand, zs }, { x0, dy + stand, zs },
+      Render.FACE_SHADE.south, { 0, 0, 1 })
+    return true
   end
   local Trees = trees and trees.Trees
   local timg = trees and trees.image
@@ -622,7 +695,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
         local card = cell.up and not part and mid == cell.mid
         local flat = card and Render.FLAT_MARK or 1
         -- (a lifted cell's ground is its relief's: src/scene/relief.lua, but a tree's)
-        if not treeGround and not cell.lifted then
+        -- (a counter or a machine stands up instead of lying as ground)
+        local stood = not treeGround and standFurniture(cell, t, slot, x0, z0, dy)
+        if not treeGround and not cell.lifted and not stood then
           -- (lit as ground: refined where a shadow's edge crosses it, not past every map)
           local kind = { refine = not cell.border, lift = dy }
           put("lower", t.image, t.quad(slot), a, b, c, d, 1, flat, kind)

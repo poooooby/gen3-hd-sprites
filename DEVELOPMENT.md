@@ -497,7 +497,22 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `c.treeGround` (`Relief.treeGround`, their `EmitGround`/`TreeOnRock`/`OneLevelSlope`: "rock"
   on a band's rock, "slope" on a one-level slope, where `Relief.treeStep` lays the trunk's ground
   on the relief from a relief-atlas slot of the raw art, `B.treeUV`), passed as `o.noGround`.
-  Stats: `sceneTrees`.
+  Stats: `sceneTrees`. The same pass gives ReadCell's other heights - a signpost 1 tile, a counter
+  or machine (COUNTER, PC, SECRET_BASE_PC, PLAYER_ROOM_PC_ON, SECRET_BASE_REGISTER_PC, TELEVISION,
+  CABLE_BOX_RESULTS_1, by `MB.id`) 0.8, whatever model stands there - and marks `c.furniture`
+  ("counter", "machine"). `render.lua`'s `standFurniture` stands a cell no model covers as their
+  EmitTile does: a counter a 0.70 block (its drawing on top and on each side facing a cell of
+  another shape, not the void), a machine their television (grey stand 0-0.3, black body 0.3-1.0
+  over z 0.3-0.8, the drawing as a screen at z 0.79 - inside the body's front face at 0.80, as
+  theirs), shades `SHADE_*` / `SOLID_*`, colours from `solidColours()`. Across every layout
+  (`BRIDGE_FURNITURE=1 BRIDGE_SIGNS=all`) 131 such cells stand under no model: 107 counters (the
+  museums, the Space Center, the Battle Frontier, the hideouts) and 24 secret-base PCs.
+- Tile animation in battle: the engine's runtime runs `Battle.update` instead of `Field.update`,
+  which steps `TilesetAnim`, so the world keeps the frame the field left, as theirs drops its tile
+  animation in battle (`DropTileAnimation`). `SCENE_TILEANIM=1` in `scene_battle.lua` checks it.
+- Move fades: theirs fits the battle backdrop's three palettes (`VoxelWorld_ScreenFade`'s
+  `FadeFit`); ours draws the world in the wallpaper's recorded colour and shader. For a BG palette
+  blend (SUN_CONTINUES: 6/16 to white) the world moves 0.35 of the way, as theirs would.
 - `models/kernel.lua`: Emerald 3DS's building primitives (`voxel_building.py`): a model in pixels
   from its rectangle's top-left (X east, Y up, Z south), its drawing at u = X, v = Z - Y; Proj,
   Tile, Band, Strip (courses laid up a face), Prism, HipRoof, Frustum, Vault, Walls, Cylinder,
