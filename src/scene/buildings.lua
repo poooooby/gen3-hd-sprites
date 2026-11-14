@@ -247,8 +247,18 @@ function Buildings.find(grid, models, alike, at)
   local memo = {}
   local function matches(md, o, i, j)
     local want = md.ref.template[j * md.ref.w + i + 1]
-    if o.mid == want then return true end
-    if not alike or md.spec.owned or not o.mid then return false end
+    if o.mid == want then
+      -- (a secondary tileset's metatile number names nothing in another secondary: a spec standing
+      -- `anywhere` is there only where the pixels agree too - Two Island's gantry is 0x2E7, and so
+      -- is a stretch of Vermilion's dock)
+      local F = Buildings.family
+      local primaries = F and F.primaryMetatiles or 512
+      if not (alike and md.spec.anywhere and not md.spec.owned and o.pair ~= md.ref.pair and want >= primaries) then
+        return true
+      end
+    elseif not alike or md.spec.owned or not o.mid then
+      return false
+    end
     local m1 = memo[md]
     if not m1 then m1 = {}; memo[md] = m1 end
     local m2 = m1[j * 64 + i]

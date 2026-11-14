@@ -208,8 +208,10 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
   trees stand as real trees with leafy crowns (Kanto's rare one-wide saplings as flat cut-outs of
   their overworld art), and in Emerald most of its town buildings, fences, hedges, curbs
-  and railings stand in 3D too, as do the buildings of FireRed and LeafGreen and their white
-  picket fences, mailboxes and boulders. Signs, street lamps
+  and railings stand in 3D too, as do the buildings of FireRed and LeafGreen (Trainer Tower on its
+  rock, the red gantries by the Sevii harbors and the Power Plant, Vermilion's dock canopies, Two
+  Island's market stall with its crates, tills, pots and flowers) and their white picket fences,
+  mailboxes and boulders. Signs, street lamps
   and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them, and in FireRed and
   LeafGreen so do the caves: Mt Moon's ridges, Rock Tunnel's and Victory Road's rock walls and
@@ -217,8 +219,7 @@ Open **OPTIONS → MODS → WoobleView**.
   the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk).
-  Rocks and buildings in Ruby and Sapphire, and the few buildings not yet rebuilt in FireRed and
-  LeafGreen (the harbour cranes, Trainer Tower), lie flat on the ground as the game draws them.
+  Rocks and buildings in Ruby and Sapphire lie flat on the ground as the game draws them.
   Indoors, Emerald's few rooms not rebuilt show their furniture flat, but for the pieces they
   share with the rooms that are; FireRed's and LeafGreen's other rooms are drawn flat for now. A battle
   with no overworld around it, or no open ground near you, keeps the game's own background.

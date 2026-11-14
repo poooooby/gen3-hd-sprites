@@ -49,7 +49,9 @@ return function(deps)
   -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
   -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
   -- rules are Emerald 3DS's, its key as it always was
-  Run.RULES = { firered = 10, leafgreen = 10 }
+  -- (r11: the cells new building models own - the harbors' gantries, Two Island's stall, Trainer
+  -- Tower - take the level south of them)
+  Run.RULES = { firered = 11, leafgreen = 11 }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end
@@ -175,7 +177,9 @@ return function(deps)
     -- (another game's buildings stand on the ground their doors open onto: each cell a building
     -- model owns takes the level of the first cell south of the building, whatever the drawing
     -- round it says - Lavender's tower is drawn between two rock bands, its door on the town's
-    -- path. Emerald 3DS's own rules read its houses' levels; Emerald's relief is theirs)
+    -- path - or the level its spec gives it (a number, pixels: Trainer Tower's platform on the rock,
+    -- its porch down on the grass). Emerald 3DS's own rules read its houses' levels; Emerald's
+    -- relief is theirs)
     if keyId ~= "emerald" and deps.models then
       local floor_ = math.floor
       for id, t in pairs(model.layouts) do
@@ -190,6 +194,7 @@ return function(deps)
               while yy < t.h and own[K(x, yy)] do yy = yy + 1 end
               local below = yy < t.h and t.cells[yy * t.w + x] or nil
               local level = below and Relief.centre(below) or 0
+              if type(own[k]) == "number" then level = own[k] end
               if level == 0 then
                 t.cells[y * t.w + x] = nil
               else

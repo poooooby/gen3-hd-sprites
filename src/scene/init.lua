@@ -3013,10 +3013,18 @@ return function(deps)
     if not found then return nil end
     local out = {}
     for _, pl in ipairs(found) do
-      local ref = pl.model.ref
+      local ref, spec = pl.model.ref, pl.model.spec
+      -- (a spec's own levels for its cells, `cell_level` = { { i0, j0, i1, j1, tiles } }: what the
+      -- drawing stands on, where the ground south of it is not that)
+      local levels = {}
+      for _, r in ipairs(spec.cell_level or {}) do
+        for j = r[2], r[4] do for i = r[1], r[3] do levels[j * 256 + i] = r[5] * 16 end end
+      end
       for j = 0, ref.h - 1 do
         for i = 0, ref.w - 1 do
-          if Buildings.owns(pl.model.spec, i, j) then out[(pl.cy + j + 4096) * 16384 + (pl.cx + i + 4096)] = true end
+          if Buildings.owns(spec, i, j) then
+            out[(pl.cy + j + 4096) * 16384 + (pl.cx + i + 4096)] = levels[j * 256 + i] or true
+          end
         end
       end
     end

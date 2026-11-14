@@ -699,6 +699,157 @@ return function(K, H)
       side = Tile(4, 64, 14, 70, { top = 24 }) })
   end
 
+  -- the red gantries beside the Sevii Islands' harbors (Two Island's either side of it, 7 and 13 x
+  -- 10 and 12; One to Seven Island's ports drawn alike) and the Power Plant (Route 10, 2 and 12 x
+  -- 35-40), a cell across: a tower of white panels in red girders, its front rows top+13 to
+  -- top+24 (its foot's outline), x 1-10 (west) or 5-14 (east); on it a beam reaching the wall beside
+  -- it, the whole cell across - its top rows top to top+5 under the outline, its lit edge row
+  -- top+6 and its front to row top+12. The front at z top + 25, the gantry 6 deep.
+  local function gantry(east, top)
+    local zf, zb = top + 25, top + 19
+    local tx0, tx1 = east and 5 or 1, east and 15 or 11
+    local bx0, bx1 = east and 0 or 1, east and 15 or 16
+    local red = Tile(3, top + 7, 9, top + 12, { top = 19 })
+    local tower = Prism("tower", tx0, tx1, { { zb, 0 }, { zf, 0 }, { zf, 12 }, { zb, 12 } },
+      { edges = { [1] = Proj(top + 13, zf) }, skip = { 0, 2, 3 },
+        caps = { Band(0, 13, red, zf, { z1 = zb }) } })
+    local beam = Prism("beam", bx0, bx1, { { zb, 12 }, { zf, 12 }, { zf, 19 }, { zb, 19 } },
+      { edges = { [1] = Proj(top + 6, top + 13), [2] = Proj(top, top + 6) }, skip = { 0, 3 },
+        caps = { Band(12, 20, red, zf, { z1 = zb }) } })
+    return { tower, beam }
+  end
+  local function gantryExact(east, top)
+    if east then return { { 0, top, 15, top + 13 }, { 5, top + 13, 15, top + 25 } } end
+    return { { 1, top, 16, top + 13 }, { 1, top + 13, 11, top + 25 } }
+  end
+
+  -- Two Island's market stall (27-30 x 1-3, 64 x 48): a flat yellow awning, its top rows 0-24
+  -- under its outline, its orange valance and fringe rows 25-31; under it two white posts x 2-5
+  -- and 58-61, their feet x 1-6 and 57-62 to row 46 (the front at z 47). The goods round it (the
+  -- crates, the pots, the baskets) are the map's.
+  local function market_stall()
+    local zf, yb, yt = 47, 15, 22
+    local zb = zf - 25
+    local band = Tile(20, 26, 40, 31, { top = yt })
+    local awning = Prism("awning", 0, 64, { { zb, yb }, { zf, yb }, { zf, yt }, { zb, yt } },
+      { edges = { [1] = Proj(25, 32), [2] = Proj(0, 25) }, skip = { 0, 3 },
+        caps = { Band(yb, yt + 1, band, zf, { z1 = zb }) } })
+    local parts = { awning }
+    local post = Tile(3, 34, 5, 40, { top = yb })
+    for _, xs in ipairs({ { 1, 7 }, { 57, 63 } }) do
+      parts[#parts + 1] = Prism("post", xs[1], xs[2], { { zf - 4, 0 }, { zf, 0 }, { zf, yb }, { zf - 4, yb } },
+        { edges = { [1] = Proj(32, 47) }, skip = { 0, 2, 3 }, caps = { Band(0, yb + 1, post, zf, { z1 = zf - 4 }) } })
+    end
+    return parts
+  end
+
+  -- the stall's goods round it (Two Island, 25-31 x 1-4), each a cell's: a crate (16 x 16) its
+  -- planked top rows 0-8 and its front rows 9-15 (the front at z 16), 7 high and 9 deep; two crates
+  -- stacked (a cell and a half, rows 8-31 of 31 x 1-2) the same, 15 high; a till (the blue and the
+  -- green, rows 1-14) its body's front rows 9-14 and its screen tilted back over it, rows 1-8
+  local function crate(top, high)
+    local zf = top + 9 + high
+    local plank = Tile(2, top + 2, 14, top + 6, { top = high })
+    return { Prism("crate", 0, 16, { { zf - 9, 0 }, { zf, 0 }, { zf, high }, { zf - 9, high } },
+      { edges = { [1] = Proj(top + 9, zf), [2] = Proj(top, top + 9) }, skip = { 0, 3 },
+        caps = { Band(0, high + 1, plank, zf, { z1 = zf - 9 }) } }) }
+  end
+  local function till()
+    local side = Tile(2, 10, 12, 14, { top = 10 })
+    return { Prism("till", 0, 15, { { 11, 0 }, { 15, 0 }, { 15, 6 }, { 11, 10 } },
+      { edges = { [1] = Proj(9, 15), [2] = Proj(1, 9) }, skip = { 0, 3 },
+        caps = { Band(0, 11, side, 15, { z1 = 11 }) } }) }
+  end
+  -- a clay pot (14 across, its mouth drawn rows 1-6, its foot row 12 over its shadow) and a basket
+  -- of flowers (its flowers rows 0-7 over a low green drum, its foot row 14; the pot's row 14 too): turned smooth on an
+  -- oval plan, the drawing projected, cut to it; the grey shadow under each is the ground's
+  -- (their faces carry the drawing projected, as a prop's do: `~proj`, no texel count to keep)
+  local POT = { { 0, 6.5 }, { 2.5, 7.6 }, { 5, 7.2 }, { 7, 6.3 }, { 9, 6 } }
+  local BASKET = { { 0, 8.3 }, { 3.6, 8.3 } }
+
+  -- Trainer Tower (Seven Island, 54-63 x 0-8, 160 x 144), drawn from the map's top edge down: a
+  -- tower of blue glass on an octagonal platform, the porch before its door. Read column by column
+  -- off its outline, { x0, x1, top, foot, last }: the platform 8 high, its front rows foot-7 to its
+  -- foot (110 across the front; one row a column higher along its 45-degree corners), its top 7
+  -- deep before the tower; the tower standing on it, its front to the map's top (top 0), 96 deep
+  -- (the platform on the rock round the tower, a level over the grass where the porch stands);
+  -- beside the tower (x 10-15, 128-133) the platform alone, its top from row `top`. The porch (x
+  -- 59-84, its last row 127-130) a box before the door: its front rows 103-130 (the front at z
+  -- 131), its top rows 97-102.
+  local TOWER = {
+    { 10, 11, 57, 91, 91 }, { 11, 12, 56, 92, 92 }, { 12, 13, 55, 93, 93 }, { 13, 14, 54, 94, 94 },
+    { 14, 15, 53, 95, 95 }, { 15, 16, 52, 96, 96 }, { 16, 17, 0, 97, 97 }, { 17, 18, 0, 98, 98 },
+    { 18, 19, 0, 99, 99 }, { 19, 20, 0, 100, 100 }, { 20, 21, 0, 101, 101 },
+    { 21, 22, 0, 102, 102 }, { 22, 23, 0, 103, 103 }, { 23, 24, 0, 104, 104 },
+    { 24, 25, 0, 105, 105 }, { 25, 26, 0, 106, 106 }, { 26, 27, 0, 107, 107 },
+    { 27, 28, 0, 108, 108 }, { 28, 29, 0, 109, 109 }, { 29, 59, 0, 110, 110 },
+    { 59, 63, 0, 110, 130 }, { 63, 65, 0, 110, 129 }, { 65, 79, 0, 110, 127 },
+    { 79, 81, 0, 110, 129 }, { 81, 85, 0, 110, 130 }, { 85, 115, 0, 110, 110 },
+    { 115, 116, 0, 109, 109 }, { 116, 117, 0, 108, 108 }, { 117, 118, 0, 107, 107 },
+    { 118, 119, 0, 106, 106 }, { 119, 120, 0, 105, 105 }, { 120, 121, 0, 104, 104 },
+    { 121, 122, 0, 103, 103 }, { 122, 123, 0, 102, 102 }, { 123, 124, 0, 101, 101 },
+    { 124, 125, 0, 100, 100 }, { 125, 126, 0, 99, 99 }, { 126, 127, 0, 98, 98 },
+    { 127, 128, 0, 97, 97 }, { 128, 129, 54, 96, 96 }, { 129, 130, 55, 95, 95 },
+    { 130, 131, 56, 94, 94 }, { 131, 132, 56, 93, 93 }, { 132, 133, 57, 92, 92 },
+    { 133, 134, 57, 91, 91 },
+  }
+  local function trainer_tower()
+    -- (the model stands at the porch's foot, on the grass; the platform on the rock a level up, as
+    -- far south as it is high: L)
+    local L = 16
+    local parts = {}
+    local glass = Tile(40, 40, 56, 56, { top = 104 })
+    local stone = Tile(40, 104, 56, 110, { top = 8 })
+    for _, r in ipairs(TOWER) do
+      local x0, x1, top, b = r[1], r[2], r[3], r[4]
+      local zf = b + 1 + L
+      if top > 0 then
+        local zb = top + 8 + L
+        parts[#parts + 1] = Prism("platform", x0, x1, { { zb, L }, { zf, L }, { zf, L + 8 }, { zb, L + 8 } },
+          { edges = { [1] = Proj(b - 7, b + 1), [2] = Proj(top, b - 7) }, skip = { 0, 3 },
+            caps = { Band(L, L + 9, stone, zf, { z1 = zb }) } })
+      else
+        local zt = b - 6 + L
+        parts[#parts + 1] = Prism("platform", x0, x1, { { zt, L }, { zf, L }, { zf, L + 8 }, { zt, L + 8 } },
+          { edges = { [1] = Proj(b - 7, b + 1), [2] = Proj(b - 14, b - 7) }, skip = { 0, 3 },
+            caps = { Band(L, L + 9, stone, zf, { z1 = zt }) } })
+        parts[#parts + 1] = Prism("tower", x0, x1, { { zt - 96, L + 8 }, { zt, L + 8 }, { zt, zt }, { zt - 96, zt } },
+          { edges = { [1] = Proj(0, b - 14), [2] = glass }, skip = { 0, 3 },
+            caps = { Band(L + 8, zt + 1, glass, zt, { z1 = zt - 96 }) } })
+      end
+    end
+    local white = Tile(62, 106, 66, 112, { top = 28 })
+    parts[#parts + 1] = Prism("porch", 59, 85, { { 125, 0 }, { 131, 0 }, { 131, 28 }, { 125, 28 } },
+      { edges = { [1] = Proj(103, 131), [2] = Proj(97, 103) }, skip = { 0, 3 },
+        caps = { Band(0, 29, white, 131, { z1 = 125 }) } })
+    return parts
+  end
+  local function towerExact()
+    local out = {}
+    for _, r in ipairs(TOWER) do out[#out + 1] = { r[1], r[3], r[2], r[5] + 1 } end
+    return out
+  end
+
+  -- Vermilion's harbour canopies (over the walkways to the dock, 35-37 x 21-23 and 22-24 x 34-36,
+  -- 48 x 48): a striped white awning, its slope rows 12-25 under its outline, its valance rows 26-31,
+  -- on two dark posts x 1-3 and 44-46 (their orange brackets under the valance), their feet row 45
+  -- (the front at z 46); the slope runs back 7 as it rises 7
+  local function harbour_canopy()
+    local zf, yb, yv = 46, 14, 20
+    local band = Tile(2, 27, 10, 31, { top = yv })
+    local valance = Prism("valance", 0, 48, { { zf - 2, yb }, { zf, yb }, { zf, yv }, { zf - 2, yv } },
+      { edges = { [1] = Proj(26, 32) }, skip = { 0, 2, 3 }, caps = { Band(yb, yv + 1, band, zf, { z1 = zf - 2 }) } })
+    local slope = Prism("awning", 0, 48, { { zf - 7, yv }, { zf, yv }, { zf - 7, yv + 7 } },
+      { edges = { [1] = Proj(12, 26) }, skip = { 0, 2 }, west = false, east = false })
+    local parts = { valance, slope }
+    local post = Tile(1, 36, 4, 42, { top = yb })
+    for _, xs in ipairs({ { 1, 4 }, { 44, 47 } }) do
+      parts[#parts + 1] = Prism("post", xs[1], xs[2], { { zf - 3, 0 }, { zf, 0 }, { zf, yb }, { zf - 3, yb } },
+        { edges = { [1] = Proj(32, 46) }, skip = { 0, 2, 3 }, caps = { Band(0, yb + 1, post, zf, { z1 = zf - 3 }) } })
+    end
+    return parts
+  end
+
   -- Bill's sea cottage (Route 25, 49-53 x 1-4, 80 x 64): a hipped green roof, its front slope rows
   -- 1-33 (as many as its run and rise show at 17.7 degrees: its ridge the drawing's top), the hips
   -- either side; the eave's yellow board rows 34-45; the facade rows 46-61 (the front at z 62); on
@@ -796,6 +947,9 @@ return function(K, H)
         caps = { Band(0, 3, Tile(52, 104, 60, 108, { top = 2 }), 111, { z1 = 92 }) } })
     return parts
   end
+  local towerCells = {}
+  for j = 0, 6 do for i = 0, 9 do towerCells[#towerCells + 1] = { i, j } end end
+  for j = 7, 8 do for i = 3, 5 do towerCells[#towerCells + 1] = { i, j } end end
   local leagueGateCells = {}
   for j = 0, 5 do for i = 0, 8 do leagueGateCells[#leagueGateCells + 1] = { i, j } end end
   for i = 3, 5 do leagueGateCells[#leagueGateCells + 1] = { i, 6 } end
@@ -877,6 +1031,12 @@ return function(K, H)
     vermilionSpec("vermilion_house_c", 25, 3, 5),
     vermilionSpec("vermilion_house_d", 18, 14, 4),
     vermilionSpec("vermilion_house_e", 27, 21, 4),
+    -- (the canopy's lower two rows repeat: its top row is drawn over the walkway or the dock)
+    { name = "harbour_canopy", layout = "LAYOUT_VERMILION_CITY", rect = { 35, 21, 3, 3 }, match_rows = { 1, 3 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x1C0, 0x1C1, 0x1C2 },
+      keep = { { 0, 12, 48, 32 }, { 1, 32, 4, 46 }, { 44, 32, 47, 46 } },
+      exact = { { 0, 12, 48, 32 }, { 1, 32, 4, 46 }, { 44, 32, 47, 46 } },
+      parts = harbour_canopy },
     { name = "fan_club", layout = "LAYOUT_VERMILION_CITY", rect = { 11, 14, 5, 4 },
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x12B, 0x12C, 0x115, 0x287 },
       exact = { { 2, 39, 78, 62 }, { 1, 2, 79, 34 }, { 1, 34, 17, 39 }, { 35, 34, 79, 39 }, { 17, 34, 35, 47 } },
@@ -1041,6 +1201,43 @@ return function(K, H)
       anywhere = true, match_rows = { 0, 4 },
       exact = { { 1, 48, 79, 71 }, { 1, 42, 79, 48 }, { 1, 1, 79, 42 } },
       parts = harbor },
+    -- (a gantry's tower cell must repeat; its beam's top is drawn in the cell above, its foot in the
+    -- cell below, over whatever is round them)
+    { name = "harbor_gantry_w", layout = "LAYOUT_TWO_ISLAND", rect = { 7, 9, 1, 3 }, match_rows = { 1, 2 },
+      ground = { 0x273 }, anywhere = true, keep = gantryExact(false, 10), exact = gantryExact(false, 10),
+      parts = function() return gantry(false, 10) end },
+    { name = "harbor_gantry_e", layout = "LAYOUT_TWO_ISLAND", rect = { 13, 9, 1, 3 }, match_rows = { 1, 2 },
+      ground = { 0x273 }, anywhere = true, keep = gantryExact(true, 10), exact = gantryExact(true, 10),
+      parts = function() return gantry(true, 10) end },
+    { name = "two_island_crate", layout = "LAYOUT_TWO_ISLAND", rect = { 25, 3, 1, 1 }, ground = SEVII_GROUND,
+      exact = { { 0, 0, 16, 16 } }, parts = function() return crate(0, 7) end },
+    { name = "two_island_crates", layout = "LAYOUT_TWO_ISLAND", rect = { 31, 1, 1, 2 }, ground = SEVII_GROUND,
+      keep = { { 0, 8, 16, 32 } }, exact = { { 0, 8, 16, 32 } }, parts = function() return crate(8, 15) end },
+    { name = "two_island_till_blue", layout = "LAYOUT_TWO_ISLAND", rect = { 26, 2, 1, 1 }, ground = SEVII_GROUND,
+      keep = { { 0, 1, 15, 15 } }, exact = { { 0, 1, 15, 15 } }, parts = till },
+    { name = "two_island_till_green", layout = "LAYOUT_TWO_ISLAND", rect = { 26, 3, 1, 1 }, ground = SEVII_GROUND,
+      keep = { { 0, 1, 15, 15 } }, exact = { { 0, 1, 15, 15 } }, parts = till },
+    { name = "two_island_pot", layout = "LAYOUT_TWO_ISLAND", rect = { 26, 4, 1, 1 }, ground = SEVII_GROUND,
+      ground_px = true, ground_rgb = { { 123, 123, 131 } }, clip_art = true, exact = { { 0, 0, 16, 16 } },
+      parts = function() return { H.ProjLathe("pot~proj", 7.5, 11.1, POT, { squash = 0.6, seg = 14 }) } end },
+    { name = "two_island_pot_b", layout = "LAYOUT_TWO_ISLAND", rect = { 27, 4, 1, 1 }, ground = SEVII_GROUND,
+      ground_px = true, ground_rgb = { { 123, 123, 131 } }, clip_art = true, exact = { { 0, 0, 16, 16 } },
+      parts = function() return { H.ProjLathe("pot~proj", 7.5, 11.1, POT, { squash = 0.6, seg = 14 }) } end },
+    { name = "two_island_flowers", layout = "LAYOUT_TWO_ISLAND", rect = { 31, 3, 1, 1 }, ground = SEVII_GROUND,
+      ground_px = true, ground_rgb = { { 123, 123, 131 } }, clip_art = true, exact = { { 0, 0, 16, 16 } },
+      parts = function() return { H.ProjLathe("basket~proj", 8, 9.0, BASKET, { squash = 0.72, seg = 16 }) } end },
+    { name = "two_island_stall", layout = "LAYOUT_TWO_ISLAND", rect = { 27, 1, 4, 3 }, ground = SEVII_GROUND,
+      keep = { { 0, 0, 64, 32 }, { 1, 32, 7, 47 }, { 57, 32, 63, 47 } },
+      exact = { { 0, 0, 64, 32 }, { 1, 32, 7, 47 }, { 57, 32, 63, 47 } },
+      parts = market_stall },
+    { name = "trainer_tower", layout = "LAYOUT_SEVEN_ISLAND_TRAINER_TOWER", rect = { 54, 0, 10, 9 },
+      ground = { 0x002, 0x008, 0x009, 0x010, 0x011, 0x068, 0x06A, 0x071, 0x072, 0x078, 0x079, 0x07A, 0x0B2,
+                 0x0B3, 0x0BA, 0x0BB },
+      -- (the tower's cells on the rock, a level up; the porch's down its face on the grass, laid
+      -- with the grass)
+      cell_level = { { 0, 0, 9, 6, 1 } },
+      cell_ground = { { 3, 7, 0x008 }, { 4, 7, 0x008 }, { 5, 7, 0x008 }, { 3, 8, 0x008 }, { 4, 8, 0x008 }, { 5, 8, 0x008 } },
+      owned = ownedOf(towerCells), keep = towerExact(), exact = towerExact(), parts = trainer_tower },
     -- the General's gatehouse at other sizes: eight cells wide with a deeper top (Route 2's, by
     -- Viridian Forest, 2-9 x 13-18: its top's outline row 12, its eave from row 75, its windows to
     -- row 91, the front at z 92), and its passage gate with a shorter facade (Route 2's at 16-21 x
@@ -1080,6 +1277,16 @@ return function(K, H)
       exact = { { 1, 0, 143, 56 }, { 0, 56, 144, 69 }, { 48, 56, 96, 94 }, { 0, 56, 16, 94 }, { 128, 56, 144, 94 },
                 { 16, 69, 48, 94 }, { 96, 69, 128, 94 }, { 52, 94, 92, 110 } },
       parts = league_gate },
+    -- (the Power Plant's gantries: the harbors' on the grass, the lower west one drawn 8 rows higher)
+    { name = "plant_gantry_w", layout = "LAYOUT_ROUTE_10", rect = { 2, 35, 1, 3 }, match_rows = { 1, 2 },
+      ground = { 0x001, 0x008, 0x009 }, keep = gantryExact(false, 10), exact = gantryExact(false, 10),
+      parts = function() return gantry(false, 10) end },
+    { name = "plant_gantry_w2", layout = "LAYOUT_ROUTE_10", rect = { 2, 38, 1, 2 },
+      ground = { 0x001, 0x008, 0x009 }, keep = gantryExact(false, 2), exact = gantryExact(false, 2),
+      parts = function() return gantry(false, 2) end },
+    { name = "plant_gantry_e", layout = "LAYOUT_ROUTE_10", rect = { 12, 35, 1, 3 }, match_rows = { 1, 2 },
+      ground = { 0x001, 0x008, 0x009 }, keep = gantryExact(true, 10), exact = gantryExact(true, 10),
+      parts = function() return gantry(true, 10) end },
     { name = "power_plant", layout = "LAYOUT_ROUTE_10", rect = { 3, 35, 9, 7 },
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0D0, 0x0D1 }, owned = ownedOf(plantCells),
       exact = { { 39, 0, 105, 103 }, { 13, 0, 32, 95 }, { 112, 0, 131, 95 } },
