@@ -350,6 +350,389 @@ function Buildings.groundOf(grid, pl, has)
   return nil
 end
 
+-- ── the ground under a placement (gen_voxel_buildings.find_placements, placement_ground,
+-- patched_cells, placement_patches) ──
+
+local EPS = 1e-6
+
+-- Sutherland-Hodgman against one axis-aligned half plane (voxel_building.clip)
+local function clip(poly, axis, value, keepGreater)
+  local out, n = {}, #poly
+  local function inside(p)
+    if keepGreater then return p[axis] >= value - EPS end
+    return p[axis] <= value + EPS
+  end
+  for k = 1, n do
+    local a, b = poly[k], poly[k % n + 1]
+    local ina, inb = inside(a), inside(b)
+    if ina then out[#out + 1] = a end
+    if ina ~= inb then
+      local t = (value - a[axis]) / (b[axis] - a[axis])
+      out[#out + 1] = { a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t, a[3] + (b[3] - a[3]) * t }
+    end
+  end
+  return out
+end
+
+--- The model's tallest point over each cell, in pixels (_cell_heights): { [j * w + i] = y }, each
+--- triangle clipped to the cell (a face on the cell's edge, with no plan area in it, counts not).
+function Buildings.cellHeights(md)
+  if md.cellHeights then return md.cellHeights end
+  local w, h = md.ref.w, md.ref.h
+  local tops = {}
+  for k = 0, w * h - 1 do tops[k] = 0 end
+  for _, t in ipairs(md.tris) do
+    local pts = { { t[1][1], t[1][2], t[1][3] }, { t[2][1], t[2][2], t[2][3] }, { t[3][1], t[3][2], t[3][3] } }
+    local x0 = min(pts[1][1], pts[2][1], pts[3][1]) - 2 * EPS
+    local x1 = max(pts[1][1], pts[2][1], pts[3][1]) + 2 * EPS
+    local z0 = min(pts[1][3], pts[2][3], pts[3][3]) - 2 * EPS
+    local z1 = max(pts[1][3], pts[2][3], pts[3][3]) + 2 * EPS
+    for cy = 0, h - 1 do
+      if not (z1 < cy * 16 or z0 > cy * 16 + 16) then
+        for cx = 0, w - 1 do
+          if not (x1 < cx * 16 or x0 > cx * 16 + 16) then
+            local piece = clip(pts, 1, cx * 16, true)
+            if #piece >= 3 then piece = clip(piece, 1, cx * 16 + 16, false) end
+            if #piece >= 3 then piece = clip(piece, 3, cy * 16, true) end
+            if #piece >= 3 then piece = clip(piece, 3, cy * 16 + 16, false) end
+            if #piece >= 3 then
+              local area, top = 0, 0
+              for k = 1, #piece do
+                local a, b = piece[k], piece[k % #piece + 1]
+                area = area + a[1] * b[3] - b[1] * a[3]
+                top = max(top, a[2])
+              end
+              if math.abs(area) / 2 > 1e-6 then
+                local key = cy * w + cx
+                tops[key] = max(tops[key], top)
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  md.cellHeights = tops
+  return tops
+end
+
+--- The texels of a model's texture that draw something (Emerald 3DS's model.art: the drawing, or
+--- the texture of its own a spec's parts_art gives it, its band grown round the drawing):
+--- { w, h, [Y * w + X] = true }. Off the texture's image data where the model keeps it.
+function Buildings.texCover(md)
+  if md.texCover then return md.texCover end
+  local data, art = md._data, md.art
+  local out
+  if data and data.getPixel then
+    local w, h = data:getWidth(), data:getHeight()
+    out = { w = w, h = h }
+    for Y = 0, h - 1 do
+      for X = 0, w - 1 do
+        local _, _, _, a = data:getPixel(X, Y)
+        if a >= 0.5 then out[Y * w + X] = true end
+      end
+    end
+  else
+    local w, h, px = art.w, art.h, art.px
+    out = { w = w, h = h }
+    for k = 0, w * h - 1 do
+      if px[k * 4 + 4] >= 0.5 then out[k] = true end
+    end
+  end
+  md.texCover = out
+  return out
+end
+
+--- Whether the model's texture draws texel (X, Y).
+function Buildings.drawn(md, X, Y)
+  local t = Buildings.texCover(md)
+  return X >= 0 and Y >= 0 and X < t.w and Y < t.h and t[Y * t.w + X] == true
+end
+
+--- Cell (i, j) of a model as a mask: true where its texture has nothing (_exposed), which the
+--- map's own drawing shows there; nil if the texture fills the cell.
+function Buildings.exposed(md, i, j)
+  md.exposedCells = md.exposedCells or {}
+  local key = j * 256 + i
+  local mask = md.exposedCells[key]
+  if mask ~= nil then return mask or nil end
+  mask = false
+  for y = 0, 15 do
+    for x = 0, 15 do
+      if not Buildings.drawn(md, i * 16 + x, j * 16 + y) then
+        mask = mask or {}
+        mask[y * 16 + x] = true
+      end
+    end
+  end
+  md.exposedCells[key] = mask
+  return mask or nil
+end
+
+--- The model in the GBA's projection (x, z - y), as the set of its texture's pixels where its faces
+--- draw an opaque texel, whatever the drawing has there (_covered: a roof behind its drawn outline
+--- hides the ground at its corners). { [Y * texture width + X] = true }
+function Buildings.covered(md)
+  if md.coveredPx then return md.coveredPx end
+  local tex = Buildings.texCover(md)
+  local W, H = tex.w, tex.h
+  local out = {}
+  local floor, ceil = math.floor, math.ceil
+  for _, t in ipairs(md.tris) do
+    local p0, p1, p2 = t[1], t[2], t[3]
+    local x0, y0, x1, y1, x2, y2 = p0[1], p0[3] - p0[2], p1[1], p1[3] - p1[2], p2[1], p2[3] - p2[2]
+    local area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+    if math.abs(area) >= 1e-9 then
+      local inv = 1 / area
+      for py = max(0, floor(min(y0, y1, y2))), min(H - 1, ceil(max(y0, y1, y2))) do
+        local cy = py + 0.5
+        for px = max(0, floor(min(x0, x1, x2))), min(W - 1, ceil(max(x0, x1, x2))) do
+          local idx = py * W + px
+          if not out[idx] then
+            local cx = px + 0.5
+            local a = ((x1 - cx) * (y2 - cy) - (x2 - cx) * (y1 - cy)) * inv
+            local b = ((x2 - cx) * (y0 - cy) - (x0 - cx) * (y2 - cy)) * inv
+            local c = 1 - a - b
+            if a >= -1e-7 and b >= -1e-7 and c >= -1e-7 then
+              local tu = floor(a * p0[4] + b * p1[4] + c * p2[4])
+              local tv = floor(a * p0[5] + b * p1[5] + c * p2[5])
+              if tu >= 0 and tv >= 0 and tu < W and tv < H and tex[tv * W + tu] then
+                out[idx] = true
+              end
+            end
+          end
+        end
+      end
+    end
+  end
+  md.coveredPx = out
+  return out
+end
+
+-- what shows of the ground in a model's cell with no patch over it, in the GBA's view: where the
+-- model draws nothing and no face of it stands in front (_bare); nil if nothing
+local function bareMask(md, i, j)
+  local mask = Buildings.exposed(md, i, j)
+  if not mask then return nil end
+  local cov, W = Buildings.covered(md), Buildings.texCover(md).w
+  local out
+  for k in pairs(mask) do
+    local x, y = k % 16, (k - k % 16) / 16
+    if not cov[(j * 16 + y) * W + i * 16 + x] then
+      out = out or {}
+      out[k] = true
+    end
+  end
+  return out
+end
+
+-- a mask's pixels on its edge: next to one it leaves out (of the eight round it), or on the cell's
+-- border (_edge)
+local function edgeOf(mask)
+  local out = {}
+  for k in pairs(mask) do
+    local x, y = k % 16, (k - k % 16) / 16
+    local edge = x == 0 or y == 0 or x == 15 or y == 15
+    for dy = -1, 1 do
+      for dx = -1, 1 do
+        if not edge and not mask[(y + dy) * 16 + x + dx] then edge = true end
+      end
+    end
+    if edge then out[k] = true end
+  end
+  return out
+end
+
+-- how many of the mask's pixels two cells (256 colours each) draw the same (_drawn_alike)
+local function drawnAlike(a, b, mask)
+  local n = 0
+  for k in pairs(mask) do
+    if a[k] == b[k] then n = n + 1 end
+  end
+  return n
+end
+
+--- The ground under one placement, as Emerald 3DS lays it: { ground = the metatile laid under the
+--- model, patched = { [j * w + i] = true } (cells the map's own paint is laid over where the model
+--- draws nothing), chosen = { [j * w + i] = metatile } (cells laid with a ground of the spec's
+--- choosing, whole) }.
+--- m, the placement's map: { id (its layout, LAYOUT_X), w, h, block(x, y) (its u16 cells, collision
+--- in bits 10-11), px, py (the rectangle's top-left cell in it), painted, seamless ({ [metatile] =
+--- true }: those it paints, those it paints beside themselves across and down), water(metatile),
+--- groundWater (a spec ground is water in the reference's tilesets), rgb(metatile) (256 colours),
+--- odd (whether the template is to be checked: not for a run of hedges, its own cells), refP (the
+--- reference layout's tilesets as pret composes them: World.pretArt) }.
+--- With relief_bare, also bare = { [j * w + i] = quarters }: the cells of its rectangle it stands
+--- over nothing of (a Sootopolis house's roof drawn over the terrace face behind it) are no patch's;
+--- the relief goes on there, drawn with the cell's metatile less the quarters of the reference's
+--- upper layer that draw something (bit 2 * row + column; gen_voxel_buildings.bare_quarters).
+---
+--- Cells the map paints otherwise than the template (`odd`; all of them with patch_own or for what
+--- is drawn on the upper layer, and the spec's patch_cells too) get the map's paint where nothing
+--- of the model stands over them (all of them with those flags); cell_ground and cell_ground_at
+--- lay a ground of the spec's choosing. The ground: of the metatiles the map paints round it (not
+--- water, for what stands on land) and the spec's own grounds the map paints (those of them that
+--- tile, if any), the one that draws most of what shows of the ground in the model's cells in the
+--- GBA's view, then most of the patches' edges and the ring round it; ground_fixed (true: its first
+--- ground; or by layout) overrides it if the map paints it.
+function Buildings.groundPlan(md, m)
+  local spec = md.spec
+  local w, h = md.ref.w, md.ref.h
+  local template = md.ref.template
+  local px, py = m.px, m.py
+  local function at(i, j)
+    local x, y = px + i, py + j
+    if x < 0 or y < 0 or x >= m.w or y >= m.h then return nil end
+    return m.block(x, y)
+  end
+  local owned, odd = {}, {}
+  for j = 0, h - 1 do
+    for i = 0, w - 1 do
+      if owns(spec, i, j) then
+        local k = j * w + i
+        owned[k] = true
+        local b = at(i, j)
+        if m.odd and template and b and b % 1024 ~= template[k + 1] then odd[k] = true end
+      end
+    end
+  end
+  local tops = Buildings.cellHeights(md)
+  local bare = {}
+  if spec.relief_bare then
+    for k in pairs(owned) do
+      -- (Python rounds the height: none is half a pixel or less)
+      if tops[k] <= 0.5 then
+        local q, P, tm = 0, m.refP, template and template[k + 1]
+        if P and tm and P.entries(tm) then
+          local sub = P.subtiles(tm, 1)
+          for qq = 0, 3 do
+            local blk = sub[qq]
+            for t = 0, 63 do
+              local idx = blk[64 + t]
+              if idx and idx ~= 0 then q = q + 2 ^ qq; break end
+            end
+          end
+        end
+        bare[k] = q
+      end
+    end
+  end
+  local patchAll = false
+  if spec.patch_cells then
+    for _, c in ipairs(spec.patch_cells) do
+      local k = c[2] * w + c[1]
+      if owned[k] and not bare[k] then odd[k] = true end
+    end
+    patchAll = true
+  end
+  if spec.patch_own or spec.relief_upper then
+    for k in pairs(owned) do odd[k] = true end
+    patchAll = true
+  end
+  local chosen = {}
+  for _, c in ipairs(spec.cell_ground or {}) do chosen[c[2] * w + c[1]] = c[3] end
+  for _, a in ipairs(spec.cell_ground_at or {}) do
+    if a[1] == m.id and a[2] == px and a[3] == py then
+      for _, c in ipairs(a[4]) do chosen[c[2] * w + c[1]] = c[3] end
+    end
+  end
+  for k in pairs(chosen) do odd[k] = true end
+  local patched = {}
+  for k in pairs(odd) do
+    if not chosen[k] and not bare[k] and (tops[k] <= 0.5 or patchAll) then patched[k] = true end
+  end
+
+  -- the ring of cells round it the map lays open ground in (no collision)
+  local ring, any = {}, false
+  for y = -1, h do
+    for x = -1, w do
+      if x < 0 or y < 0 or x >= w or y >= h then
+        local b = at(x, y)
+        if b and math.floor(b / 1024) % 4 == 0 then
+          ring[b % 1024] = (ring[b % 1024] or 0) + 1
+          any = true
+        end
+      end
+    end
+  end
+  -- what stands on land stands on land: not the sea along a pier's edge, unless a ground of the
+  -- spec's is water (a boat, the Trick House by its pond)
+  if any and not m.groundWater then
+    local land, anyLand = {}, false
+    for g, n in pairs(ring) do
+      if not m.water(g) then land[g] = n; anyLand = true end
+    end
+    if anyLand then ring = land end
+  end
+  local cand = {}
+  for g in pairs(ring) do cand[g] = true end
+  for _, g in ipairs(spec.ground or {}) do
+    if m.painted[g] then cand[g] = true end
+  end
+  local tiling = {}
+  for g in pairs(cand) do
+    if m.seamless[g] then tiling[g] = true end
+  end
+  if next(tiling) then cand = tiling end
+  local list = {}
+  for g in pairs(cand) do list[#list + 1] = g end
+  table.sort(list)
+  local ground, scores = nil, {}
+  if #list < 2 then
+    ground = list[1] or (spec.ground or {})[1]
+  else
+    local bare, edges = {}, {}
+    for j = 0, h - 1 do
+      for i = 0, w - 1 do
+        local k = j * w + i
+        if owned[k] and not chosen[k] and Buildings.exposed(md, i, j) then
+          local b = at(i, j)
+          local rgb = b and m.rgb(b % 1024)
+          if rgb then
+            if patched[k] then
+              edges[#edges + 1] = { rgb, edgeOf(Buildings.exposed(md, i, j)) }
+            else
+              local mask = bareMask(md, i, j)
+              if mask then bare[#bare + 1] = { rgb, mask } end
+            end
+          end
+        end
+      end
+    end
+    local best, b1, b2
+    for _, g in ipairs(list) do
+      local tile = m.rgb(g)
+      local s1, s2 = 0, 16 * (ring[g] or 0)
+      if tile then
+        for _, e in ipairs(bare) do s1 = s1 + drawnAlike(e[1], tile, e[2]) end
+        for _, e in ipairs(edges) do s2 = s2 + drawnAlike(e[1], tile, e[2]) end
+      end
+      scores[#scores + 1] = { g, s1, s2 }
+      if not best or s1 > b1 or (s1 == b1 and s2 > b2) then best, b1, b2 = g, s1, s2 end
+    end
+    ground = best
+  end
+  -- the spec's own ground whatever is round it (a boat moored by a pier floats on the sea), or one
+  -- of its own in one map (a tent on its lawn) - if the map paints it
+  local fixed = spec.ground_fixed
+  if type(fixed) == "table" then
+    fixed = fixed[m.id]
+  elseif fixed == true then
+    fixed = (spec.ground or {})[1]
+    -- (a run's block with a secondary tileset's metatiles stands on that tileset's own ground)
+    if spec.component then
+      for k in pairs(owned) do
+        local b = at(k % w, (k - k % w) / w)
+        if b and b % 1024 >= 512 then fixed = nil end
+      end
+    end
+  else
+    fixed = nil
+  end
+  if fixed and m.painted[fixed] then ground = fixed end
+  return { ground = ground, patched = patched, chosen = chosen, bare = bare, scores = scores, ring = ring }
+end
+
 --- How tall the model stands over each of its cells, in tiles: { [i .. "," .. j] = top } (the
 --- highest vertex over the cell, a vertex on an edge counted in the cell inside it and one past
 --- the rectangle in its nearest cell; a face crossing a cell without a vertex in it is not

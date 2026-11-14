@@ -128,6 +128,23 @@ local function body(game, log)
   if env("SCENE_PROBE") and hd._sceneModelArt then
     for i, r in ipairs(hd._sceneModelArt(env("SCENE_PROBE")) or {}) do log(("art %3d %s"):format(i - 1, r)) end
   end
+  -- SCENE_GROUND_OLD=1: the ground under buildings laid by the old rule (before-and-after shots)
+  if env("SCENE_GROUND_OLD") and hd._sceneGroundPlan then hd._sceneGroundPlan(false) end
+  -- SCENE_PROBE_PNG=name[,name...]: each model's art saved as SHOT_DIR/art_<name>.png
+  for name in (env("SCENE_PROBE_PNG") or ""):gmatch("[^,]+") do
+    local art = hd._sceneModelArtRaw and hd._sceneModelArtRaw(name)
+    if art then
+      local data = love.image.newImageData(art.w, art.h)
+      for y = 0, art.h - 1 do
+        for x = 0, art.w - 1 do
+          local o = (y * art.w + x) * 4
+          data:setPixel(x, y, art.px[o + 1], art.px[o + 2], art.px[o + 3], art.px[o + 4])
+        end
+      end
+      local f = io.open(("%s/art_%s.png"):format(env("SHOT_DIR") or "/tmp/hd_scene", name), "wb")
+      if f then f:write(data:encode("png"):getString()); f:close() end
+    end
+  end
   if env("SCENE_PIXELS") and hd._scenePixel then
     -- SCENE_PIXELS=pair:mid:x:y,... (mid in hex)
     for spec in env("SCENE_PIXELS"):gmatch("[^,]+") do

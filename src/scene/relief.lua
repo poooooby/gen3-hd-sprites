@@ -524,6 +524,7 @@ end
 --   sign(x, y) -> the metatile a sign's cell lays (its ground) or nil
 --   headGround(x, y) -> the metatile under a sign's head in this cell, or nil
 --   modelTop(x, y) -> the top (tiles) of a model whose cell this is, or nil
+--   bare(x, y) -> u0, v0, u1, v1   a relief_bare model's bare cell: the cell less its quarters
 --   standing(x, y, lift, shift)      what stands on the cell (a sign), placed at that lift
 -- }
 
@@ -1143,6 +1144,12 @@ function Relief.emitCell(B, x, y, g)
       local u0, v0, u1, v1 = B.metatileUV(hg)
       if u0 then art = { u0, v0, u1, v1 } end
     end
+  end
+  -- a model's cell it stands over nothing of, its drawing on the face behind (a relief_bare
+  -- house's roof): the cell's drawing less the model's quarters (VoxelBuildings_BareVariant)
+  if B.bare then
+    local u0, v0, u1, v1 = B.bare(x, y)
+    if u0 then art = { u0, v0, u1, v1 } end
   end
   -- a canopy cleared: its variant on its relief over a plate of the ground under the crown
   local canopy, plate

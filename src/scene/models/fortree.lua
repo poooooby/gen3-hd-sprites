@@ -290,30 +290,39 @@ return function(K, specs)
   local list = {
     -- the house at (10, 11) is the one at (8, 1) again
     { name = "fortree_treehouse", layout = L, rect = { 8, 1, 5, 6 }, owned = houseCells(5, true),
+      ground_fixed = true,
       repeat_at = { { 8, 1 }, { 10, 11 } }, ground = FORTREE_GROUND, parts_art = flatArt(function(art) return treehouse(art, 64, 32) end) },
     -- bridges east and west, a ladder
     { name = "fortree_treehouse_c", layout = L, rect = { 23, 1, 5, 6 }, owned = houseCells(5, true),
+      ground_fixed = true,
       ground = FORTREE_GROUND, parts_art = flatArt(function(art) return treehouse(art, 64, 32) end) },
     -- bridges east and west, no ladder
     { name = "fortree_treehouse_b", layout = L, rect = { 15, 1, 5, 5 }, owned = houseCells(5, false),
+      ground_fixed = true,
       ground = FORTREE_GROUND, parts_art = flatArt(function(art) return treehouse(art, 64) end) },
     -- the deeper deck in the north-east, one row more of it
     { name = "fortree_treehouse_d", layout = L, rect = { 30, 0, 5, 7 }, owned = houseCells(6, true),
+      ground_fixed = true,
       ground = FORTREE_GROUND, parts_art = flatArt(function(art) return treehouse(art, 80, 32) end) },
     -- the east one: a bridge west, a ladder without its hook
     { name = "fortree_treehouse_f", layout = L, rect = { 35, 11, 5, 6 }, owned = houseCells(5, true),
+      ground_fixed = true,
       ground = FORTREE_GROUND, parts_art = flatArt(function(art) return treehouse(art, 64, 32) end) },
     -- the tall palms, their trunks two cells (the other at (28, 6))
     { name = "fortree_palm", layout = L, rect = { 12, 6, 3, 4 }, repeat_at = { { 12, 6 }, { 28, 6 } },
+      ground_fixed = true,
       owned = cellSet({ { 0, 0 }, { 1, 0 }, { 2, 0 }, { 0, 1 }, { 1, 1 }, { 2, 1 }, { 1, 2 }, { 1, 3 } }),
       ground = FORTREE_GROUND, parts_art = palm({ { 1, 2, 0x25C }, { 1, 3, 0x273 } }) },
     -- the short ones, one cell of trunk (also at (14, 16) and (27, 17))
     { name = "fortree_palm_short", layout = L, rect = { 1, 1, 3, 3 }, repeat_at = { { 1, 1 }, { 14, 16 }, { 27, 17 } },
+      ground_fixed = true,
       owned = cellSet({ { 0, 0 }, { 1, 0 }, { 2, 0 }, { 0, 1 }, { 1, 1 }, { 2, 1 }, { 1, 2 } }),
       ground = FORTREE_GROUND, parts_art = palm({ { 1, 2, 0x25C } }) },
-    { name = "fortree_bridge", layout = L, rect = { 13, 4, 1, 1 }, ground = FORTREE_GROUND, parts_art = flatArt(bridgeCell) },
+    { name = "fortree_bridge", layout = L, rect = { 13, 4, 1, 1 }, ground = FORTREE_GROUND, ground_fixed = true,
+      parts_art = flatArt(bridgeCell) },
     -- over the path, which runs on under it
     { name = "fortree_bridge_path", layout = L, rect = { 30, 14, 1, 1 }, ground = { 0x261, GRASS, 0x22A, 0x244, 0x237, 0x261, 0x253 },
+      ground_fixed = true,
       parts_art = flatArt(bridgeCell) },
   }
   for _, sp in ipairs(list) do specs[#specs + 1] = sp end

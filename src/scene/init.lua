@@ -382,6 +382,28 @@ return function(deps)
   -- (for the dev drivers: a pair's layers, pixel by pixel)
   Scene._pixelSource = pixelSource
 
+  -- a metatile less the quarters q of its upper layer (bit 2 * row + column): its whole drawing,
+  -- and in those quarters the lower layer alone, read exactly off the atlas blobs (the engine's
+  -- lower atlas has a COVERED metatile's upper layer drawn over it). Emerald 3DS's ground variant
+  -- (voxel_atlas.c AtlasSourceOf). pixel(x, y) -> r, g, b (0..1) or nil.
+  local function lessQuarters(NativeTileset, pair, mid, q)
+    local src = pixelSource(NativeTileset, pair)
+    local World_ = deps.World
+    local wa = q ~= 0 and World_ and World_.art(pair)
+    local lower = wa and wa.pixels(mid, 0)
+    return function(x, y)
+      local bit = 2 ^ ((y >= 8 and 2 or 0) + (x >= 8 and 1 or 0))
+      local hidden = math.floor(q / bit) % 2 == 1
+      local p = hidden and lower and lower[y * 16 + x]
+      if p then return p[1] / 255, p[2] / 255, p[3] / 255 end
+      if not src then return nil end
+      local r, g, b = src.under(mid, x, y)
+      local r1, g1, b1, a1 = src.over(mid, x, y)
+      if a1 and a1 > 0.5 and not hidden then r, g, b = r1, g1, b1 end
+      return r, g, b
+    end
+  end
+
   local function imageOf(W, H, fill)
     local ok, data = pcall(love.image.newImageData, W, H)
     if not ok then return nil end
@@ -396,7 +418,7 @@ return function(deps)
   -- a model's cache (Scene Cache): its triangles, core cells and texture as bytes, under the
   -- game's key (Scene.modelCache, set by main.lua; Scene.MODELS_VERSION bumps when the specs or
   -- the kernel change what they build)
-  Scene.MODELS_VERSION = 6
+  Scene.MODELS_VERSION = 7
   -- the models with texels a tile animation redraws (md.live), made ready so far
   local liveModels = {}
   local function serialize(md)
@@ -494,6 +516,47 @@ return function(deps)
     return nil
   end
 
+  -- a layout's two layers as its metatiles draw them (voxel_building.LayoutArt.subtiles, over the
+  -- cache's raw tilesets: relief_art's pair): the lower layer whole, also under a COVERED
+  -- metatile's upper, which the engine's lower atlas has drawn over it (a battle tent's grass
+  -- under its foot read as tent, the ground test missed it and left the grass's dots standing).
+  -- The same reader as `src` (pixelSource); `src` itself where the raw tilesets are not at hand.
+  local layerSources = setmetatable({}, { __mode = "k" })
+  local function layerSource(layoutName, src)
+    local L = World and World.layout(layoutName)
+    local P = L and World.pretArt(L)
+    if not P then return src end
+    local s = layerSources[P]
+    if s then return s end
+    local floor = math.floor
+    local function at(m, layer, x, y)
+      if not P.entries(m) then return nil end
+      local blk = P.subtiles(m, layer)[floor(y / 8) * 2 + floor(x / 8)]
+      local k = (y % 8) * 8 + x % 8
+      return blk[k], blk[64 + k]
+    end
+    local function rgb(c) return floor(c / 65536) / 255, floor(c / 256) % 256 / 255, c % 256 / 255 end
+    s = {
+      ts = src and src.ts,
+      -- (opaque: an index 0 pixel is its palette's first colour, as pret's art reads it)
+      under = function(m, x, y)
+        local c = at(m, 0, x, y)
+        if not c then return nil end
+        local r, g, b = rgb(c)
+        return r, g, b, 1
+      end,
+      over = function(m, x, y)
+        local c, i = at(m, 1, x, y)
+        if not c then return nil end
+        if i == 0 then return 0, 0, 0, 0 end
+        local r, g, b = rgb(c)
+        return r, g, b, 1
+      end,
+    }
+    layerSources[P] = s
+    return s
+  end
+
   local function ready(spec, NativeTileset, ctx)
     if spec._model ~= nil then return spec._model end
     local ref = Buildings.reference(spec, ctx)
@@ -501,7 +564,7 @@ return function(deps)
     local src = pixelSource(NativeTileset, ref.pair)
     if not src then return false end
     spec._model = false
-    local art = Buildings.art(spec, ref, src)
+    local art = Buildings.art(spec, ref, layerSource(spec.layout, src))
     local hit = cachedModel(spec)
     if hit then
       hit.spec, hit.ref, hit.art = spec, ref, art
@@ -516,7 +579,7 @@ return function(deps)
                       ground_px = true }
       local oref = Buildings.reference(other, ctx)
       local osrc = oref and pixelSource(NativeTileset, oref.pair)
-      return osrc and Buildings.art(other, oref, osrc) or nil
+      return osrc and Buildings.art(other, oref, layerSource(layout, osrc)) or nil
     end,
     -- a metatile's lower layer alone (its colour-index-0 pixels as the engine's lower atlas
     -- draws them): lower(x, y) -> r, g, b
@@ -1893,9 +1956,74 @@ return function(deps)
     return nil
   end
 
+  -- a layout as Buildings.groundPlan reads it (the map a placement stands in): its cells off the
+  -- cache, the metatiles it paints and those it paints beside themselves, its water, its cells'
+  -- colours as pret draws them; nil without the World's data. Read once per layout.
+  local groundMaps = setmetatable({}, { __mode = "k" })
+  local rawWater
+  local function waterBehaviours()
+    if rawWater then return rawWater end
+    rawWater = {}
+    local Constants = req("src.core.game3.constants")
+    local ok, em = pcall(function() return Constants.of("emerald").metatile_behaviors.byName end)
+    for _, n in ipairs(deps.Roles and deps.Roles.WATER_NAMES or {}) do
+      local v = ok and em and em[n]
+      if v then rawWater[v] = true end
+    end
+    return rawWater
+  end
+  local function groundMap(L)
+    local G = groundMaps[L]
+    if G ~= nil then return G or nil end
+    groundMaps[L] = false
+    local P = World and World.pretArt(L)
+    if not (P and L.grid and L.w and L.h) then return nil end
+    local grid, W, N = L.grid, L.w, L.w * L.h
+    local blocks, painted, across, down = {}, {}, {}, {}
+    for k = 0, N - 1 do
+      local b = grid:byte(k * 2 + 1) + grid:byte(k * 2 + 2) * 256
+      blocks[k] = b
+      painted[b % 1024] = true
+    end
+    for k = 0, N - 1 do
+      local m = blocks[k] % 1024
+      if (k + 1) % W ~= 0 and k + 1 < N and blocks[k + 1] % 1024 == m then across[m] = true end
+      if k + W < N and blocks[k + W] % 1024 == m then down[m] = true end
+    end
+    local seamless = {}
+    for m in pairs(across) do
+      if down[m] then seamless[m] = true end
+    end
+    local water = waterBehaviours()
+    G = { id = L.name, w = W, h = L.h, painted = painted, seamless = seamless, P = P,
+          block = function(x, y) return blocks[y * W + x] end,
+          water = function(m) return water[P.attribute(m) % 256] == true end,
+          rgb = function(m) return P.entries(m) and P.cellImage(m) or nil end }
+    groundMaps[L] = G
+    return G
+  end
+  -- the map a placement stands in, for Buildings.groundPlan: `cell` one of its cells in the grid,
+  -- (i, j) that cell's place in the model's rectangle
+  local function groundCtx(md, cell, i, j, where)
+    if not (where and World and cell) or Scene.groundPlanOff then return nil end
+    local _, lx, ly, id = where(cell.cx, cell.cy)
+    local L = id and World.layout(id)
+    local G = L and groundMap(L)
+    if not G then return nil end
+    -- (a spec ground that is water in the reference's own tilesets)
+    local RL = md.spec.layout and World.layout(md.spec.layout) or L
+    local RP = RL and World.pretArt(RL)
+    local water, groundWater = waterBehaviours(), false
+    for _, g in ipairs(RP and md.spec.ground or {}) do
+      if water[RP.attribute(g) % 256] then groundWater = true end
+    end
+    return setmetatable({ px = lx - i, py = ly - j, groundWater = groundWater, odd = md.ref.template ~= nil,
+                          refP = RP }, { __index = G })
+  end
+
   -- the runs of hedges, fences, curbs and railings in the grid, each its own model, added to
   -- `found` (their cells marked as a building's are)
-  function placeComponents(grid, NativeTileset, found)
+  function placeComponents(grid, NativeTileset, found, where)
     local runs = Components.find(grid)
     local report = {}
     local mid = function(x, y) local c = grid.at(x, y); return c and c.mid end
@@ -1914,7 +2042,9 @@ return function(deps)
         report[#report + 1] = run.spec.name .. ":" .. (okM and #mesh.tris or -1)
         if okM and #mesh.tris > 0 then
           local art = built.art
-          local md = { spec = { name = run.spec.name, owned = run.owned, ground = run.spec.ground },
+          local md = { spec = { name = run.spec.name, owned = run.owned, ground = run.spec.ground,
+                                patch_own = run.spec.patch_own, ground_fixed = run.spec.ground_fixed,
+                                relief_upper = run.spec.upper, component = true },
                        ref = { w = run.w, h = run.h, pair = run.pair }, art = art, texW = art.w, texH = art.h,
                        tris = mesh.tris, component = run.spec }
           md.image = imageOf(art.w, art.h, function(data)
@@ -1927,22 +2057,39 @@ return function(deps)
             end
           end)
           local pl = { model = md, cx = run.x0, cy = run.y0 }
-          local g = Buildings.groundOf(grid, pl, function(m) return src.ts.midToSlot[m] ~= nil end)
+          -- its ground as Emerald 3DS lays it (Buildings.groundPlan); without the World's data,
+          -- the ground metatile under the model and the map's own drawing round it
+          local c1 = run.cells[1]
+          local gctx = c1 and groundCtx(md, c1, c1.cx - run.x0, c1.cy - run.y0, where)
+          local plan = gctx and Buildings.groundPlan(md, gctx)
+          local g
+          if plan then g = plan.ground
+          else g = Buildings.groundOf(grid, pl, function(m) return src.ts.midToSlot[m] ~= nil end) end
           for _, c in ipairs(run.cells) do
             c.model = pl
             c.top = Buildings.tops(md)[(c.cx - run.x0) .. "," .. (c.cy - run.y0)] or 0
           end
-          -- its cells' ground: the map's own drawing where the model draws nothing; under it the
-          -- ground metatile (or, for what is drawn on the upper layer, the cell's own lower layer)
           pl.ground = imageOf(run.w * 16, run.h * 16, function(data)
             for _, c in ipairs(run.cells) do
               local i, j = c.cx - run.x0, c.cy - run.y0
+              local k = j * run.w + i
+              local whole = plan and plan.chosen[k]
+              local patched = plan and plan.patched[k]
               for y = 0, 15 do
                 for x = 0, 15 do
                   local X, Y = i * 16 + x, j * 16 + y
                   local covered = art.px[(Y * art.w + X) * 4 + 4] >= 0.5
                   local r, gg, b
-                  if covered and not run.spec.upper and g then
+                  if plan then
+                    -- (the ground metatile, the map's paint over it where the model draws nothing
+                    -- in a patched cell, or a ground of the spec's choosing whole)
+                    local m = whole or (patched and not covered and c.mid) or g
+                    if m then
+                      r, gg, b = src.under(m, x, y)
+                      local r1, g1, b1, a1 = src.over(m, x, y)
+                      if a1 and a1 > 0.5 then r, gg, b = r1, g1, b1 end
+                    end
+                  elseif covered and not run.spec.upper and g then
                     r, gg, b = src.under(g, x, y)
                     local r1, g1, b1, a1 = src.over(g, x, y)
                     if a1 and a1 > 0.5 then r, gg, b = r1, g1, b1 end
@@ -2095,25 +2242,53 @@ return function(deps)
           end
         end
       end
-      -- the ground under it: the placement's ground metatile, and in a cell the map paints
-      -- otherwise than the template, the map's own drawing wherever the model draws nothing
-      local anchor = grid.at(pl.cx + md.core[1][1], pl.cy + md.core[1][2])
+      -- the ground under it, as Emerald 3DS lays it (Buildings.groundPlan): the placement's
+      -- ground metatile, the map's own paint over it where the model draws nothing in a patched
+      -- cell, a ground of the spec's choosing whole in its cells. Without the World's data: the
+      -- commonest spec ground round it, the map's paint in every cell it paints otherwise than
+      -- the template.
+      local a = md.core[1]
+      local anchor = grid.at(pl.cx + a[1], pl.cy + a[2])
       local src = anchor and pixelSource(NativeTileset, anchor.pair)
       if src then
-        local g = Buildings.groundOf(grid, pl, function(m) return src.ts.midToSlot[m] ~= nil end)
-        local art = md.art
+        local gctx = groundCtx(md, anchor, a[1], a[2], where)
+        local plan = gctx and Buildings.groundPlan(md, gctx)
+        local g
+        if plan then g = plan.ground
+        else g = Buildings.groundOf(grid, pl, function(m) return src.ts.midToSlot[m] ~= nil end) end
+        if plan then pl.groundMid = g end
+        -- (a relief_bare model's bare cells with quarters to leave out: the relief goes on there
+        -- (cell.bareQ), drawn less them; where nothing lifts the cell, that drawing lies flat -
+        -- voxel_building.c VoxelBuildings_CellAt as Emerald 3DS's dev branch has it, the model's
+        -- ground there a square of grass in the sand behind Lilycove's beacon)
+        local bareOf = {}
+        for k, q in pairs(plan and plan.bare or {}) do
+          local c = grid.at(pl.cx + k % w, pl.cy + math.floor(k / w))
+          if q ~= 0 and c and c.model == pl and c.mid then
+            c.bareQ = q
+            bareOf[k] = lessQuarters(NativeTileset, c.pair, c.mid, q)
+          end
+        end
         pl.ground = imageOf(w * 16, h * 16, function(data)
           for j = 0, h - 1 do
             for i = 0, w - 1 do
               local c = grid.at(pl.cx + i, pl.cy + j)
               local own = c and c.model == pl
-              local odd = own and c.mid ~= md.ref.template[j * w + i + 1]
+              local k = j * w + i
+              local whole = plan and plan.chosen[k]
+              local patched
+              if plan then patched = plan.patched[k]
+              else patched = own and c.mid ~= md.ref.template[k + 1] end
+              local bareAt = own and bareOf[k]
               for y = 0, 15 do
                 for x = 0, 15 do
                   local X, Y = i * 16 + x, j * 16 + y
-                  local m = g
-                  if odd and art.px[(Y * art.w + X) * 4 + 4] < 0.5 then m = c.mid end
-                  if own and m then
+                  local m = whole or g
+                  if not whole and patched and not Buildings.drawn(md, X, Y) then m = c.mid end
+                  if bareAt then
+                    local r, gg, b = bareAt(x, y)
+                    if r then data:setPixel(X, Y, r, gg, b, 1) end
+                  elseif own and m then
                     local r, gg, b = src.under(m, x, y)
                     local r1, g1, b1, a1 = src.over(m, x, y)
                     if a1 and a1 > 0.5 then r, gg, b = r1, g1, b1 end
@@ -2144,7 +2319,7 @@ return function(deps)
     end
     -- the objects of no fixed shape (hedges, fences, curbs, railings), found by their runs
     if Components then
-      local okC, extra = pcall(placeComponents, grid, NativeTileset, found)
+      local okC, extra = pcall(placeComponents, grid, NativeTileset, found, where)
       if not okC then hd.stats.sceneBuildingError = tostring(extra) end
     end
     return found
@@ -2304,13 +2479,29 @@ return function(deps)
     return Buildings.find(grid, models, alikeOf(NativeTileset, signCell))
   end
   --- (dev) The models standing in a layout: { { name, x, y, w, h, footprints, tops } }.
+  --- With its ground: { ground (metatile), patches (cells laid with a patch: a ground of the spec's
+  --- choosing, or the map's paint where the model leaves some of it) }.
   function Scene._layoutModels(name)
     local out = {}
+    local where = function(cx, cy) return nil, cx, cy, name end
     for _, pl in ipairs(layoutFind(name) or {}) do
       local md = pl.model
+      local a = md.core[1]
+      local cell = { cx = pl.cx + a[1], cy = pl.cy + a[2] }
+      local gctx = groundCtx(md, cell, a[1], a[2], where)
+      local plan = gctx and Buildings.groundPlan(md, gctx)
+      local patches = 0
+      if plan then
+        for k in pairs(plan.chosen) do patches = patches + 1 end
+        for k in pairs(plan.patched) do
+          local i, j = k % md.ref.w, math.floor(k / md.ref.w)
+          if not plan.chosen[k] and Buildings.exposed(md, i, j) then patches = patches + 1 end
+        end
+      end
       out[#out + 1] = { name = md.spec.name, x = pl.cx, y = pl.cy, w = md.ref.w, h = md.ref.h,
                         footprints = Buildings.footprints(md), tops = Buildings.tops(md), owned = md.spec.owned,
-                        tris = md.tris }
+                        tris = md.tris, ground = plan and plan.ground, patches = plan and patches,
+                        plan = plan }
     end
     return out
   end
@@ -2424,7 +2615,7 @@ return function(deps)
   -- the battle map asks - and its relief's at its middle; a point h up stands h south as well),
   -- less the player's cell's, so the battle stands where it did. Returns the maps placed.
   local function placeRelief(grid, env, R, px, py)
-    local maps = {}
+    local maps, clears = {}, {}
     for j = 0, grid.h - 1 do
       for i = 0, grid.w - 1 do
         local c = grid.rows[j][i]
@@ -2440,6 +2631,22 @@ return function(deps)
           end
           c.rmap, c.lx, c.ly = m, lx, ly
           c.g = m.L and m.L.cells[ly * m.L.w + lx] or nil
+          -- (its cut record, and for the seam skirts which stretches of its north edge a wall may
+          -- stand on: not where its cut tile clears the north row, voxel_mesh_builder.c SeamEdge)
+          c.cut = c.g and m.L.cuts[ly * m.L.w + lx] or nil
+          local v = c.cut and c.cut.variant ~= 0xFFFF and R.variants[c.cut.variant]
+          if v then
+            local clear = clears[c.cut.variant]
+            if not clear then
+              clear = Relief.cutClear(v.rows)
+              clears[c.cut.variant] = clear
+            end
+            local st = 0
+            for k = 0, 3 do
+              if math.floor(clear[0] / 2 ^ (4 * k)) % 16 == 0 then st = st + 2 ^ k end
+            end
+            c.northStands = st
+          end
         end
       end
     end
@@ -2579,7 +2786,20 @@ return function(deps)
             end
             function B.modelTop(x, y)
               local o = grid.at(x, y)
-              return o and o.model and 2 or nil
+              -- (a relief_bare model's bare cell with quarters to leave out: the relief's)
+              return o and o.model and not o.bareQ and 2 or nil
+            end
+            -- its drawing there: the cell's metatile less those quarters
+            function B.bare(x, y)
+              local o = grid.at(x, y)
+              if not (o and o.bareQ and o.pair and o.mid) then return nil end
+              local ps = pixelSource(NativeTileset, o.pair)
+              if not (ps and ps.ts.midToSlot[o.mid]) then return nil end
+              local px = lessQuarters(NativeTileset, o.pair, o.mid, o.bareQ)
+              return rect(slotOf(o.pair .. ":" .. o.mid .. ":q" .. o.bareQ, function(xx, yy)
+                local r, g, b = px(xx, yy)
+                return r and { r, g, b } or nil
+              end))
             end
             local part
             if Trees then
@@ -2591,6 +2811,8 @@ return function(deps)
               Relief.treeStep(B, c.cx, c.cy)
             elseif not Relief.emitCell(B, c.cx, c.cy, c.g) then
               c.lifted = false       -- a model's cell: its ground lies flat at the cell's middle
+            elseif c.model then
+              c.reliefDrawn = true   -- (a model's cell the relief draws: no ground of the model's)
             end
           end
         end
@@ -2933,6 +3155,11 @@ return function(deps)
     local lists = Render.vertices(grid, tilesFor(NativeTileset), px, py,
       { Trees = Trees, image = treesArt(), outdoor = not env.indoor },
       { Buildings = Buildings, placements = placed })
+    if lists.skirts and hd.stats.sceneRelief then
+      local k = lists.skirts
+      hd.stats.sceneRelief = hd.stats.sceneRelief .. ("; skirts: belt %d, seam %d, gap %d (%s)"):format(k.belt, k.seam, k.gap,
+        table.concat(k.cells, " "))
+    end
     -- the signs' solids, from one texture of their drawings (16 x 32 each)
     if #signs > 0 then
       local src = {}

@@ -16,6 +16,16 @@
 --   ground_px = true   ground is told apart pixel by pixel (the ground painted into its blocks)
 --   parts_art = function(art) -> parts, texture   parts read off the drawing (a texture of its
 --                own: the drawing with its grown band, K.flat), instead of parts
+-- and the ground laid under it where it stands (src/scene/buildings.lua's groundPlan):
+--   patch_cells = { { i, j }, ... }   cells the map's own paint is laid in round the model
+--   patch_own = true   the map's own paint in every cell of it (what is drawn round it there)
+--   ground_fixed = true | { LAYOUT_X = metatile }   its first ground (or that one, in that map)
+--                whatever the map lays round it, where the map paints it
+--   cell_ground = { { i, j, metatile }, ... }   cells laid with that metatile whole
+--   cell_ground_at = { { layout, x, y, { { i, j, metatile }, ... } }, ... }   the same, in one
+--                placement (the rectangle's top-left cell in that map)
+--   relief_bare = true   the cells it stands over nothing of stay the relief's, drawn less its
+--                upper layer's quarters there (a house's roof drawn over the terrace face behind it)
 
 return function(K)
   local Prism, Proj, Tile, Band, Strip, HipRoof = K.Prism, K.Proj, K.Tile, K.Band, K.Strip, K.HipRoof
@@ -23,6 +33,14 @@ return function(K)
   local tan, rad = math.tan, math.rad
 
   local GRASS = 0x001
+  -- the cells { i, j } of every column of `is` in every row of `js`
+  local function gridCells(is, js)
+    local out = {}
+    for _, j in ipairs(js) do
+      for _, i in ipairs(is) do out[#out + 1] = { i, j } end
+    end
+    return out
+  end
   local PITCH = 22.0
   local ROOF_COLUMNS = { 12, 68 }
 
@@ -956,6 +974,13 @@ return function(K)
   end
 
   local BOLLARD = { { 0, 6.5 }, { 2, 6 }, { 5, 6 }, { 6, 5.5 }, { 7, 7 }, { 8.5, 7 }, { 9, 4 }, { 11, 0 } }
+  -- Lilycove's beacon (art 16x32, its foot at v 27), the same way on a plan half as deep as wide: a
+  -- drum on the ground (r 7), a post (r 4.5), the gallery flaring to r 8 at y 14, the lamp (r 4)
+  -- domed on it, 27 high in all, fitted to the drawing's outline row by row (Emerald 3DS's dev
+  -- branch, after v0.5.0)
+  local BEACON = { { 0, 6 }, { 2, 7 }, { 4, 7 }, { 6, 4.5 }, { 10, 4.5 }, { 12, 6.5 }, { 14, 8 }, { 16, 7.5 },
+    { 18, 6 }, { 20, 4 }, { 22, 4 }, { 24, 2.5 }, { 26, 1 }, { 27, 0 } }
+  local BEACON_Z = 25
 
   local function cells(list)
     local o = {}
@@ -1006,14 +1031,18 @@ return function(K)
     { name = "kit_house_5", layout = "LAYOUT_PETALBURG_CITY", rect = { 5, 2, 5, 4 }, ground = { GRASS },
       parts = function() return kit_house(80) end },
     { name = "slateport_house_4", layout = "LAYOUT_SLATEPORT_CITY", rect = { 4, 16, 4, 4 }, ground = { GRASS },
+      patch_own = true,
       keep = kit_house_keep(64), parts = function() return kit_house(64) end },
     { name = "slateport_house_5", layout = "LAYOUT_ROUTE109", rect = { 10, 2, 5, 4 }, ground = { 0x124 },
       parts = function() return kit_house(80) end },
     { name = "slateport_house_6", layout = "LAYOUT_SLATEPORT_CITY", rect = { 24, 41, 6, 4 }, ground = { 0x202 },
+      patch_own = true,
       keep = kit_house_keep(96), parts = function() return kit_house(96) end },
     { name = "trick_house", layout = "LAYOUT_ROUTE110", rect = { 9, 61, 5, 6 }, ground = { GRASS, 0x171, 0x179, 0x190 },
+      cell_ground = { { 0, 4, GRASS }, { 0, 5, GRASS } },
       parts = trick_house },
     { name = "cycling_gate", layout = "LAYOUT_ROUTE110", rect = { 14, 12, 6, 5 }, ground = { GRASS, 0x149 },
+      cell_ground_at = { { "LAYOUT_ROUTE110", 15, 84, { { 5, 1, 0x170 } } } },
       parts = flatGate(96, 95) },
     { name = "pink_house_4", layout = "LAYOUT_MAUVILLE_CITY", rect = { 18, 11, 4, 4 }, ground = { GRASS, 0x004 },
       parts = function() return pink_house(64) end },
@@ -1063,6 +1092,7 @@ return function(K)
       parts = function() return pitched_house(144, { 0, 4 }, { 4, 8 }, { 8, 64 }, { 8, 16 }, { 64, 69 }, 112,
         { 18, 26 }, { 18, 26 }, { 16, 32 }, { inset = 8, overhang = 2, back_z = 32 }) end },
     { name = "battle_palace_wing", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 40, 50, 3, 6 },
+      patch_cells = gridCells({ 0, 1, 2 }, { 0, 5 }),
       ground = { 0x004, 0x017, 0x00E, 0x0C6, 0x003 }, ground_px = true, keep = { { 0, 8, 48, 80 } },
       parts = function() return pitched_house(48, { 8, 16 }, { 16, 20 }, { 20, 46 }, { 23, 31 }, { 46, 48 }, 80,
         { 16, 24 }, { 16, 24 }, { 2, 8 }, { inset = 2, overhang = 2, back_z = 40 }) end },
@@ -1077,6 +1107,8 @@ return function(K)
     { name = "devon_corporation", layout = "LAYOUT_RUSTBORO_CITY", rect = { 7, 7, 10, 9 }, ground = { 0x2BB, 0x2C3, GRASS },
       parts = devon },
     { name = "slateport_awning", layout = "LAYOUT_SLATEPORT_CITY", rect = { 16, 7, 5, 3 }, match_rows = { 0, 2 },
+      cell_ground_at = { { "LAYOUT_SLATEPORT_CITY", 8, 30, { { 1, 0, 0x210 }, { 2, 0, 0x211 }, { 3, 0, 0x212 },
+        { 1, 1, 0x286 }, { 2, 1, 0x285 }, { 3, 1, 0x287 }, { 1, 2, 0x286 }, { 2, 2, 0x285 }, { 3, 2, 0x287 } } } },
       ground = { GRASS }, ground_px = true,
       parts = function() return { Awning("awning", 8, 72, { top_v = 1, valance_v = 24, post_v = 32, foot_v = 47,
         back = 0, lift = 12, rep = { 3, 11 }, posts = { { 8, 14 }, { 66, 72 } }, shaft = { 34, 43 }, foot = { 43, 47 } }) } end },
@@ -1094,6 +1126,8 @@ return function(K)
       parts = function() return { Awning("gate", 0, 112, { top_v = 0, valance_v = 38, post_v = 48, foot_v = 80,
         back = 42, lift = 0, rep = { 2, 38 }, posts = { { 1, 15 }, { 97, 111 } }, shaft = { 50, 76 }, foot = { 76, 80 } }) } end },
     { name = "fan_club", layout = "LAYOUT_SLATEPORT_CITY", rect = { 2, 22, 5, 6 }, ground = { GRASS, 0x209, 0x218, 0x219 },
+      patch_cells = gridCells({ 0, 1, 2, 3, 4 }, { 5 }),
+      clip_art = true,
       keep = { { 0, 0, 80, 80 }, { 29, 80, 33, 96 }, { 47, 80, 51, 96 } }, parts = fan_club },
     { name = "museum", layout = "LAYOUT_SLATEPORT_CITY", rect = { 25, 7, 7, 6 }, ground = { GRASS },
       keep = { { 6, 2, 106, 3 }, { 5, 3, 107, 4 }, { 4, 4, 108, 5 }, { 3, 5, 109, 6 }, { 2, 6, 110, 7 },
@@ -1101,17 +1135,30 @@ return function(K)
     { name = "contest_hall", layout = "LAYOUT_SLATEPORT_CITY", rect = { 28, 22, 6, 6 }, ground = { GRASS },
       keep = { { 0, 9, 96, 96 } }, parts = contest_hall },
     { name = "slateport_bush", layout = "LAYOUT_SLATEPORT_CITY", rect = { 7, 10, 1, 1 }, ground = { GRASS }, ground_px = true,
+      ground_fixed = true, patch_own = true,
+      clip_art = true,
       keep = { { 6, 1, 10, 2 }, { 4, 2, 12, 3 }, { 3, 3, 13, 4 }, { 2, 4, 14, 6 }, { 1, 6, 14, 10 },
                { 2, 10, 14, 12 }, { 3, 12, 13, 14 }, { 5, 14, 11, 15 } },
       parts = function() return { ProjDome("bush", 7.5, 8.6, 7.6, 7.0, 8.0) } end },
     { name = "slateport_bollard", layout = "LAYOUT_SLATEPORT_CITY", rect = { 33, 34, 1, 1 }, ground = { 0x202 }, ground_px = true,
+      ground_fixed = true,
+      clip_art = true,
       parts = function() return { ProjLathe("bollard", 8, 11.5, BOLLARD, { squash = 0.5, seg = 10 }) } end },
+    -- Lilycove's beacon, the little lighthouse on the grass point by the beach (all on the upper
+    -- layer): a white drum on the grass, a post, a white gallery, the yellow lamp on top. Its gallery
+    -- and lamp are drawn over the beach behind, a level lower: that cell stays the relief's, drawn
+    -- without them (relief_bare); its shadow on the grass round its foot is the ground's
+    { name = "lilycove_beacon", layout = "LAYOUT_LILYCOVE_CITY", rect = { 61, 33, 1, 2 }, ground = { 0x002, 0x19E },
+      ground_px = true, ground_rgb = { { 131, 131, 139 } }, clip_art = true, relief_bare = true,
+      parts = function() return { ProjLathe("beacon", 8, BEACON_Z, BEACON, { squash = 0.5, seg = 10 }) } end },
     { name = "shipyard", layout = "LAYOUT_SLATEPORT_CITY", rect = { 24, 32, 8, 7 }, ground = { 0x202, GRASS },
       keep = { { 0, 1, 128, 112 } }, parts = shipyard },
     { name = "slateport_stall", layout = "LAYOUT_SLATEPORT_CITY", rect = { 2, 41, 5, 3 }, ground = { 0x211, 0x285 },
+      patch_cells = gridCells({ 0 }, { 0, 1, 2 }),
       ground_px = true, keep = stall_keep(72),
       parts = function() return { stall(72, 57.5, { { 24, 3, 55, 8 }, { 9, 12, 12, 20 }, { 60, 12, 69, 20 } }) } end },
     { name = "slateport_stall_e", layout = "LAYOUT_SLATEPORT_CITY", rect = { 10, 41, 4, 3 }, ground = { 0x211, 0x285 },
+      patch_cells = gridCells({ 3 }, { 0, 1, 2 }),
       ground_px = true, keep = stall_keep(56),
       parts = function() return { stall(56, 41.5, { { 24, 3, 39, 8 }, { 9, 12, 12, 20 }, { 44, 12, 53, 20 } }) } end },
   }
@@ -1298,6 +1345,7 @@ return function(K)
       parts_art = flat(function() return { SectionPrism("harbor", { { 96, 0 }, { 96, 34 }, { 98, 36 }, { 98, 44 }, { 56, 55 },
         { 14, 44 }, { 14, 36 }, { 16, 34 }, { 16, 0 } }, 0, 112, { 2, 10, 96 }) } end) },
     { name = "battle_factory", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 4, 30, 15, 9 },
+      ground_fixed = { LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST = 0x05E },
       ground = { 0x189, 0x170, 0x172, 0x19A, 0x198, 0x180, 0x181, 0x05E }, ground_px = true,
       keep = { { 0, 4, 232, 144 }, { 88, 0, 152, 4 }, { 232, 44, 240, 144 } }, parts_art = flat(battle_factory) },
     { name = "frontier_house", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_WEST", rect = { 43, 2, 3, 4 },
@@ -1323,6 +1371,7 @@ return function(K)
       ground = { 0x05E, 0x05D, 0x05F }, ground_px = true,
       parts_art = function(art) return flat(function() return frontier_arch(art) end)(art) end },
     { name = "battle_tower", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 8, 0, 17, 16 },
+      patch_cells = gridCells({ 6, 7, 8, 9, 10 }, { 15 }),
       ground = { 0x001, 0x201, 0x203, 0x202 }, ground_px = true,
       keep = { { 0, 0, 272, 248 }, { 0, 248, 100, 256 }, { 172, 248, 272, 256 } },
       parts_art = flat(function() return {
@@ -1341,6 +1390,7 @@ return function(K)
         PlanPrism("gate", { { 80, 36 }, { 112, 36 }, { 112, 64 }, { 80, 64 } }, 0, 36, { 90, 100, 64 }),
         PlanPrism("lintel", { { 32, 36 }, { 80, 36 }, { 80, 64 }, { 32, 64 } }, 24, 36, { 40, 48, 64 }) } end) },
     { name = "battle_palace", layout = "LAYOUT_BATTLE_FRONTIER_OUTSIDE_EAST", rect = { 43, 49, 5, 8 },
+      patch_cells = gridCells({ 0, 1, 2, 3, 4 }, { 0, 6, 7 }),
       ground = { 0x004, 0x017, 0x00E, 0x0C6, 0x003 }, ground_px = true, keep = { { 0, 16, 80, 96 }, { 8, 96, 72, 128 } },
       parts_art = flat(function() return {
         PlanPrism("hall", { { 0, 40 }, { 80, 40 }, { 80, 104 }, { 0, 104 } }, 0, 18, { 72, 78, 104 }),
@@ -1364,6 +1414,7 @@ return function(K)
   }
   for _, sp in ipairs(artSpecs) do specs[#specs + 1] = sp end
   -- for the specs of round things (src/scene/models/solid_specs.lua)
-  specs.helpers = { flat_block = flat_block, ProjLathe = ProjLathe, ProjDome = ProjDome, GRASS = GRASS }
+  specs.helpers = { flat_block = flat_block, ProjLathe = ProjLathe, ProjDome = ProjDome, GRASS = GRASS,
+    gridCells = gridCells }
   return specs
 end

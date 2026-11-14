@@ -56,6 +56,7 @@ return function(K, Fence)
       height = 12, hull = 12, bridge = 3, upper = true, flank = 0x2A7,
       ground = { 0x2BB, 0x2C3, GRASS } },
     { name = "fence", primary = "general",
+      ground_fixed = true,
       tiles = set({ 0x132, 0x133, 0x134, 0x138, 0x139, 0x13A, 0x140, 0x141, 0x142, 0x148, 0x149, 0x14A }),
       also = {
         battlefrontieroutsideeast = set({ 0x24D, 0x255, 0x25D, 0x26D, 0x27D, 0x320, 0x322, 0x324, 0x3D7, 0x3E5, 0x3E7 }),
@@ -73,6 +74,7 @@ return function(K, Fence)
       height = 12, hull = 12, bridge = 3, upper = true, flank = 0x251,
       ground = { GRASS } },
     { name = "curb", primary = "general",
+      patch_own = true,
       tiles = set({ 0x03D, 0x03E, 0x03F, 0x045, 0x047, 0x04D, 0x04E, 0x04F, 0x055, 0x056, 0x057, 0x05D, 0x05E, 0x05F }),
       height = 3, fill = set({ 0x05E }),
       skip = set({ "battlefrontieroutsidewest", "battlefrontieroutsideeast" }),
@@ -91,6 +93,7 @@ return function(K, Fence)
     { name = "spring_bench", secondary = "lavaridge", tiles = set({ 0x29C, 0x29E }), height = 4,
       ground = { 0x2A8, 0x274, 0x2AE } },
     { name = "slateport_curb", secondary = "slateport",
+      patch_own = true, ground_fixed = true,
       tiles = set({ 0x245, 0x24D, 0x255, 0x25D, 0x2FF, 0x2FE, 0x23C, 0x234, 0x2CF }), height = 3,
       ground = { 0x202 },
       ground_rgb = rgb({ { 65, 180, 131 }, { 115, 197, 164 }, { 164, 213, 197 }, { 205, 205, 222 }, { 230, 230, 238 } }) },

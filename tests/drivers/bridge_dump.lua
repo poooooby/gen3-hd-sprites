@@ -123,8 +123,18 @@ local function body(game, log)
       for j = 0, m.h - 1 do
         for i = 0, m.w - 1 do fps[#fps + 1] = fpText(m.footprints[i .. "," .. j] or nil) end
       end
-      out[#out + 1] = ("P %d %d %dx%d %s"):format(m.x, m.y, m.w, m.h, m.name)
+      -- (and its ground metatile and patch count, as the dump of buildings.bin has them)
+      out[#out + 1] = ("P %d %d %dx%d %s %s %s"):format(m.x, m.y, m.w, m.h, m.name, tostring(m.ground or "-"),
+        tostring(m.patches or "-"))
       out[#out + 1] = "F " .. table.concat(fps, " ")
+      -- (how its ground was chosen: each candidate's scores, the ring's counts)
+      if m.plan then
+        local sc, rg = {}, {}
+        for _, s in ipairs(m.plan.scores or {}) do sc[#sc + 1] = ("%03X:%d/%d"):format(s[1], s[2], s[3]) end
+        for g, n in pairs(m.plan.ring or {}) do rg[#rg + 1] = ("%03X:%d"):format(g, n) end
+        table.sort(rg)
+        out[#out + 1] = "G " .. table.concat(sc, " ") .. " | ring " .. table.concat(rg, " ")
+      end
       local tl = {}
       for _, t in ipairs(m.tris or {}) do
         local pos = {}

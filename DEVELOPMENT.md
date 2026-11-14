@@ -627,9 +627,16 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   counts the live models in a scene.
 - `buildings.lua`: in the game, per spec once per session: its reference template (the
   reference layout read through `Map.ensureMidLayout(Runtime._game, "EM_" .. name)`), its art
-  from the reference pair's atlases (`imageData` = the lower layer, `overImageData` the upper;
-  exact for NORMAL and SPLIT metatiles, COVERED ones read their composite as the lower layer),
-  ground quarters (and with `ground_px` ground pixels) clear, `keep` applied. Only specs one of
+  read through `layerSource` (init.lua: the layout's metatiles' two layers off the cache's raw
+  tilesets, `World.pretArt`'s `subtiles`, as `voxel_building.LayoutArt` reads them - the lower
+  layer whole, also under a COVERED metatile's upper, which the engine's lower atlas has drawn
+  over it; the atlases, `pixelSource`, only where the raw tilesets are not at hand), ground
+  quarters (and with `ground_px` ground pixels) clear, `keep` applied. Read off the atlas, the
+  battle tent's covered cells failed the ground test and left its lawn's dots standing round its
+  foot as a fringe, its plan cut in narrow cells (878 triangles against 528). Every model placed
+  in the 100 outdoor layouts equals Emerald 3DS's `buildings.bin` triangle for triangle
+  (`bridge_dump.lua` with `BRIDGE_FP_LAYOUTS`, against `bld_dump.py`), but WoobleView's own
+  `ever_grande_gate`. Only specs one of
   whose template metatiles the window draws are read. `find` places a spec wherever its core
   cells (match rows, drawn cells) repeat, but a spec with `owned` cells only where it is drawn or
   at its `repeat_at` places (the cell's place in its own map, `env.where`; gen_voxel_buildings's
@@ -641,10 +648,30 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   with that slack for the ground drawn round a corner: Rustboro's Center and Mart on its paving;
   a signpost's cell, or the cell its head tops, is asked its lower layer alone, off the atlas
   blobs, as their same_building_pixels asks it: Lavaridge's gym sign on the gym's corner).
-  A placed model's cells (`cell.model`) draw its ground image (the commonest spec ground round
-  it, else the commonest open ground the map lays round it; the map's own drawing where the map
-  paints otherwise and the model draws nothing) and stand no card, tree or tile; `cell.top` (its height there)
-  feeds the stage search like a card.
+  A placed model's cells (`cell.model`) draw its ground image and stand no card, tree or tile;
+  `cell.top` (its height there) feeds the stage search like a card. The ground is
+  `Buildings.groundPlan` (gen_voxel_buildings's find_placements, placement_ground, patched_cells,
+  placement_patches), over the placement's own map (init.lua `groundCtx`: `env.where`, the
+  layout's cells off `World.layout`'s grid, its colours off `World.pretArt`): the ground metatile,
+  of the ring's open metatiles (not water, for a spec whose grounds are not) and the spec's own
+  grounds the map paints (those that tile, if any), the one drawing most of what shows of the
+  ground in the GBA's view (`exposed` less `covered`: the model rasterised in x, z - y), then the
+  patches' edges and 16 a ring cell; `ground_fixed` over it where the map paints it. The map's
+  paint is laid where the model draws nothing in the cells it paints otherwise than the template,
+  but only where nothing of the model stands (`cellHeights`, the triangles clipped to the cell),
+  and in all of them with `patch_own`, `patch_cells` or a component's `upper`; `cell_ground` and
+  `cell_ground_at` lay a metatile whole. `relief_bare` cells (owned, nothing standing over them:
+  Sootopolis's houses, Lilycove's beacon) take no patch; with quarters of the reference's upper
+  layer to leave out (`cell.bareQ`) the relief goes on there (`B.bare`: the cell's metatile less
+  those quarters, `lessQuarters`; `cell.reliefDrawn` then drops the model's ground quad), and off
+  the relief that drawing lies flat (Emerald 3DS's dev branch, de38764). Masks and the patches
+  read the model's texture (`texCover`: a `parts_art` texture of its own, as their `model.art`),
+  not the drawing. Every one of the 283 placements in the 100 outdoor layouts lays the pak's
+  ground metatile and its number of patches (`bridge_dump.lua`'s `P` and `G` lines, the pak's
+  patch field six vertices a patch); components are placed in the window only and not in that
+  check. Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
+  driver's `SCENE_GROUND_OLD=1`, for before-and-after shots), the old rule: the commonest spec
+  ground round it, the map's paint in every cell it paints otherwise.
 - `models/components.lua` and `models/fence.lua`: the `components` specs (hedges, fences, curbs,
   railings, Sootopolis's walls, Lavaridge's spring, Slateport's crates), found at runtime as
   connected runs of their metatiles in one pair (`tilesIn`: `primary`/`secondary` names as the
@@ -704,7 +731,16 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   map. `EmitSeamSkirt`'s belt cases: a map's edge cell under the belt north, west or east of it
   hangs a wall of its own drawing, point by point of its lattice, up to the belt; south of it a
   belt of trees has its drawing run on to the belt. Trees are trees. The stage search counts the
-  belt two tall. Not ported: the skirts between two maps at different levels.
+  belt two tall.
+- Where two maps meet at different levels (the rest of `EmitSeamSkirt`, with `SeamEdge`):
+  `render.lua` compares both edges point by point of their lattices, theirs over our map's base
+  (`mapLift` apart); wherever ours stands over theirs a wall of the edge cell's drawing hangs down
+  to theirs (west, east and south a cell with a cut record and a wall stands on its foot; north,
+  not under the stretches its cut tile clears, `cell.northStands` from `Relief.cutClear` in
+  `placeRelief`), and south, an edge a sliver short of theirs has its drawing run on to it, a row
+  of the drawing a row of the gap. `scene_battle.lua` logs the skirts laid, by case, and their
+  first cells (`sceneRelief`: "skirts: belt, seam, gap"). Not ported: the ease stretch (`VoxelBuilder_StretchZ`; no layout
+  of the relief eases, so it never applies).
 - The build's cost, measured in the engine at 3 ms slices: about 75 s for a whole cartridge.
   The solver's per-cell bookkeeping is kept as numbers (each canvas cell's counts packed, its
   commonest region worked out where counted; sub-tiles packed), not as tables: a million small
@@ -731,7 +767,8 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   the warm-up (`SCENE_WARM=1`; `SCENE_WARM=all` the whole-game one). `SCENE_LOOK` takes an
   optional fifth field, a yaw in degrees east of north (the battle itself always looks north).
   `SCENE_PROBE=<spec>` logs a model's art (drawn / cleared, row by row) and its parts' bounds
-  (`exports._sceneModelArt`, `_sceneModelBounds`, built afresh); `SCENE_PIXELS=pair:mid:x:y,...`
+  (`exports._sceneModelArt`, `_sceneModelBounds`, built afresh), `SCENE_PROBE_PNG=<spec>,...`
+  saves each one's art as `art_<spec>.png` (`exports._sceneModelArtRaw`); `SCENE_PIXELS=pair:mid:x:y,...`
   a metatile's two layers at a pixel through the scene's pixel source (`exports._scenePixel`). The dev `WOOBLE_RELIEF_BIN`
   path still overrides it. **Scene Cache** (`scene_cache`, `Scene.cacheModels`): on the first
   `map.entered`, `Scene.warmAll` queues every spec; `ready` reads a model from `mod.cache`

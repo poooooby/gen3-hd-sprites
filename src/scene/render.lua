@@ -259,7 +259,38 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
   -- the drawing, nor in a room.
   local SIDE = 5
   local LAST = SIDE - 1
+  -- (Emerald 3DS's d: 0 north, 1 south, 2 west, 3 east)
+  local SEAM_DIRS = { [0] = { 0, -1 }, { 0, 1 }, { -1, 0 }, { 1, 0 } }
+  -- a cell's ground along one edge, point by point of its lattice (voxel_mesh_builder.c SeamEdge):
+  -- heights in pixels over its map's base, and how far south each point stands (tiles, from the
+  -- edge's own row or column: a point h up stands h south). West, east and south a cell with a cut
+  -- record and a wall stands on its foot (the rock over it closes those sides down to it); `stands`
+  -- has a bit a stretch of the north edge a wall may stand on (cell.northStands, src/scene/init.lua)
+  local function seamEdge(c, d, wantStands)
+    local g, cut = c.g, c.g and c.cut
+    local onFoot = cut ~= nil and d ~= 0 and cut.wall ~= nil
+    local h, z = {}, {}
+    for k = 0, LAST do
+      local i = d == 0 and k or d == 1 and LAST * SIDE + k or k * SIDE + (d == 2 and 0 or LAST)
+      h[k] = onFoot and cut.foot or (g and g[i] or 0)
+      z[k] = h[k] / 16
+    end
+    local stands = 15
+    if wantStands and d == 0 and c.northStands then stands = c.northStands end
+    return h, z, stands
+  end
+  -- (counted for the dev driver: out.skirts, quads by case)
+  out.skirts = { belt = 0, gap = 0, seam = 0, cells = {} }
+  local skirtAt
+  local function skirtUV(kind, ...)
+    local k = out.skirts
+    k[kind] = k[kind] + 1
+    local tag = skirtAt .. ":" .. kind
+    if #k.cells < 12 and k.cells[#k.cells] ~= tag then k.cells[#k.cells + 1] = tag end
+    faceUV(...)
+  end
   local function skirts(cell, t, mid)
+    skirtAt = cell.cx .. "," .. cell.cy
     local g, lift = cell.g, cell.mapLift or cell.dy or 0
     local x, y = cell.cx, cell.cy
     local function Q(px, h, pz, fu, fv) return { px - ox, h, pz - oz, fu, fv } end
@@ -284,18 +315,102 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
             if hA > 0.05 or hB > 0.05 then
               if d == 1 then
                 local xa, xb = x + along[k], x + along[k + 1]
-                faceUV(t, mid, { Q(xa, fh[k], fz[k], along[k], fA), Q(xb, fh[k + 1], fz[k + 1], along[k + 1], fB),
+                skirtUV("belt", t, mid, { Q(xa, fh[k], fz[k], along[k], fA), Q(xb, fh[k + 1], fz[k + 1], along[k + 1], fB),
                                  Q(xb, belt, y + bz, along[k + 1], 0), Q(xa, belt, y + bz, along[k], 0) }, SH.south)
               else
                 local za, zb = y + along[k] + bz, y + along[k + 1] + bz
                 if d == 2 then
-                  faceUV(t, mid, { Q(x, belt, zb, 0, along[k + 1]), Q(x, belt, za, 0, along[k]),
+                  skirtUV("belt", t, mid, { Q(x, belt, zb, 0, along[k + 1]), Q(x, belt, za, 0, along[k]),
                                    Q(x, fh[k], fz[k], fA, along[k]), Q(x, fh[k + 1], fz[k + 1], fB, along[k + 1]) },
                     SH.east)
                 else
-                  faceUV(t, mid, { Q(x + 1, belt, za, 1, along[k]), Q(x + 1, belt, zb, 1, along[k + 1]),
+                  skirtUV("belt", t, mid, { Q(x + 1, belt, za, 1, along[k]), Q(x + 1, belt, zb, 1, along[k + 1]),
                                    Q(x + 1, fh[k + 1], fz[k + 1], 1 - fB, along[k + 1]),
                                    Q(x + 1, fh[k], fz[k], 1 - fA, along[k]) }, SH.west)
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    -- where two maps meet at different levels (the rest of EmitSeamSkirt): both edges point by point
+    -- of the lattice, theirs over our map's base. South, should their edge still lie rows south of
+    -- ours, the edge cell's drawing goes on to it, a row of the drawing a row of the gap (never
+    -- stretched); then wherever ours stands over theirs, a wall of the cell's drawing from their
+    -- edge up to ours (from where the ground now ends, south). In our map's frame (heights in
+    -- pixels over its base, rows as its builder lays them), then put in ours (`Q2`).
+    local m = cell.rmap
+    if m then
+      local function Q2(px, h, pz, fu, fv) return { px - ox, h + lift, pz - oz + lift, fu, fv } end
+      local southGap = 0
+      for d = 0, 3 do
+        local dir = SEAM_DIRS[d]
+        local o = grid.at(x + dir[1], y + dir[2])
+        if o and o.rmap and o.rmap ~= m and not o.border then
+          local rebase = ((o.mapLift or 0) - lift) * 16
+          local ourH, ourZ, stands = seamEdge(cell, d, true)
+          local theirH = seamEdge(o, d == 0 and 1 or d == 1 and 0 or d == 2 and 3 or 2, false)
+          local any = false
+          for k = 0, LAST do
+            theirH[k] = theirH[k] + rebase
+            if ourH[k] - theirH[k] > 0.8 then any = true end
+          end
+          if d == 1 then
+            local og = o.g
+            local hA, zA, hB, zB = {}, {}, {}, {}
+            local gap, meets = 0, true
+            for k = 0, LAST do
+              hA[k] = g and g[LAST * SIDE + k] or 0
+              zA[k] = y + 1 + hA[k] / 16
+              local th = og and og[k] or 0
+              hB[k] = th + rebase
+              zB[k] = y + 1 + (th + rebase) / 16
+              if zB[k] - zA[k] > gap then gap = zB[k] - zA[k] end
+              if math.abs(hB[k] - hA[k]) > 1 then meets = false end
+            end
+            -- (a map with an ease meets it with no gap: VoxelRelief_Stretch)
+            if gap > 0.02 and meets and not ((m.L and m.L.ease or 0) ~= 0 and (m.L.easeRows or 0) ~= 0) then
+              local rows = math.ceil(gap - 0.02)
+              local vb = math.min(gap / rows, 1)
+              for s = 0, rows - 1 do
+                local f0, f1 = s / rows, (s + 1) / rows
+                for k = 0, LAST - 1 do
+                  local function H(i, f) return (hA[i] + (hB[i] - hA[i]) * f) / 16 end
+                  local function Z(i, f) return zA[i] + (zB[i] - zA[i]) * f end
+                  local xa, xb = x + k / LAST, x + (k + 1) / LAST
+                  skirtUV("gap", t, mid, { Q2(xa, H(k, f0), Z(k, f0), k / LAST, 0), Q2(xb, H(k + 1, f0), Z(k + 1, f0), (k + 1) / LAST, 0),
+                                   Q2(xb, H(k + 1, f1), Z(k + 1, f1), (k + 1) / LAST, vb),
+                                   Q2(xa, H(k, f1), Z(k, f1), k / LAST, vb) }, 1)
+                end
+              end
+              southGap = gap
+            end
+          end
+          if any then
+            for k = 0, LAST - 1 do
+              local ta, tb = ourH[k] / 16, ourH[k + 1] / 16
+              local la, lb = math.min(theirH[k], ourH[k]) / 16, math.min(theirH[k + 1], ourH[k + 1]) / 16
+              local fa, fb = math.min(1, ta - la), math.min(1, tb - lb)
+              local ka, kb = k / LAST, (k + 1) / LAST
+              if not ((ta - la <= 0.05 and tb - lb <= 0.05) or math.floor(stands / 2 ^ k) % 2 == 0) then
+                if d == 0 then
+                  local za, zb = y + ourZ[k], y + ourZ[k + 1]
+                  skirtUV("seam", t, mid, { Q2(x + kb, tb, zb, kb, 0), Q2(x + ka, ta, za, ka, 0), Q2(x + ka, la, za, ka, fa),
+                                   Q2(x + kb, lb, zb, kb, fb) }, SH.north)
+                elseif d == 1 then
+                  local za, zb = y + 1 + ourZ[k] + southGap, y + 1 + ourZ[k + 1] + southGap
+                  skirtUV("seam", t, mid, { Q2(x + ka, ta, za, ka, 1), Q2(x + kb, tb, zb, kb, 1), Q2(x + kb, lb, zb, kb, 1 - fb),
+                                   Q2(x + ka, la, za, ka, 1 - fa) }, SH.south)
+                else
+                  local za, zb = y + ka + ourZ[k], y + kb + ourZ[k + 1]
+                  if d == 2 then
+                    skirtUV("seam", t, mid, { Q2(x, ta, za, 0, ka), Q2(x, tb, zb, 0, kb), Q2(x, lb, zb, fb, kb),
+                                     Q2(x, la, za, fa, ka) }, SH.west)
+                  else
+                    skirtUV("seam", t, mid, { Q2(x + 1, tb, zb, 1, kb), Q2(x + 1, ta, za, 1, ka), Q2(x + 1, la, za, 1 - fa, ka),
+                                     Q2(x + 1, lb, zb, 1 - fb, kb) }, SH.east)
+                  end
                 end
               end
             end
@@ -316,7 +431,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
           if not (belt - hA < 1 and belt - hB < 1) then
             local zA, zB = y + 1 + hA, y + 1 + hB
             local xa, xb = x + k / LAST, x + (k + 1) / LAST
-            faceUV(t, mid, { Q(xa, hA, zA, k / LAST, 1), Q(xb, hB, zB, (k + 1) / LAST, 1),
+            skirtUV("belt", t, mid, { Q(xa, hA, zA, k / LAST, 1), Q(xb, hB, zB, (k + 1) / LAST, 1),
                              Q(xb, belt, bz, (k + 1) / LAST, 0), Q(xa, belt, bz, k / LAST, 0) }, 1)
           end
         end
@@ -413,7 +528,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings)
       for j = 0, h - 1 do
         for i = 0, w - 1 do
           local cell = grid.at(pl.cx + i, pl.cy + j)
-          if cell and cell.model == pl then
+          if cell and cell.model == pl and not cell.reliefDrawn then
             local cdy = cell.dy or 0
             local x0, z0 = pl.cx + i - ox, pl.cy + j - oz + cdy
             quad(gl, { x0, cdy, z0 }, { x0 + 1, cdy, z0 }, { x0 + 1, cdy, z0 + 1 }, { x0, cdy, z0 + 1 },

@@ -925,5 +925,94 @@ do
     and v[1] <= 2 end) == 1, "...none where the belt stands at the edge's level (only the belt's own course)")
 end
 
+-- ------------------------------------------------------- seams between maps
+do
+  local function img(name) return { name = name, getDimensions = function() return 256, 256 end } end
+  local under = img("under")
+  local function q(x, y) return { getViewport = function() return x, y, 16, 16 end } end
+  local tiles = function()
+    return { image = under, overImage = img("over"), slot = function(mid) return mid end,
+             quad = function() return q(0, 0) end, overQuad = function() return q(16, 0) end }
+  end
+  -- two maps a column wide, the south one a level lower
+  local grid = Cells.build(fakeEnv({ ".", "." }), 0, 0, 1, 2)
+  local a, b = grid.at(0, 0), grid.at(0, 1)
+  a.rmap, a.mapLift, a.dy = { L = {} }, 0, 0
+  b.rmap, b.mapLift, b.dy = { L = {} }, -1, -1
+  local l = Render.vertices(grid, tiles, 0, 0).lower[under] or {}
+  local walls, others = 0, 0
+  for k = 1, #l, 6 do
+    if near(l[k][6], Render.SHADE.south) then
+      local ok = true
+      for v = k, k + 5 do
+        if not (near(l[v][3], 1) and l[v][2] >= -1 - 1e-9 and l[v][2] <= 1e-9) then ok = false end
+      end
+      if ok then walls = walls + 1 end
+    elseif l[k][6] < 0.99 then
+      others = others + 1
+    end
+  end
+  check(walls == 4, "seam: the higher map's edge cell hangs its drawing down to the lower map, point by point")
+  check(others == 0, "...and the lower one stands nothing up to it")
+end
+
+-- the ground under a placement (Buildings.groundPlan): a model 2 x 1 cells, a 16-pixel box over its
+-- west cell, nothing over its east one (its drawing clear there), on a 6 x 5 map at (2, 2)
+do
+  local Buildings = dofile("src/scene/buildings.lua")
+  local function model(spec)
+    local px = {}
+    for y = 0, 15 do
+      for x = 0, 31 do px[(y * 32 + x) * 4 + 4] = x < 16 and 1 or 0 end
+    end
+    local function v(x, y, z) return { x, y, z, x, 15 } end
+    return { spec = spec, ref = { w = 2, h = 1, template = { 10, 11 } }, art = { w = 32, h = 16, px = px },
+             tris = { { v(0, 16, 0), v(16, 16, 0), v(16, 16, 16) }, { v(0, 16, 0), v(16, 16, 16), v(0, 16, 16) } } }
+  end
+  -- the map: grass (1) round it, a path (5) along its north, the sea (7) south; it paints 13 and 12
+  -- in the model's cells where the template has 10 and 11
+  local blocks = {}
+  for y = 0, 4 do
+    for x = 0, 5 do blocks[y * 6 + x] = y == 1 and 5 or y >= 3 and 7 or 1 end
+  end
+  blocks[2 * 6 + 2], blocks[2 * 6 + 3] = 13, 12
+  local function ctx(extra)
+    local m = { id = "LAYOUT_TEST", w = 6, h = 5, px = 2, py = 2, odd = true,
+                block = function(x, y) return blocks[y * 6 + x] end,
+                painted = { [1] = true, [5] = true, [7] = true, [12] = true, [13] = true },
+                seamless = { [1] = true, [5] = true, [7] = true },
+                water = function(g) return g == 7 end,
+                rgb = function(g) local t = {}; for k = 0, 255 do t[k] = g end; return t end }
+    for k, val in pairs(extra or {}) do m[k] = val end
+    return m
+  end
+  local plan = Buildings.groundPlan(model({ ground = { 5 } }), ctx())
+  check(plan.patched[1] and not plan.patched[0],
+    "the map's paint is laid in a cell it paints otherwise only where nothing of the model stands")
+  -- (the ring: the path's 4 cells north, the grass's 2 west and east, the sea's 4 south)
+  check(plan.ground == 5, "the ground is the open land round it the most of, not the sea: " .. tostring(plan.ground))
+  plan = Buildings.groundPlan(model({ ground = { 5 }, patch_own = true }), ctx())
+  check(plan.patched[0] and plan.patched[1], "patch_own lays the map's paint in every cell of it")
+  plan = Buildings.groundPlan(model({ ground = { 1 }, ground_fixed = true }), ctx())
+  check(plan.ground == 1, "ground_fixed lays its first ground where the map paints it")
+  plan = Buildings.groundPlan(model({ ground = { 9 }, ground_fixed = true }), ctx())
+  check(plan.ground == 5, "...and not where the map paints none of it")
+  plan = Buildings.groundPlan(model({ ground = { 5 }, cell_ground = { { 1, 0, 5 } } }), ctx())
+  check(plan.chosen[1] == 5 and not plan.patched[1], "cell_ground lays a metatile of its choosing whole")
+  -- relief_bare: the east cell stands nothing; the reference's upper layer draws in its first quarter
+  local refP = { entries = function() return {} end, subtiles = function(m, layer)
+    local s = {}
+    for q = 0, 3 do
+      local blk = {}
+      for t = 0, 63 do blk[t], blk[64 + t] = 0, (q == 0 and m == 11 and t == 9) and 3 or 0 end
+      s[q] = blk
+    end
+    return s
+  end }
+  plan = Buildings.groundPlan(model({ ground = { 5 }, relief_bare = true }), ctx({ refP = refP }))
+  check(plan.bare[1] == 1 and plan.bare[0] == nil and not plan.patched[1],
+    "relief_bare: the cell it stands nothing over is bare (its quarters to leave out), no patch's")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

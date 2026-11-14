@@ -148,6 +148,17 @@ return function(mod, hd, state)
     end
     return rows
   end
+  -- (dev: a model's art itself, { w, h, px }, built afresh)
+  exports._sceneModelArtRaw = function(name)
+    local s = hd.scene
+    local md = s and s.modelOf and s.modelOf(name)
+    return md and md.art or nil
+  end
+  -- (dev: false lays the ground under buildings by the old rule - the commonest spec ground round
+  -- each, the map's paint in every cell it paints otherwise - for before-and-after shots)
+  exports._sceneGroundPlan = function(on)
+    if hd.scene then hd.scene.groundPlanOff = on == false end
+  end
   -- (dev: a metatile's two layers at a pixel, through the scene's pixel source) -> r,g,b,a, r,g,b,a
   exports._scenePixel = function(pair, mid, x, y)
     local s = hd.scene
