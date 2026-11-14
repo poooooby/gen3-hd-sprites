@@ -115,8 +115,18 @@ resolution, and the camera pulls back so even the biggest ones fit.
   flares as the camera lands. The weather sets the light: warm and clear in sunshine, grey and
   cold in rain, ochre in a sandstorm, a pale veil in fog, and the far slopes of Mt Chimney lost
   in ash. Rooms are lit as the game draws them.
+- 🌧️ **Weather you stand in:** Rain streaks fall through the scene (white in a lightning flash),
+  sand blows past in long low gusts and ash flakes drift down, all at their own depth, so a roof
+  hides the rain behind it and the far drops fade into the distance. Fog lies in two drifting
+  banks over the ground, at the knees and the chest, parting round walls and trees, and a
+  sandstorm's dust sweeps along the ground the same way. In the desert's sandstorm, a battle's
+  Sandstorm plays its swirls over the world's own blowing sand instead of a flat sand picture.
+- 🔍 **A miniature world:** A soft tilt-shift blur on the far distance and the nearest ground
+  makes the world look like a diorama (Scene Blur turns it off).
 - 🎥 **A camera that swoops in:** As the battle begins, the camera sweeps down from the
-  overworld view to the battle, the houses and trees rising up as it goes.
+  overworld view to the battle, the houses and trees rising up as it goes. The swoop plays as a
+  shot: cinema bars close in, the edges darken, the world blurs and speed lines race past as it
+  flies, and a white flash marks the landing.
 - 🎯 **A good spot every time:** Both Pokémon are placed on open ground of the kind you met
   them on (grass for a grass encounter, water when you're surfing), with nothing standing in
   front of them, and a soft shadow under each.
@@ -134,6 +144,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
+| **Scene Blur** | On / Off | On | With Battle Scene on Overworld: a soft tilt-shift blur on the far distance and the nearest ground, so the world looks like a miniature. Off: the whole world sharp. |
 | **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings and every furnished room are built the first time you step into the world, a little each frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive, the rooms read again each time the game starts, and both dropped when it closes. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn it off on a slow device. |
 
@@ -198,7 +209,9 @@ Open **OPTIONS → MODS → WoobleView**.
   its rooms, cut into their walls and furniture,
   and the shape of the land: how it reads cliffs, terraces and stairs off the map's own drawing,
   with the corrections its team made by hand, map by map, and its lighting: the sun, its shadows,
-  the weather's light and haze, the drifting patches of sunlight, the rays, dust and glow.
+  the weather's light and haze, the drifting patches of sunlight, the rays, dust and glow, the
+  rain, sand, ash and fog in the scene, the diorama blur and the entrance's cinema bars, blur,
+  speed lines and flash.
 
 ---
 

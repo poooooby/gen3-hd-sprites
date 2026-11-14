@@ -114,6 +114,30 @@ function Gen3.wrapFit(Engine, hd)
     ours[Chrome.drawTerrain] = true
   end
 
+  -- the battle's sandstorm picture (AnimTask_LoadSandstormBackground, on BG1): none over a battle
+  -- scene whose world blows its own sand, the task's blend and its flying sprites kept (Emerald
+  -- 3DS's battle_anim_rock.c patch and CtrBattle_Sandstorm, CC BY-NC-SA 4.0; see LICENSE). The
+  -- task's first call lays the picture on BG1; it is taken off again at once (P.bg1Clear)
+  local okT, AnimTasks = pcall(require, "src.core.game3.battle.anim_tasks")
+  local REG = okT and type(AnimTasks) == "table" and type(AnimTasks.REGISTRY) == "table" and AnimTasks.REGISTRY
+  local loadSand = REG and REG.LoadSandstormBackground
+  if type(loadSand) == "function" and not ours[loadSand] then
+    local function noSandPicture(t, vm, ...)
+      local r = loadSand(t, vm, ...)
+      -- (run in the game's update, outside the draw pass: the scene's own flag, set as it draws)
+      if type(t) == "table" and t._bg1key == "SANDSTORM" and hd.fit.enabled and Engine.Scene
+          and Engine.Scene.enabled and Engine.Scene.drawsSand and okBM and type(BattleMod) == "table"
+          and Engine.Scene.drawsSand(BattleMod._st) then
+        t.draw, t._bg1key = nil, nil
+        hd.stats.sceneSandPicture = "dropped"
+      end
+      return r
+    end
+    REG.LoadSandstormBackground = noSandPicture
+    REG.AnimTask_LoadSandstormBackground = noSandPicture
+    ours[noSandPicture] = true
+  end
+
   -- the intro's scrolling grass (a background layer that wraps on the cart): drawn as a band
   -- across the whole zoomed-out view instead of one screen-wide image
   local drawEntry = Chrome.drawEntry

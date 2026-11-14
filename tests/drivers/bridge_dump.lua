@@ -4,6 +4,21 @@
 -- three points in pixels, the shade, the 5-bit colour at the centroid's texel), to diff, and the
 -- time the read took.
 --   BRIDGE_LAYOUT  the layout (default LAYOUT_ROUTE110)
+-- With BRIDGE_RUNS=all (the whole-layout mode) it also writes SHOT_DIR/signs_<LAYOUT>.txt for each
+-- layout of BRIDGE_FP_LAYOUTS: the signposts src/scene/signs.lua finds over that layout's own
+-- cells, as the battle's build finds them (its sign step, over the layout alone: Emerald 3DS's
+-- generator reads a layout alone), to diff with Emerald 3DS's signposts.bin:
+--   L id name w h pair coll=<codes|engine|bits:N> middiff=N   (id: the cartridge's layout id,
+--                                                              pret's layouts.json index + 1)
+--   S x y MID ROWS HEAD HG G   one a sign: its cell, metatile, 16 rows of its silhouette ('%04x',
+--                              row 0 the top, bit x pixel x from the left; joined by ','), its
+--                              head's in the cell north ('-' for none), the head cell's ground
+--                              and its own cell's (hex metatiles, '-' for none)
+--   P x y                      each cell whose role (src/scene/roles.lua) is signpost
+--   G y MID MID ...            the layout's metatiles, a row a line
+--   BRIDGE_SIGNS=outdoor  every outdoor layout of the game instead (and with BRIDGE_SIGNS set the
+--                         signs are written whatever BRIDGE_RUNS is); BRIDGE_SIGNS=A,B those
+--   BRIDGE_SIGNS_ONLY=1   the signs alone (no bridge, decks or models)
 -- Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/bridge_dump.lua love .
@@ -35,6 +50,249 @@ local function body(game, log)
   local loader = game.mods
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
   if not (hd and hd._bridgeBlocks) then log("FAIL gen3-hd-sprites exports missing"); return end
+  -- the signposts of whole layouts (see the header)
+  local function writeSigns()
+    -- the scene's locals (src/scene/init.lua: its sign step's inputs), found by name among the
+    -- upvalues of its functions, nearest first
+    local core
+    for _, f in pairs(hd) do
+      if type(f) == "function" then
+        for i = 1, 255 do
+          local n, v = debug.getupvalue(f, i)
+          if not n then break end
+          if n == "hd" and type(v) == "table" and v.scene then core = v; break end
+        end
+      end
+      if core then break end
+    end
+    local Scene = core and core.scene
+    if not Scene then log("FAIL signs: no scene"); return end
+    local roots = { Scene.forBattle, Scene._layoutModels, Scene._findWhy }
+    for _, f in pairs(Scene) do if type(f) == "function" then roots[#roots + 1] = f end end
+    local function upvalue(want)
+      local seen, queue, q = {}, {}, 1
+      for _, f in ipairs(roots) do queue[#queue + 1] = { f, 0 } end
+      while q <= #queue do
+        local f, d = queue[q][1], queue[q][2]
+        q = q + 1
+        if not seen[f] then
+          seen[f] = true
+          for i = 1, 255 do
+            local n, v = debug.getupvalue(f, i)
+            if not n then break end
+            if n == want and v ~= nil then return v end
+            if type(v) == "function" and d < 2 then queue[#queue + 1] = { v, d + 1 } end
+          end
+        end
+      end
+    end
+    local World, Signs, Cells = upvalue("World"), upvalue("Signs"), upvalue("Cells")
+    local placeBuildings, signPosts, postKey = upvalue("placeBuildings"), upvalue("signPosts"), upvalue("postKey")
+    local pixelSource = Scene._pixelSource
+    local missing = {}
+    for k, v in pairs({ World = World and World.layoutIds, Signs = Signs and Signs.find, Cells = Cells and Cells.build,
+                        placeBuildings = placeBuildings, signPosts = signPosts, postKey = postKey,
+                        pixelSource = pixelSource }) do
+      if type(v) ~= "function" then missing[#missing + 1] = k end
+    end
+    if #missing > 0 then log("FAIL signs: not found " .. table.concat(missing, ",")); return end
+    local NativeTileset = require("src.core.game3.tileset_native")
+    local Map, Collision = require("src.core.game3.map"), require("src.core.game3.collision")
+    local Runtime = require("src.core.game3.runtime")
+    local okIS, IS = pcall(require, "src.core.game3.scripting.interaction_scripts")
+    local okP, Perm = pcall(require, "src.core.CollPermissions")
+    if not okP then okP, Perm = pcall(require, "src.world.gen2.Permissions") end
+    local okMB, MB = pcall(require, "src.core.game3.mb")
+    local game = Runtime._game
+    local isWall = okP and Perm.isWall or function(c) return c == 0x07 or c == 0xff end
+    local isWater = okP and Perm.isWater or function(c) return c == 0x29 end
+    local doors = {}
+    for _, n in ipairs({ "ANIMATED_DOOR", "PETALBURG_GYM_DOOR", "CLOSED_SOOTOPOLIS_DOOR" }) do
+      local v = okMB and MB.id(n)
+      if v then doors[v] = true end
+    end
+    local function hex(v) return v ~= nil and ("%03X"):format(v) or "-" end
+    local function rowsText(r)
+      local t = {}
+      for y = 0, 15 do t[y + 1] = ("%04x"):format(math.floor(r[y] or 0)) end
+      return table.concat(t, ",")
+    end
+    -- one layout: its own cells, in its own coordinates (the window is the layout)
+    local function one(L)
+      local W, H, g = L.w, L.h, L.grid
+      local function raw(x, y)
+        local i = (y * W + x) * 2 + 1
+        return g:byte(i) + g:byte(i + 1) * 256
+      end
+      -- the engine's collision codes: an alternate's own (World's `codes`), else its map's layout;
+      -- the blockdata's collision bits only where neither has one
+      local codes, EL = L.codes, nil
+      if not codes then
+        for _, id in ipairs(L.maps or {}) do
+          local ok, l = pcall(Map.ensureMidLayout, game, id, game and game.data and game.data.maps[id])
+          if ok and type(l) == "table" and l.collAt then EL = l; break end
+        end
+      end
+      local beh = okIS and IS.behaviors and IS.behaviors[L.pair] or {}
+      local bitsUsed, midDiff = 0, 0
+      local cenv = { indoor = not L.outdoor, walled = false, isWall = isWall, isWater = isWater,
+                    isSurfable = Collision.isSurfable }
+      -- (Hoenn: nothing stands as a cut-out, the build's env.stands)
+      function cenv.stands() return false end
+      local function inside(x, y) return x >= 0 and y >= 0 and x < W and y < H end
+      function cenv.mid(x, y)
+        if not inside(x, y) then return nil, nil end
+        return raw(x, y) % 1024, L.pair
+      end
+      function cenv.cell(x, y)
+        if not inside(x, y) then return nil end
+        local m, c = raw(x, y) % 1024, nil
+        if codes then
+          c = codes[y * W + x]
+        elseif EL then
+          c = EL:collAt(x, y)
+          if EL:midAt(x, y) ~= m then midDiff = midDiff + 1 end
+        end
+        if c == nil then
+          bitsUsed = bitsUsed + 1
+          c = math.floor(raw(x, y) / 1024) % 4 ~= 0 and 0x07 or 0x00
+        end
+        return c, beh[m]
+      end
+      local grid = Cells.build(cenv, 0, 0, W, H)
+      -- the buildings first (their cells marked: cell.model), as the build stands them
+      local okB, errB = pcall(placeBuildings, grid, NativeTileset, function(cx, cy) return nil, cx, cy, L.name, 0, 0 end)
+      if not okB then log("signs " .. tostring(L.name) .. ": buildings error " .. tostring(errB)) end
+      -- the sign step of init.lua's build
+      local layerCache = {}
+      local function layersOf(mid, pair)
+        local k = tostring(pair) .. ":" .. tostring(mid)
+        local e = layerCache[k]
+        if e == nil then
+          e = false
+          local src = pixelSource(NativeTileset, pair)
+          if src and src.under(mid, 0, 0) ~= nil then
+            local lo, up = {}, {}
+            for y = 0, 15 do
+              for x = 0, 15 do
+                local r0, g0, b0, a0 = src.under(mid, x, y)
+                local r1, g1, b1, a1 = src.over(mid, x, y)
+                if a0 and a0 > 0.5 then lo[y * 16 + x] = { r0, g0, b0 } end
+                if a1 and a1 > 0.5 then up[y * 16 + x] = { r1, g1, b1 } end
+              end
+            end
+            e = { lo, next(up) and up or nil }
+          end
+          layerCache[k] = e
+        end
+        if not e then return nil, nil end
+        return e[1], e[2]
+      end
+      local okPo, posts = pcall(signPosts, cenv)
+      posts = okPo and posts or {}
+      local windowPairs, byPrimary = {}, {}
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local p = grid.rows[j][i].pair
+          if p and not windowPairs[p] then
+            windowPairs[p] = true
+            local primary = Signs.tilesets(p)
+            if primary and not byPrimary[primary] then byPrimary[primary] = p end
+          end
+        end
+      end
+      local uppers = {}
+      for _, f in pairs(posts) do
+        local mid, pair = f[1], f[2]
+        local via = mid < 512 and byPrimary[Signs.tilesets(pair) or ""] or (windowPairs[pair] and pair) or nil
+        if via then
+          local _, up = layersOf(mid, via)
+          if up then uppers[Signs.upperKey(up)] = true end
+        end
+      end
+      local roles = World.roles(L)
+      local warps = {}
+      for _, w in ipairs(L.warps or {}) do warps[w[1] .. "," .. w[2]] = true end
+      local okS, found = pcall(Signs.find, grid, {
+        isWall = cenv.isWall, stands = cenv.stands, layers = layersOf,
+        signAt = function(cx, cy) return (L.signs or {})[cx .. "," .. cy] == true end,
+        doorAt = function(cx, cy) return warps[cx .. "," .. cy] == true end,
+        isHouseDoor = function(b) return doors[tonumber(b) or -1] == true end,
+        postAt = function(mid, pair) return mid ~= nil and pair ~= nil and posts[postKey(mid, pair)] ~= nil end,
+        postUpper = function(k) return uppers[k] == true end,
+        mountainRock = true,
+        signpostAt = roles and function(c) return roles.role(c.cx, c.cy) == "signpost" end or nil,
+      })
+      local coll = codes and "codes" or EL and "engine" or "bits"
+      if bitsUsed > 0 then coll = coll .. ":bits" .. bitsUsed end
+      local out = { ("L %d %s %d %d %s coll=%s middiff=%d"):format(L.id, tostring(L.name), W, H, tostring(L.pair), coll, midDiff) }
+      if not okS then
+        log("signs " .. tostring(L.name) .. ": error " .. tostring(found))
+        out[#out + 1] = "E " .. tostring(found):gsub("%c", " ")
+        found = {}
+      end
+      for _, s in ipairs(found) do
+        out[#out + 1] = ("S %d %d %s %s %s %s %s"):format(s.cell.cx, s.cell.cy, hex(s.cell.mid), rowsText(s.rows),
+          s.head and rowsText(s.head) or "-", s.head and hex(s.headGround) or "-", hex(s.ground))
+      end
+      local nRole = 0
+      for y = 0, H - 1 do
+        for x = 0, W - 1 do
+          if roles and roles.role(x, y) == "signpost" then
+            out[#out + 1] = ("P %d %d"):format(x, y)
+            nRole = nRole + 1
+          end
+        end
+      end
+      for y = 0, H - 1 do
+        local t = {}
+        for x = 0, W - 1 do t[#t + 1] = ("%03X"):format(raw(x, y) % 1024) end
+        out[#out + 1] = ("G %d %s"):format(y, table.concat(t, " "))
+      end
+      return out, #found, nRole
+    end
+    -- which layouts
+    local which = env("BRIDGE_SIGNS")
+    local list = {}
+    if which == "outdoor" then
+      for _, id in ipairs(World.layoutIds()) do
+        local L = World.layout(id)
+        if L and L.outdoor then list[#list + 1] = { L.name, L } end
+      end
+    else
+      local names = (which and which ~= "1") and which
+        or env("BRIDGE_FP_LAYOUTS") or "LAYOUT_RUSTBORO_CITY,LAYOUT_FORTREE_CITY,LAYOUT_SLATEPORT_CITY"
+      for lname in names:gmatch("[^,]+") do list[#list + 1] = { lname, World.layout(lname) } end
+    end
+    local clock = love.timer.getTime
+    local total, t0 = 0, clock()
+    for _, e in ipairs(list) do
+      local lname, L = e[1], e[2]
+      if not (L and L.grid and L.pair) then
+        log("signs " .. tostring(lname) .. ": no layout")
+      else
+        local tl = clock()
+        local ok, out, n, nRole = xpcall(one, debug.traceback, L)
+        if not ok then
+          log("signs " .. lname .. ": DRIVER ERROR " .. tostring(out))
+        else
+          local f = io.open(dir .. "/signs_" .. lname .. ".txt", "w")
+          if f then
+            f:write(table.concat(out, "\n"), "\n")
+            f:close()
+          end
+          total = total + n
+          log(("signs %s (id %d): %d signs, %d signpost cells, %s; %.0f ms"):format(lname, L.id, n, nRole,
+            out[1]:match("coll=%S+ middiff=%d+"), (clock() - tl) * 1000))
+        end
+      end
+    end
+    log(("signs: %d layouts, %d signs in %.1f s"):format(#list, total, clock() - t0))
+  end
+  if env("BRIDGE_SIGNS_ONLY") then
+    writeSigns()
+    return
+  end
   -- (BRIDGE_WHY="LAYOUT,spec,x,y;...": why each stands or not, then nothing else)
   if env("BRIDGE_WHY") then
     local f = io.open(dir .. "/why.txt", "w")
@@ -162,6 +420,8 @@ local function body(game, log)
     end
     write("models_" .. lname .. ".txt", out)
   end
+  -- (and the signposts of the same layouts, or BRIDGE_SIGNS's)
+  if env("BRIDGE_RUNS") == "all" or env("BRIDGE_SIGNS") then writeSigns() end
 end
 
 return function(game)

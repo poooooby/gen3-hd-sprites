@@ -235,6 +235,39 @@ do
   Trees.emit(put, sec, 0x0C6, 3, 3, Trees.SMALL, function() return nil end)
   check(#quads == 2 and quads[1][5] == 48 and quads[1][6] == 32 and quads[2][5] == 32 and quads[2][8] == 64,
     "a small tree: its trunk plate (48, 32) and crown (32, 32)-(48, 64)")
+  -- against rock: a tuft and a small crown stand up steeper; the relief laying the ground: no plate
+  quads = {}
+  Trees.emit(put, sec, 0x015, 3, 3, Trees.GRASS, function() return nil end, { rock = true, noGround = true })
+  check(#quads == 1 and quads[1][9] == "card" and near(quads[1][1][3], 3.825 - 0.8),
+    "a tuft against rock: no plate (the relief's), its top 0.8 back")
+  check(select(1, Trees.groundArt(sec, 0x015, Trees.GRASS)) == 96 and select(3, Trees.groundArt("mossdeep", 0x2F8, 2)),
+    "the tuft's floor at (96, 32); Mossdeep's shallows tree a decal")
+  -- a General tree never stands steeper; a tileset's own does (Mossdeep's)
+  quads = {}
+  Trees.emit(put, sec, 0x1E4, 10, 5, 2, function(x, y) return y == 4 and 0 or nil end, { rock = true })
+  local flat = quads[2][1][3]
+  quads = {}
+  Trees.emit(put, sec, 0x1E4, 10, 5, 2, function(x, y) return y == 4 and 0 or nil end)
+  check(near(flat, quads[2][1][3]), "...a General 2x2 tree's crown keeps its lean against rock")
+end
+
+-- the stage search's ground kinds (Emerald 3DS's KindOf, src/scene/cells.lua)
+do
+  local env = {}
+  check(Cells.kindOf(env, 0, 0x02) == "grass" and Cells.kindOf(env, 0, 0x03) == "grass", "tall and long grass are grass")
+  check(Cells.kindOf(env, 0, 0xD1) == "floor" and Cells.kindOf({ kanto = true }, 0, 0xD1) == "grass",
+    "0xD1: Hoenn's bumpy slope is plain, Kanto's Cycling Road grass is grass")
+  check(Cells.kindOf(env, 0, 0x17) == "floor" and Cells.kindOf(env, 0, 0x06) == "sand", "shallow water is plain, deep sand sand")
+end
+
+-- how a tree's cell lays its ground on the relief (src/scene/relief.lua treeGround)
+do
+  local Relief = dofile("src/scene/relief.lua")
+  local level, step = {}, {}
+  for k = 0, 24 do level[k] = 32; step[k] = k < 10 and 48 or 32 end
+  check(Relief.treeGround(level, nil) == nil and Relief.treeGround(step, nil) == "slope",
+    "level ground: a plate; a slope a level tall: on the relief")
+  check(Relief.treeGround(level, { sides = Relief.FACE_TOP, wall = 0x10 }) == "rock", "a wood on a band's rock: the rock's")
 end
 
 -- ---------------------------------------------------------------- signs
@@ -312,6 +345,21 @@ do
   grid.rows[2][2].mid, grid.rows[2][2].pair = 7, "p"
   check(at["2,2"].rows[4] == 2 ^ 6 + 2 ^ 7 + 2 ^ 8 + 2 ^ 9 and at["2,2"].rows[3] == 0 and at["2,2"].ground == 1,
     "...its silhouette is what the ground round it does not draw; its cell laid with that ground")
+  -- a sign drawn as a post's (its upper layer one, pixel for pixel) is that upper layer alone
+  local function postLayers(mid)
+    local lo, up = layers(mid)
+    if mid ~= 7 then return lo, up end
+    up = {}
+    for k = 0, 15 do up[2 * 16 + k] = { 0.1, 0.2, 0.3 } end
+    return lo, up
+  end
+  local upKey = Signs.upperKey(select(2, postLayers(7)))
+  found = Signs.find(grid, { isWall = function(c) return c == 1 end, layers = postLayers,
+    signAt = function(x, y) return x == 2 and y == 2 end, postUpper = function(k) return k == upKey end })
+  local post
+  for _, f in ipairs(found) do if f.cell.cx == 2 and f.cell.cy == 2 then post = f end end
+  check(post and post.rows[2] == 2 ^ 16 - 1 and post.rows[4] == 0,
+    "...one drawn as a post's sign is its upper layer alone, its lower layer all ground")
   local quads, top = 0, 0
   top = Signs.emit(at["2,2"].rows, 16, function() quads = quads + 1 end)
   check(quads > 0 and quads % 6 == 0 and near(top, 12 / 16), "...a solid of its pixels, as tall as it is drawn")
@@ -1169,6 +1217,54 @@ do
   check(near(F.rayStrength(0, 1), 1) and F.rayStrength(1, 0) == 0, "the rays: full in the top left corner, gone in the far one")
   check(F.impact(0.5, 0.78) == 0 and F.impact(1, 0.78) == 0, "no landing burst in flight or once landed")
   check(near(F.impact(0.78 + 0.22 * 0.1, 0.78), math.exp(-0.5) * 0.9, 1e-4), "...and its decay as it lands")
+end
+
+-- the weather in the scene (src/scene/weather.lua)
+do
+  local W = dofile("src/scene/weather.lua")
+  local L = dofile("src/scene/light.lua")
+  local F = dofile("src/scene/sunfx.lua")
+  check(near(W.offset(0, 5, 2, 24), 1 - 2 / 24) and near(W.offset(4.8, 5, 0, 24), 0), "a group's offset: the drift less the box's corner, wrapped")
+  local streaks, flakes = W.particles(F.moteRandom, false), W.particles(F.moteRandom, true)
+  check(#streaks == W.STREAKS * 6 and #flakes == W.FLAKES * 12, "768 streaks of two triangles, 512 flakes of four")
+  local s = streaks[1]
+  check(s[4] >= 0.55 and s[4] <= 1 and streaks[3][4] == 0 and streaks[3][6] >= 38 / 64, "a streak bright at its head, gone at its tail")
+  check(s[1] >= 0 and s[1] < 1 and s[5] < 0 and streaks[2][5] > 0, "...at a place in its box, across both ways")
+  local sheet = W.sheet(12)
+  check(#sheet == 8 * 8 * 6, "a bank's sheet: 8 x 8 cells")
+  local rim, mid = 1, 0
+  for _, v in ipairs(sheet) do
+    if math.abs(v[1]) == 32 and math.abs(v[3]) == 32 then rim = math.min(rim, v[9]) end
+    if v[1] == 0 and v[3] == 0 then mid = v[9] end
+  end
+  check(rim == 0 and near(mid, 1), "...whole in its middle, gone at its rim")
+  local lo, hi = 255, 0
+  W.makeFog(L.dappleNoise, function(_, _, v) lo, hi = math.min(lo, v), math.max(hi, v) end)
+  check(lo == 0 and hi > 200, "the fog's wisps: clear gaps between the banks")
+  local across, along = W.vectors(W.KINDS.rain.groups[1], { 0, -0.5, -0.866 }, { 1, 0, 0 }, { 0, 0.866, -0.5 })
+  local v = W.KINDS.rain.groups[1].velocity
+  local dot = across[1] * v[1] + across[2] * v[2] + across[3] * v[3]
+  check(math.abs(dot) < 1e-6 and along[2] > 0, "a streak lies along its fall, across it as the camera sees it")
+  local fa = W.vectors(W.KINDS.ash.groups[1], { 0, -0.5, -0.866 }, { 1, 0, 0 }, { 0, 0.866, -0.5 })
+  check(near(fa[1], 0.12) and fa[2] == 0, "a flake turned to the camera")
+end
+
+-- the shot: the diorama's blur and the entrance (src/scene/screenfx.lua)
+do
+  local S = dofile("src/scene/screenfx.lua")
+  local a = S.intro(0, 0, 0.78)
+  check(a.speed == 0 and a.flight == 0 and a.bars == 0 and a.impact == 0, "nothing before the glide")
+  local m = S.intro(0.39, 40, 0.78)
+  check(near(m.speed, 1) and near(m.flight, 1) and near(m.bars, 1), "mid-flight: full speed, at the top of the arc, the bars closed")
+  local l = S.intro(0.78 + 0.22 * 0.1, 80, 0.78)
+  check(l.speed == 0 and near(l.impact, math.exp(-0.5) * 0.9, 1e-4) and near(l.bars, 1), "landing: the flash, the bars still closed")
+  check(S.intro(1, 120, 0.78).bars == 0, "landed: the bars gone")
+  local lines = S.streaks(m, 400, 192)
+  local clear = #lines == 12
+  for _, s in ipairs(lines) do
+    if math.abs(s[2] - 192 * 0.55) < 24 then clear = false end
+  end
+  check(clear, "twelve speed lines, none across the battlers' band")
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))

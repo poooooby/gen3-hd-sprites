@@ -2,7 +2,7 @@
 -- read once per battle into a window of cells, each with its kind and, for what stands up, its
 -- place in an upright run.
 --
--- Kinds: "floor", "grass" (tall grass), "sand" (sand, shallow water), "water" (surfable or deep
+-- Kinds: "floor", "grass" (tall or long grass), "sand" (sand, deep sand), "water" (surfable or deep
 -- water), "blocked" (a wall, a tree, a house, a fence, a rock: anything that blocks a step and is
 -- not water) and "void" (outside every map, indoors: black on the cart).
 --
@@ -31,8 +31,8 @@ Cells.RUN_MAX = 6
 local MB_TALL_GRASS, MB_LONG_GRASS = 0x02, 0x03
 local MB_DEEP_SAND = 0x06
 local MB_FAST_WATER, MB_DEEP_WATER, MB_OCEAN_WATER = 0x11, 0x12, 0x15
-local MB_SHALLOW_WATER, MB_SAND = 0x17, 0x21
-local MB_CYCLING_ROAD_PULL_DOWN_GRASS = 0xD1
+local MB_SAND = 0x21
+local MB_CYCLING_ROAD_PULL_DOWN_GRASS = 0xD1    -- (pokefirered only)
 
 --- The kind of one cell.
 function Cells.kindOf(env, coll, beh)
@@ -43,8 +43,13 @@ function Cells.kindOf(env, coll, beh)
     return walled and "void" or "blocked"
   end
   local b = tonumber(beh)
-  if b == MB_TALL_GRASS or b == MB_LONG_GRASS or b == MB_CYCLING_ROAD_PULL_DOWN_GRASS then return "grass" end
-  if b == MB_SAND or b == MB_DEEP_SAND or b == MB_SHALLOW_WATER then return "sand" end
+  -- (Emerald 3DS's KindOf: the game's IsTallGrass or IsLongGrass - Kanto's tall grass is also
+  -- the Cycling Road's, pokefirered's own test; 0xD1 is Hoenn's bumpy slope - then
+  -- IsSandOrDeepSand; shallow water is plain ground)
+  if b == MB_TALL_GRASS or b == MB_LONG_GRASS or (env.kanto and b == MB_CYCLING_ROAD_PULL_DOWN_GRASS) then
+    return "grass"
+  end
+  if b == MB_SAND or b == MB_DEEP_SAND then return "sand" end
   if (env.isWater and env.isWater(coll)) or (b and env.isSurfable and env.isSurfable(b))
       or (b and ((b >= MB_FAST_WATER and b <= MB_DEEP_WATER) or b == MB_OCEAN_WATER)) then
     return "water"

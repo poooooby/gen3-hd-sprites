@@ -30,6 +30,13 @@ return {
     description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
   },
   {
+    key = "scene_blur",
+    label = "Scene Blur",
+    type = "toggle",
+    default = true,
+    description = "With Battle Scene on OVERWORLD: a soft tilt-shift blur on the far distance at the top of the battle and the nearest ground at the bottom, so the world looks like a miniature. Off: the whole world sharp.",
+  },
+  {
     key = "scene_cache",
     label = "Scene Cache",
     type = "toggle",

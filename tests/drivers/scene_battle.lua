@@ -179,6 +179,14 @@ local function body(game, log)
     Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
     Player.targetX, Player.targetY, Player.facing = px, py, facing
     if s and #(s.party or {}) == 0 then Party.giveMon(s, C:require("species", "SPECIES_TORCHIC"), 12) end
+    -- SCENE_WEATHER=id: that weather set as a script sets it (setweather, doweather), given time
+    -- to come in
+    if env("SCENE_WEATHER") then
+      local Weather = require("src.core.game3.weather")
+      Weather.set(tonumber(env("SCENE_WEATHER")))
+      Weather.doWeather()
+      U.wait(200)
+    end
     U.wait(40)
     U.shot(game, ("%s/%s_field.png"):format(dir, mapId))
     -- SCENE_DUMP=1: the collision codes and behaviours around the player (to read what stands up)
@@ -235,6 +243,24 @@ local function body(game, log)
       U.wait(6)
       U.shot(game, ("%s/%s_scene_%s.png"):format(dir, mapId, fill and "fill" or "nofill"))
     end
+    -- SCENE_ANIM=NAME: a general battle animation played over the settled battle (e.g.
+    -- SANDSTORM_CONTINUES), shot at frames 20, 50 and 80 of it
+    if env("SCENE_ANIM") then
+      hd.setFill(true)
+      local AnimSeq = require("src.core.game3.battle.anim_seq")
+      local okA, errA = pcall(AnimSeq.beginEvents, { { kind = "anim", anim = "general", name = env("SCENE_ANIM"),
+        attacker = "player", target = "enemy" } }, function() end)
+      if not okA then log("FAIL anim", tostring(errA)) end
+      for f = 1, 80 do
+        -- (the battle's menu does not advance a sequence: ticked here)
+        pcall(AnimSeq.update)
+        U.wait(1)
+        if f == 20 or f == 50 or f == 80 then
+          U.shot(game, ("%s/%s_anim_%03d.png"):format(dir, mapId, f))
+        end
+      end
+      log(("%s anim %s: sand picture %s"):format(mapId, env("SCENE_ANIM"), stat("sceneSandPicture")))
+    end
     -- SCENE_LOOK=dx:dz:pitch:dist[,...]: the settled camera aimed that far from the player too
     local looks = 0
     for look in (env("SCENE_LOOK") or ""):gmatch("[^,]+") do
@@ -263,6 +289,8 @@ local function body(game, log)
     log(("%s bridge: %s (error %s)"):format(mapId, stat("sceneBridge"), stat("sceneBridgeError")))
     log(("%s swapped layouts: %s (error %s)"):format(mapId, stat("sceneSwaps"), stat("sceneSwapError")))
     log(("%s haze: %s"):format(mapId, stat("sceneHaze")))
+    log(("%s weather: %s"):format(mapId, stat("sceneWeather")))
+    log(("%s trees: %s"):format(mapId, stat("sceneTrees")))
     log(("%s runs: %s (built in %s ms: %s)"):format(mapId, stat("sceneRuns"), stat("sceneMs"), stat("scenePhases")))
     hd.setScene(false)
     U.wait(6)

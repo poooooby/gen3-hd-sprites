@@ -2492,6 +2492,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       if b then real.setScissor(b[1], b[2], b[3], b[4]) else real.setScissor() end
     end
     local inScene = true
+    local worldShown
     if not moved then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy, sceneBox) end
     real.push("all")
     for _, item in ipairs(cur.items) do
@@ -2525,8 +2526,12 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         drawWide(item, sx0, sy0, ssx, ssy, sceneBox or cover)
       elseif item.kind == "world" then
         -- the battle scene's world: the ground under the battlers, so zoomed with them (no
-        -- parallax), over the whole view
-        if not worldDraw(item, sx0, sy0, ssx, ssy, sceneBox or cover) then
+        -- parallax), over the whole view; told where the UI's box is (the world shows beside a
+        -- text box narrower than the view)
+        item.ui = uiBox
+        if worldDraw(item, sx0, sy0, ssx, ssy, sceneBox or cover) then
+          worldShown = item
+        else
           scissor(sceneBox)
           drawBackdrop(item.rec, cover[3], cover[4], bkx, bky, bksx, bksy, cover[1], cover[2], 1, 1)
         end
@@ -2616,6 +2621,16 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         end
         real.setBlendMode("alpha", "alphamultiply")
       end
+    end
+    -- over everything, when the world was drawn: what the scene lays over the whole shot (the
+    -- entrance's cinema bars)
+    if worldShown and self.sceneOverlay then
+      local v = sceneBox or cover
+      real.setScissor(v[1], v[2], v[3], v[4])
+      local ok, err = pcall(self.sceneOverlay, worldShown, v)
+      if not ok then self.stats.sceneError = tostring(err) end
+      real.setBlendMode("alpha", "alphamultiply")
+      real.setColor(1, 1, 1, 1)
     end
     real.pop()
     restoreShaders()

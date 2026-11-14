@@ -636,11 +636,13 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
           marks = nil
         end
         if part then
+          -- (against rock it stands up steeper; on a band's rock or a one-level slope the relief
+          -- lays its ground: src/scene/init.lua, src/scene/relief.lua treeStep)
           Trees.emit(putTree, sec, cell.mid, cell.cx, cell.cy, part, function(x, y)
             local o = grid.at(x, y)
             if not o or o.pair ~= cell.pair then return false end
             return Trees.part(sec, o.mid)
-          end)
+          end, { rock = cell.treeRock, noGround = cell.treeGround ~= nil })
         end
         if card then
           -- standing on the run's southern edge, `up` tiles high
@@ -789,14 +791,65 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
     if want ~= sent then sh:send("uSaturation", want); sent = want end
     G.draw(m.mesh)
   end
-  -- the light in the air: rays, motes, bloom (src/scene/sunfx.lua)
-  if Render.SunFx and light then
-    pcall(Render.SunFx.draw, G, target, { light = light, impact = light.impact, Camera = Camera, pose = p,
-      view = Camera.viewRows(p), proj = proj, depth = depth, sun = light.sunDir or { dx = 0.85, dz = 0.55 },
-      seconds = light.seconds, w = w, h = h })
-  end
+  if light then Render.after(G, Camera, target, p, proj, depth, haze, fog, w, h, light) end
   G.pop()
   return target
+end
+
+--- After the world, in Emerald 3DS's order (CtrVoxel_Draw, then RenderBattleWorld): the fog's
+--- banks and the sand's dust lying in the scene, the light in the air, the rain, sand or ash
+--- (src/scene/weather.lua, src/scene/sunfx.lua); then the picture's finish - the diorama's blur,
+--- the entrance's zoom blur, the bloom, the speed lines and vignette, the landing's flash
+--- (src/scene/screenfx.lua). `light` also carries the frame's weather (weather, weatherAmount,
+--- lightning, fogDensity, cave), `intro` (ScreenFx.intro), `diorama` (the blur's strength) and
+--- `introLow` (true: the vignette runs to the canvas's foot).
+function Render.after(G, Camera, target, p, proj, depth, haze, fog, w, h, light)
+  local ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz = Camera.basis(p)
+  local o = { light = light, Camera = Camera, pose = p, view = Camera.viewRows(p), proj = proj, depth = depth,
+    sun = light.sunDir or { dx = 0.85, dz = 0.55 }, seconds = light.seconds or 0, w = w, h = h,
+    fog = fog, haze = haze, eye = { ex, ey, ez }, forward = { fx, fy, fz }, right = { rx, 0, rz },
+    up = { ux, uy, uz } }
+  local W, S, F = Render.Weather, Render.SunFx, Render.ScreenFx
+  if W then
+    local fogAmount = light.fogDensity or 0
+    if fogAmount > 0 then
+      pcall(W.banks, G, o, W.FOG_BANKS, light.cave and W.CAVE_FOG_COLOUR or W.FOG_COLOUR, fogAmount)
+    end
+    -- (the sand's dust is the fog's sheets, sweeping along the ground)
+    if light.weather == "sand" and (light.weatherAmount or 0) > 0 then
+      pcall(W.banks, G, o, W.SAND_BANKS, W.SAND_COLOUR, light.weatherAmount)
+    end
+  end
+  if S then pcall(S.air, G, target, o) end
+  if W and (light.weatherAmount or 0) > 0 then
+    pcall(W.draw, G, o, light.weather, light.weatherAmount, light.lightning or 0)
+  end
+  -- the finish: the bloom taken from the world as it stands, the blurs laid over it, then the
+  -- bloom added
+  local intro = light.intro
+  local impact = intro and intro.impact or light.impact or 0
+  local bloom = S and S.bloomStrength(light, impact) or 0
+  local okB, glow = false, nil
+  if S then okB, glow = pcall(S.bloomPrepare, G, target, w, h, bloom) end
+  if F then
+    local blur = light.diorama or 0
+    local speed = intro and intro.speed or 0
+    if blur > 0.005 or speed >= 0.04 then
+      local okC, copy = pcall(F.copy, G, target, w, h)
+      if okC and copy then
+        pcall(F.diorama, G, target, copy, w, h, blur)
+        -- (about the camera's target: the canvas's middle, where the battle's sprites stand)
+        pcall(F.zoomBlur, G, target, copy, w, h, proj[2], proj[4], speed)
+      end
+    end
+  end
+  if S and okB and glow then pcall(S.bloomCompose, G, target, w, h, glow, bloom) end
+  if F and intro then
+    -- (the text box's line, GBA row 112, on the canvas)
+    local floorY = proj[4] + 32 * proj[3] / Camera.F
+    pcall(F.atmosphere, G, target, w, h, intro, floorY, light.introLow and h or floorY)
+    pcall(F.flash, G, target, w, h, intro.impact)
+  end
 end
 
 return Render

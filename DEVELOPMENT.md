@@ -452,7 +452,10 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   (`Map.worldMidAt` for art; collision and behaviour through the cell's own map: the primary
   layout, a connection found as `fromDir` finds it, `Map.world`). Kinds: floor, grass, sand,
   water, blocked (`CollPermissions.isWall`), void (off every map indoors); each keeps its
-  `coll` and `beh`. Nothing without a model stands up (Emerald 3DS's rule). In Kanto's games
+  `coll` and `beh`; the kinds are their `KindOf`: grass is the game's tall or long grass
+  (Kanto's tall grass also the Cycling Road's 0xD1, pokefirered's own test; in Hoenn 0xD1 is the
+  bumpy slope), sand is sand or deep sand, shallow water plain. Nothing without a model stands up
+  (Emerald 3DS's rule). In Kanto's games
   trees stand too: each column's run of blocked cells with a tree's metatile (`env.stands`: a
   primary tileset's, half its drawn pixels leaves, something on its upper layer) stands as cards
   on the run's southern edge, at most 6 high. In Hoenn's `env.stands` is always false (its trees
@@ -484,8 +487,17 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   General (the engine's pair `general__<secondary>`): `part(sec, mid)` (0-3 a 2x2 tree's,
   SMALL, GRASS), `groundMetatile` (a crown's top over grass lays the grass), `laysGround`,
   `emit` (trunk plates and crown cards from `assets/scene/trees.png`, the crown's missing row).
-  Packed by `tools/pack_trees.py` from an emerald-3ds checkout. No relief yet: no steeper
-  crowns against rock. Cells a tree or a crown covers stand no card.
+  Packed by `tools/pack_trees.py` from an emerald-3ds checkout. Cells a tree or a crown covers
+  stand no card. `init.lua`'s trees pass (before the stage search, after the relief is placed)
+  marks each tree cell: `c.top` for the stage search (their `ReadCell`: a small trunk 1.8, a 2x2
+  tree's cells and a crown-top cell 2.4, long grass none); `c.treeRock` (their `AgainstRock`: a
+  cliff or shelf role two rows north, one for a 2x2 tree, or the same map's cell north a quarter
+  tile higher by `Relief.centre`, two rows for a 2x2 tree; a 2x2 tree's columns alike), passed
+  to `emit` as `o.rock` (small crown and tuft run 0.8, a tileset's own large crown 0.4);
+  `c.treeGround` (`Relief.treeGround`, their `EmitGround`/`TreeOnRock`/`OneLevelSlope`: "rock"
+  on a band's rock, "slope" on a one-level slope, where `Relief.treeStep` lays the trunk's ground
+  on the relief from a relief-atlas slot of the raw art, `B.treeUV`), passed as `o.noGround`.
+  Stats: `sceneTrees`.
 - `models/kernel.lua`: Emerald 3DS's building primitives (`voxel_building.py`): a model in pixels
   from its rectangle's top-left (X east, Y up, Z south), its drawing at u = X, v = Z - Y; Proj,
   Tile, Band, Strip (courses laid up a face), Prism, HipRoof, Frustum, Vault, Walls, Cylinder,
@@ -683,7 +695,14 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   layouts a script swaps in too (World's alternates, read by name) - and the 987 with a ground
   plan lay its ground metatile and number of patches (`P` and `G` lines; the pak's patch field
   six vertices a patch). The rest: sea rocks and stacks across a map's seam (they stand in the
-  window, the next map in it; a lone layout has no next map). A room spec's pieces stand in its own layout whatever its map's type (the
+  window, the next map in it; a lone layout has no next map). The signs (`BRIDGE_SIGNS=outdoor`,
+  `signs_<LAYOUT>.txt`: each sign's cell, silhouette and head rows, head ground and ground)
+  against the pak's 292 signposts: all 292 found at the same cell, 279 equal in every field; one
+  of ours the pak has not (Verdanturf 0,16). The rest come from the layer pixels the build reads
+  (the engine's under-image mixes some metatiles' upper layer into the lower, or drops it, and
+  paints colour 0 with the backdrop): Dewford's sand 0x124 and sign 0x23A, Pacifidlog's
+  0x218/0x221/0x220/0x210, Verdanturf's 0x2BC, the Battle Frontier's 0x3AB and 0x226, Route
+  117's 0x291/0x020. A room spec's pieces stand in its own layout whatever its map's type (the
   Abandoned Ship's flooded rooms are MAP_TYPE_UNDERWATER, outdoors to voxel_cells); a room
   nobody modelled is an indoor one (gen_voxel_buildings's reuse_everywhere). `BRIDGE_WHY="LAYOUT,spec,x,y;..."` writes why a spec stands there or
   not (`_findWhy`: each core cell's metatile, sign, and the pixels it draws otherwise). Without the World's data, or with `exports._sceneGroundPlan(false)` (the battle
@@ -896,7 +915,40 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   target, drifting with the sun, depth tested), and bloom (VoxelBloomPrepare/Compose: the picture
   at a quarter of their 400-wide screen keeping what is over 0.85, x4, stretched back and added at
   the light's strength, and 0.7 x the landing's impact as the glide lands). The canvas is halved
-  to their 400 across first, so a large window averages as their screen does.
+  to their 400 across first, so a large window averages as their screen does. `bloomPrepare`
+  takes the glow from the world as it stands, `bloomCompose` adds it after the blurs (their
+  order); `air` is the motes and rays.
+- `weather.lua`: the weather in the scene (MakeFog/DrawBanks, MakeWeather/DrawWeather and
+  voxel_weather.v.pica as a GLSL shader). Rain, sand and ash: 768 streaks or 512 flakes built once,
+  each at a fixed place in a box round the camera (24 x 8.5 x 28 tiles for rain), three groups of
+  their own speed, wind and size drawn by setting the box's offset (wrapped in the shader) and
+  `setDrawRange` to the share the game's weather has come in (`Light.amount`); thinning at the
+  box's sides, at the lens and into the haze; white in a bolt. Fog: two 64-tile sheets at 0.30
+  and 1.10 tiles over the target's ground, a 128-px coverage texture of four octaves of the
+  dapples' noise, moved in whole periods plus the drift so the mist stays on the ground; the
+  sandstorm's dust on the same sheets (`SAND_BANKS`). Depth tested, never written, alpha
+  blended. The game's own weather is read off `R.state` (`Light.amount`, `fogDensity`,
+  `lightning`) in `hazeFor`; none indoors, the fog's banks outdoors only (dark when
+  `mapType == 4`, underground). While the world blows sand (`Scene.drawsSand(st)`, their
+  CtrVoxel_DrawsSand), `src/gen3.lua` wraps the engine's `AnimTasks.REGISTRY.LoadSandstormBackground`
+  and takes the BG1 picture off after its first call (their battle_anim_rock.c patch: no
+  picture, the blend and the flying sprites kept). The task runs in the update, outside the draw
+  pass, so it reads the scene's flag, not `hd.capturing`.
+- `screenfx.lua`: the shot (3ds_video.c's VoxelDiorama, BattleIntroBlur, BattleIntroAtmosphere,
+  BattleIntroFlash, BattleIntroBars; ctr_voxel.c's BattleCamera intro values). Their 400 x 240
+  screen is the world's canvas, its height their 240 rows. The diorama blur: a copy of the canvas
+  at their size (halved, then scaled) drawn back over the top 100 and bottom 56 rows half a pixel
+  off each way, fading to nothing towards the middle (strength `Scene.blur`, the Scene Blur
+  option). The intro (`ScreenFx.intro(progress, frames, TRAVEL)`): flight `sin(pi p)`, speed
+  `16 p^2 (1-p)^2`, impact `exp(-5q)(1-q)`, bars `smooth(frames/18)(1 - smooth((q-0.35)/0.65))`;
+  a zoom blur about the target's canvas point, twelve speed lines (their hash), the indigo
+  vignette down to the text box's line (to the canvas's foot when the UI's box is narrower than
+  the view), the landing's flash. The bars are drawn over the whole composite through
+  `hd.sceneOverlay` (`Scene.overlay`), called after every item when a world was drawn. Their
+  curtain (BattleWorldCurtain) is the `"win0"` item's. Not exact: their atmosphere is laid over
+  the battlers' shadows, ours under them (the shadows are stage items).
+- `Render.after` runs all of it in their order: fog banks, sand dust, motes and rays, weather
+  particles, then bloom prepare, diorama, zoom blur, bloom compose, lines and vignette, flash.
 
 In `src/gen3.lua`, `fitTerrain` records `hd.world(wallpaper, scene)` and two soft shadows as
 stage items instead of the wallpaper and pads; `drawEntry` skips the intro bands. The `"world"`

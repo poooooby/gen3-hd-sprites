@@ -30,8 +30,10 @@ The battle scene's trees (src/scene/trees.lua, assets/scene/trees.png) adapt Eme
 voxel trees (3ds_port/src/voxel/voxel_tree.c) and use its tree artwork
 (3ds_port/assets/voxel/trees/, packed by tools/pack_trees.py at the places its own packer puts
 them). Changes: rewritten in Lua for LOVE; a plain RGBA atlas instead of the 3DS's tiled
-RGBA5551; no terrain relief (trees stand on flat ground and never steepen against rock); a
-secondary tileset told by the engine's tileset pair name.
+RGBA5551; AgainstRock and EmitGround worked out ahead of the drawing, off the battle's own cell
+window, a trunk's ground on a slope laid from a slot of the relief's atlas; voxel_battle.c's
+ReadCell tree heights and KindOf ported to the stage search, a Kanto game's tall grass also its
+Cycling Road's; a secondary tileset told by the engine's tileset pair name.
 
 The battle scene's buildings (src/scene/models/kernel.lua, src/scene/models/specs.lua,
 src/scene/buildings.lua) adapt Emerald 3DS's building models: the modelling primitives of
@@ -141,10 +143,20 @@ contact darkening, LightFace, the relief lattice, ModelShade) and voxel_relief.c
 SurfaceAt and SurfaceTop, and src/scene/relief.lua takes voxel_mesh_builder.c's ReliefFace,
 SpanLinear and the builder's lighting flags; src/scene/sunfx.lua adapts ctr_voxel.c's MakeRays,
 DrawRays, DrawMotes, MoteRandom and the battle intro's impact, and src/3ds_video.c's
-VoxelBloomPrepare and VoxelBloomCompose. Changes: rewritten in Lua for LOVE; the casters read
+VoxelBloomPrepare and VoxelBloomCompose; src/scene/weather.lua adapts ctr_voxel.c's MakeFog,
+DrawBanks, MakeWeather, WeatherOffset, DrawWeather and the weather kinds, and
+src/voxel/voxel_weather.v.pica; src/scene/screenfx.lua adapts src/3ds_video.c's VoxelDiorama,
+DioramaTap, BattleIntroZoomTap, BattleIntroBlur, BattleIntroAtmosphere, BattleIntroFlash and
+BattleIntroBars, and ctr_voxel.c's BattleCamera intro values; src/gen3.lua's sandstorm hook
+adapts their patch to battle_anim_rock.c (AnimTask_LoadSandstormBackground) and 3ds_video.c's
+CtrBattle_Sandstorm. Changes: rewritten in Lua for LOVE; the casters read
 off the battle's own cell window; a ray marches every point up to the casters' ceiling (their
 cell skips and block bounds change no answer); the grade, the dapples and the haze worked out
-per pixel; the bloom made from a canvas halved to their screen's width first; the weather read
+per pixel; the bloom made from a canvas halved to their screen's width first; the weather's
+particles drawn by a GLSL shader; the blurs sampled from a copy of the world at their screen's
+size, the zoom blur about the camera's target; the cinema bars drawn over WoobleView's
+composite; the speed lines and vignette run to the canvas's foot beside a text box narrower than
+the view; the weather read
 from the engine's copy of the game's weather state; their day/night cycle (tint, moonlight and
 clock sun, behind their "day_night" setting, off by default) is not ported.
 

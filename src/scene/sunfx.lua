@@ -224,9 +224,11 @@ local function canvasOf(G, k, w, h)
   end
   return c
 end
-local function bloom(G, target, w, h, strength)
+--- VoxelBloomPrepare: what of the picture in `target` is brighter than the threshold, at a
+--- quarter of their screen (a canvas of ours), or nil when there is no bloom to add.
+function SunFx.bloomPrepare(G, target, w, h, strength)
   local th = shader(G, "threshold", THRESHOLD)
-  if not th or strength <= 0.005 then return end
+  if not th or strength <= 0.005 then return nil end
   G.setDepthMode("always", false)
   G.setShader()
   G.setBlendMode("replace", "premultiplied")
@@ -250,7 +252,15 @@ local function bloom(G, target, w, h, strength)
   th:send("uThreshold", SunFx.BLOOM_THRESHOLD)
   G.draw(cur, 0, 0, 0, bw / cw, bh / ch)
   G.setShader()
-  -- stretched back over the picture, added
+  return small
+end
+
+--- VoxelBloomCompose: the prepared glow stretched back over the picture in `target`, added.
+function SunFx.bloomCompose(G, target, w, h, small, strength)
+  if not small or strength <= 0.005 then return end
+  local bw, bh = small:getWidth(), small:getHeight()
+  G.setDepthMode("always", false)
+  G.setShader()
   G.setCanvas(target)
   G.setBlendMode("add", "alphamultiply")
   G.setColor(1, 1, 1, strength)
@@ -258,19 +268,30 @@ local function bloom(G, target, w, h, strength)
   G.setColor(1, 1, 1, 1)
 end
 
---- After the world is drawn into `target` (its depth still bound): the rays and the motes into
---- it, then the bloom over it. o = { light (src/scene/light.lua: rays, motes, bloom strengths,
---- dappleImage), impact (the landing, 0..1), Camera, pose (the mesh's frame), view, proj, depth,
---- sun, seconds, w, h }.
-function SunFx.draw(G, target, o)
+--- After the world is drawn into `target` (its depth still bound): the motes and the rays into
+--- it. o = { light (src/scene/light.lua: rays, motes strengths, dappleImage), Camera, pose (the
+--- mesh's frame), view, proj, depth, sun, seconds, w, h }.
+function SunFx.air(G, target, o)
   local light = o.light
   if not light then return end
   local seconds = o.seconds or 0
-  rays(G, light.dappleImage, light.rays or 0, seconds, o.w, o.h)
   motes(G, o.Camera, o.pose, o.view, o.proj, o.depth, light.motes or 0, o.sun, seconds)
-  local b = (light.bloom or 0) + SunFx.LANDING_BLOOM * (o.impact or 0)
-  if b > 1 then b = 1 end
-  bloom(G, target, o.w, o.h, b)
+  rays(G, light.dappleImage, light.rays or 0, seconds, o.w, o.h)
+end
+
+--- This frame's bloom: the light's own, and the landing's burst dying away with its flash
+--- (`impact`, 0..1).
+function SunFx.bloomStrength(light, impact)
+  local b = (light and light.bloom or 0) + SunFx.LANDING_BLOOM * (impact or 0)
+  return b > 1 and 1 or b
+end
+
+--- The air, then the bloom over the picture (with nothing between them).
+function SunFx.draw(G, target, o)
+  if not o.light then return end
+  SunFx.air(G, target, o)
+  local b = SunFx.bloomStrength(o.light, o.impact)
+  SunFx.bloomCompose(G, target, o.w, o.h, SunFx.bloomPrepare(G, target, o.w, o.h, b), b)
 end
 
 return SunFx

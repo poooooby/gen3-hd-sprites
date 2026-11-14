@@ -15,9 +15,13 @@
 --   * a cell whose drawing is only a crown's top over something else lays that something else
 --     (groundMetatile): the crown comes from the tree.
 --
--- Changes from the port: written in Lua for LOVE; no relief yet (every tree stands on the flat
--- ground, so it never stands up steeper against rock); a secondary tileset is told by its name
--- (the engine's tileset pair, "general__petalburg").
+--   * against rock or higher ground behind it (AgainstRock, worked out by src/scene/init.lua off
+--     the cells' roles and relief) a small tree's crown and a tuft stand up steeper (run 0.8),
+--     and a tileset's own large tree's (0.4); where the relief lays a tree's ground (on a band's
+--     rock, or on a one-level slope: EmitGround, src/scene/relief.lua's treeStep) no flat plate.
+--
+-- Changes from the port: written in Lua for LOVE; a secondary tileset is told by its name (the
+-- engine's tileset pair, "general__petalburg").
 
 local Trees = {}
 
@@ -193,11 +197,12 @@ end
 
 -- one row of a large crown over the cell (x, y), column col, row row of a tree whose trunk row
 -- is y - row + 1
-local function crownCard(put, art, x, y, col, row)
+local function crownCard(put, art, x, y, col, row, steep)
   local u0 = art.crownX + col * 16
   local v0 = art.crownY + row * art.rowPx
   local length = art.rowPx / 8
-  local rise, run = 0.766044 * length, 0.642788 * length
+  -- (against rock or higher ground behind the trunk, a tileset's own tree stands up steeper)
+  local rise, run = 0.766044 * length, (steep and 0.4 or 0.642788) * length
   local baseZ = y - row + 1 + art.foot
   local top, bottom = 1 - row * 0.5, 0.5 - row * 0.5
   put({ x, BASE_HEIGHT + top * rise, baseZ - top * run },
@@ -207,8 +212,8 @@ local function crownCard(put, art, x, y, col, row)
       u0, v0, u0 + 16, v0 + art.rowPx, "card")
 end
 
--- a small tree's trunk cell (its 16:32 crown leant back on it) or a long grass tuft
-local function smallCell(put, sec, m, x, y, part)
+-- a small tree's or a tuft's art: its card's top left, its ground's, and whether it is Dewford's
+local function smallArt(sec, m, part)
   local grass = part == Trees.GRASS
   local trunk = not grass and smallTrunkGround(sec, m) or nil
   local dewford = not grass and m >= SECONDARY and trunk == nil
@@ -216,37 +221,65 @@ local function smallCell(put, sec, m, x, y, part)
   local cy = dewford and 0 or 32
   local tx = trunk and TRUNKS[trunk][1] or cx + 16
   local ty = trunk and TRUNKS[trunk][2] or cy
-  ground(put, x, y, tx, ty, tx + 16, ty + 16)
-  local rise, run = 1.532089, 1.285575
+  return cx, cy, tx, ty, dewford
+end
+
+-- a small tree's trunk cell (its 16:32 crown leant back on it) or a long grass tuft; against rock
+-- (o.rock) it stands up steeper, its top at the trunk cell's back edge; o.noGround: the relief
+-- lays its ground
+local function smallCell(put, sec, m, x, y, part, o)
+  local cx, cy, tx, ty, dewford = smallArt(sec, m, part)
+  if not o.noGround then ground(put, x, y, tx, ty, tx + 16, ty + 16) end
+  local rise, run = 1.532089, o.rock and 0.8 or 1.285575
   local baseZ = y + (dewford and 0.975 or 0.825)
   put({ x, BASE_HEIGHT + rise, baseZ - run }, { x + 1, BASE_HEIGHT + rise, baseZ - run },
       { x + 1, BASE_HEIGHT, baseZ }, { x, BASE_HEIGHT, baseZ },
       cx, cy, cx + 16, cy + 32, "card")
 end
 
---- Emit a tree part's cell at (x, y) (map cells). partAt(x, y) -> the tree part of another cell
---- of the same map, or nil (for the crown's other row).
-function Trees.emit(put, sec, m, x, y, part, partAt)
+--- Where a tree part's cell lays its ground from the art: the 16x16 texels' top left (tx, ty), and
+--- whether it is a decal over water (laid just off the surface, never on the relief).
+function Trees.groundArt(sec, m, part)
   if part == Trees.SMALL or part == Trees.GRASS then
-    smallCell(put, sec, m, x, y, part)
+    local _, _, tx, ty = smallArt(sec, m, part)
+    return tx, ty, false
+  end
+  local art = largeArt(sec, m)
+  return art.groundX + (part % 2) * 16, art.groundY + math.floor(part / 2) * 16, art.decal == true
+end
+
+--- Emit a tree part's cell at (x, y) (map cells). partAt(x, y) -> the tree part of another cell
+--- of the same map, or nil (for the crown's other row). o: { rock (it stands against rock or
+--- higher ground: AgainstRock), noGround (the relief lays its ground: on the rock of a band, or
+--- on a one-level slope) }, or nil.
+function Trees.emit(put, sec, m, x, y, part, partAt, o)
+  o = o or {}
+  if part == Trees.SMALL or part == Trees.GRASS then
+    smallCell(put, sec, m, x, y, part, o)
     return
   end
   local art = largeArt(sec, m)
   local col, row = part % 2, math.floor(part / 2)
   local u0, v0 = art.groundX + col * 16, art.groundY + row * 16
   -- over the water: its roots and shadow just off the surface
-  ground(put, x, y, u0, v0, u0 + 16, v0 + 16, art.decal and 0.02 or 0)
-  crownCard(put, art, x, y, col, row)
+  if art.decal then
+    ground(put, x, y, u0, v0, u0 + 16, v0 + 16, 0.02)
+  elseif not o.noGround then
+    ground(put, x, y, u0, v0, u0 + 16, v0 + 16, 0)
+  end
+  -- (only a tileset's own tree stands up steeper)
+  local own = m >= SECONDARY and ownLarge(sec, m) ~= nil
+  local steep = o.rock and own
+  crownCard(put, art, x, y, col, row, steep)
   -- the crown's other row, when that row's cell is something else drawn over the tree (a General
   -- tree's only inside its own map: across the edge the next map's cells answer; a tileset's own
   -- tree's always, as its crown row is never a part)
   local other = row == 0 and y + 1 or y - 1
   local partner = row == 0 and part + 2 or part - 2
-  local own = m >= SECONDARY and ownLarge(sec, m) ~= nil
   local otherPart = partAt(x, other)     -- a part, nil (none), or false (outside this map)
   if otherPart == partner then return end
   if not own and otherPart == false then return end
-  crownCard(put, art, x, other, col, 1 - row)
+  crownCard(put, art, x, other, col, 1 - row, steep)
 end
 
 return Trees

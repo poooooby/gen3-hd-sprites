@@ -3,11 +3,14 @@
 --
 -- A sign metatile draws the post over the ground it stands on. Its upper layer is the sign; on its
 -- lower layer a pixel is ground when its colour is one the clean walkable cells beside it draw on
--- theirs. What remains, closed off from the cell's border by a flood fill, is the sign's
--- silhouette. A lamp's lantern (a gym sign's round top) is drawn in the cell north of it: the
--- upper-layer pixels there joined to the sign's top row. Each 8-connected piece stands on its own
--- bottom, two pixels thick, in the depth band of that bottom's half cell; its cell is laid with the
--- ground round it, the head's cell with its own ground.
+-- theirs, and all of it is when its upper layer is a post's sign pixel for pixel (Lavaridge's gym
+-- sign on the gym's corner). What remains, closed off from the cell's border by a flood fill, is
+-- the sign's silhouette (none at all, and its cell is laid with ground all the same). A lamp's
+-- lantern (a gym sign's round top) is drawn in the cell north of it: the upper-layer pixels there
+-- joined to the sign's top row; in a blocked cell only a sign event's, when they are all that cell
+-- draws on its upper layer. Each 8-connected piece stands on its own bottom, two pixels thick, in
+-- the depth band of that bottom's half cell; its cell is laid with the ground round it, the head's
+-- cell with its own ground (a blocked one with its own drawing).
 --
 -- Which cells are signposts, as Emerald 3DS's voxel_cells.py says: a blocked cell outdoors with
 -- walkable ground west, east and south that is
@@ -20,8 +23,9 @@
 -- layer pixel for pixel) is one wherever it stands with walkable ground south (a house's sign
 -- against its wall); and a lamp drawn as a free one (its post and its lantern) is one against a
 -- house's wall on one side. A tree's never is; a building's cell (a model's) only where its own
--- layout's role says so, and then its upper layer alone is the sign, standing in front of the
--- building (Lavaridge's gym sign on the gym's corner).
+-- layout's role says so. A sign event that is none, open north, south and on a side, over clean
+-- ground (the cell south draws all its lower layer and nothing else on its upper) that its cell and
+-- the cell north draw on their lower layers, is a board: their upper layers' own pixels.
 --
 -- Adapted from Emerald 3DS (3ds_port/scripts/voxel_sign_mask.py, gen_voxel_sign_masks.py,
 -- src/voxel/voxel_sign.c; voxel_cells.py's signposts; by Zallax and contributors, CC BY-NC-SA 4.0,
@@ -134,6 +138,54 @@ local function count(row)
   local n = 0
   for x = 0, 15 do if bit(row, x) then n = n + 1 end end
   return n
+end
+
+-- two layers drawing the same pixels
+local function same(a, b)
+  if not a or not b then return a == b end
+  for k = 0, 255 do
+    local p, q = a[k], b[k]
+    if (p == nil) ~= (q == nil) then return false end
+    if p and key(p) ~= key(q) then return false end
+  end
+  return true
+end
+
+-- voxel_sign_mask.connected_head: of the cell north's pixels `upper` ({ [k] = true }), those
+-- 8-connected to the sign's top row (`row0`) through its bottom row; nil for none, or a head wider
+-- than maxWidth or bigger than maxPixels (a crown or a roof the sign stands in front of)
+local function connectedHead(upper, row0, maxWidth, maxPixels)
+  local head, queue = {}, {}
+  for x = 0, 15 do
+    local k = 15 * 16 + x
+    if upper[k] and ((x > 0 and bit(row0, x - 1)) or bit(row0, x) or (x < 15 and bit(row0, x + 1))) then
+      head[k] = true
+      queue[#queue + 1] = k
+    end
+  end
+  local q = 1
+  while q <= #queue do
+    local p = queue[q]
+    q = q + 1
+    local hx, hy = p % 16, floor(p / 16)
+    for dy = -1, 1 do
+      for dx = -1, 1 do
+        local x, y = hx + dx, hy + dy
+        local k = y * 16 + x
+        if x >= 0 and x < 16 and y >= 0 and y < 16 and upper[k] and not head[k] then
+          head[k] = true
+          queue[#queue + 1] = k
+        end
+      end
+    end
+  end
+  local n, xmin, xmax = 0, 16, -1
+  for k in pairs(head) do
+    n = n + 1
+    xmin, xmax = math.min(xmin, k % 16), math.max(xmax, k % 16)
+  end
+  if n == 0 or xmax - xmin + 1 > maxWidth or n > maxPixels then return nil end
+  return head
 end
 
 --- The signposts of a grid: { { cell, rows (16 masks), head (16, or nil), ground (metatile),
@@ -288,11 +340,15 @@ function Signs.find(grid, opt)
   -- drawn as a sign that stands open on three sides somewhere in the game (opt.postAt: its
   -- metatile; opt.postUpper: its upper layer pixel for pixel): a sign wherever it stands, walkable
   -- to its south (a house's sign against its wall)
-  local function drawnAsPost(c)
-    if opt.postAt and opt.postAt(c.mid, c.pair) then return true end
+  -- (Layout.draws_post_sign: its upper layer a post's, pixel for pixel)
+  local function drawsPostSign(c)
     if not opt.postUpper then return false end
     local _, up = layers(c)
     return up ~= nil and opt.postUpper(Signs.upperKey(up)) == true
+  end
+  local function drawnAsPost(c)
+    if opt.postAt and opt.postAt(c.mid, c.pair) then return true end
+    return drawsPostSign(c)
   end
   local function windowSignpost(i, j)
     if not candidate(i, j) then return false end
@@ -319,95 +375,107 @@ function Signs.find(grid, opt)
     return windowSignpost(i, j)
   end
 
+  -- its silhouette (voxel_sign_mask.metatile_mask): a sign drawn as a post's is its upper layer
+  -- alone, all its lower layer ground; any other the pixels of its lower layer in no colour the
+  -- clean walkable cells beside and below draw on theirs, and its upper layer
+  local function silhouette(i, j)
+    local c = rows[j][i]
+    local lower, upper = layers(c)
+    local solid = {}
+    if not drawsPostSign(c) then
+      local ground = {}
+      for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, 1 }, { -1, 1 }, { 1, 1 } }) do
+        local n = cell(i + d[1], j + d[2])
+        if n and not off(i + d[1], j + d[2]) and not blocked(i + d[1], j + d[2]) and not hasUpper(n) then
+          local lo = layers(n)
+          for _, p in pairs(lo or {}) do ground[key(p)] = true end
+        end
+      end
+      for k, p in pairs(lower or {}) do if not ground[key(p)] then solid[k] = true end end
+    end
+    for k in pairs(upper or {}) do solid[k] = true end
+    return Signs.cutout(solid)
+  end
+  -- gen_voxel_sign_masks.sign_record: every signpost, its silhouette, its head (the north cell's
+  -- upper layer joined to its top row: a lamp's lantern) and its grounds. The head stands in an
+  -- open cell north, or a sign event's in a blocked one whose upper layer is the head and nothing
+  -- else (blocked_head: Lavaridge's gym sign tops the gym's corner), laid with its own drawing
+  local function record(i, j)
+    local c = rows[j][i]
+    local mask = silhouette(i, j)
+    local rec = { cell = c, rows = mask }
+    local nc = cell(i, j - 1)
+    if nc and not off(i, j - 1) and count(mask[0]) <= Signs.HEAD_MAX_WIDTH then
+      local _, nup = layers(nc)
+      local head = nup and connectedHead(nup, mask[0], Signs.HEAD_MAX_WIDTH, Signs.HEAD_MAX_PIXELS)
+      if head and not blocked(i, j - 1) then
+        rec.head = Signs.cutout(head)
+        rec.headGround = Signs.headGround(grid, i, j - 1, layers, off, blocked, hasUpper)
+      elseif head and signEvent(c) then
+        rec.head = Signs.cutout(head)
+        local only = true
+        for k in pairs(nup) do
+          if not bit(rec.head[floor(k / 16)], k % 16) then only = false; break end
+        end
+        if only then rec.headGround = nc.mid else rec.head = nil end
+      end
+    end
+    rec.ground = Signs.cellGround(grid, i, j, mask, layers, off, blocked, hasUpper, signpost)
+    return rec
+  end
+  -- voxel_sign_mask.event_board_masks: a sign event that is no signpost, open north and south and
+  -- on a side, over ground proven clean (the cell south draws all its lower layer and nothing else
+  -- on its upper), its cell's and the cell north's lower layer that ground: a board of their upper
+  -- layers' own pixels, the cell north's joined to it its head; laid with the cell south
+  local function board(i, j)
+    local c = rows[j][i]
+    if not signEvent(c) or not blocked(i, j) or j < 1 then return nil end
+    for _, dy in ipairs({ -1, 1 }) do
+      if off(i, j + dy) or blocked(i, j + dy) then return nil end
+    end
+    if (off(i - 1, j) or blocked(i - 1, j)) and (off(i + 1, j) or blocked(i + 1, j)) then return nil end
+    local s, n = rows[j + 1][i], rows[j - 1][i]
+    local lower, sup = layers(s)
+    local nl = 0
+    for _ in pairs(lower or {}) do nl = nl + 1 end
+    if nl ~= 256 then return nil end
+    for k, p in pairs(sup or {}) do
+      if key(lower[k]) ~= key(p) then return nil end
+    end
+    local function own(x)
+      local lo, up = layers(x)
+      if not same(lo, lower) then return nil end
+      local px = {}
+      for k, p in pairs(up or {}) do
+        if key(p) ~= key(lower[k]) then px[k] = true end
+      end
+      return px
+    end
+    local body, top = own(c), own(n)
+    if not body or not top then return nil end
+    local mask = Signs.cutout(body)
+    local any = false
+    for y = 0, 15 do if mask[y] ~= 0 then any = true end end
+    local head = any and connectedHead(top, mask[0], 16, 256)
+    if not head then return nil end
+    return { cell = c, rows = mask, head = Signs.cutout(head), headGround = s.mid, ground = s.mid }
+  end
+
   local out = {}
   for j = 0, H - 1 do
     for i = 0, W - 1 do
       if signpost(i, j) then
-        local c = rows[j][i]
-        local lower, upper = layers(c)
-        if lower or upper then
-          -- the ground's colours: the clean walkable cells beside and below
-          local ground = {}
-          for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, 1 }, { -1, 1 }, { 1, 1 } }) do
-            local n = cell(i + d[1], j + d[2])
-            if n and not off(i + d[1], j + d[2]) and not blocked(i + d[1], j + d[2]) and not hasUpper(n) then
-              local lo = layers(n)
-              for _, p in pairs(lo or {}) do ground[key(p)] = true end
-            end
-          end
-          -- (in a model's cell the sign is its upper layer: the lower layer is the building's)
-          local solid = {}
-          if not c.model then
-            for k, p in pairs(lower or {}) do if not ground[key(p)] then solid[k] = true end end
-          end
-          for k in pairs(upper or {}) do solid[k] = true end
-          local mask = Signs.cutout(solid)
-          local any = false
-          for y = 0, 15 do if mask[y] ~= 0 then any = true end end
-          if any then
-            local rec = { cell = c, rows = mask }
-            -- its head: the north cell's upper layer joined to its top row (a lamp's lantern)
-            local nc = cell(i, j - 1)
-            if nc and not off(i, j - 1) and not blocked(i, j - 1) and count(mask[0]) <= Signs.HEAD_MAX_WIDTH then
-              local _, nup = layers(nc)
-              if nup then
-                local head, queue = {}, {}
-                for x = 0, 15 do
-                  if nup[15 * 16 + x] and ((x > 0 and bit(mask[0], x - 1)) or bit(mask[0], x)
-                      or (x < 15 and bit(mask[0], x + 1))) then
-                    head[15 * 16 + x] = true
-                    queue[#queue + 1] = 15 * 16 + x
-                  end
-                end
-                local q = 1
-                while q <= #queue do
-                  local p = queue[q]
-                  q = q + 1
-                  local px, py = p % 16, floor(p / 16)
-                  for dy = -1, 1 do
-                    for dx = -1, 1 do
-                      local x, y = px + dx, py + dy
-                      local k = y * 16 + x
-                      if x >= 0 and x < 16 and y >= 0 and y < 16 and nup[k] and not head[k] then
-                        head[k] = true
-                        queue[#queue + 1] = k
-                      end
-                    end
-                  end
-                end
-                local n, xmin, xmax = 0, 16, -1
-                for k in pairs(head) do
-                  n = n + 1
-                  xmin, xmax = math.min(xmin, k % 16), math.max(xmax, k % 16)
-                end
-                if n > 0 and xmax - xmin + 1 <= Signs.HEAD_MAX_WIDTH and n <= Signs.HEAD_MAX_PIXELS then
-                  rec.head = Signs.cutout(head)
-                  rec.headGround = Signs.headGround(grid, i, j - 1, layers, off, blocked, hasUpper)
-                end
-              end
-            end
-            rec.ground = Signs.cellGround(grid, i, j, mask, layers, off, blocked, hasUpper, signpost)
-            out[#out + 1] = rec
-          end
-        end
+        out[#out + 1] = record(i, j)
+      elseif not off(i, j) then
+        out[#out + 1] = board(i, j)
       end
     end
   end
   return out
 end
 
-local function same(a, b)
-  if not a or not b then return a == b end
-  for k = 0, 255 do
-    local p, q = a[k], b[k]
-    if (p == nil) ~= (q == nil) then return false end
-    if p and key(p) ~= key(q) then return false end
-  end
-  return true
-end
-
 --- The ground under a sign's head: a clean walkable neighbour drawing the head cell's own lower
---- layer, or the commonest clean walkable neighbour.
+--- layer, or the commonest clean walkable neighbour, or the cell south of the sign.
 function Signs.headGround(grid, i, j, layers, off, blocked, hasUpper)
   local own = layers(grid.rows[j][i])
   local counts, order = {}, {}
@@ -426,6 +494,7 @@ function Signs.headGround(grid, i, j, layers, off, blocked, hasUpper)
   end
   local best
   for _, m in ipairs(order) do if not best or counts[m] > counts[best] then best = m end end
+  if best == nil and not off(i, j + 2) then best = grid.rows[j + 2][i].mid end
   return best
 end
 
@@ -660,41 +729,10 @@ function Signs.signMetatiles(L)
     for x = 0, 15 do if bit(row, x) then n = n + 1 end end
     return n
   end
-  -- voxel_sign_mask.head_mask / connected_head
+  -- voxel_sign_mask.head_mask
   local function headMask(rows, north)
     if popcount(rows[0]) > Signs.HEAD_MAX_WIDTH then return nil end
-    local upper = px(north, 1)
-    local head, queue = {}, {}
-    for x = 0, 15 do
-      local k = 15 * 16 + x
-      if upper[k] and ((x > 0 and bit(rows[0], x - 1)) or bit(rows[0], x) or (x < 15 and bit(rows[0], x + 1))) then
-        head[k] = true
-        queue[#queue + 1] = k
-      end
-    end
-    local q = 1
-    while q <= #queue do
-      local p = queue[q]
-      q = q + 1
-      local hx, hy = p % 16, floor(p / 16)
-      for dy = -1, 1 do
-        for dx = -1, 1 do
-          local x, y = hx + dx, hy + dy
-          local k = y * 16 + x
-          if x >= 0 and x < 16 and y >= 0 and y < 16 and upper[k] and not head[k] then
-            head[k] = true
-            queue[#queue + 1] = k
-          end
-        end
-      end
-    end
-    local n, xmin, xmax = 0, 16, -1
-    for k in pairs(head) do
-      n = n + 1
-      xmin, xmax = math.min(xmin, k % 16), math.max(xmax, k % 16)
-    end
-    if n == 0 or xmax - xmin + 1 > Signs.HEAD_MAX_WIDTH or n > Signs.HEAD_MAX_PIXELS then return nil end
-    return head
+    return connectedHead(px(north, 1), rows[0], Signs.HEAD_MAX_WIDTH, Signs.HEAD_MAX_PIXELS)
   end
   -- gen_voxel_sign_masks.head_ground
   local function headGround(x, y)
@@ -732,8 +770,10 @@ function Signs.signMetatiles(L)
             if headGround(x, y - 1) == north then found[north] = true end
           elseif head and L.signs[x .. "," .. y] then
             -- (blocked_head: that cell's upper layer is the head and nothing else)
-            local all = true
-            for k in pairs(px(north, 1)) do if not head[k] then all = false; break end end
+            local cut, all = Signs.cutout(head), true
+            for k in pairs(px(north, 1)) do
+              if not bit(cut[floor(k / 16)], k % 16) then all = false; break end
+            end
             if all then found[north] = true end
           end
         end

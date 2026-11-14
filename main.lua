@@ -64,6 +64,10 @@ return function(mod)
     Lighting = loadSibling(mod, "src/scene/lighting.lua"),
     -- (optional: the sun's rays, its dust in the air, bloom)
     SunFx = loadSibling(mod, "src/scene/sunfx.lua"),
+    -- (optional: the rain, sand, ash and fog in the scene)
+    Weather = loadSibling(mod, "src/scene/weather.lua"),
+    -- (optional: the diorama's blur and the entrance's effects)
+    ScreenFx = loadSibling(mod, "src/scene/screenfx.lua"),
     -- (optional: without it trees stand as cut-outs too)
     Trees = loadSibling(mod, "src/scene/trees.lua"),
     -- (optional: without them buildings stand as cut-outs)
@@ -134,6 +138,7 @@ return function(mod)
       Engine.Scene = Scene
       hd.scene = Scene
       hd.sceneRenderer = Scene.render
+      hd.sceneOverlay = Scene.overlay
     end
   end
   -- the relief, built once a game in the background and cached (src/scene/relief_run.lua): the
@@ -216,6 +221,8 @@ return function(mod)
     if Engine.Scene then
       Engine.Scene.enabled = option("battle_scene", "classic") == "overworld"
       Engine.Scene.cacheModels = option("scene_cache", true) ~= false
+      -- (Emerald 3DS's diorama blur, its strength 0..1: their default is the full blur)
+      Engine.Scene.blur = option("scene_blur", true) ~= false and 1 or 0
     end
   end
 

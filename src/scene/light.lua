@@ -271,6 +271,9 @@ local function dappleNoise(u, v, period, seed)
   local top, bottom = a + (b - a) * fx, c + (d - c) * fx
   return top + (bottom - top) * fy
 end
+--- DappleNoise: tileable value noise at (u, v), repeating every `period` lattice cells (the
+--- fog's banks are made of it too, src/scene/weather.lua).
+Light.dappleNoise = dappleNoise
 
 --- MakeDapple: the pattern's 128x128 values 0..255 (three octaves of tileable noise, then a
 --- soft threshold: broad patches with ragged, blurred edges, a little more light than shade).

@@ -1168,11 +1168,29 @@ end
 -- where a cut tile's ground runs on under the rock beside it
 local CUT_FILL = { { 0, 1 }, { -1, 1 }, { 1, 1 }, { -1, 0 }, { 1, 0 } }
 
---- A tree's cell where a wood climbs a step: the lower ground run on under it, its walls.
+--- How a tree's cell (heights g, cut record c) lays its trunk's ground (Emerald 3DS's
+--- voxel_tree.c EmitGround, VoxelMesh_TreeOnRock, OneLevelSlope): "rock" - a wood on a band's
+--- rock, the ground pass lays the rock; "slope" - a piece of slope one level tall (a band, a face,
+--- a corner), the trunk's drawing laid on the relief; nil - one plate at the centre's height.
+function Relief.treeGround(g, c)
+  if not g then return nil end
+  if c and band(c.sides, Relief.FACE_TOP) ~= 0 and c.wall and c.wall ~= Relief.NO_FACE then return "rock" end
+  local lo, hi = g[0], g[0]
+  for i = 1, SIDE * SIDE - 1 do lo, hi = min(lo, g[i]), max(hi, g[i]) end
+  if hi - lo == 16 then return "slope" end
+  return nil
+end
+
+--- A tree's cell where a wood climbs a step: the lower ground run on under it, its walls; on a
+--- one-level slope the trunk's ground laid on the relief (B.treeUV(x, y): its art's uv rect).
 function Relief.treeStep(B, x, y)
   local g = B.cell(x, y)
   if not g then return end
   local c = B.cut(x, y)
+  if B.treeUV and Relief.treeGround(g, c) == "slope" then
+    local u0, v0, u1, v1 = B.treeUV(x, y)
+    if u0 then Relief.reliefUV(B, x, y, g, g, u0, v0, u1, v1, false, 0, nil) end
+  end
   if not c then return end
   if c.variant == Relief.NO_VARIANT and c.ground then
     local u0, v0, u1, v1 = B.metatileUV(c.ground)

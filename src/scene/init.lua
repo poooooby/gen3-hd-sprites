@@ -20,6 +20,15 @@ return function(deps)
   local Lighting = deps.Lighting                  -- (optional: src/scene/lighting.lua, Emerald 3DS's sun)
   -- (optional: src/scene/sunfx.lua, the sun's rays, dust and bloom, drawn by the renderer)
   if Render and deps.SunFx then Render.SunFx = deps.SunFx end
+  -- (optional: src/scene/weather.lua, the rain, sand, ash and fog in the scene; its noise is the
+  -- dapples', its particles placed as the motes are)
+  if Render and deps.Weather then
+    Render.Weather = deps.Weather
+    deps.Weather.noise = deps.Light and deps.Light.dappleNoise
+    deps.Weather.random = deps.SunFx and deps.SunFx.moteRandom
+  end
+  -- (optional: src/scene/screenfx.lua, the diorama's blur and the entrance's effects)
+  if Render and deps.ScreenFx then Render.ScreenFx = deps.ScreenFx end
   local hd = deps.hd
 
   local Scene = { enabled = false, Camera = Camera }
@@ -333,6 +342,7 @@ return function(deps)
 
   -- the trees' art (assets/scene/trees.png), loaded once; false when it cannot be
   local treeImage
+  local treeRaw
   local function treesArt()
     if treeImage == nil then
       treeImage = false
@@ -341,6 +351,8 @@ return function(deps)
         -- (graded as their tree texture loads: saturated, the crowns brightened; the shader
         -- leaves the trees' meshes ungraded, src/scene/light.lua)
         local okD, data = pcall(love.image.newImageData, path)
+        -- (kept as drawn too: a trunk's ground laid on the relief, whose atlas the shader grades)
+        if okD and data then treeRaw = data:clone() end
         if okD and data and Light then pcall(Light.gradeTrees, data) end
         local ok, img = pcall(G.newImage, okD and data or path)
         if ok and img then
@@ -3239,6 +3251,31 @@ return function(deps)
               return metatileUV(o.pair, o.mid)
             end
             function B.metatileUV(mt) return metatileUV(c.pair, mt) end
+            -- a tree's trunk ground (src/scene/trees.lua) for the relief to lay it on a slope: the
+            -- art as drawn, the crowns' areas brightened as their tree texture is (the shader
+            -- saturates this atlas as their grade does the tree texture)
+            function B.treeUV(x, y)
+              local o = grid.at(x, y)
+              if not (o and o.pair and o.mid and Trees and treeRaw) then return nil end
+              local sec, general = Trees.tilesets(o.pair)
+              local part = general and Trees.part(sec, o.mid)
+              if not part then return nil end
+              local tx, ty, decal = Trees.groundArt(sec, o.mid, part)
+              if decal then return nil end
+              return rect(slotOf("tree:" .. tx .. "," .. ty, function(xx, yy)
+                local X, Y = tx + xx, ty + yy
+                local r, g, b = treeRaw:getPixel(X, Y)
+                for _, cr in ipairs(Light and Light.CROWNS or {}) do
+                  if X >= cr[1] and X < cr[1] + cr[3] and Y >= cr[2] and Y < cr[2] + cr[4] then
+                    local f = Light.TREE_BRIGHTNESS
+                    local function br(v) return math.min(31, math.floor(math.floor(v * 31 + 0.5) * f + 0.5)) / 31 end
+                    r, g, b = br(r), br(g), br(b)
+                    break
+                  end
+                end
+                return { r, g, b }
+              end))
+            end
             function B.cutUV(k)
               local v = R.variants[k]
               if not v then return nil end
@@ -3338,6 +3375,8 @@ return function(deps)
     local Profile = req("src.core.game3.profile")
     local okV, gameId = pcall(function() return Profile.active().id end)
     local hoenn = okV and (gameId == "emerald" or gameId == "ruby" or gameId == "sapphire")
+    -- (the game's own behaviours: Kanto's tall grass includes the Cycling Road's, src/scene/cells.lua)
+    env.kanto = okV and (gameId == "firered" or gameId == "leafgreen")
     -- whether a metatile is a tree's that stands as a cut-out: in Kanto's games only (Hoenn's trees
     -- are models, and nothing else stands there: Mossdeep's ledges, half grass, are no trees), a
     -- primary tileset's drawn as leaves (Emerald 3DS's foliage test: half its drawn pixels green)
@@ -3606,6 +3645,88 @@ return function(deps)
       end
     end
     phase("relief")
+    -- the trees' cells (Emerald 3DS's voxel_battle.c ReadCell, voxel_tree.c AgainstRock and
+    -- EmitGround), on an outdoor map drawn with the General tileset:
+    --   * for the stage search, a small tree's trunk 1.8 tiles tall, a 2x2 tree's cells and a
+    --     cell its crown leans over 2.4; long grass is the ground a battle stands on;
+    --   * against rock: a cliff or shelf two rows north (one, for a 2x2 tree), or the cell north of
+    --     it (two, for a 2x2 tree) a quarter tile higher in the same map; a 2x2 tree's columns
+    --     stand alike (src/scene/trees.lua);
+    --   * where the relief lays its ground (Relief.treeGround: a band's rock, a one-level slope)
+    -- (tree cells, those standing steeper, those whose ground is the band's rock or the slope's)
+    local treeTally = { cells = 0, steep = 0, rock = 0, slope = 0 }
+    if Trees and not env.indoor then
+      local function placeOf(x, y)
+        local d, lx, ly, id = env.where(x, y)
+        if not (d and id) then return nil end
+        return lx, ly, id
+      end
+      local function liftOf(o) return o and o.g and Relief and Relief.centre(o.g) / 16 or 0 end
+      local function againstRock(x, y, part)
+        local lx, ly, id = placeOf(x, y)
+        if not lx then return false end
+        local L = World and World.layout(id)
+        local r = L and World.roles(L)
+        local function roleAt(dy)
+          if not r or ly - dy < 0 then return nil end
+          local okR, role = pcall(r.role, lx, ly - dy)
+          return okR and role or nil
+        end
+        local large = part ~= Trees.SMALL and part ~= Trees.GRASS
+        local behind, over = roleAt(2), roleAt(1)
+        if behind == "cliff" or behind == "shelf" then return true end
+        if large and (over == "cliff" or over == "shelf") then return true end
+        local lift = liftOf(grid.at(x, y))
+        local function higher(dy)
+          local nx, ny, nid = placeOf(x, y - dy)
+          if not (nx and nid == id and ny == ly - dy) then return false end
+          return liftOf(grid.at(x, y - dy)) > lift + 0.25
+        end
+        if higher(1) then return true end
+        return large and higher(2)
+      end
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local c = grid.rows[j][i]
+          if c.pair and c.mid and c.kind ~= "void" and not c.border and not c.model then
+            local sec, general = Trees.tilesets(c.pair)
+            if general then
+              local part = Trees.part(sec, c.mid)
+              local top
+              if part and part ~= Trees.GRASS then
+                top = part == Trees.SMALL and 1.8 or 2.4
+              elseif Trees.groundMetatile(sec, c.mid) ~= c.mid then
+                top = 2.4
+              end
+              if top and top > (c.top or 0) then c.top = top end
+              if part then
+                local rock = againstRock(c.cx, c.cy, part)
+                if not rock and (part == 2 or part == 3) then
+                  local ox = part == 2 and c.cx + 1 or c.cx - 1
+                  local _, _, id = placeOf(c.cx, c.cy)
+                  local _, _, oid = placeOf(ox, c.cy)
+                  if id and oid == id then rock = againstRock(ox, c.cy, part) end
+                end
+                c.treeRock = rock
+                local _, _, decal = Trees.groundArt(sec, c.mid, part)
+                if Relief and c.g and c.rmap and c.rmap.L and not decal and Trees.laysGround(sec, c.mid) then
+                  local L = c.rmap.L
+                  c.treeGround = Relief.treeGround(c.g, L.cuts and L.cuts[c.ly * L.w + c.lx])
+                end
+                treeTally.cells = treeTally.cells + 1
+                if rock then treeTally.steep = treeTally.steep + 1 end
+                if c.treeGround then
+                  treeTally[c.treeGround] = treeTally[c.treeGround] + 1
+                  if #treeTally < 8 then treeTally[#treeTally + 1] = ("%d,%d:%s"):format(c.cx, c.cy, c.treeGround) end
+                end
+              end
+            end
+          end
+        end
+      end
+    end
+    hd.stats.sceneTrees = ("%d cells, %d steeper, ground on rock %d, on a slope %d (%s)"):format(treeTally.cells,
+      treeTally.steep, treeTally.rock, treeTally.slope, table.concat(treeTally, " "))
     local stage = Stage.search(Camera, grid, {
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
       void = env.walled,
@@ -3726,7 +3847,7 @@ return function(deps)
       to = Camera.pose(stage.tx, stage.tz + (stage.ty or 0), nil, nil, stage.ty),
       progress = 0, frames = 0, haze = haze, fog = indoor and Scene.FOG.indoor or Scene.FOG.outdoor,
       -- (Emerald 3DS's indoor, no haze: MAP_TYPE_INDOOR or SECRET_BASE; a cave's fog goes dark)
-      walled = env.walled, cave = tonumber(env.def and env.def.mapType) == 3, frameH = grid.frameH,
+      walled = env.walled, cave = tonumber(env.def and env.def.mapType) == 4, frameH = grid.frameH,
       shadows = shadows, live = live,
     }
   end
@@ -3819,6 +3940,29 @@ return function(deps)
     light.seconds = love.timer.getTime()
     light.sunDir = Lighting and Lighting.SUN or nil
     light.impact = Camera.TRAVEL and s.progress and require_impact(s.progress) or 0
+    -- (the weather in the scene, src/scene/weather.lua: as Emerald 3DS's CtrVoxel_Draw reads it,
+    -- none of it indoors; the fog's banks outdoors only, dark in a cave)
+    local class = Light.class(weather)
+    if not s.walled then
+      light.fogDensity = Light.fogDensity(state)
+      light.cave = s.cave
+      if class == "rain" or class == "sand" or class == "ash" then
+        light.weather, light.weatherAmount = class, Light.amount(state)
+        light.lightning = Light.lightning(state)
+      end
+    end
+    -- (CtrVoxel_DrawsSand: the world blows the sandstorm itself, src/gen3.lua drops the battle's
+    -- sandstorm picture)
+    s.drawsSand = light.weather == "sand" and (light.weatherAmount or 0) > 0 and Render.Weather ~= nil
+    hd.stats.sceneWeather = ("%s %.2f, fog %.2f, bolt %.2f"):format(light.weather or "none",
+      light.weatherAmount or 0, light.fogDensity or 0, light.lightning or 0)
+    -- (the shot: the entrance's effects and the diorama's blur, src/scene/screenfx.lua)
+    local F = Render.ScreenFx
+    if F then
+      light.intro = F.intro(s.progress or 1, s.frames or 0, Camera.TRAVEL)
+      light.diorama = Scene.blur or 0
+      s.intro = light.intro
+    end
     -- (the sun dapples: their pattern, drifting, over the world as it stands in their frame)
     light.dappleImage = dappleImage()
     if light.dappleImage then
@@ -3886,9 +4030,31 @@ return function(deps)
     local proj, depth = Camera.screenProjection(u0, v0, bsx, bsy)
     local pose = Camera.glide(s.from, s.to, s.progress)
     local haze, fog, sky, light = hazeFor(s, pose)
+    -- (the world shows beside the text box when the UI's box is narrower than the view: the
+    -- vignette runs on down there, src/scene/screenfx.lua)
+    local ui = item.ui
+    if light then
+      light.introLow = ui ~= nil and (ui[1] > x + 1 or ui[1] + ui[3] < x + w - 1)
+    end
     local c = Render.draw(G, Camera, s, pose, proj, depth, smooth(s.progress), haze, fog, w, h, sky, light)
     if not c then return nil end
     return c, x, y
+  end
+
+  --- Whether this battle state's scene is blowing its own sandstorm (Emerald 3DS's
+  --- CtrVoxel_DrawsSand): the battle's 2D sandstorm picture is left out over it.
+  function Scene.drawsSand(st)
+    local s = Scene.current(st)
+    return s ~= nil and s.drawsSand == true
+  end
+
+  --- hd.sceneOverlay: over everything of a composite that drew the world (`item`), in the view's
+  --- rect `box`: the entrance's cinema bars (src/scene/screenfx.lua). G is set up to draw on it.
+  function Scene.overlay(item, box)
+    local s = item and item.scene
+    local F = Render.ScreenFx
+    if not (s and s.intro and F) then return end
+    F.bars(G, box[1], box[2], box[3], box[4], s.intro.bars)
   end
 
   return Scene
