@@ -98,7 +98,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Game Corner, Silph Co., the Pokémon Mansion, Cinnabar's capsule-shaped lab, the Power Plant
   with its four smokestacks, the Pokémon League with its trees and statues, Bill's sea cottage
   with his machine on the roof, the route gatehouses, the Cycling Road's gate, and the islands'
-  houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them.
+  houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them, and
+  Kanto's pine trees stand as real trees too, their crowns and trunks drawn from your own cartridge.
 - 🛋️ **Furnished rooms:** In Emerald, battles indoors take place in furnished rooms, rebuilt
   from their own art: the Pokémon Centers and Poké Marts (the counter with its Poké Balls, the
   healing machine, stools, the escalator), the houses of Littleroot and the common houses of
@@ -184,11 +185,11 @@ Open **OPTIONS → MODS → WoobleView**.
   you play. Changed your mind while it builds? Press B and it carries on in the background while
   you play. Say no and it never asks again; you can switch it on any time in **OPTIONS → MODS →
   WoobleView**. Its messages carry the WoobleView name, so you always know which mod is asking.
-- **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's trees stand as
-  real trees with leafy crowns, and in Emerald most of its town buildings, fences, hedges, curbs
+- **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
+  trees stand as real trees with leafy crowns (Kanto's rare one-wide saplings as flat cut-outs of
+  their overworld art), and in Emerald most of its town buildings, fences, hedges, curbs
   and railings stand in 3D too, as do the buildings of FireRed and LeafGreen. Signs, street lamps
-  and posts stand as little solids of their own pixels, and Kanto's trees as flat cut-outs of
-  their overworld art. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
+  and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them, and
   the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
   read off your own cartridge the first time you play (it builds quietly in the background for a
@@ -235,8 +236,8 @@ Open **OPTIONS → MODS → WoobleView**.
 ## 💡 Inspirations
 
 - [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS) by
-  NachoGonzalez2001 first showed Kanto standing in 3D. WoobleView's FireRed and LeafGreen buildings
-  and land are its own reading of the games' art, by Emerald 3DS's method.
+  NachoGonzalez2001 first showed Kanto standing in 3D. WoobleView's FireRed and LeafGreen buildings,
+  land and trees are its own reading of the games' art, by Emerald 3DS's method.
 
 ---
 

@@ -99,4 +99,24 @@ F.terraces = {
   groups = "drawn",
 }
 
+-- Kanto's General tree (src/scene/trees.lua, Trees.useGame): built as Hoenn's is - 2x2, a crown row
+-- whose upper layer covers the player over a trunk row, stacked through the woods - and stood as
+-- the same model. Read off FireRed's drawing on Route 2, Pallet Town and Viridian Forest:
+--   * crown row: 01E / 01F alone on grass, 01C / 01D with the tree above's foot behind;
+--   * trunk row: 024 / 025 alone on grass (the trunk shows), 014 / 015 and 016 / 017 with the next
+--     tree's crown or the wood's edge behind, 026 / 027 on the darker ground;
+--   * the crown's tip is drawn in the cell above the tree: 00E / 00F, grass under it (001's).
+-- Every variant stands as the one tree (its art, Trees.kantoArt, read off the alone tree's three
+-- rows); 01A-01B and 012-013 / 022-023 (a one-wide tree, a handful of cells in all) stay as drawn.
+F.trees = {
+  general = F.general,
+  parts = {
+    [0x01C] = 0, [0x01E] = 0, [0x01D] = 1, [0x01F] = 1,
+    [0x014] = 2, [0x016] = 2, [0x024] = 2, [0x026] = 2,
+    [0x015] = 3, [0x017] = 3, [0x025] = 3, [0x027] = 3,
+  },
+  alone = { tip = { 0x00E, 0x00F }, crown = { 0x01E, 0x01F }, trunk = { 0x024, 0x025 } },
+  ground = { [0x00E] = 0x001, [0x00F] = 0x001 },
+}
+
 return F

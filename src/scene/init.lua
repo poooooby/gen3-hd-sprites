@@ -31,7 +31,7 @@ return function(deps)
   if Render and deps.ScreenFx then Render.ScreenFx = deps.ScreenFx end
   local hd = deps.hd
 
-  local Scene = { enabled = false, Camera = Camera }
+  local Scene = { enabled = false, Camera = Camera, Tune = deps.Tune, Trees = deps.Trees }
 
   -- love.graphics as it really is (the functions WoobleView wraps, unwrapped)
   local G = setmetatable({}, { __index = function(_, k) return hd.real[k] or love.graphics[k] end })
@@ -340,10 +340,52 @@ return function(deps)
   end
   local shadows
 
-  -- the trees' art (assets/scene/trees.png), loaded once; false when it cannot be
+  -- the trees' art (assets/scene/trees.png), loaded once; false when it cannot be. Kanto's is read
+  -- off the player's own tiles instead (Trees.kantoArt), once a game, through a pair of the scene
+  -- with its General tileset; treeCrowns: the art's crowns (graded brighter, src/scene/light.lua)
   local treeImage
   local treeRaw
-  local function treesArt()
+  local treeCrowns
+  local hoennRaw
+  local kantoTrees = {}     -- [game] = { image, raw } or false
+  local pixelSource
+  local function treesArt(NativeTileset, grid)
+    local Tr = deps.Trees
+    if Tr and Tr.kanto then
+      local game = tostring(deps.Family and deps.Family.game() or "?")
+      local k = kantoTrees[game]
+      if k == nil then
+        k = false
+        local pair
+        for j = 0, grid and grid.h - 1 or -1 do
+          for i = 0, grid.w - 1 do
+            local c = grid.rows[j][i]
+            if not pair and c.pair and select(2, Tr.tilesets(c.pair)) then pair = c.pair end
+          end
+        end
+        local src = pair and NativeTileset and pixelSource(NativeTileset, pair)
+        if src then
+          local data = love.image.newImageData(Tr.KANTO_W, Tr.KANTO_H)
+          local n = Tr.kantoArt(function(mid, layer, x, y)
+            if layer == 1 then return src.over(mid, x, y) end
+            return src.under(mid, x, y)
+          end, function(x, y, r, g, b, a) data:setPixel(x, y, r, g, b, a) end)
+          if n > 0 then
+            local raw = data:clone()
+            if Light then pcall(Light.gradeTrees, data, Tr.KANTO_CROWNS) end
+            local ok, img = pcall(G.newImage, data)
+            if ok and img then
+              img:setFilter("nearest", "nearest")
+              k = { image = img, raw = raw }
+            end
+          end
+        end
+        kantoTrees[game] = k
+      end
+      treeRaw, treeCrowns = k and k.raw or nil, Tr.KANTO_CROWNS
+      return k and k.image or nil
+    end
+    treeCrowns = Light and Light.CROWNS or nil
     if treeImage == nil then
       treeImage = false
       if Trees and deps.path then
@@ -352,7 +394,7 @@ return function(deps)
         -- leaves the trees' meshes ungraded, src/scene/light.lua)
         local okD, data = pcall(love.image.newImageData, path)
         -- (kept as drawn too: a trunk's ground laid on the relief, whose atlas the shader grades)
-        if okD and data then treeRaw = data:clone() end
+        if okD and data then hoennRaw = data:clone() end
         if okD and data and Light then pcall(Light.gradeTrees, data) end
         local ok, img = pcall(G.newImage, okD and data or path)
         if ok and img then
@@ -361,6 +403,7 @@ return function(deps)
         end
       end
     end
+    treeRaw = hoennRaw
     return treeImage or nil
   end
 
@@ -394,6 +437,8 @@ return function(deps)
     local F = family()
     return not (F and F.namespace)
   end
+  -- (dev: the game being played now, as the scene names it - the workshop's tune file's)
+  function Scene._game() family(); return famGame end
   -- every plain module that reads tileset names or cuts, told the game's family
   local function useFamily()
     local F = family()
@@ -402,6 +447,12 @@ return function(deps)
     end
     -- (and the game's own rock, src/scene/games/: Emerald 3DS's for Emerald)
     if deps.Roles and deps.Roles.useGame then deps.Roles.useGame(deps.Games and deps.Games[famGame] or nil) end
+    -- (its own tree - Kanto's; Hoenn's are the module's own - and the workshop's settings for its
+    -- trees, src/scene/tune.lua)
+    if deps.Trees and deps.Trees.useGame then
+      deps.Trees.useGame(deps.Games and deps.Games[famGame] or nil)
+      deps.Trees.useTune(deps.Tune and deps.Tune.group(famGame, "trees") or nil)
+    end
     -- (and its own buildings)
     local own = deps.SpecsByGame and deps.SpecsByGame[famGame]
     if own then Specs = own
@@ -447,7 +498,7 @@ return function(deps)
   -- shows more than one colour where its middle is clear (a NORMAL one shows only the backdrop
   -- there) is COVERED: its upper layer is its middle.
   local srcCache = setmetatable({}, { __mode = "k" })
-  local function pixelSource(NativeTileset, pair)
+  function pixelSource(NativeTileset, pair)
     local ok, ts = pcall(NativeTileset.get, pair)
     if not (ok and type(ts) == "table" and ts.imageData and ts.midToSlot) then return nil end
     if srcCache[ts] then return srcCache[ts] end
@@ -3495,7 +3546,7 @@ return function(deps)
               return rect(slotOf("tree:" .. tx .. "," .. ty, function(xx, yy)
                 local X, Y = tx + xx, ty + yy
                 local r, g, b = treeRaw:getPixel(X, Y)
-                for _, cr in ipairs(Light and Light.CROWNS or {}) do
+                for _, cr in ipairs(treeCrowns or {}) do
                   if X >= cr[1] and X < cr[1] + cr[3] and Y >= cr[2] and Y < cr[2] + cr[4] then
                     local f = Light.TREE_BRIGHTNESS
                     local function br(v) return math.min(31, math.floor(math.floor(v * 31 + 0.5) * f + 0.5)) / 31 end
@@ -3923,6 +3974,11 @@ return function(deps)
                   local L = c.rmap.L
                   c.treeGround = Relief.treeGround(c.g, L.cuts and L.cuts[c.ly * L.w + c.lx])
                 end
+                -- (the workshop's mark for this tree's cell, src/scene/tune.lua)
+                if deps.Tune and deps.Tune.hasMarks(famGame) then
+                  local lx, ly, id = placeOf(c.cx, c.cy)
+                  c.treeMark = id and deps.Tune.markAt(famGame, id, lx, ly) or nil
+                end
                 treeTally.cells = treeTally.cells + 1
                 if rock then treeTally.steep = treeTally.steep + 1 end
                 if c.treeGround then
@@ -3990,7 +4046,7 @@ return function(deps)
     local okLt, light = pcall(sceneLighting, grid, env, maps, signs)
     if not okLt then hd.stats.sceneLightError, light = tostring(light), nil else hd.stats.sceneLightError = nil end
     local lists = Render.vertices(grid, tilesFor(NativeTileset), px, py,
-      { Trees = Trees, image = treesArt(), outdoor = not env.indoor },
+      { Trees = Trees, image = treesArt(NativeTileset, grid), outdoor = not env.indoor },
       { Buildings = Buildings, placements = placed, solids = solidColours() }, light)
     if lists.skirts and hd.stats.sceneRelief then
       local k = lists.skirts
@@ -4092,6 +4148,8 @@ return function(deps)
       -- (Emerald 3DS's indoor, no haze: MAP_TYPE_INDOOR or SECRET_BASE; a cave's fog goes dark)
       walled = env.walled, cave = tonumber(env.def and env.def.mapType) == 4, frameH = grid.frameH,
       shadows = shadows, live = live,
+      -- (for the Scene Workshop, tests/drivers/workshop.lua: what stands where, and each cell's map)
+      grid = grid, where = env.where, game = famGame,
     }
   end
 
@@ -4110,6 +4168,7 @@ return function(deps)
       end
       s = made or false
       built[st] = s
+      if made then made.wallpaper = wallpaper end
       hd.stats.scene = made and "built" or tostring(why or "failed")
       if made then
         hd.stats.sceneScore = math.floor(made.stage.score * 10 + 0.5) / 10
@@ -4117,8 +4176,23 @@ return function(deps)
       end
     end
     Scene.last = s or nil
+    Scene.lastSt = st
     return s or nil
   end
+
+  --- (dev: the Scene Workshop) The last battle's scene built again - after a tuning change - at
+  --- the same pose and progress. Returns it, or nil and why.
+  function Scene._rebuild()
+    local st, old = Scene.lastSt, Scene.last
+    if not (st and old) then return nil, "no scene" end
+    useFamily()
+    built[st] = nil
+    local s = Scene.forBattle(st, old.key, old.wallpaper)
+    if not s then return nil, hd.stats.sceneError or hd.stats.scene end
+    s.to, s.progress, s.frames = old.to, old.progress, old.frames
+    return s
+  end
+
 
   --- This battle state's scene if it is built (never builds one), or nil.
   function Scene.current(st)
@@ -4229,6 +4303,18 @@ return function(deps)
     end
     hd.stats.sceneHaze = ("%s %.2f from %.2f over %.2f"):format(Light.class(weather), light.haze, light.start, light.ramp)
     return light.rgb, Light.range(light, pose.dist), s.haze, light
+  end
+
+  --- (dev: the Scene Workshop) The last scene from any pose, w x h screen pixels at k screen
+  --- pixels a canvas pixel (the camera's fixed lens: its 160 rows span h / k), settled: a canvas.
+  function Scene._view(pose, w, h, k)
+    local s = Scene.last
+    if not (s and s.meshes) then return nil end
+    local u0, v0 = Camera.CX - w / (2 * k), Camera.CY - h / (2 * k)
+    local proj, depth = Camera.screenProjection(u0, v0, k, k)
+    local haze, fog, sky, light = hazeFor(s, pose)
+    if light then light.intro, light.diorama, light.impact = nil, 0, 0 end
+    return Render.draw(G, Camera, s, pose, proj, depth, 1, haze, fog, w, h, sky, light), u0, v0
   end
 
   --- (tests) The last scene alone at its settled pose, w x h (the battle canvas scaled to it):

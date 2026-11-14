@@ -1334,5 +1334,94 @@ do
   check(Pr.NUM_PRIMARY == 512 and Pr.behaviour(600) == 88, "an Emerald pair cuts at 512")
 end
 
+-- ------------------------------------------------------------------ the workshop's tuning
+do
+  local Tune = dofile("src/scene/tune.lua")
+  local g = Tune.group("firered", "trees")
+  check(g.lean == 50 and g.height == 1 and g.sink == 0.10 and g.foot == nil,
+    "with no tune file a game's settings are the models' own")
+  Tune.set("firered", "trees", "lean", 65.123456)
+  check(Tune.group("leafgreen", "trees").lean == 65.1235, "a setting is kept to four places, and LeafGreen shares FireRed's")
+  Tune.set("firered", "trees", "lean", 200)
+  check(Tune.group("firered", "trees").lean == 90, "...and held to its range")
+  Tune.setMark("firered", "FR_ROUTE_2", 6, 0, "trees", "lean", 25)
+  Tune.setMark("firered", "FR_ROUTE_2", 6, 0, "trees", "hide", true)
+  local m = Tune.markAt("firered", "FR_ROUTE_2", 6, 0)
+  check(m and m.trees.lean == 25 and m.hide == true and Tune.hasMarks("firered"), "a cell's mark: a setting and hide")
+  local src = Tune.source("firered")
+  local T2 = dofile("src/scene/tune.lua")
+  T2.put("firered", assert(load(src))())
+  local m2 = T2.markAt("firered", "FR_ROUTE_2", 6, 0)
+  check(T2.group("firered", "trees").lean == 90 and m2 and m2.trees.lean == 25 and m2.hide == true,
+    "the saved file reads back as it was")
+  Tune.setMark("firered", "FR_ROUTE_2", 6, 0, "trees", "lean", nil)
+  Tune.setMark("firered", "FR_ROUTE_2", 6, 0, "trees", "hide", nil)
+  check(Tune.markAt("firered", "FR_ROUTE_2", 6, 0) == nil and not Tune.hasMarks("firered"), "a mark cleared is gone")
+  check(not Tune.hasMarks("emerald") and Tune.group("emerald", "trees").lean == 50, "...and Emerald's are its own")
+end
+
+-- ------------------------------------------------------------------ Kanto's trees
+do
+  local Trees = dofile("src/scene/trees.lua")
+  local FR = dofile("src/scene/games/firered.lua")
+  local Tune = dofile("src/scene/tune.lua")
+  -- Hoenn's tree drawn with no settings and with Emerald's defaults: the same, to the bit
+  local function cards(tree, mid, mark)
+    local out = {}
+    Trees.emit(function(a, b, c, d, u0, v0, u1, v1, kind)
+      out[#out + 1] = table.concat({ a[1], a[2], a[3], b[2], c[2], c[3], d[3], u0, v0, v1, kind }, ",")
+    end, tree, mid, 5, 5, 0, function() return 2 end, { mark = mark })
+    return table.concat(out, ";")
+  end
+  local hoenn = cards("petalburg", 0x1D4)
+  Trees.useTune(Tune.group("emerald", "trees"))
+  check(cards("petalburg", 0x1D4) == hoenn, "Hoenn's tree with Emerald's default settings is drawn exactly as before")
+  Trees.useTune(nil)
+  -- Kanto's: FireRed's family and tree
+  Trees.useFamily({ primaryMetatiles = 640, namespace = "fr:", pairNames = function(pair)
+    local p, s = tostring(pair):match("^([^_]+)__(.+)$")
+    return p and "fr:" .. p, s and "fr:" .. s
+  end })
+  Trees.useGame(FR)
+  local sec, general = Trees.tilesets("general__pallet_town")
+  check(general == true and Trees.part(sec, 0x01C) == 0 and Trees.part(sec, 0x01F) == 1 and Trees.part(sec, 0x024) == 2
+    and Trees.part(sec, 0x017) == 3, "Kanto's General tree: its four parts, alone or stacked")
+  check(Trees.part(sec, 0x0E1) == nil and Trees.part(sec, 0x1D4) == nil and Trees.part(sec, 0x2A0) == nil,
+    "...nothing of Hoenn's tables, nor a secondary's")
+  check(Trees.groundMetatile(sec, 0x00E) == 0x001 and Trees.groundMetatile(sec, 0x024) == 0x024,
+    "the tip over grass lays grass; a tree's cell its own")
+  local plain = cards(sec, 0x01E)
+  check(select(2, plain:gsub("card", "")) == 2, "a crown-row cell stands its row and the tip above it")
+  check(cards(sec, 0x01E, { trees = { lean = 25 } }) ~= plain, "a mark's lean changes its cards")
+  check(cards(sec, 0x01E, { hide = true }):find("card") == nil, "a hidden tree keeps its ground alone")
+  -- the art: a 4-colour tree on grass, read apart by the crown's colours
+  local GRASS, LEAF, TRUNK = { 0.4, 0.8, 0.6 }, { 0.2, 0.6, 0.1 }, { 0.3, 0.3, 0.3 }
+  local function px(mid, layer, x, y)
+    if mid == 0x00E or mid == 0x00F then
+      if layer == 1 then if y >= 12 then return LEAF[1], LEAF[2], LEAF[3], 1 end return nil end
+      return GRASS[1], GRASS[2], GRASS[3], 1
+    elseif mid == 0x01E or mid == 0x01F then
+      if layer == 1 then return LEAF[1], LEAF[2], LEAF[3], 1 end
+      return GRASS[1], GRASS[2], GRASS[3], 1
+    elseif mid == 0x024 or mid == 0x025 then
+      if layer == 1 then return nil end
+      if y < 8 then return LEAF[1], LEAF[2], LEAF[3], 1 end
+      if y < 12 and x >= 6 and x < 10 then return TRUNK[1], TRUNK[2], TRUNK[3], 1 end
+      return GRASS[1], GRASS[2], GRASS[3], 1
+    end
+  end
+  local img = {}
+  local n = Trees.kantoArt(px, function(x, y, r, g, b, a) img[y * 128 + x] = { r, g, b, a } end)
+  local function at(x, y) return img[y * 128 + x] end
+  check(n == 2 * 16 * 4 + 2 * 16 * 16 + 2 * 16 * 8, "the crown: the tip's leaves, the crown row's, the trunk row's (" .. n .. ")")
+  check(at(3, 14) and at(3, 14)[2] == LEAF[2] and at(3, 2) == nil, "...the tip's leaves on the crown, its sky clear")
+  check(at(3, 32 + 4) and at(3, 32 + 4)[2] == LEAF[2] and at(7, 32 + 10) == nil,
+    "the trunk row's leaves on the crown, its trunk not")
+  check(at(32 + 7, 32 + 10)[1] == TRUNK[1] and at(32 + 3, 32 + 4)[2] == GRASS[2],
+    "the trunk on the ground, and the grass where the crown was")
+  Trees.useGame(nil)
+  Trees.useFamily(nil)
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

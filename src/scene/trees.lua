@@ -37,12 +37,32 @@ function Trees.useFamily(F)
   SECONDARY = F and F.primaryMetatiles or 0x200
 end
 
+-- Another game's own tree (src/scene/games/<game>.lua's `trees`; nil: Hoenn's, below): Kanto's
+-- General tree is built as Hoenn's is - 2x2, a crown row whose upper layer covers the player over a
+-- trunk row, stacked through the woods - and stands as the same model, its art read off the
+-- player's own tiles (Trees.kantoArt). { general = the primary's name, parts = { [mid] = part },
+-- alone = { tip, crown, trunk } (the tree alone on grass: each a row's two metatiles), ground =
+-- { [mid] = mid } (a cell drawing only a crown's tip over something else) }
+Trees.kanto = nil
+function Trees.useGame(G)
+  Trees.kanto = type(G) == "table" and type(G.trees) == "table" and G.trees or nil
+end
+
+-- The workshop's settings (src/scene/tune.lua: lean, height, foot, sink), the game's; nil: the
+-- models' own constants
+Trees.tune = nil
+function Trees.useTune(t) Trees.tune = t end
+
 --- The secondary tileset of an engine tileset pair ("general__petalburg" -> "petalburg"),
 --- without underscores; and whether the pair's primary is the General tileset.
 function Trees.tilesets(pair)
   local p, s
   if Trees.family and Trees.family.namespace then
     p, s = Trees.family.pairNames(pair)
+    if not p then return nil, false end
+    -- (Kanto's: its own General, by its family's name; Hoenn's tables never)
+    local K = Trees.kanto
+    return (s:gsub("_", "")):lower(), K ~= nil and p:lower() == tostring(K.general):lower()
   else
     p, s = tostring(pair or ""):match("^([^_]+)__(.+)$")
   end
@@ -122,6 +142,7 @@ local GENERAL = {
 
 --- The tree part a metatile is (0-3 a 2x2 tree's, SMALL, GRASS), or nil.
 function Trees.part(sec, m)
+  if Trees.kanto then return m < SECONDARY and Trees.kanto.parts[m] or nil end
   if m >= SECONDARY then
     local part = ownLarge(sec, m)
     if part then return part end
@@ -135,6 +156,7 @@ end
 
 --- Whether a tree part's cell lays its own ground (not over water the ground pass lays).
 function Trees.laysGround(sec, m)
+  if Trees.kanto then return true end
   if m >= SECONDARY then
     local part, ground = ownLarge(sec, m)
     if part and ground == OWN_SHALLOWS then return false end
@@ -156,6 +178,7 @@ local GENERAL_GROUND = {
 --- The metatile the ground under a cell is drawn with: a crown's top over something else is
 --- that something else.
 function Trees.groundMetatile(sec, m)
+  if Trees.kanto then return m < SECONDARY and Trees.kanto.ground and Trees.kanto.ground[m] or m end
   if m >= SECONDARY then
     local own = OWN_GROUND[sec] and OWN_GROUND[sec][m]
     if own then return own end
@@ -187,7 +210,16 @@ local OWN_ART = {
   [OWN_SOIL] = { crownX = 96, crownY = 64, rowPx = 16, groundX = 0, groundY = 80, foot = 1.00 },
   [OWN_ASH] = { crownX = 96, crownY = 64, rowPx = 16, groundX = 32, groundY = 80, foot = 1.00 },
 }
+-- Kanto's tree in its art (Trees.kantoArt, its top left 64 x 48): the crown's three rows down the left half (its
+-- tip, the crown row, the trunk row's leaves), the ground of its rows down the right
+local KANTO_ART = { crownX = 0, crownY = 16, rowPx = 16, groundX = 32, groundY = 16, foot = 0.70, tip = 16 }
+-- (laid in an atlas of the Hoenn art's size: the tree meshes' uvs are texels over Trees.DIM)
+Trees.KANTO_W, Trees.KANTO_H = 128, 128
+-- the art's crowns (graded brighter as the tree texture loads: src/scene/light.lua gradeTrees)
+Trees.KANTO_CROWNS = { { 0, 0, 32, 48 } }
+
 local function largeArt(sec, m)
+  if Trees.kanto then return KANTO_ART end
   if m >= SECONDARY then
     local part, ground = ownLarge(sec, m)
     if part then return OWN_ART[ground] end
@@ -208,21 +240,43 @@ local function ground(put, x, z, u0, v0, u1, v1, lift)
   put({ x, y, z }, { x + 1, y, z }, { x + 1, y, z + 1 }, { x, y, z + 1 }, u0, v0, u1, v1, "ground")
 end
 
+-- a setting: the cell's mark's, else the game's (Trees.tune), else nil (the model's own)
+local function setting(mark, key)
+  local m = mark and mark.trees
+  if m and m[key] ~= nil then return m[key] end
+  local t = Trees.tune
+  return t and t[key] or nil
+end
+
 -- one row of a large crown over the cell (x, y), column col, row row of a tree whose trunk row
--- is y - row + 1
-local function crownCard(put, art, x, y, col, row, steep)
+-- is y - row + 1; and above the crown row, the tip the art has (art.tip texels, Kanto's: drawn in
+-- the cell above the tree)
+local function crownCard(put, art, x, y, col, row, steep, mark)
   local u0 = art.crownX + col * 16
   local v0 = art.crownY + row * art.rowPx
-  local length = art.rowPx / 8
+  local length = art.rowPx / 8 * (setting(mark, "height") or 1)
   -- (against rock or higher ground behind the trunk, a tileset's own tree stands up steeper)
-  local rise, run = 0.766044 * length, (steep and 0.4 or 0.642788) * length
-  local baseZ = y - row + 1 + art.foot
+  local lean = setting(mark, "lean")
+  local up, back = 0.766044, 0.642788
+  if lean and lean ~= 50 then up, back = math.sin(math.rad(lean)), math.cos(math.rad(lean)) end
+  local rise, run = up * length, (steep and 0.4 or back) * length
+  local baseZ = y - row + 1 + (setting(mark, "foot") or art.foot)
+  local sink = setting(mark, "sink")
+  local base = sink and -sink or BASE_HEIGHT
   local top, bottom = 1 - row * 0.5, 0.5 - row * 0.5
-  put({ x, BASE_HEIGHT + top * rise, baseZ - top * run },
-      { x + 1, BASE_HEIGHT + top * rise, baseZ - top * run },
-      { x + 1, BASE_HEIGHT + bottom * rise, baseZ - bottom * run },
-      { x, BASE_HEIGHT + bottom * rise, baseZ - bottom * run },
+  put({ x, base + top * rise, baseZ - top * run },
+      { x + 1, base + top * rise, baseZ - top * run },
+      { x + 1, base + bottom * rise, baseZ - bottom * run },
+      { x, base + bottom * rise, baseZ - bottom * run },
       u0, v0, u0 + 16, v0 + art.rowPx, "card")
+  if row == 0 and art.tip then
+    local tip = 1 + art.tip / (2 * art.rowPx)
+    put({ x, base + tip * rise, baseZ - tip * run },
+        { x + 1, base + tip * rise, baseZ - tip * run },
+        { x + 1, base + top * rise, baseZ - top * run },
+        { x, base + top * rise, baseZ - top * run },
+        u0, v0 - art.tip, u0 + 16, v0, "card")
+  end
 end
 
 -- a small tree's or a tuft's art: its card's top left, its ground's, and whether it is Dewford's
@@ -264,13 +318,15 @@ end
 --- Emit a tree part's cell at (x, y) (map cells). partAt(x, y) -> the tree part of another cell
 --- of the same map, or nil (for the crown's other row). o: { rock (it stands against rock or
 --- higher ground: AgainstRock), noGround (the relief lays its ground: on the rock of a band, or
---- on a one-level slope) }, or nil.
+--- on a one-level slope), mark (the cell's workshop mark, src/scene/tune.lua: its settings, or
+--- hide: its ground alone) }, or nil.
 function Trees.emit(put, sec, m, x, y, part, partAt, o)
   o = o or {}
   if part == Trees.SMALL or part == Trees.GRASS then
     smallCell(put, sec, m, x, y, part, o)
     return
   end
+  local mark = o.mark
   local art = largeArt(sec, m)
   local col, row = part % 2, math.floor(part / 2)
   local u0, v0 = art.groundX + col * 16, art.groundY + row * 16
@@ -281,9 +337,10 @@ function Trees.emit(put, sec, m, x, y, part, partAt, o)
     ground(put, x, y, u0, v0, u0 + 16, v0 + 16, 0)
   end
   -- (only a tileset's own tree stands up steeper)
-  local own = m >= SECONDARY and ownLarge(sec, m) ~= nil
+  local own = not Trees.kanto and m >= SECONDARY and ownLarge(sec, m) ~= nil
   local steep = o.rock and own
-  crownCard(put, art, x, y, col, row, steep)
+  if mark and mark.hide then return end
+  crownCard(put, art, x, y, col, row, steep, mark)
   -- the crown's other row, when that row's cell is something else drawn over the tree (a General
   -- tree's only inside its own map: across the edge the next map's cells answer; a tileset's own
   -- tree's always, as its crown row is never a part)
@@ -292,7 +349,64 @@ function Trees.emit(put, sec, m, x, y, part, partAt, o)
   local otherPart = partAt(x, other)     -- a part, nil (none), or false (outside this map)
   if otherPart == partner then return end
   if not own and otherPart == false then return end
-  crownCard(put, art, x, other, col, 1 - row, steep)
+  crownCard(put, art, x, other, col, 1 - row, steep, mark)
+end
+
+--- Kanto's tree art (Trees.KANTO_W x KANTO_H), read off the player's own tiles: px(mid, layer, x, y)
+--- -> r, g, b, a (0-1; nil or a < 0.5 where that layer draws nothing), set(x, y, r, g, b, a).
+--- The tree alone on grass (Trees.kanto.alone) gives each row:
+---   * the crown: the tip row's and crown row's upper layers (what covers the player), and of the
+---     trunk row what is drawn in the crown's own colours (the colours its upper layers use: its
+---     trunk, its shadow and the grass are other colours);
+---   * the ground: each row's lower layer, the trunk row's with the crown's pixels taken off it -
+---     the grass under them the crown row's own, at the same place.
+--- Returns the number of crown texels (0: nothing read).
+function Trees.kantoArt(px, set)
+  local K = Trees.kanto
+  local A = K and K.alone
+  if not (A and A.tip and A.crown and A.trunk) then return 0 end
+  local function key(r, g, b) return math.floor(r * 255 + 0.5) * 65536 + math.floor(g * 255 + 0.5) * 256 + math.floor(b * 255 + 0.5) end
+  local crownColours, n = {}, 0
+  for _, row in ipairs({ A.tip, A.crown }) do
+    for col = 0, 1 do
+      for y = 0, 15 do
+        for x = 0, 15 do
+          local r, g, b, a = px(row[col + 1], 1, x, y)
+          if r and a and a >= 0.5 then crownColours[key(r, g, b)] = true end
+        end
+      end
+    end
+  end
+  for col = 0, 1 do
+    local ox = col * 16
+    for y = 0, 15 do
+      for x = 0, 15 do
+        -- the tip and the crown rows: upper layers on the crown, lower layers on the ground
+        for k, row in ipairs({ A.tip, A.crown }) do
+          local oy = (k - 1) * 16
+          local r, g, b, a = px(row[col + 1], 1, x, y)
+          if r and a and a >= 0.5 then set(ox + x, oy + y, r, g, b, 1); n = n + 1 end
+          local lr, lg, lb, la = px(row[col + 1], 0, x, y)
+          if lr then set(32 + ox + x, oy + y, lr, lg, lb, 1) end
+        end
+        -- the trunk row: its crown's colours on the crown, the rest (and the grass under the crown)
+        -- on the ground
+        local m = A.trunk[col + 1]
+        local r, g, b, a = px(m, 1, x, y)
+        if not (r and a and a >= 0.5) then r, g, b, a = px(m, 0, x, y) end
+        if r then
+          if crownColours[key(r, g, b)] then
+            set(ox + x, 32 + y, r, g, b, 1); n = n + 1
+            local gr, gg, gb = px(A.crown[col + 1], 0, x, y)
+            if gr then set(32 + ox + x, 32 + y, gr, gg, gb, 1) end
+          else
+            set(32 + ox + x, 32 + y, r, g, b, 1)
+          end
+        end
+      end
+    end
+  end
+  return n
 end
 
 return Trees

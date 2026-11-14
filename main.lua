@@ -96,6 +96,16 @@ return function(mod)
     path = mod.path,
     hd = hd,
   }
+  -- (the Scene Workshop's tuning, src/scene/tune.lua, and each game's tune file it wrote; optional)
+  do
+    local Tune = loadSibling(mod, "src/scene/tune.lua", true)
+    if type(Tune) == "table" then
+      for _, file in ipairs({ "emerald", "firered" }) do
+        Tune.put(file, loadSibling(mod, "src/scene/games/" .. file .. "_tune.lua", true))
+      end
+      sceneDeps.Tune = Tune
+    end
+  end
   local specsOf = loadSibling(mod, "src/scene/models/specs.lua")
   local fenceOf = loadSibling(mod, "src/scene/models/fence.lua")
   local componentsOf = loadSibling(mod, "src/scene/models/components.lua")

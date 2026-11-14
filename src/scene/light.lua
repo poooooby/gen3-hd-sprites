@@ -208,12 +208,13 @@ function Light.saturate5(r, g, b)
 end
 
 --- The tree art graded as their tree texture loads: every texel saturated, then the crowns
---- brightened (VoxelGrade_Brighten). data: love ImageData of the 128x128 art, changed in place.
-function Light.gradeTrees(data)
+--- brightened (VoxelGrade_Brighten). data: love ImageData of the 128x128 art, changed in place;
+--- crowns: the art's crowns ({ x, y, w, h }; default Light.CROWNS, the 128x128 art's).
+function Light.gradeTrees(data, crowns)
   local w, h = data:getDimensions()
   local function c5(v) return math.floor(v * 31 + 0.5) end
   local inCrown = {}
-  for _, r in ipairs(Light.CROWNS) do
+  for _, r in ipairs(crowns or Light.CROWNS) do
     for y = r[2], math.min(h, r[2] + r[4]) - 1 do
       for x = r[1], math.min(w, r[1] + r[3]) - 1 do inCrown[y * w + x] = true end
     end

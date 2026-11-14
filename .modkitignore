@@ -29,3 +29,5 @@ tests/drivers/room_dump.lua
 tests/drivers/first_run.lua
 tests/model_check.lua
 tests/drivers/model_check.lua
+tests/drivers/workshop.lua
+tools/workshop.ps1

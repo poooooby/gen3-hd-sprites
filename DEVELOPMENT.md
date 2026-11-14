@@ -1120,10 +1120,55 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - **Helpers:** `pallet_house` (hipped, striped hips), `gable_house` (eave, front and back slopes, an optional chimney), `gym`, `flat_top` (a top flat as drawn, falling away behind), `HipRoof` uses for the Centers, and `slabs`: runs read column by column off an outline (`{ x0, x1, top, foot }`), each a block whose front is projected and whose top falls back at 45 degrees. That fall is edge-on in the GBA's view and faces away from every lower camera. Slabs make the Cinnabar Lab's capsule, the Power Plant's octagon and its stacks, and the trees, statues and gables standing before a wall.
   - **Placement:** `match_rows` skips a top row drawn over different backgrounds. A FireRed-only rule in `Buildings.find` drops a placement lying wholly inside a larger one (one kit drawn at several sizes). `anywhere` lets a kit stand in another secondary tileset when its pixels match: the Sevii houses and harbor, drawn alike in all three of the islands' tilesets.
   - **Model cache:** models are cached by spec name (`models/v<MODELS_VERSION>/<game key>/`). After changing a spec in development, delete the game's folder there (or bump `Scene.MODELS_VERSION`), or the old model is served.
-  - **Left flat for now:** the cranes beside the Sevii harbors and the Power Plant, Vermilion's harbour canopies, Two Island's market stall, Trainer Tower, Mt Ember's volcano rock (no piece table for its Sevii tileset), the boulders on land, and Kanto's trees (cut-out cards: Emerald 3DS's tree art is Hoenn's).
+  - **Left flat for now:** the cranes beside the Sevii harbors and the Power Plant, Vermilion's harbour canopies, Two Island's market stall, Trainer Tower, Mt Ember's volcano rock (no piece table for its Sevii tileset), the boulders on land, and Kanto's one-wide saplings (`01A`-`01B`, `012`-`013`, `022`-`023`: cut-out cards).
 - **FireRed's rooms:** `roomJob` takes the game's own room specs (`deps.RoomSpecsByGame`, loaded by main.lua from `src/scene/models/interior_specs_firered.lua` when that file exists), or Emerald 3DS's for a game drawn with Hoenn's tilesets. FireRed has none yet, so its rooms lie flat as drawn. Its rooms draw with their own primary tileset (`fr:building`). `Interiors.layoutOf` cuts tiles and palettes by the pair's family (640 / 7 in FireRed). A FireRed room spec needs a room proof first (the model check over a room's pieces), as Emerald's rooms had the pak to compare with.
 - **First run (`src/prompt.lua`):** the question and Build 3D Cache come up in the games whose world is built in 3D (`P.GAMES_3D`: Emerald, FireRed, LeafGreen). `Run.TICKS` holds each game's measured build (FireRed 62,662 ticks against Emerald's 117,030; LeafGreen draws the same maps). Measured in the scratch engine: FireRed's whole build in 46 s, LeafGreen's in 41 s. `tests/drivers/first_run.lua` takes `FIRST_RUN_SPOT=MAP:x:y` for another game's field (`FR_ROUTE_1:10:20`).
 - **FireRed's sea rocks (`props.lua`):** `fr_sea_rock` and `fr_sea_rock_pale`, each four General tiles in a square at the corner four metatiles share (as Emerald's sea rock): tiles 420-423 in palette 4 (metatiles 0x110-0x119) and 173/174 over 189/190 in palette 2 (0x1CB-0x1D4). They stand as Mounds on the General's plain water (0x12B), their pale outline the foam. The relief solver's own copy of the objects is unchanged (FireRed's relief bytes stay the same); the rocks' cells are water to it.
+- **Kanto's trees (`src/scene/trees.lua`, `games/firered.lua` `trees`):** Kanto's General tree is
+  built as Hoenn's is (2x2: a crown row whose upper layer covers the player, over a trunk row,
+  stacked through the woods), so it stands as Emerald 3DS's tree model: leaned crown cards, the
+  trunk's ground under them. `Trees.useGame` takes the game's table: its parts (crown row `01C`-`01F`,
+  trunk row `014`-`017`, `024`-`027`), the tree alone on grass (`alone`: tip `00E`/`00F`, crown
+  `01E`/`01F`, trunk `024`/`025`) and the tip cells' ground (`00E`/`00F` lay `001`). Every variant
+  stands as the one tree. Its art is read off the player's own tiles at the scene's first build,
+  once a game (`Trees.kantoArt`, into a 128x128 atlas, `init.lua` `treesArt`): the crown is the tip's
+  and crown row's upper layers plus the trunk row's pixels in the crown's own colours (the colours
+  those upper layers use; trunk, shadow and grass use others); the ground is each row's lower layer,
+  the trunk row's with the crown's pixels replaced by the crown row's grass at the same place. The
+  crown card carries a third strip, the tip (`art.tip`), above the crown row. It is graded as
+  Hoenn's tree texture is, over its own crowns (`Light.gradeTrees(data, Trees.KANTO_CROWNS)`).
+  With `Trees.kanto` set, `Trees.tilesets` finds the General by the family's name (`fr:general`),
+  so the scene's tree passes (shadows, the stage's tree heights, the relief's trunk ground) run in
+  Kanto as in Hoenn.
+- **The Scene Workshop (`tests/drivers/workshop.lua`, `tools/workshop.ps1`, `src/scene/tune.lua`):**
+  tune the scene's models by eye and keep the result as data.
+  - **Run it:** `.\tools\workshop.ps1 [-Game firered] [-Spot FR_ROUTE_2:5:5] [-Engine ..\gen1recomp]`.
+    It boots a new game in the engine (which must load this mod), stands the player at the spot,
+    starts a wild battle with Battle Scene on (for the session only; no option or save changes),
+    and opens the scene it built. The game is held still, and the workshop takes the window's
+    drawing and input. Its log and F12 shots go to `%TEMP%\woobleview-workshop`.
+  - **Use:** click a tree (or any cell) to select it; right-drag orbits, middle- or left-drag pans,
+    the wheel zooms (WASD, Q/E, R/F, Z/X too); B is the battle's camera, O 45 degrees, T from
+    above. The panel lists the trees' settings (`Tune.DEFS.trees`: crown lean, crown height, foot,
+    sink): Up/Down picks one, Left/Right or its -/+ change it (Shift: x5), Backspace resets it.
+    Tab switches between all trees (the game's settings) and this tree (a mark on its four cells);
+    H hides this tree (its ground stays). Each change rebuilds the scene (`Scene._rebuild`, about
+    0.3 s). Ctrl+S saves, Ctrl+R goes back to the saved file, Esc quits (unsaved changes are
+    dropped).
+  - **The data:** `Tune.DEFS` names each group's settings with their defaults (the models' own
+    constants, so a game with no tune file draws as before) and ranges. Ctrl+S writes
+    `src/scene/games/<game>_tune.lua` (`Tune.source`: `groups` and `marks`, keyed `MAP:x:y` in the
+    map's own cells; FireRed's serves LeafGreen). main.lua loads `tune.lua` and each game's file
+    (`Tune.put`); `useFamily` hands the trees their game's settings (`Trees.useTune`), and the tree
+    pass looks up each tree cell's mark (`c.treeMark`, passed to `Trees.emit`). The tune files
+    ship; the workshop and its launcher don't (`.modkitignore`).
+  - **Hooks:** `exports._workshop()` gives the workshop the tuning, the camera, the trees, the last
+    scene (which keeps its `grid` and `where`), `rebuild`, `view(pose, w, h, k)` (the scene from any
+    pose, settled, at k screen pixels a canvas pixel: `Scene._view`), the mod's path and the game.
+    Picking hits the ground under the ray (lifted cells by their lift), and a tree by its crown
+    card's outline on screen, the nearest first.
+  - **Checking it unattended:** `WORKSHOP_SCRIPT=<file>` runs a script with the workshop's hooks
+    instead of the interactive loop, and `WORKSHOP_TUNE_FILE` saves elsewhere.
 - **LeafGreen:** it draws FireRed's maps with its own palettes. All 81 FireRed specs pass against LeafGreen's drawings, and placements match FireRed's.
 - **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
   `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the

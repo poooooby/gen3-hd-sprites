@@ -717,7 +717,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
             local o = grid.at(x, y)
             if not o or o.pair ~= cell.pair then return false end
             return Trees.part(sec, o.mid)
-          end, { rock = cell.treeRock, noGround = cell.treeGround ~= nil })
+          end, { rock = cell.treeRock, noGround = cell.treeGround ~= nil, mark = cell.treeMark })
         end
         if card then
           -- standing on the run's southern edge, `up` tiles high

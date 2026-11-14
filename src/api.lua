@@ -235,6 +235,14 @@ return function(mod, hd, state)
   exports._bridgeMesh = function(block, curbHeight)
     return hd.scene and hd.scene._bridgeMesh and hd.scene._bridgeMesh(block, curbHeight)
   end
+  -- (dev: the Scene Workshop, tests/drivers/workshop.lua - the tuning, the last scene, built again
+  -- after a change, drawn from any pose, and where the mod's files are)
+  exports._workshop = function()
+    local s = hd.scene
+    if not s then return nil end
+    return { Tune = s.Tune, Camera = s.Camera, Trees = s.Trees, last = function() return s.last end, rebuild = s._rebuild,
+             view = s._view, path = mod.path, game = s._game }
+  end
   -- (tests: the current battle scene alone, as image data w x h)
   exports._sceneShot = function(w, h)
     return hd.scene and hd.scene.snapshot and hd.scene.snapshot(w, h) or nil
