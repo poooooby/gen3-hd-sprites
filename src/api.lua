@@ -109,6 +109,17 @@ return function(mod, hd, state)
   end
   -- (dev: one slice of the relief's background build, as the frame hook runs it; the drivers
   -- call it since their frames skip the engine's update hook) -> state, detail, phases
+  -- (dev: WoobleView's prompt ticked by hand - a driver's frames skip core.update - and its
+  -- phase up, or nil)
+  exports._promptTick = function(dt)
+    if hd.prompt then hd.prompt._tick(dt) end
+    return hd.prompt and hd.prompt.phase() or nil
+  end
+  exports._promptWhy = function() return hd.prompt and hd.prompt._why() or "no prompt module" end
+  -- (dev: the 3D cache cleared, as Clear 3D Cache does)
+  exports._cacheClear = function()
+    return hd.scene and hd.scene.cacheClear and pcall(hd.scene.cacheClear) or false
+  end
   exports._sceneWarm = function(mapId)
     local s = hd.scene
     if not (s and s.warm) then return nil end

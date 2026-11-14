@@ -969,6 +969,51 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
 - `Render.after` runs all of it in their order: fog banks, sand dust, motes and rays, weather
   particles, then bloom prepare, diorama, zoom blur, bloom compose, lines and vignette, flash.
 
+### The 3D cache and the first-run prompt (`src/prompt.lua`)
+
+WoobleView's own UI (not a port). The engine has no prompt, progress, action-row or
+`options:set` API for mods, so:
+
+- **Panel and notices:** drawn at window resolution in a `render.hud` wrapper (a dark rounded
+  panel, the "WoobleView" chip in its corner, LÖVE's default font, pill buttons; a notice is a pill
+  at the foot of the screen). While a panel is up, an empty layer `woobleview_prompt` on
+  `src.ui.game3.stack` (`isMenu`, `hideBelow = false`) pauses the field and takes the buttons
+  (`handleInput`: left/right, A/START, B). An `input.pointer` wrapper turns a release on a button
+  into a press and swallows every pointer event meanwhile.
+- **Options:** set through `ManagerState.setOption` with the Gen 3 manager's proxy
+  (`P.setOption`). That saves them, emits `mod.options_changed`, and the pane shows them.
+- **First run (Emerald only, `GameVersion.get() == "emerald"`):** `core.update` wrapper waits for
+  45 quiet frames of the field (`Field.running`, no battle, `Runtime.uiBusy()` false, engine modules
+  through `require`: a mod's `package.loaded` is not the engine's). If the flag file
+  `state/first_run_asked` is not in `mod.cache`, it asks "Battle in the world around you?" (yes:
+  `battle_scene` = overworld, then "Build the 3D world now?"). Either answer writes the flag; with
+  Overworld already chosen it only writes the flag.
+- **Build 3D Cache / Clear 3D Cache:** `choice` rows (`idle` / `go`, `visible_if` Overworld) under
+  Battle Scene. `main.lua`'s `mod.options_changed` handler runs a row set to `go` and sets it back
+  (Build's when the panel closes). A `go` left from the launcher runs once the field is quiet.
+  Build is Emerald only for now.
+- **`Scene.cacheJob()`:** `warmAll` queued (Scene Cache forced on) and the relief run started.
+  `job.step(budget)` works ~28 ms a frame on both. `job.progress()` = 0.95 × relief + 0.05 ×
+  models, and `job.stage()` names the phase.
+- **`Run.progress()` (relief_run.lua):** by the phases passed (groups 2%, world 21%, export 35%,
+  29 terrace groups 42%). Within a phase it creeps on at the pace so far, measured once the
+  world's phase is done (a 90 s guess until then), to 95% of the phase.
+- **Time left:** the bar's pace over the last 20 s, counted down between frames and eased toward
+  the estimate, by the real clock.
+- **`Scene.cacheClear()`:** deletes every file the cache holds:
+  - each spec's `.lua`/`.rgba`;
+  - each bridge's;
+  - the rooms named in `rooms.index`, and the index;
+  - the relief (`Run.clear`).
+
+  It then drops them from memory (`spec._model`, the warm queue, the rooms' and bridges' jobs, the
+  relief bytes). The flag file is kept.
+- **Background build gate:** the relief's background build now starts only while the scene is
+  wanted (`deps.wanted`: Battle Scene on Overworld).
+- **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
+  `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the
+  prompt through `exports._promptTick`.
+
 In `src/gen3.lua`, `fitTerrain` records `hd.world(wallpaper, scene)` and two soft shadows as
 stage items instead of the wallpaper and pads; `drawEntry` skips the intro bands. The `"world"`
 item is drawn by `hd.composite` (and `compositeCard`) through `hd.sceneRenderer` with the

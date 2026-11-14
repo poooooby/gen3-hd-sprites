@@ -19,6 +19,10 @@
 --
 --   Run.state() -> "idle" | "cached" | "running" | "ready" | "failed", detail
 --   Run.start()    begin (or serve the cache) for the current game; no-op while running
+--   Run.progress() how far a build has come, 0..1 (for the Build 3D Cache bar)
+--   Run.clear()    the cached relief deleted, back to idle (Clear 3D Cache)
+-- deps.wanted() (optional): whether to start at all - the frame hook starts the build only then
+-- (the battle scene on).
 
 return function(deps)
   local Relief, Post, WorldMaps, Terraces = deps.Relief, deps.Post, deps.WorldMaps, deps.Terraces
@@ -144,6 +148,7 @@ return function(deps)
     end
     phases = {}
     Run._phaseAt = clock()
+    Run._startAt = Run._phaseAt
     co = coroutine.create(pipeline)
     state, detail = "running", nil
     log("%s: building the relief in the background", game)
@@ -174,6 +179,46 @@ return function(deps)
 
   function Run.state() return state, detail, phases end
 
+  -- how far a build has come, by the phases it has passed (their shares of a whole build's time,
+  -- measured: the groups 2%, the world 21%, the export 35%, the 29 terrace groups 42%), 0..1
+  -- Within a phase it creeps on at the pace the build has kept so far (the time spent per share
+  -- of it), stopping short of the phase's end, so the bar and the time left move smoothly.
+  Run.TERRACE_GROUPS = 29
+  Run.GUESS_SECONDS = 90      -- a whole build's time, before the world's phase has measured it
+  function Run.progress()
+    if state == "ready" then return 1 end
+    if state ~= "running" or not phases then return 0 end
+    local p, terraces = 0, 0
+    local seen = {}
+    for _, ph in ipairs(phases) do
+      local name = ph:match("^(%S+)")
+      if name == "groups" then p = math.max(p, 0.02); seen.groups = true
+      elseif name == "world" then p = math.max(p, 0.23); seen.world = true
+      elseif name == "export" then p = math.max(p, 0.58); seen.export = true
+      elseif name and name:match("^terraces:") then terraces = terraces + 1 end
+    end
+    local tShare = 0.415 / Run.TERRACE_GROUPS
+    p = p + tShare * math.min(terraces, Run.TERRACE_GROUPS)
+    -- the phase under way: its share, and how far into it by the pace so far
+    local share = not seen.groups and 0.02 or not seen.world and 0.21 or not seen.export and 0.35
+      or terraces < Run.TERRACE_GROUPS and tShare or 0.005
+    local now = clock and clock() or 0
+    local start, at = Run._startAt or now, Run._phaseAt or now
+    -- (the groups' phase is too short to judge the pace by: the guess until the world's is done)
+    local perShare = p >= 0.23 and (at - start) / p or Run.GUESS_SECONDS
+    local into = perShare > 0 and (now - at) / (perShare * share) or 0
+    return math.min(p + share * math.min(0.95, math.max(0, into)), 0.995)
+  end
+
+  --- Forget the relief (Clear cache): the cached file deleted, the state back to idle, so the next
+  --- start builds it again.
+  function Run.clear()
+    co, phases = nil, nil
+    local k = cacheKey()
+    if k and deps.cache and deps.cache.delete then pcall(deps.cache.delete, deps.cache, k) end
+    state, detail = "idle", "cleared"
+  end
+
   --- "<game>-<fingerprint>" of the current game's map data (what the cache is keyed by), or nil.
   function Run.gameKey()
     local k, id = cacheKey()
@@ -187,7 +232,8 @@ return function(deps)
     deps.hooks:wrap("core.update", function(next, g, dt)
       next(g, dt)
       if deps.onFrame then pcall(deps.onFrame) end
-      if state == "idle" then Run.start() end
+      -- (only while it is wanted: deps.wanted(), the battle scene on)
+      if state == "idle" and (not deps.wanted or deps.wanted()) then Run.start() end
       Run.step()
     end)
     return true

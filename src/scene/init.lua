@@ -2649,7 +2649,7 @@ return function(deps)
   -- against; never shipped); the port of its solver comes next
   local reliefData
   function Scene.setReliefBytes(bytes)
-    reliefData = Relief and Relief.parse(bytes) or nil
+    reliefData = bytes and Relief and Relief.parse(bytes) or nil
     return reliefData ~= nil
   end
   function Scene.reliefData() return reliefData end
@@ -2949,6 +2949,103 @@ return function(deps)
       if NativeTileset then pcall(ready, spec, NativeTileset, layoutCtx()) end
     end
     return #warmQueue
+  end
+
+  --- The whole 3D cache built now (Build Cache, the first-run prompt): the relief and every
+  --- model, room and bridge, kept on disk. Returns a job: job.step(budget) works for about
+  --- `budget` seconds and returns true when done; job.progress() 0..1; job.failed() why, or nil.
+  function Scene.cacheJob()
+    local run = Scene.reliefRun
+    Scene.cacheModels = true
+    Scene.warmAll()
+    local total = math.max(1, #warmQueue)
+    local job = {}
+    local clock = love.timer and love.timer.getTime or os.clock
+    local function reliefBusy()
+      if not run then return false end
+      local st = run.state()
+      if st == "idle" then run.start(); st = run.state() end
+      return st == "running"
+    end
+    function job.step(budget)
+      local t0 = clock()
+      repeat
+        local busy = false
+        if #warmQueue > 0 then Scene.warmStep(); busy = true end
+        if reliefBusy() then run.step(); busy = true end
+      until not busy or clock() - t0 >= (budget or 0.03)
+      return job.done()
+    end
+    function job.done() return #warmQueue == 0 and not reliefBusy() end
+    function job.progress()
+      local models = 1 - #warmQueue / total
+      local relief = 1
+      if run then
+        local st = run.state()
+        relief = (st == "running" or st == "idle") and run.progress() or 1
+      end
+      -- (the relief is nearly all the time - a minute or two against the models' few seconds,
+      -- built first - so the bar keeps to the clock and the time left with it)
+      return 0.95 * relief + 0.05 * models
+    end
+    --- What it is working on, in words for the progress bar.
+    function job.stage()
+      if run and run.state() == "running" then
+        local p = run.progress()
+        if p < 0.02 then return "Reading the maps" end
+        if p < 0.23 then return "Shaping the land" end
+        if p < 0.58 then return "Laying out cliffs, paths and water" end
+        return "Raising the terraces"
+      end
+      if #warmQueue > 0 then return "Building towns and rooms" end
+      return "Saving"
+    end
+    function job.failed()
+      local st, why = run and run.state()
+      if st == "failed" then return tostring(why) end
+      return nil
+    end
+    return job
+  end
+
+  --- The whole 3D cache cleared (Clear Cache): the relief's file and every model's, room's and
+  --- bridge's, and what is kept of them in memory, so they are built again when next wanted.
+  function Scene.cacheClear()
+    local c = Scene.modelCache
+    if c and c.delete then
+      for _, spec in ipairs(Specs or {}) do
+        c.delete(spec.name .. ".lua")
+        c.delete(spec.name .. ".rgba")
+      end
+      for name in pairs(Bridge and Bridge.BRIDGES or {}) do
+        c.delete(name .. ".bridge")
+        c.delete(name .. ".bridge.rgba")
+      end
+      -- (the rooms' files, named in their index)
+      local text = unpackData(c.read("rooms.index"))
+      local chunk = text and load(text, "=rooms.index", "t", {})
+      local ok, idx = pcall(chunk or error)
+      if ok and type(idx) == "table" then
+        local seen = {}
+        for _, f in ipairs(idx.pieces or {}) do
+          if f.room and not seen[f.room] then
+            seen[f.room] = true
+            c.delete("room_" .. f.room .. ".dat")
+            c.delete("room_" .. f.room .. ".rgba")
+          end
+        end
+      end
+      c.delete("rooms.index")
+    end
+    if Scene.reliefRun and Scene.reliefRun.clear then Scene.reliefRun.clear() end
+    Scene.setReliefBytes(nil)
+    for _, spec in ipairs(Specs or {}) do spec._model = nil end
+    for k in pairs(warmed) do warmed[k] = nil end
+    for k in pairs(bridges) do bridges[k] = nil end
+    for i = #warmQueue, 1, -1 do warmQueue[i] = nil end
+    warmedAll = false
+    roomRun = nil
+    Scene.modelsFromCache, Scene.modelsBuilt = 0, 0
   end
 
   -- a map's layout id: the one a script swapped in or Emerald 3DS draws the neighbour with

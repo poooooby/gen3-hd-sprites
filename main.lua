@@ -177,6 +177,8 @@ return function(mod)
         onReady = function(bytes) Engine.Scene.setReliefBytes(bytes) end,
         models = function(name, tick) return Engine.Scene.modelCells(name, tick) end,
         onFrame = function() Engine.Scene.warmStep() end,
+        -- (built only while the battle scene is on: a player who keeps Classic never pays for it)
+        wanted = function() return Engine.Scene.enabled == true end,
       })
       if okR and type(run) == "table" then
         reliefRun = run
@@ -191,6 +193,10 @@ return function(mod)
           write = function(name, bytes)
             local k = run.gameKey()
             return k and pcall(function() mod.cache:write("models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k .. "/" .. name, bytes) end)
+          end,
+          delete = function(name)
+            local k = run.gameKey()
+            return k and pcall(function() mod.cache:delete("models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k .. "/" .. name) end)
           end,
         }
       else
@@ -258,8 +264,40 @@ return function(mod)
   end
   pcall(install)
 
+  -- WoobleView's own prompts (src/prompt.lua): the first-run question about 3D battles (Emerald),
+  -- the 3D cache's progress bar, short notices
+  local Prompt
+  if Engine.Scene then
+    local promptOf = loadSibling(mod, "src/prompt.lua")
+    local okP, p = pcall(function() return type(promptOf) == "function" and promptOf({ mod = mod, Scene = Engine.Scene }) end)
+    if okP and type(p) == "table" then
+      Prompt = p
+      hd.prompt = p
+      local okI, err = pcall(Prompt.install)
+      if not okI then mod.log:warn("prompt: %s", tostring(err)) end
+    end
+  end
+
   mod.events:on("mod.options_changed", function(ev)
-    if ev and ev.mod == mod.id then applyOptions() end
+    if not (ev and ev.mod == mod.id) then return end
+    applyOptions()
+    -- Build 3D Cache and Clear 3D Cache: rows pressed in the options (each set to "go"), run and
+    -- set back (the Build row when its build ends)
+    if Prompt and ev.value == "go" then
+      local okV, GV = pcall(require, "src.core.GameVersion")
+      local emerald = okV and GV.get and GV.get() == "emerald"
+      if ev.key == "scene_build" then
+        if not emerald then
+          Prompt.notify("The 3D cache is built in Emerald for now")
+          Prompt.setOption("scene_build", "idle")
+        elseif not Prompt.build() then
+          Prompt.setOption("scene_build", "idle")
+        end
+      elseif ev.key == "scene_clear" then
+        Prompt.clear()
+        Prompt.setOption("scene_clear", "idle")
+      end
+    end
   end)
 
   Api(mod, hd, state)
