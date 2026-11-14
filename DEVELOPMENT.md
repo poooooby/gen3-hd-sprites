@@ -1235,7 +1235,7 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     card's outline on screen, the nearest first.
   - **Checking it unattended:** `WORKSHOP_SCRIPT=<file>` runs a script with the workshop's hooks
     instead of the interactive loop, and `WORKSHOP_TUNE_FILE` saves elsewhere.
-- **LeafGreen:** it draws FireRed's maps with its own palettes. All 81 FireRed specs pass against LeafGreen's drawings, and placements match FireRed's.
+- **LeafGreen:** it draws FireRed's maps with its own palettes. All 81 FireRed specs pass against LeafGreen's drawings, and placements match FireRed's. Its caves read the same as FireRed's (all 78, 185 disagreeing joins, layout for layout), its 71 rooms check the same (`room_check.lua` with `POKEPORT_GAME=leafgreen`, room for room), and its three trees (the General, Viridian Forest's, Berry Forest's) are 0 wrong at 45 degrees; Oak's lab, the forests, the caves and the Power Plant checked in game.
 - **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
   `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the
   prompt through `exports._promptTick`.
