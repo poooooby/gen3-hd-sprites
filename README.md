@@ -132,7 +132,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   cabin, barrels, deck chairs and tables), the Fighting Dojo its
   partitions and statues, Trainer Tower's halls their walls, console and white posts, and Professor
   Oak's lab, where your first rival battle happens, its machines, bookshelves and table, and
-  Celadon's Game Corner its rows of slot machines and stools and its prize counter.
+  Celadon's Game Corner its rows of slot machines and stools and its prize counter. On Seven
+  Island, the Tanoby Chambers' stone mazes rise round you as you meet the Unown.
 - 🪨 **Rocks that stand:** Grey rocks in the sea sit in their foam, brown sea stacks rise as
   peaks, and boulders stand on the sand and the mountains, wherever the map draws them.
   Slateport market's baskets, urns and piles of fruit stand round on its paving, and the Battle
