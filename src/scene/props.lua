@@ -52,6 +52,9 @@ Props.OBJECTS = {
   -- water - the grey one (Cinnabar's, 0x110-0x119) and the pale one (0x1CB-0x1D4)
   fr_sea_rock = { tileset = "fr:general", palette = 4, grid = { { 420, 421 }, { 422, 423 } } },
   fr_sea_rock_pale = { tileset = "fr:general", palette = 2, grid = { { 173, 174 }, { 189, 190 } } },
+  -- the round boulder on land (Routes 11 and 23, Kindle Road, ...): four upper-layer tiles of the
+  -- General over whatever ground its cell draws (metatiles 09F / 0A7 / 0AF / 0B7)
+  fr_boulder = { land = true, tileset = "fr:general", palette = 1, grid = { { 120, 121 }, { 136, 137 } } },
 }
 
 -- The props the scene models, in the specs' order. `shape`: a Mound (the default;
@@ -68,6 +71,8 @@ Props.SPECS = {
   { name = "fr_sea_rock", props = "fr_sea_rock", ground = { 0x12B }, rise = 1.0, step = 2, ring = { { 230, 246, 255 } } },
   { name = "fr_sea_rock_pale", props = "fr_sea_rock_pale", ground = { 0x12B }, rise = 1.0, step = 2,
     ring = { { 246, 246, 255 } } },
+  -- (FireRed's boulder on land: the same low dome as Emerald's, on its cell's own ground)
+  { name = "fr_boulder", props = "fr_boulder", ground = { 0x001 }, rise = 1.0, step = 2 },
   -- a boulder on the sand or the grass, a cell across (Route 106's beach, Route 111's desert, the
   -- Safari Zone)
   { name = "sand_boulder", props = "sand_boulder", ground = { 0x124 }, rise = 1.0, step = 2 },
