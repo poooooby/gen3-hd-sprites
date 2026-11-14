@@ -182,4 +182,183 @@ function Check.density(mesh, tolerance)
   return bad
 end
 
+-- ── the proofs as the drivers run them (tests/drivers/model_check.lua, room_check.lua, review.lua) ──
+-- Each returns a result { name, ok, wrong, missing, extra / over, judged, stretched, sheet }, the
+-- sheet { w, h, at(x, y) -> 0xRRGGBB } three panels wide: the drawing | the model at 45 degrees |
+-- the marks (red wrong, magenta missing, cyan extra, amber over) on the render dimmed.
+
+local function colourOf(px, w, x, y)
+  local o = (y * w + x) * 4
+  if (px[o + 4] or 0) < 0.5 then return nil end
+  return floor(px[o + 1] * 255 + 0.5) * 65536 + floor(px[o + 2] * 255 + 0.5) * 256 + floor(px[o + 3] * 255 + 0.5)
+end
+Check.colourOf = colourOf
+
+local function dim(g)
+  return floor(floor(g / 65536) / 3) * 65536 + floor(floor(g / 256) % 256 / 3) * 256 + floor(g % 256 / 3)
+end
+Check.dim = dim
+
+--- Three W x H panels side by side, each at(x, y) -> colour or nil (black).
+function Check.sheet(W, H, a, b, c)
+  local panels = { a, b, c }
+  return { w = W * #panels, h = H, at = function(x, y)
+    local p = panels[floor(x / W) + 1]
+    return p and p(x % W, y) or 0
+  end }
+end
+
+function Check.writePPM(path, sheet)
+  local f = io.open(path, "wb")
+  if not f then return false end
+  f:write(("P6\n%d %d\n255\n"):format(sheet.w, sheet.h))
+  local row = {}
+  for y = 0, sheet.h - 1 do
+    for x = 0, sheet.w - 1 do
+      local c = sheet.at(x, y) or 0
+      row[#row + 1] = string.char(floor(c / 65536) % 256, floor(c / 256) % 256, c % 256)
+    end
+  end
+  f:write(table.concat(row))
+  f:close()
+  return true
+end
+
+--- A building spec's model (hd._sceneModel(name)) against its drawing over its exact rectangles.
+function Check.building(hd, name, exact)
+  local md = hd._sceneModel(name)
+  if not md then return nil end
+  local art, tex = md.art, md.tex or md.art
+  exact = exact or md.spec.exact
+  local refAt = function(x, y) return colourOf(art.px, art.w, x, y) end
+  -- (rendered with the model's own texture, judged against the drawing: the sizes may differ)
+  local texArt = { w = art.w, h = art.h, at = function(x, y)
+    return x < tex.w and y < tex.h and colourOf(tex.px, tex.w, x, y) or nil
+  end }
+  local _, _, _, img = Check.ortho({ tris = md.tris }, texArt, exact, 32)
+  local W, M = img.w, img.margin
+  local wrong, missing, extra, judgedN = 0, 0, 0, 0
+  local marks = {}
+  for _, rg in ipairs(exact or { { 0, 0, art.w, art.h } }) do
+    for y = rg[2], rg[4] - 1 do
+      for x = rg[1], rg[3] - 1 do
+        local want = refAt(x, y)
+        local idx = (y + M) * W + x + M
+        local got = img.color[idx]
+        if want then
+          judgedN = judgedN + 1
+          if got == nil then missing = missing + 1; marks[idx] = 0xFF00FF
+          elseif got ~= want then wrong = wrong + 1; marks[idx] = 0xFF0000 end
+        elseif got ~= nil and not rg[5] then
+          extra = extra + 1; marks[idx] = 0x00FFFF
+        end
+      end
+    end
+  end
+  local bad = Check.density({ tris = md.tris })
+  return { name = name, kind = "building", ok = wrong == 0 and missing == 0 and extra == 0 and #bad == 0,
+    wrong = wrong, missing = missing, extra = extra, judged = judgedN, stretched = bad, marks = marks,
+    W = W, M = M,
+    sheet = Check.sheet(W, img.h,
+      function(x, y) local ax, ay = x - M, y - M
+        return ax >= 0 and ay >= 0 and ax < art.w and ay < art.h and refAt(ax, ay) or nil end,
+      function(x, y) return img.color[y * W + x] end,
+      function(x, y) return marks[y * W + x] or dim(img.color[y * W + x] or 0) end) }
+end
+
+--- A room's pieces (every piece standing in it: modelled there, reused there, or found by its
+--- pixels) against the room as drawn. rooms = hd._rooms(); r one of them.
+function Check.room(hd, rooms, r, log)
+  local A = hd._roomLayout(r.layout)
+  if not A then return nil, "no layout " .. tostring(r.layout) end
+  local W, H = A.w * 16, A.h * 16
+  local function drawn(x, y)
+    if x < 0 or y < 0 or x >= W or y >= H then return nil end
+    local img = A.cellImage(A.metatile(floor(x / 16), floor(y / 16)))
+    return img[(y % 16) * 16 + x % 16]
+  end
+  local meshes, stretched = {}, {}
+  local function texAt(tex)
+    return function(u, v)
+      if u < 0 or v < 0 or u >= tex.w or v >= tex.h then return nil end
+      return colourOf(tex.px, tex.w, u, v)
+    end
+  end
+  for _, r2 in ipairs(rooms) do
+    for _, pc in ipairs(r2.pieces or {}) do
+      local at = {}
+      if pc.placed then
+        for _, p in ipairs(pc.placed) do if p[1] == r.layout then at[#at + 1] = { p[2], p[3] } end end
+      elseif pc.layout == r.layout then
+        at[#at + 1] = { pc.rect[1], pc.rect[2] }
+      end
+      for _, p in ipairs(pc.reused_at or {}) do if p[1] == r.layout then at[#at + 1] = { p[2], p[3] } end end
+      -- (found by its own pixels in a room drawn otherwise round it: its bare twin stands there)
+      local bare = {}
+      for _, p in ipairs(pc.bare_at or {}) do if p[1] == r.layout then bare[#bare + 1] = { p[2], p[3] } end end
+      if #bare > 0 then
+        local okT, twin = xpcall(hd._roomBuild, debug.traceback, pc, true)
+        if okT then
+          for _, p in ipairs(bare) do
+            meshes[#meshes + 1] = { tris = twin.tris, ox = p[1] * 16, oy = p[2] * 16, piece = pc, at = texAt(twin.tex) }
+          end
+        end
+      end
+      if #at > 0 then
+        local okB, md = xpcall(hd._roomBuild, debug.traceback, pc)
+        if not okB then
+          if log then log(("  FAIL build %s: %s"):format(pc.name, tostring(md))) end
+        else
+          local bad = Check.density({ tris = md.tris })
+          if #bad > 0 then stretched[#stretched + 1] = ("%s (%d, %s)"):format(pc.name, #bad, tostring(bad[1][1])) end
+          for _, p in ipairs(at) do
+            meshes[#meshes + 1] = { tris = md.tris, ox = p[1] * 16, oy = p[2] * 16, piece = pc, at = texAt(md.tex) }
+          end
+        end
+      end
+    end
+  end
+  local color, owner = Check.render(meshes, W, H)
+  local wrong, missing, over, covered, marks, byPiece = 0, 0, 0, 0, {}, {}
+  local function note(k, what)
+    local m = meshes[k]
+    local name = m and m.piece.name or "?"
+    byPiece[name] = byPiece[name] or { wrong = 0, missing = 0 }
+    byPiece[name][what] = byPiece[name][what] + 1
+  end
+  -- (a pixel the covering piece doesn't own - a top rising over what is drawn behind it, at 45
+  -- degrees as Emerald 3DS's rooms stand - is counted apart: over)
+  for idx, c in pairs(color) do
+    covered = covered + 1
+    local x, y = idx % W, floor(idx / W)
+    if c ~= drawn(x, y) then
+      local m = meshes[owner[idx]]
+      local own = m and m.piece.own
+      if own and not own[(y - m.oy) * 4096 + (x - m.ox)] then
+        over = over + 1; marks[idx] = 0xFFC000
+      else
+        wrong = wrong + 1; marks[idx] = 0xFF0000; note(owner[idx], "wrong")
+      end
+    end
+  end
+  for k, m in ipairs(meshes) do
+    for key in pairs(m.piece.own or {}) do
+      local x, y = m.ox + key % 4096, m.oy + floor(key / 4096)
+      if x >= 0 and y >= 0 and x < W and y < H and color[y * W + x] == nil then
+        missing = missing + 1; marks[y * W + x] = 0xFF00FF; note(k, "missing")
+      end
+    end
+  end
+  local placed = {}
+  for _, m in ipairs(meshes) do placed[m.piece.name] = (placed[m.piece.name] or 0) + 1 end
+  return { name = r.name, kind = "room", layout = r.layout, error = r.error,
+    ok = wrong == 0 and missing == 0 and #stretched == 0,
+    wrong = wrong, missing = missing, over = over, judged = covered, pieces = #meshes,
+    stretched = stretched, byPiece = byPiece, placed = placed,
+    sheet = Check.sheet(W, H,
+      function(x, y) return drawn(x, y) end,
+      function(x, y) return color[y * W + x] or drawn(x, y) end,
+      function(x, y) return marks[y * W + x] or dim(color[y * W + x] or drawn(x, y) or 0) end) }
+end
+
 return Check

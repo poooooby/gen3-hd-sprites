@@ -1212,6 +1212,23 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   With `Trees.kanto` set, `Trees.tilesets` finds the General by the family's name (`fr:general`),
   so the scene's tree passes (shadows, the stage's tree heights, the relief's trunk ground) run in
   Kanto as in Hoenn.
+- **The review sheet (`tests/drivers/review.lua`, `tools/review.ps1`):** every model the scene
+  stands, proved against the game's own drawing at 45 degrees and gathered into one page.
+  - **Run it:** `.\tools\review.ps1 [-Game firered] [-Kinds building,room,tree,cave] [-Engine ..\gen1recomp]`.
+    It boots a new game in the engine (which must load this mod), runs the proofs and opens
+    `%TEMP%\woobleview-review\<game>\index.html` (a PNG sheet an item beside it; they show the
+    game's art, so they stay on this machine). About three minutes for FireRed.
+  - **What it judges:** buildings by `Check.building` (the spec's exact rectangles: wrong, missing,
+    extra pixels and stretched faces), rooms by `Check.room` (every piece standing in the room:
+    wrong and missing; `over` is not a fault), each tree species alone on grass against its three
+    drawn rows, and each cave's levels as `relief_caves.lua` counts them, an edge marked where its
+    two sides draw it at different levels. Each sheet is the drawing | the model at 45 degrees (a
+    cave: its levels tinted) | the marks.
+  - **The page:** filters by kind and name, only-mismatches (on by default), sorting by the share
+    or the count of pixels off. Each item takes "looks fine" / "needs work" and a note, kept in the
+    browser (`localStorage`, by game); "copy my notes" lists them as text to paste back.
+  - `tests/drivers/model_check.lua` and `room_check.lua` run the same proofs (`Check.building`,
+    `Check.room`) and write `.ppm` sheets, for one spec or room at a time.
 - **The Scene Workshop (`tests/drivers/workshop.lua`, `tools/workshop.ps1`, `src/scene/tune.lua`):**
   tune the scene's models by eye and keep the result as data.
   - **Run it:** `.\tools\workshop.ps1 [-Game firered] [-Spot FR_ROUTE_2:5:5] [-Engine ..\gen1recomp]`.

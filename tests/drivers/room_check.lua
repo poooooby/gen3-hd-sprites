@@ -38,24 +38,10 @@ local function body(game, log)
   for n in (env("ROOM_CHECK") or ""):gmatch("[^,]+") do want = want or {}; want[n] = true end
   local okR, rooms = xpcall(hd._rooms, debug.traceback, nil)
   if not okR or not rooms then log("FAIL rooms: " .. tostring(rooms)); return end
-  local function colourOf(px, w, x, y)
-    local o = (y * w + x) * 4
-    if (px[o + 4] or 0) < 0.5 then return nil end
-    return math.floor(px[o + 1] * 255 + 0.5) * 65536 + math.floor(px[o + 2] * 255 + 0.5) * 256
-      + math.floor(px[o + 3] * 255 + 0.5)
-  end
   local pass, judged = 0, 0
   for _, r in ipairs(rooms) do
     if (not want or want[r.name]) and r.pieces then
       judged = judged + 1
-      local A = hd._roomLayout(r.layout)
-      if not A then log(("%-24s no layout %s"):format(r.name, tostring(r.layout))); goto continue end
-      local W, H = A.w * 16, A.h * 16
-      local function drawn(x, y)
-        if x < 0 or y < 0 or x >= W or y >= H then return nil end
-        local img = A.cellImage(A.metatile(math.floor(x / 16), math.floor(y / 16)))
-        return img[(y % 16) * 16 + x % 16]
-      end
       if env("ROOM_VERBOSE") then
         for _, pc in ipairs(r.pieces) do
           if pc.name:find(env("ROOM_VERBOSE"), 1, true) or not pc.name:find(r.name, 1, true) then
@@ -69,140 +55,30 @@ local function body(game, log)
           end
         end
       end
-      -- every piece standing in this room, where it stands
-      local meshes, stretched = {}, {}
-      -- (a piece stands in later rooms through its reuse records, listed with the room it was
-      -- modelled in: every room's pieces are looked through)
-      local all = {}
-      for _, r2 in ipairs(rooms) do for _, pc in ipairs(r2.pieces or {}) do all[#all + 1] = pc end end
-      for _, pc in ipairs(all) do
-        local at = {}
-        if pc.placed then
-          for _, p in ipairs(pc.placed) do if p[1] == r.layout then at[#at + 1] = { p[2], p[3] } end end
-        elseif pc.layout == r.layout then
-          at[#at + 1] = { pc.rect[1], pc.rect[2] }
+      local res, why = Check.room(hd, rooms, r, log)
+      if not res then log(("%-24s %s"):format(r.name, why))
+      else
+        if res.ok then pass = pass + 1 end
+        log(("%-24s %s  %d pieces  wrong %d (%.1f%% of %d covered) missing %d  stretched %d  (over %d)%s"):format(r.name,
+          res.ok and "OK  " or "FAIL", res.pieces, res.wrong, 100 * res.wrong / math.max(1, res.judged), res.judged,
+          res.missing, #res.stretched, res.over, r.error and ("  error " .. tostring(r.error)) or ""))
+        if env("ROOM_VERBOSE") then
+          local l = {}
+          for k, v in pairs(res.placed) do l[#l + 1] = k .. (v > 1 and ("x" .. v) or "") end
+          table.sort(l)
+          log("    placed: " .. table.concat(l, " "))
         end
-        for _, p in ipairs(pc.reused_at or {}) do if p[1] == r.layout then at[#at + 1] = { p[2], p[3] } end end
-        -- (found by its own pixels in a room drawn otherwise round it: its bare twin stands there)
-        local bare = {}
-        for _, p in ipairs(pc.bare_at or {}) do if p[1] == r.layout then bare[#bare + 1] = { p[2], p[3] } end end
-        if #bare > 0 then
-          local okT, twin = xpcall(hd._roomBuild, debug.traceback, pc, true)
-          if okT then
-            local tex = twin.tex
-            for _, p in ipairs(bare) do
-              meshes[#meshes + 1] = { tris = twin.tris, ox = p[1] * 16, oy = p[2] * 16, piece = pc,
-                at = function(u, v)
-                  if u < 0 or v < 0 or u >= tex.w or v >= tex.h then return nil end
-                  return colourOf(tex.px, tex.w, u, v)
-                end }
-            end
-          end
+        if not res.ok then
+          local names = {}
+          for name, n in pairs(res.byPiece) do names[#names + 1] = ("%s w%d m%d"):format(name, n.wrong, n.missing) end
+          table.sort(names)
+          if #names > 0 then log("    " .. table.concat(names, ", ")) end
+          if #res.stretched > 0 then log("    stretched: " .. table.concat(res.stretched, ", ")) end
         end
-        if #at > 0 then
-          local okB, md = xpcall(hd._roomBuild, debug.traceback, pc)
-          if not okB then
-            log(("  FAIL build %s: %s"):format(pc.name, tostring(md)))
-          else
-            local tex = md.tex
-            local bad = Check.density({ tris = md.tris })
-            if #bad > 0 then stretched[#stretched + 1] = ("%s (%d, %s)"):format(pc.name, #bad, tostring(bad[1][1])) end
-            for _, p in ipairs(at) do
-              meshes[#meshes + 1] = { tris = md.tris, ox = p[1] * 16, oy = p[2] * 16, piece = pc,
-                at = function(u, v)
-                  if u < 0 or v < 0 or u >= tex.w or v >= tex.h then return nil end
-                  return colourOf(tex.px, tex.w, u, v)
-                end }
-            end
-          end
-        end
-      end
-      local color, owner = Check.render(meshes, W, H)
-      -- judged: what the pieces cover, against the drawing; what they own, covered
-      local wrong, missing, marks = 0, 0, {}
-      local byPiece = {}
-      local function note(k, what)
-        local m = meshes[k]
-        local name = m and m.piece.name or "?"
-        byPiece[name] = byPiece[name] or { wrong = 0, missing = 0 }
-        byPiece[name][what] = byPiece[name][what] + 1
-      end
-      -- (a pixel the covering piece doesn't own - a top rising over what is drawn behind it, at
-      -- 45 degrees as in Emerald 3DS's rooms - is counted apart: over)
-      local over = 0
-      for idx, c in pairs(color) do
-        local x, y = idx % W, math.floor(idx / W)
-        if c ~= drawn(x, y) then
-          local m = meshes[owner[idx]]
-          local own = m and m.piece.own
-          if own and not own[(y - m.oy) * 4096 + (x - m.ox)] then
-            over = over + 1; marks[idx] = 0xFFC000
-          else
-            wrong = wrong + 1; marks[idx] = 0xFF0000; note(owner[idx], "wrong")
-          end
-        end
-      end
-      local owned = 0
-      for k, m in ipairs(meshes) do
-        local own = m.piece.own
-        if own then
-          for key in pairs(own) do
-            owned = owned + 1
-            local u, v = key % 4096, math.floor(key / 4096)
-            local x, y = m.ox + u, m.oy + v
-            if x >= 0 and y >= 0 and x < W and y < H and color[y * W + x] == nil then
-              missing = missing + 1; marks[y * W + x] = 0xFF00FF; note(k, "missing")
-            end
-          end
-        end
-      end
-      local ok = wrong == 0 and missing == 0 and #stretched == 0
-      if ok then pass = pass + 1 end
-      local covered = 0
-      for _ in pairs(color) do covered = covered + 1 end
-      log(("%-24s %s  %d pieces  wrong %d (%.1f%% of %d covered) missing %d  stretched %d  (over %d)%s"):format(r.name,
-        ok and "OK  " or "FAIL", #meshes, wrong, 100 * wrong / math.max(1, covered), covered, missing, #stretched, over, r.error and ("  error " .. tostring(r.error)) or ""))
-      if env("ROOM_VERBOSE") then
-        local n = {}
-        for _, m in ipairs(meshes) do n[m.piece.name] = (n[m.piece.name] or 0) + 1 end
-        local l = {}
-        for k, v in pairs(n) do l[#l + 1] = k .. (v > 1 and ("x" .. v) or "") end
-        table.sort(l)
-        log("    placed: " .. table.concat(l, " "))
-      end
-      if not ok then
-        local names = {}
-        for name, n in pairs(byPiece) do names[#names + 1] = ("%s w%d m%d"):format(name, n.wrong, n.missing) end
-        table.sort(names)
-        if #names > 0 then log("    " .. table.concat(names, ", ")) end
-        if #stretched > 0 then log("    stretched: " .. table.concat(stretched, ", ")) end
-      end
-      -- the sheet: drawing | the room at 45 degrees (the floor flat where nothing stands) | marks
-      local f = io.open(("%s/room_%s.ppm"):format(dir, r.name), "wb")
-      if f then
-        f:write(("P6\n%d %d\n255\n"):format(W * 3, H))
-        local row = {}
-        for y = 0, H - 1 do
-          for panel = 0, 2 do
-            for x = 0, W - 1 do
-              local idx = y * W + x
-              local c
-              if panel == 0 then c = drawn(x, y) or 0
-              elseif panel == 1 then c = color[idx] or drawn(x, y) or 0
-              else
-                local g = color[idx] or drawn(x, y) or 0
-                c = marks[idx] or (math.floor(math.floor(g / 65536) / 3) * 65536 + math.floor(math.floor(g / 256) % 256 / 3) * 256
-                  + math.floor(g % 256 / 3))
-              end
-              row[#row + 1] = string.char(math.floor(c / 65536) % 256, math.floor(c / 256) % 256, c % 256)
-            end
-          end
-        end
-        f:write(table.concat(row))
-        f:close()
+        -- the sheet: drawing | the room at 45 degrees (the floor flat where nothing stands) | marks
+        Check.writePPM(("%s/room_%s.ppm"):format(dir, r.name), res.sheet)
       end
     end
-    ::continue::
   end
   log(("%d of %d rooms pass"):format(pass, judged))
 end
