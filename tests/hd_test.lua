@@ -601,6 +601,29 @@ do
   for _ = 1, 60 do fitFrame(G, hd, base, frame) end
   check(near(hd.stats.zoom, 0.5), "...and reaches its fit within a second")
 
+  -- a turn playing (a move swells the sprite for a moment, then it shrinks back): the camera
+  -- stays pulled out, however long, and comes back in only once the battle waits again
+  hd.setTurn(true)
+  hd.tag(pic, shortSpec)
+  for _ = 1, hd.fit.holdFrames * 4 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoomTarget, 1) and near(hd.stats.zoom, 0.5), "a turn playing: the zoom never comes back in")
+  hd.tag(pic, tallSpec)
+  fitFrame(G, hd, base, frame)
+  hd.tag(pic, shortSpec)
+  for _ = 1, 10 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 0.5), "...nor bounces as the sprite grows and shrinks again")
+  hd.setTurn(false)
+  for _ = 1, hd.fit.holdFrames - 1 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 0.5), "the menu: it waits holdFrames first")
+  for _ = 1, 400 do fitFrame(G, hd, base, frame) end
+  check(near(hd.stats.zoom, 1), "...then eases back in")
+  hd.setTurn(true)
+  hd.tag(pic, tallSpec)
+  fitFrame(G, hd, base, frame)
+  check(hd.stats.zoom < 1, "a turn playing: a tall sprite still pulls the camera out at once")
+  for _ = 1, 60 do fitFrame(G, hd, base, frame) end
+  hd.setTurn(false)
+
   -- no UI seam (the post-catch Pokedex scene): nothing is zoomed
   blits = fitFrame(G, hd, base, { wall = wall, pad = pad, pic = pic, seam = false })
   local anyZoom = false

@@ -427,6 +427,8 @@ function Gen3.prepare(Engine, hd)
     if not ours[battleDraw] then
       Battle.draw = function(...)
         pcall(noteDouble)
+        -- (a turn playing, anything but the command menu: Battle Fit only pulls out meanwhile)
+        if hd.setTurn then hd.setTurn(Battle._phase ~= nil and Battle._phase ~= "command") end
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not ok then hd.fail("battle pass: " .. tostring(err)) end

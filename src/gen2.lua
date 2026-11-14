@@ -207,6 +207,12 @@ function Gen2.prepare(Engine, hd)
     G.clear(1, 1, 1, 1)
     G.setColor(1, 1, 1, 1)
     hd.useLayout(wide and "gen2_wide" or "gen2_og")
+    -- (a turn playing, anything but the menus that wait for the player: src/ui/gen2/
+    -- BattleState.lua; Battle Fit only pulls out meanwhile)
+    if hd.setTurn then
+      local ph = battle.phase
+      hd.setTurn(not (ph == "menu" or ph == "submenu" or ph == "moves"))
+    end
     local okP, errP = pcall(hd.beginPass, "battle", c)
     if not okP then hd.fail("battle pass: " .. tostring(errP)) end
     local ok, err

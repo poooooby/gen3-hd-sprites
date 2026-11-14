@@ -175,6 +175,12 @@ function HD.new(G, opts)
       -- cutAbove it keeps minVisible (the over-the-shoulder cut); in between the share blends.
       wholeBelow = 36, cutAbove = 56,
       outRate = 0.2, inRate = 0.05, holdFrames = 45,
+      -- a turn playing (setTurn: the adapter's battle phase, not the menu): the camera may pull
+      -- out but never comes back in until the battle waits for the player again. A move swells,
+      -- lunges or lifts a Pokemon for a moment (Bulk Up, Growth, a jump); in a double battle and
+      -- on Red to Crystal (no resting pose to plan by, as Gen 3's singles have) the camera
+      -- followed each one out and back, move after move
+      turn = false,
       z = 1, target = 1, extra = 0, extraTarget = 0, hold = 0, idle = 99,
       -- a double battle (setDouble): a back's head stops this far below the foes' lower HP box.
       -- Its outer battlers stand near the canvas's edges, so the side shift is smaller: a move's
@@ -1741,6 +1747,12 @@ function HD.new(G, opts)
   end
   self.fitSolve = fitSolve
 
+  --- Whether a turn is playing (the battle is not waiting for the player): set by the adapter
+  --- before each battle pass. While it is, Battle Fit only pulls out (fit.turn).
+  function self.setTurn(on)
+    self.fit.turn = on == true
+  end
+
   --- Which battle's UI the fit plans around: a double battle's two HP boxes a side stand
   --- elsewhere. enemy, player: each side's boxes together, {x0, y0, x1, y1} canvas px. The foes'
   --- feet stay above the player's boxes, a back's head just under the foes', and the stacked
@@ -1829,7 +1841,8 @@ function HD.new(G, opts)
     else
       local outward = zt < fit.z or et > fit.extra
       local inward = zt > fit.z or et < fit.extra
-      if outward then fit.hold = 0 elseif inward then fit.hold = fit.hold + 1 else fit.hold = 0 end
+      -- (a turn playing: never settled, so never back in; held from the menu on)
+      if outward or fit.turn then fit.hold = 0 elseif inward then fit.hold = fit.hold + 1 else fit.hold = 0 end
       local settle = fit.hold >= fit.holdFrames
       if zt < fit.z then
         fit.z = math.max(zt, fit.z - math.max((fit.z - zt) * fit.outRate, 0.002))
@@ -2393,7 +2406,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           g = gt
         elseif gt < g then
           g = math.max(gt, g - math.max((g - gt) * fit.outRate, 0.002))
-        elseif gt > g then
+        elseif gt > g and not fit.turn then
+          -- (back in only between turns, as the zoom is: see fit.turn)
           g = math.min(gt, g + math.max((gt - g) * fit.inRate, 0.001))
         end
         fit.grow = g

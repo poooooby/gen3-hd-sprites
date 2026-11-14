@@ -277,6 +277,15 @@ function Gen1.prepare(Engine, hd)
     return ...
   end
 
+  -- the phases that wait for the player (src/battle/BattleState.lua); any other is a turn
+  -- playing, and Battle Fit only pulls out meanwhile (hd.setTurn)
+  local WAITING = { menu = true, moveSelect = true, mimicSelect = true }
+  local function noteTurn(battle)
+    if not (hd.setTurn and type(battle) == "table") then return end
+    -- (a move's animation counts wherever it plays: animPlaying)
+    hd.setTurn(not WAITING[battle.phase] or battle.animPlaying == true)
+  end
+
   return function()
     if gameDraw and not ours[gameDraw] then
       Game.draw = function(self, ...)
@@ -294,6 +303,7 @@ function Gen1.prepare(Engine, hd)
           return wideDraw(battle, ...)
         end
         hd.useLayout("gen1_wide")
+        noteTurn(battle)
         local okP, errP = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not okP then hd.fail("battle pass: " .. tostring(errP)) end
         if not (hd.capturing("battle") and hd.fit.enabled) then return wideDraw(battle, ...) end
@@ -312,6 +322,7 @@ function Gen1.prepare(Engine, hd)
           return drawClassic(self, ...)
         end
         hd.useLayout("gen1_og")
+        noteTurn(self)
         local okP, errP = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not okP then hd.fail("battle pass: " .. tostring(errP)) end
         -- the field and the UI apart only when the fit draws them apart, and only on the

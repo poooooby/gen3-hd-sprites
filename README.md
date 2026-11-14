@@ -74,7 +74,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
   stay crisp.
 - 🌄 **Depth:** The far background pulls back less than the platforms, like a real camera.
 - 🎚️ **Smooth:** The camera eases out when a tall Pokémon arrives and drifts back in a moment
-  after it leaves. It doesn't bob with a Pokémon's animation.
+  after it leaves. It doesn't bob with a Pokémon's animation, and while a turn plays it stays
+  put rather than chasing each move that swells or lifts a Pokémon, settling back once you're
+  choosing your next move.
 
 ### Battle Scene 🏞️
 

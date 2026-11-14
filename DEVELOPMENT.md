@@ -291,6 +291,15 @@ The target zoom:
   The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
   frames.
+- **Not back in while a turn plays.** Before each battle pass the adapter calls
+  `hd.setTurn(on)`: Gen 3 when `Battle._phase` is anything but `command`, Gen 1 any
+  `BattleState.phase` but `menu` / `moveSelect` / `mimicSelect`, Gen 2 any but `menu` /
+  `submenu` / `moves`. While `fit.turn` holds, the zoom and the extra rise may still pull out at
+  once, but the hold never counts, so they never come back in. Fill Screen's growth (`fit.grow`)
+  does not grow back meanwhile either. Back at the menu the 45-frame hold applies and it eases
+  in. Without this, a move that swells, lifts or lunges a Pokémon for a moment (Bulk Up,
+  Growth, a jump) pulled the camera out and let it back in, move after move. That happened
+  wherever no resting pose is reported: double battles, and Red to Crystal.
 - A frame with no UI seam (the post-catch Pokédex scene) is not zoomed; it fills as a whole
   screen (see Fill Screen).
 
