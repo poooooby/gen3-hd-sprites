@@ -917,6 +917,30 @@ local function tanobyChamber(name)
   return out
 end
 
+-- the Power Plant (49 x 40, 784 x 640 px; wild Pokemon and Zapdos): its walls' fronts are 25 rows
+-- (a grey rail, a panel with its red and green stripe, a blue base to the dark line at their foot)
+-- under a 15-row top, read off the drawing per pixel column by their blue base (839CB4 under
+-- A4BDD5, a dark line 4 rows down: the foot stands a row under that line), the columns with the
+-- same foot grouped and the diagonal braces at a run's ends (within 8 px, their feet within 6 rows)
+-- taken into it; kept as { x0, x1 (exclusive), the row under the line }: a wall stands to the line. The partitions between its rooms, drawn as tops alone in the
+-- floor's colours, the drums, the rubble and the generators stay as drawn
+local POWER_WALLS = {
+  { 29, 147, 48 }, { 189, 307, 48 }, { 349, 515, 48 }, { 557, 755, 48 }, { 162, 174, 80 }, { 336, 366, 128 },
+  { 402, 475, 128 }, { 176, 222, 144 }, { 258, 320, 144 }, { 10, 62, 160 }, { 98, 112, 160 }, { 322, 334, 192 },
+  { 21, 155, 256 }, { 181, 315, 256 }, { 336, 366, 256 }, { 402, 432, 256 }, { 530, 622, 256 }, { 658, 763, 256 },
+  { 162, 174, 272 }, { 341, 699, 336 }, { 32, 78, 352 }, { 322, 334, 352 }, { 66, 80, 416 }, { 112, 160, 416 },
+  { 226, 288, 416 }, { 336, 718, 480 }, { 16, 94, 496 }, { 130, 160, 496 }, { 176, 270, 496 }, { 322, 334, 496 },
+  { 176, 222, 576 }, { 258, 288, 576 }, { 304, 416, 576 }, { 496, 512, 576 }, { 528, 574, 576 }, { 626, 672, 576 },
+  { 735, 768, 576 },
+}
+local function powerPlant()
+  local out = {}
+  for i, b in ipairs(POWER_WALLS) do
+    out[#out + 1] = piece("wall_" .. i, { { b[1], b[3] - 41, b[2], b[3] - 1 } }, 25, { foot = b[3] - 1, alone = true })
+  end
+  return out
+end
+
 local ROOMS = {
   { name = "fr_pc1f", interior = { layout = "LAYOUT_CELADON_CITY_POKEMON_CENTER_1F", ground = { 0x281 },
                                    pieces = CENTER_1F, open = CENTER_OPEN } },
@@ -939,6 +963,7 @@ local ROOMS = {
                                           pieces = tanobyChamber("RIXY") } },
   { name = "fr_tanoby_viapois", interior = { layout = "LAYOUT_SEVEN_ISLAND_TANOBY_RUINS_VIAPOIS_CHAMBER", ground = { 0x288 },
                                           pieces = tanobyChamber("VIAPOIS") } },
+  { name = "fr_power_plant", interior = { layout = "LAYOUT_POWER_PLANT", ground = { 0x29F }, pieces = powerPlant() } },
   { name = "fr_anne_deck", interior = { layout = "LAYOUT_SSANNE_DECK", ground = { 0x350 }, pieces = ANNE_DECK } },
   { name = "fr_game_corner", interior = { layout = "LAYOUT_CELADON_CITY_GAME_CORNER", ground = { 0x291 },
                                           pieces = gameCorner() } },
