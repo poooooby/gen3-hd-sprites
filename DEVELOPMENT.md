@@ -1235,6 +1235,17 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     card's outline on screen, the nearest first.
   - **Checking it unattended:** `WORKSHOP_SCRIPT=<file>` runs a script with the workshop's hooks
     instead of the interactive loop, and `WORKSHOP_TUNE_FILE` saves elsewhere.
+- **Performance (FireRed, measured 2026-11-14 in the scratch engine, 1920x1080, desktop GPU):**
+  `scene_battle.lua` with `SCENE_TIME=n` times n frames of the settled battle with vsync off (mean
+  and worst). Viridian Forest (its trees: 120 crown quads and the lid each, stacked through the
+  wood) 5.6 ms a frame, worst 9; Route 1 (the General tree: 84 quads) 7.7 / 12.5; Pallet Town 8.1;
+  the rooms 5.3-5.9 (Oak's lab, the Game Corner, the Power Plant); Emerald's Route 101, Petalburg
+  Woods and Route 119 7-8 / 11-17. The scene's build: its render stage 490 ms in Viridian Forest,
+  600 on Route 1, 460 on Emerald's Route 112. The relief's background build: FireRed's whole build
+  in 34-36 s, 57 slices over 50 ms (longest 175-240 ms) against Emerald's 95-117 (longest 430-460);
+  `RELIEF_WATCH` finds no stretch between two ticks over 80 ms, and `RELIEF_SLOW=1` spreads the slow
+  slices over every phase, one or two a town: the collector's pauses on the build's heap, not any
+  one piece of work.
 - **LeafGreen:** it draws FireRed's maps with its own palettes. All 81 FireRed specs pass against LeafGreen's drawings, and placements match FireRed's. Its caves read the same as FireRed's (all 78, 185 disagreeing joins, layout for layout), its 71 rooms check the same (`room_check.lua` with `POKEPORT_GAME=leafgreen`, room for room), and its three trees (the General, Viridian Forest's, Berry Forest's) are 0 wrong at 45 degrees; Oak's lab, the forests, the caves and the Power Plant checked in game.
 - **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
   `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the

@@ -91,17 +91,27 @@ local function body(game, log)
   -- a slice a frame, and log its phases
   if env("RELIEF_BUILD") and hd._reliefStep then
     local t0, st, why, phases = love.timer.getTime(), nil, nil, nil
-    local worstStep, longSteps = 0, 0
+    local worstStep, longSteps, slow = 0, 0, nil
     for _ = 1, 200000 do
       local ts = love.timer.getTime()
       st, why, phases = hd._reliefStep(tonumber(env("RELIEF_WATCH") or ""))
       local spent = love.timer.getTime() - ts
       worstStep = math.max(worstStep, spent)
-      if spent > 0.05 then longSteps = longSteps + 1 end
+      if spent > 0.05 then
+        longSteps = longSteps + 1
+        -- (the phase it fell in: after the last one finished)
+        slow = slow or {}
+        local k = tostring(phases and phases[#phases] or "-"):match("^(%S+)")
+        slow[k] = (slow[k] or 0) + 1
+      end
       if st ~= "running" and st ~= "idle" then break end
       U.wait(1)
     end
     log(("relief build: longest slice %.0f ms, %d slices over 50 ms"):format(worstStep * 1000, longSteps))
+    -- RELIEF_SLOW=1: where they fell, by the phase finished before each
+    if env("RELIEF_SLOW") then
+      for k, n in pairs(slow or {}) do log(("  slow slices after %s: %d"):format(k, n)) end
+    end
     -- RELIEF_WATCH=seconds: the stretches without a tick longer than that, where they ended
     local run = hd.scene and hd.scene.reliefRun
     if run and run.gaps then
@@ -242,6 +252,22 @@ local function body(game, log)
       hd.setFill(fill)
       U.wait(6)
       U.shot(game, ("%s/%s_scene_%s.png"):format(dir, mapId, fill and "fill" or "nofill"))
+    end
+    -- SCENE_TIME=n: n frames of the settled battle (Fill on) timed: their mean and their worst
+    -- (vsync off while they run: the frame's own cost)
+    if env("SCENE_TIME") then
+      hd.setFill(true)
+      local vs = love.window.getVSync and love.window.getVSync()
+      if love.window.setVSync then love.window.setVSync(0) end
+      U.wait(10)
+      local n, sum, worst = tonumber(env("SCENE_TIME")) or 120, 0, 0
+      for _ = 1, n do
+        U.wait(1)
+        local dt = love.timer.getDelta() * 1000
+        sum, worst = sum + dt, math.max(worst, dt)
+      end
+      if vs and love.window.setVSync then love.window.setVSync(vs) end
+      log(("%s frame time: mean %.2f ms, worst %.2f ms over %d frames"):format(mapId, sum / n, worst, n))
     end
     -- SCENE_TILEANIM=1: whether the field's tile animation runs on in the battle (its banks'
     -- frames, a second apart)
