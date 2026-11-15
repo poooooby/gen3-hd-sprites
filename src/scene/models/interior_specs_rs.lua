@@ -62,7 +62,14 @@ return function(H, EMERALD)
       if r.name == name then
         local interior = {}
         for k, v in pairs(r.interior) do interior[k] = v end
-        for k, v in pairs(o or {}) do interior[k] = v end
+        for k, v in pairs(o or {}) do if k ~= "drop" then interior[k] = v end end
+        -- (`drop`: the pieces Ruby does not draw, left out)
+        if o and o.drop then
+          local gone, kept = {}, {}
+          for _, n in ipairs(o.drop) do gone[n] = true end
+          for _, pc in ipairs(interior.pieces) do if not gone[pc.name] then kept[#kept + 1] = pc end end
+          interior.pieces = kept
+        end
         ROOMS[#ROOMS + 1] = { name = "rs_" .. name, interior = interior, replaces = name }
         return
       end
@@ -395,6 +402,8 @@ return function(H, EMERALD)
     { "trick_house_puzzle5" }, { "tent_lobby", "LAYOUT_FALLARBOR_TOWN_CONTEST_LOBBY" },
   }
   for _, t in ipairs(ADOPTED) do adopt(t[1], t[2] and { layout = t[2] } or nil) end
+  adopt("lab", { drop = { "books_ne1" } })
+  adopt("devon_corp_1f", { drop = { "case_w", "case_e" } })
 
   -- ── the Trick House's puzzle rooms ────────────────────────────────────────────
   -- Ruby's own mazes, read as Emerald 3DS reads Emerald's: each a map of its partitions (the cells
@@ -691,6 +700,33 @@ return function(H, EMERALD)
     end
     add("rs_magma_hideout_1f", "LAYOUT_MAGMA_HIDEOUT_1F", { 0x228 }, ownShell(out))
   end
+
+  -- ── the Pokemon Center's 2F (every town's, drawn with Oldale's layout) ─────────────
+  -- 14 x 9, its own: a plant and a link terminal in the north-west corner, four glass tubes (x 48,
+  -- 96, 144, 192) down to the floor at 80, a counter between each two with a low gate east of it,
+  -- two plants along the front. The stools there are the ground floor's (as Emerald 3DS has it),
+  -- the escalator lies as drawn; the walls are the ground floor's, the room 144 deep.
+  local CENTER_FLOOR = { "cdc58b", "eedea4", "ffffc5" }
+  local function center2f()
+    local out = {
+      piece("plant_nw", { { 16, 10, 32, 40 } }, 26, { card = true, through = true,
+        leave = H.cat(H.WALL_COLOURS, CENTER_FLOOR, { "f6eebd", "949494" }) }),
+      piece("terminal", { { 32, 8, 48, 40 } }, 24, { leave = H.WALL_COLOURS, back = 32 }),
+      piece("plant_1", { { 48, 96, 64, 128 } }, 24, { card = true, leave = H.cat(CENTER_FLOOR, { "f6eebd" }) }),
+      piece("plant_2", { { 128, 96, 144, 128 } }, 24, { card = true, leave = H.cat(CENTER_FLOOR, { "f6eebd" }) }),
+    }
+    for i, x in ipairs({ 48, 96, 144, 192 }) do
+      out[#out + 1] = piece("tube_" .. i, { { x, 6, x + 16, 80 } }, 57,
+        { leave = H.WALL_COLOURS, side = { x + 3, 23, x + 13, 70 }, solid = true })
+    end
+    for i, x in ipairs({ 64, 112, 160 }) do
+      out[#out + 1] = piece("gate_" .. i, { { x + 16, 49, x + 32, 58 } }, 6, { back = 55 })
+      out[#out + 1] = piece("counter_" .. i, { { x, 40, x + 16, 63 } }, 9, { fill = 1, back = 48 })
+    end
+    return H.cat(out, H.centerWalls(144))
+  end
+  add("rs_pc2f", "LAYOUT_OLDALE_TOWN_POKEMON_CENTER_2F", { 0x202 }, center2f())
+  ROOMS[#ROOMS].replaces = "pc2f"
 
   return ROOMS
 end
