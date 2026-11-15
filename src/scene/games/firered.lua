@@ -342,6 +342,18 @@ F.components = {
               0x2C0, 0x2C1, 0x2C2, 0x2C3, 0x284, 0x285, 0x286, 0x2A5, 0x2A6, 0x2AE, 0x2AF, 0x320, 0x321,
               0x29A, 0x2A2, 0x2A8, 0x2AC, 0x2AD, 0x2B5, 0x328, 0x32C, 0x2B0, 0x2B4, 0x2B8, 0x2BC },
     ground = { 0x28A, 0x008, 0x009, 0x12B } },
+  -- Routes 12 and 13's boardwalks over the sea (rom_082d4b0c): plank decks on stilts, the planks
+  -- across a north-south walk (2F3-2F5, 346, 34B, 343, 345, 34F) and along an east-west one (2FC,
+  -- 2FD, 304, 305, 347-34A), the landings (310-315), and under each deck's south edge the cell drawn
+  -- with its dark edge, its pilings and its shade on the water (308-30B). Read off the drawing (Route
+  -- 12, 9 x 10-12): the planks to row 30, the edge row 31, the pilings and shade rows 32-36 - 6
+  -- texels of front; its upper layer alone is the deck, the planks' one-texel gaps left clear (a
+  -- north-south walk's runs joined across them: `hull`).
+  { name = "fr_boardwalk", secondary = "fr:rom082d4b0c", upper = true, height = 6, hull = 1, bridge = 0,
+    tiles = { 0x2F3, 0x2F4, 0x2F5, 0x346, 0x34B, 0x343, 0x345, 0x34F, 0x2FC, 0x2FD, 0x304, 0x305,
+              0x347, 0x348, 0x349, 0x34A, 0x310, 0x311, 0x312, 0x313, 0x314, 0x315,
+              0x308, 0x309, 0x30A, 0x30B },
+    ground = { 0x12B } },
 }
 
 return F
