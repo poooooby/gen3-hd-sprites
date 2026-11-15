@@ -8,7 +8,7 @@
 -- drawn foot. Every number is read off Ruby's drawing (Sapphire's rooms are Ruby's, tile for tile):
 -- pixels, colours and cells only. Each room is checked by tests/drivers/room_check.lua.
 
-return function(H)
+return function(H, EMERALD)
   local piece, ownShell = H.piece, H.ownShell
 
   local function room(name, layout, ground, pieces, o)
@@ -54,6 +54,20 @@ return function(H)
 
   local ROOMS = {}
   local function add(...) ROOMS[#ROOMS + 1] = room(...) end
+  -- Emerald 3DS's room `name` whole, for a room Ruby draws a little otherwise where its pieces -
+  -- each found by its own pixels - read Ruby's drawing as they read Emerald's (proved so by
+  -- room_check); `o` its interior's fields replaced
+  local function adopt(name, o)
+    for _, r in ipairs(EMERALD or {}) do
+      if r.name == name then
+        local interior = {}
+        for k, v in pairs(r.interior) do interior[k] = v end
+        for k, v in pairs(o or {}) do interior[k] = v end
+        ROOMS[#ROOMS + 1] = { name = "rs_" .. name, interior = interior, replaces = name }
+        return
+      end
+    end
+  end
 
   -- ── Rustboro's gym: pink stone blocks on a cobbled floor ──────────────────────
   -- 11 x 19. The back wall rows 0-1 (its corners to row 2); the leader's sand dais (rows 2-3) lies
@@ -360,6 +374,205 @@ return function(H)
   end
   add("rs_sootopolis_gym_1f", "LAYOUT_SOOTOPOLIS_CITY_GYM_1F", { 0x20d }, sootopolisGym1f())
   add("rs_sootopolis_gym_b1f", "LAYOUT_SOOTOPOLIS_CITY_GYM_B1F", { 0x211 }, sootopolisGymB1f())
+
+  -- ── Emerald 3DS's rooms that read Ruby's drawing as they read Emerald's ────────
+  -- (each proved by room_check against Ruby's: as few pixels wrong as Emerald's own, or fewer; a
+  -- layout Ruby names after another map, or one Ruby has its own name for, by that name):
+  -- the Mart (every town's), Brendan's 2F and May's house (Emerald redrew a few cells of each),
+  -- Rustboro's flat and Devon's 3F, Lilycove's elevator and Slateport's fan club, Mossdeep's game
+  -- corner, the Pokemon League's lobby and its corridors (Ruby's Corridor1 is Emerald's short hall,
+  -- its Corridor4 Emerald's Hall4), the Battle Tower's corridor, battle room and elevator (Emerald's
+  -- Frontier tower's), the link colosseums, Trick House puzzle 5, and the contest lobby of
+  -- Fallarbor, Verdanturf and Slateport (Emerald's Battle Tent lobby, the same room)
+  local ADOPTED = {
+    { "mart", "LAYOUT_OLDALE_TOWN_MART" }, { "brendan_2f" }, { "may_1f" }, { "may_2f" }, { "rustboro_city_flat1_2f" },
+    { "rustboro_city_devon_corp_3f" }, { "dept_store_elevator" }, { "slateport_fan_club" }, { "mossdeep_game_corner_1f" },
+    { "league_1f", "LAYOUT_EVER_GRANDE_CITY_POKEMON_LEAGUE" }, { "league_hall", "LAYOUT_EVER_GRANDE_CITY_CORRIDOR1" },
+    { "league_hall4", "LAYOUT_EVER_GRANDE_CITY_CORRIDOR4" },
+    { "frontier_tower_corridor", "LAYOUT_BATTLE_TOWER_CORRIDOR" },
+    { "frontier_tower_battle_room", "LAYOUT_BATTLE_TOWER_BATTLE_ROOM" }, { "battle_elevator", "LAYOUT_BATTLE_TOWER_ELEVATOR" },
+    { "battle_colosseum_2p", "LAYOUT_SINGLE_BATTLE_COLOSSEUM" }, { "battle_colosseum_4p", "LAYOUT_DOUBLE_BATTLE_COLOSSEUM" },
+    { "trick_house_puzzle5" }, { "tent_lobby", "LAYOUT_FALLARBOR_TOWN_CONTEST_LOBBY" },
+  }
+  for _, t in ipairs(ADOPTED) do adopt(t[1], t[2] and { layout = t[2] } or nil) end
+
+  -- ── the Trick House's puzzle rooms ────────────────────────────────────────────
+  -- Ruby's own mazes, read as Emerald 3DS reads Emerald's: each a map of its partitions (the cells
+  -- the player cannot walk, rows 2-21, as Emerald 3DS's maps are Emerald's), standing at Emerald's
+  -- heights for the same kind of partition, in the room's shell (Emerald's: the same walls); the
+  -- eighth's jars on its sand, each a cell's jar turned on a lathe.
+  local RS_TRICK_PUZZLES = {
+    [1] = { 12, [[
+############...
+..#...#....#...
+...............
+..#...#....#...
+.##############
+....#....#.....
+....#.........#
+....#....#.....
+##.###.########
+...#...#....#..
+.......#.......
+...#...#....#..
+.#############.
+.....#....#....
+.....#.........
+.....#....#....
+###.########.##
+.......#.......
+.......#.......
+...............
+]] },
+    [2] = { 6, [[
+.#..#..........
+.#.######......
+.#.#....#.#####
+.#...##.###.#.#
+.###.#....#.###
+...#.#....#....
+##.#.#.#######.
+...#.#.....#...
+...#.##.#.##.##
+##.###..#......
+.#...#.##.####.
+.###.###..#.#..
+...#...####.###
+##.###.#....#..
+.....#.###..#..
+.#.#.#...#.....
+.#.#.#####.###.
+.#.#...#....#..
+...#####.##.##.
+..........#..#.
+]] },
+    [3] = { 12, [[
+#..#..#..#..#..
+#..#..#..#..#..
+#..#..#..#..#..
+...#.....#.....
+#..#..#..####..
+#..####..####..
+#........#.....
+####..#..#..#..
+####..#..#..#..
+...#..#..#.....
+#..#..#..#..#..
+#..#..#######..
+......#.....#..
+#..####..#..#..
+#######..#..#..
+......#.....#..
+#..#..#..#..###
+#..#..#..######
+...............
+...............
+]] },
+    [4] = { 6, [[
+...............
+...#######.....
+...#....##.....
+#..##....#.....
+#####....#####.
+.......#.....#.
+..######.....#.
+......##.......
+.#.....#.#####.
+##.###.#.#.#...
+.#...#.#.#..##.
+##.#.#.#.......
+........#.#.##.
+...#.#.#..#....
+...#...#..#....
+.##############
+...............
+...............
+...............
+...............
+]] },
+    [6] = { 6, [[
+.....#.#.#....#
+.......#.#.#.##
+.....#.#.#.#.##
+.....#.#.#...##
+##.#.#.#.#..###
+#....#.#.#..###
+#...##.....#...
+#.#.###....#.#.
+#.#...######...
+..###..........
+....#..........
+..#.###..#.####
+#.#..##..#.####
+#....##......##
+#....##......##
+##.####..###.##
+.#...##..###..#
+.....##..###..#
+..............#
+.....##....####
+]] },
+    [7] = { 6, [[
+.......##.#....
+........#......
+....#.....#....
+##.....#..#....
+...............
+...........#.#.
+.#.#.#.####....
+...............
+.....#.........
+....#.......#..
+....#........#.
+.............#.
+...............
+...............
+............#..
+...............
+...##..........
+...............
+...............
+...............
+]] },
+  }
+  local RS_TRICK_JARS = [[
+############..#
+...........#..#
+...............
+#..............
+..........#....
+...#.......#...
+.......#.....#.
+....#....##....
+.#####.########
+....##.##..#...
+###.######.###.
+.....#.........
+.#..........#..
+.............#.
+#..............
+...............
+.........#....#
+....#.......#..
+..##########...
+....#######....
+]]
+  for n = 1, 7 do
+    local p = RS_TRICK_PUZZLES[n]
+    if p then
+      add("rs_trick_house_puzzle" .. n, "LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE" .. n, { 0x208 },
+        ownShell(H.cat(H.rectPieces("partition", H.runsOf(H.cellsOf(H.rowsOf(p[2]), "#", 2)), p[1]), H.trickHouseShell())))
+    end
+  end
+  do
+    local out = {}
+    for _, c in ipairs(H.cellsOf(H.rowsOf(RS_TRICK_JARS), "#", 0)) do
+      local x, y = c[1], c[2]
+      out[#out + 1] = piece(("jar_%d_%d"):format(x, y + 2), { { x * 16 + 2, y * 16 + 33, x * 16 + 14, y * 16 + 47 } }, 9,
+        { round = "lathe", leave = H.TRICK_JAR_FLOOR })
+    end
+    add("rs_trick_house_puzzle8", "LAYOUT_ROUTE110_TRICK_HOUSE_PUZZLE8", { 0x26b }, ownShell(H.cat(out, H.trickHouseShell())))
+  end
 
   return ROOMS
 end

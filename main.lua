@@ -182,17 +182,19 @@ return function(mod)
     -- src/scene/models/interior_specs_rs.lua)
     local rsRoomsOf = loadSibling(mod, "src/scene/models/interior_specs_rs.lua", true)
     if okI and type(interiors) == "table" and type(rooms) == "table" then
-      local okR, own = pcall(function() return type(rsRoomsOf) == "function" and rsRoomsOf(rooms.helpers) or {} end)
+      local okR, own = pcall(function() return type(rsRoomsOf) == "function" and rsRoomsOf(rooms.helpers, rooms) or {} end)
       if not okR then mod.log:warn("Ruby's and Sapphire's rooms: %s", tostring(own)); own = {} end
+      -- (an own room stands in for Emerald's of its layout, or of the name it `replaces`)
       local byLayout, placed = {}, {}
       for _, r in ipairs(own) do
         r.own = true
-        byLayout[r.interior.layout] = byLayout[r.interior.layout] or {}
-        table.insert(byLayout[r.interior.layout], r)
+        local key = r.replaces or r.interior.layout
+        byLayout[key] = byLayout[key] or {}
+        table.insert(byLayout[key], r)
       end
       local list = { ids = rooms.ids, swaps = rooms.swaps, helpers = rooms.helpers }
       for _, r in ipairs(rooms) do
-        local mine = byLayout[r.interior.layout]
+        local mine = byLayout[r.name] or byLayout[r.interior.layout]
         if not mine then list[#list + 1] = r
         elseif not placed[mine] then
           placed[mine] = true
@@ -200,9 +202,10 @@ return function(mod)
         end
       end
       for _, r in ipairs(own) do
-        if not placed[byLayout[r.interior.layout]] then
-          placed[byLayout[r.interior.layout]] = true
-          for _, m in ipairs(byLayout[r.interior.layout]) do list[#list + 1] = m end
+        local mine = byLayout[r.replaces or r.interior.layout]
+        if not placed[mine] then
+          placed[mine] = true
+          for _, m in ipairs(mine) do list[#list + 1] = m end
         end
       end
       sceneDeps.RoomSpecsByGame = sceneDeps.RoomSpecsByGame or {}

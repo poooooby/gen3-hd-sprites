@@ -3193,11 +3193,13 @@ for _, fm in ipairs({
   end
   add("magma_hideout_" .. fm[1]:lower(), "LAYOUT_MAGMA_HIDEOUT_" .. fm[1], { 0x3a2 }, pieces)
 end
-
+-- (the last rooms' readers, for other games' rooms: ROOMS.helpers)
+ROOMS.last = { rowsOf = rowsOf, cellsOf = cellsOf, trickHouseShell = trickHouseShell,
+               TRICK_JAR_FLOOR = TRICK_JAR_FLOOR }
 end
 -- (the later rooms' readers, for other games' rooms: ROOMS.helpers)
 ROOMS.later = { rectPieces = rectPieces, cutRuns = cutRuns, tierTops = tierTops, cellsRects = cellsRects,
-                flatRuns = flatRuns }
+                flatRuns = flatRuns, runsOf = runsOf }
 lastRooms()
 end
 laterRooms()
@@ -3306,6 +3308,7 @@ ROOMS.helpers = { piece = piece, facet = facet, cat = cat, hexes = hexes, ownShe
                   gymBlock = gymBlock, gymStatue = gymStatue, GYM_WALL_SIDE = GYM_WALL_SIDE,
                   centerWalls = centerWalls, WALL_COLOURS = WALL_COLOURS }
 for k, v in pairs(ROOMS.later or {}) do ROOMS.helpers[k] = v end
-ROOMS.later = nil
+for k, v in pairs(ROOMS.last or {}) do ROOMS.helpers[k] = v end
+ROOMS.later, ROOMS.last = nil, nil
 
 return ROOMS
