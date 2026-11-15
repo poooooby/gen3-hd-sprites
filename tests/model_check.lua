@@ -287,6 +287,130 @@ function Check.building(hd, name, exact)
       function(x, y) return marks[y * W + x] or dim(img.color[y * W + x] or 0) end) }
 end
 
+-- ── the game's layouts and their art, read as the relief reads them (the trees', the caves' and
+-- the workshop's proofs): { G (the game's tables), inp (relief_input's), Art, pairOf(L), load(p) } ──
+function Check.layoutsOf(gameName, mod)
+  mod = mod or "mods/gen3-hd-sprites/"
+  local function load_(p) return assert(loadfile(mod .. p))() end
+  local Input = load_("src/scene/relief_input.lua")
+  local Art = load_("src/scene/relief_art.lua")
+  local Post = load_("src/scene/relief_post.lua")
+  local Family = load_("src/scene/family.lua")
+  local base = gameName == "leafgreen" and "firered" or gameName
+  local okG, G = pcall(load_, "src/scene/games/" .. base .. ".lua")
+  if not okG then return nil end
+  local root = gameName .. "/data/generated/gba"
+  local function read(rel)
+    local f = io.open(root .. "/" .. rel, "rb")
+    if not f then return nil end
+    local s = f:read("*a"); f:close(); return s
+  end
+  local okB, B = pcall(dofile, "src/core/game3/constants/" .. base .. "/metatile_behaviors.lua")
+  local behaviours = {}
+  for n, v in pairs(okB and B.byName or {}) do
+    if type(n) == "string" and n:match("^MB_") and type(v) == "number" then behaviours[n] = v end
+  end
+  local F = Family.of(gameName)
+  local io_ = { read = read, json = function(t) local ok, v = pcall(Post.json, t); return ok and v or nil end,
+    lua = function(src)
+      local c = src and load(src, "=c", "t", {}); if not c then return nil end
+      local ok, t = pcall(c); return ok and t or nil
+    end,
+    behaviours = behaviours, family = F, Family = Family, game = gameName, collBlocked = function() return false end }
+  local okI, inp = pcall(Input.build, io_, Art.palettes)
+  if not okI or not inp then return nil end
+  local pairsBy = {}
+  local function pairOf(L)
+    local key = L.primary.key .. "/" .. L.secondary.key
+    pairsBy[key] = pairsBy[key] or Art.pair(L.primary, L.secondary)
+    return pairsBy[key]
+  end
+  return { G = G, inp = inp, Art = Art, pairOf = pairOf, load = load_ }
+end
+
+
+--- One tree species (Trees.species[K]) alone on grass: its model (the Trees module's, with its
+--- settings - the workshop's live tune when it is the scene's own) against its three drawn rows
+--- in the GBA's projection. ctx = Check.layoutsOf(...). -> a result, or nil and why.
+function Check.tree(ctx, Trees, K)
+  local SP = Trees.species[K]
+  local lname = K == 0 and "LAYOUT_PALLET_TOWN" or (SP.layouts and SP.layouts[1])
+  local L = lname and ctx.inp.byName[lname]
+  if L and SP.alone then
+    local P = ctx.pairOf(L)
+    local DIM = Trees.DIM
+    local function px(mid, layer, x, y)
+      local c = P.layerPixels(mid, layer)[y * 16 + x]
+      if not c then return nil end
+      return floor(c / 65536) / 255, (floor(c / 256) % 256) / 255, (c % 256) / 255, 1
+    end
+    local atlas = {}
+    Trees.kantoArt(px, function(x, y, r, g, b)
+      atlas[y * DIM + x] = floor(r * 255 + 0.5) * 65536 + floor(g * 255 + 0.5) * 256 + floor(b * 255 + 0.5)
+    end, K)
+    local A = SP.alone
+    local rows = { A.tip, A.crown, A.trunk }
+    local W, H = SP.w * 16, 48
+    local drawn = {}
+    for v = 0, H - 1 do
+      for x = 0, W - 1 do
+        local m = rows[floor(v / 16) + 1][floor(x / 16) + 1]
+        drawn[v * W + x] = P.layerPixels(m, 1)[(v % 16) * 16 + x % 16] or P.layerPixels(m, 0)[(v % 16) * 16 + x % 16]
+      end
+    end
+    local tris = {}
+    local function put(a, b, c, d, u0, v0, u1, v1, kind)
+      local function V(p, u, v) return { p[1] * 16, p[2] * 16, p[3] * 16, u, v } end
+      local A_, B_, C_, D_ = V(a, u0, v0), V(b, u1, v0), V(c, u1, v1), V(d, u0, v1)
+      tris[#tris + 1] = { A_, B_, C_, tag = kind }
+      tris[#tris + 1] = { A_, C_, D_, tag = kind }
+    end
+    local parts = {}
+    for row = 0, 1 do
+      for col = 0, SP.w - 1 do
+        local id = K == 0 and row * 2 + col or 16 + (K - 1) * 8 + row * SP.w + col
+        parts[id] = { col, row + 1, rows[row + 2][col + 1] }
+      end
+    end
+    for part, p in pairs(parts) do
+      Trees.emit(put, "x", p[3], p[1], p[2], part, function(x, y)
+        for k2, q in pairs(parts) do if q[1] == x and q[2] == y then return k2 end end
+        return nil
+      end, {})
+    end
+    -- (the tip row's ground: its lower layer, the grass)
+    put({ 0, 0, 0 }, { SP.w, 0, 0 }, { SP.w, 0, 1 }, { 0, 0, 1 }, SP.art.groundTexX, SP.art.texY,
+      SP.art.groundTexX + W, SP.art.texY + 16, "ground")
+    local color = Check.render({ { tris = tris, ox = 0, oy = 0, at = function(u, v) return atlas[v * DIM + u] end } }, W, H)
+    local wrong, missing, marks = 0, 0, {}
+    for i = 0, W * H - 1 do
+      if color[i] == nil then missing = missing + 1; marks[i] = 0xFF00FF
+      elseif color[i] ~= drawn[i] then wrong = wrong + 1; marks[i] = 0xFF0000 end
+    end
+    return { name = K == 0 and "tree (General)" or ("tree (" .. tostring(lname):gsub("^LAYOUT_", ""):lower() .. ")"),
+      kind = "tree", ok = wrong == 0 and missing == 0, wrong = wrong, missing = missing, judged = W * H,
+      sheet = Check.sheet(W, H, function(x, y) return drawn[y * W + x] end,
+        function(x, y) return color[y * W + x] end,
+        function(x, y) return marks[y * W + x] or Check.dim(color[y * W + x] or 0) end) }
+  end
+  return nil, ("tree species %s: no layout %s"):format(tostring(K), tostring(lname))
+end
+
+--- The engine's map drawn with a layout (its native layout file's name: FR_..., SEVII_...), or nil.
+function Check.mapIdOf(gameName, layout)
+  local words = {}
+  for w in layout:gsub("^LAYOUT_", ""):gmatch("[^_]+") do words[#words + 1] = w end
+  local root = gameName .. "/data/generated/gba/native/layouts/"
+  for first = 1, #words do
+    local tail = table.concat(words, "_", first)
+    for _, pre in ipairs({ "FR_", "SEVII_", "LG_", "EM_" }) do
+      local f = io.open(root .. pre .. tail .. ".mid", "rb")
+      if f then f:close(); return pre .. tail end
+    end
+  end
+  return nil
+end
+
 --- A room's pieces (every piece standing in it: modelled there, reused there, or found by its
 --- pixels) against the room as drawn. rooms = hd._rooms(); r one of them.
 function Check.room(hd, rooms, r, log, probe)

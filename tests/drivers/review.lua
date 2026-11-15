@@ -71,45 +71,7 @@ local function writePNG(path, sheet)
 end
 
 -- ── the game's layouts and their art, read as the relief reads them (trees, caves) ──
-local function layoutsOf(gameName)
-  local function load_(p) return assert(loadfile(MOD .. p))() end
-  local Input = load_("src/scene/relief_input.lua")
-  local Art = load_("src/scene/relief_art.lua")
-  local Post = load_("src/scene/relief_post.lua")
-  local Family = load_("src/scene/family.lua")
-  local base = gameName == "leafgreen" and "firered" or gameName
-  local okG, G = pcall(load_, "src/scene/games/" .. base .. ".lua")
-  if not okG then return nil end
-  local root = gameName .. "/data/generated/gba"
-  local function read(rel)
-    local f = io.open(root .. "/" .. rel, "rb")
-    if not f then return nil end
-    local s = f:read("*a"); f:close(); return s
-  end
-  local okB, B = pcall(dofile, "src/core/game3/constants/" .. base .. "/metatile_behaviors.lua")
-  local behaviours = {}
-  for n, v in pairs(okB and B.byName or {}) do
-    if type(n) == "string" and n:match("^MB_") and type(v) == "number" then behaviours[n] = v end
-  end
-  local F = Family.of(gameName)
-  local io_ = { read = read, json = function(t) local ok, v = pcall(Post.json, t); return ok and v or nil end,
-    lua = function(src)
-      local c = src and load(src, "=c", "t", {}); if not c then return nil end
-      local ok, t = pcall(c); return ok and t or nil
-    end,
-    behaviours = behaviours, family = F, Family = Family, game = gameName, collBlocked = function() return false end }
-  local okI, inp = pcall(Input.build, io_, Art.palettes)
-  if not okI or not inp then return nil end
-  local pairsBy = {}
-  local function pairOf(L)
-    local key = L.primary.key .. "/" .. L.secondary.key
-    pairsBy[key] = pairsBy[key] or Art.pair(L.primary, L.secondary)
-    return pairsBy[key]
-  end
-  return { G = G, inp = inp, Art = Art, pairOf = pairOf, load = load_ }
-end
-
--- ── trees: each species alone on grass, its model against its drawn rows ──
+-- ── trees: each species alone on grass, its model against its drawn rows (Check.tree) ──
 local function treeResults(ctx, Check, log)
   local Trees = ctx.load("src/scene/trees.lua")
   if not (ctx.G.trees and Trees.useGame) then return {} end
@@ -120,68 +82,8 @@ local function treeResults(ctx, Check, log)
   for k in pairs(Trees.species) do ks[#ks + 1] = k end
   table.sort(ks)
   for _, K in ipairs(ks) do
-    local SP = Trees.species[K]
-    local lname = K == 0 and "LAYOUT_PALLET_TOWN" or (SP.layouts and SP.layouts[1])
-    local L = lname and ctx.inp.byName[lname]
-    if L and SP.alone then
-      local P = ctx.pairOf(L)
-      local DIM = Trees.DIM
-      local function px(mid, layer, x, y)
-        local c = P.layerPixels(mid, layer)[y * 16 + x]
-        if not c then return nil end
-        return floor(c / 65536) / 255, (floor(c / 256) % 256) / 255, (c % 256) / 255, 1
-      end
-      local atlas = {}
-      Trees.kantoArt(px, function(x, y, r, g, b)
-        atlas[y * DIM + x] = floor(r * 255 + 0.5) * 65536 + floor(g * 255 + 0.5) * 256 + floor(b * 255 + 0.5)
-      end, K)
-      local A = SP.alone
-      local rows = { A.tip, A.crown, A.trunk }
-      local W, H = SP.w * 16, 48
-      local drawn = {}
-      for v = 0, H - 1 do
-        for x = 0, W - 1 do
-          local m = rows[floor(v / 16) + 1][floor(x / 16) + 1]
-          drawn[v * W + x] = P.layerPixels(m, 1)[(v % 16) * 16 + x % 16] or P.layerPixels(m, 0)[(v % 16) * 16 + x % 16]
-        end
-      end
-      local tris = {}
-      local function put(a, b, c, d, u0, v0, u1, v1, kind)
-        local function V(p, u, v) return { p[1] * 16, p[2] * 16, p[3] * 16, u, v } end
-        local A_, B_, C_, D_ = V(a, u0, v0), V(b, u1, v0), V(c, u1, v1), V(d, u0, v1)
-        tris[#tris + 1] = { A_, B_, C_, tag = kind }
-        tris[#tris + 1] = { A_, C_, D_, tag = kind }
-      end
-      local parts = {}
-      for row = 0, 1 do
-        for col = 0, SP.w - 1 do
-          local id = K == 0 and row * 2 + col or 16 + (K - 1) * 8 + row * SP.w + col
-          parts[id] = { col, row + 1, rows[row + 2][col + 1] }
-        end
-      end
-      for part, p in pairs(parts) do
-        Trees.emit(put, "x", p[3], p[1], p[2], part, function(x, y)
-          for k2, q in pairs(parts) do if q[1] == x and q[2] == y then return k2 end end
-          return nil
-        end, {})
-      end
-      -- (the tip row's ground: its lower layer, the grass)
-      put({ 0, 0, 0 }, { SP.w, 0, 0 }, { SP.w, 0, 1 }, { 0, 0, 1 }, SP.art.groundTexX, SP.art.texY,
-        SP.art.groundTexX + W, SP.art.texY + 16, "ground")
-      local color = Check.render({ { tris = tris, ox = 0, oy = 0, at = function(u, v) return atlas[v * DIM + u] end } }, W, H)
-      local wrong, missing, marks = 0, 0, {}
-      for i = 0, W * H - 1 do
-        if color[i] == nil then missing = missing + 1; marks[i] = 0xFF00FF
-        elseif color[i] ~= drawn[i] then wrong = wrong + 1; marks[i] = 0xFF0000 end
-      end
-      out[#out + 1] = { name = K == 0 and "tree (General)" or ("tree (" .. tostring(lname):gsub("^LAYOUT_", ""):lower() .. ")"),
-        kind = "tree", ok = wrong == 0 and missing == 0, wrong = wrong, missing = missing, judged = W * H,
-        sheet = Check.sheet(W, H, function(x, y) return drawn[y * W + x] end,
-          function(x, y) return color[y * W + x] end,
-          function(x, y) return marks[y * W + x] or Check.dim(color[y * W + x] or 0) end) }
-    else
-      log(("tree species %s: no layout %s"):format(tostring(K), tostring(lname)))
-    end
+    local res, why = Check.tree(ctx, Trees, K)
+    if res then out[#out + 1] = res else log(why) end
   end
   return out
 end
@@ -418,21 +320,8 @@ local FLAT = {
 
 -- -- in-game shots of the worst items: a battle started just south of where the faults gather,
 -- the battle as played and the camera aimed at them (REVIEW_SHOTS: how many, default 10; 0 none) --
-local function mapIdOf(gameName, layout)
-  local words = {}
-  for w in layout:gsub("^LAYOUT_", ""):gmatch("[^_]+") do words[#words + 1] = w end
-  local root = gameName .. "/data/generated/gba/native/layouts/"
-  for first = 1, #words do
-    local tail = table.concat(words, "_", first)
-    for _, pre in ipairs({ "FR_", "SEVII_", "LG_", "EM_" }) do
-      local f = io.open(root .. pre .. tail .. ".mid", "rb")
-      if f then f:close(); return pre .. tail end
-    end
-  end
-  return nil
-end
-
 local function shoot(game, hd, items, dir, gameName, log)
+  local Check = dofile(MOD .. "tests/model_check.lua")
   local want = tonumber(env("REVIEW_SHOTS") or "10") or 10
   if want <= 0 then return end
   local U = require("tests.drivers.util")
@@ -464,7 +353,7 @@ local function shoot(game, hd, items, dir, gameName, log)
   local n = 0
   for _, it in ipairs(list) do
     if n >= want then break end
-    local mapId = mapIdOf(gameName, it.layout)
+    local mapId = Check.mapIdOf(gameName, it.layout)
     if not mapId then
       log(("shot %s: no map for %s"):format(it.name, it.layout))
     else
@@ -577,7 +466,7 @@ local function body(game, log)
     else log("rooms: " .. tostring(rooms)) end
   end
   if not want or want.tree or want.cave then
-    local ctx = layoutsOf(gameName)
+    local ctx = Check.layoutsOf(gameName, MOD)
     if ctx then
       if not want or want.tree then
         local ok, res = xpcall(treeResults, debug.traceback, ctx, Check, log)

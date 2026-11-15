@@ -1244,7 +1244,9 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     or the count of pixels off. Each item takes "looks fine" / "needs work" and a note, kept in the
     browser (`localStorage`, by game); "copy my notes" lists them as text to paste back.
   - `tests/drivers/model_check.lua` and `room_check.lua` run the same proofs (`Check.building`,
-    `Check.room`) and write `.ppm` sheets, for one spec or room at a time.
+    `Check.room`) and write `.ppm` sheets, for one spec or room at a time. The trees' and caves'
+    proofs read the game's layouts as the relief reads them (`Check.layoutsOf`); a tree species is
+    proved by `Check.tree`, a layout's map found by `Check.mapIdOf` (the shots, the workshop).
 - **The Scene Workshop (`tests/drivers/workshop.lua`, `tools/workshop.ps1`, `src/scene/tune.lua`):**
   tune the scene's models by eye and keep the result as data.
   - **Run it:** `.\tools\workshop.ps1 [-Game firered] [-Spot FR_ROUTE_2:5:5] [-Engine ..\gen1recomp]`.
@@ -1260,6 +1262,16 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     H hides this tree (its ground stays). Each change rebuilds the scene (`Scene._rebuild`, about
     0.3 s). Ctrl+S saves, Ctrl+R goes back to the saved file, Esc quits (unsaved changes are
     dropped).
+  - **The proof (G):** the selection against the game's own drawing in the GBA's projection, as
+    the review sheet proves it (`tests/model_check.lua`): a tree, its species alone on grass under
+    the settings being tuned (`Check.tree` with the scene's own `Trees`); a building, its spec
+    (`Check.building`; a fence or curb is the scene's own, with no spec); anything else indoors,
+    the room the spot is in (`Check.room`). It shows the counts and drawing | model | marks; V
+    turns to the model laid over the drawing (pulsing) and to the marks alone. It is proved again
+    after every rebuild. Kanto's tree holds the drawing at 45 degrees by construction (its crown
+    textured by projection, its cone's radius fitted row by row on screen): its depth and stand
+    change it only away from 45 degrees, and its proof stays 0. `WORKSHOP_SCRIPT` hooks: `prove`,
+    `proof`, `setView`, `hd`.
   - **The data:** `Tune.DEFS` names each group's settings with their defaults (the models' own
     constants, so a game with no tune file draws as before) and ranges. Ctrl+S writes
     `src/scene/games/<game>_tune.lua` (`Tune.source`: `groups` and `marks`, keyed `MAP:x:y` in the

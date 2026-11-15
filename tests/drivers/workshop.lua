@@ -196,6 +196,78 @@ local function body(game, log)
     dirty, dirtyAt, unsaved = true, 0, false
     say(chunk and "Back to the saved file" or "No saved file: back to the defaults")
   end
+  -- ── the proof: the selection against the game's own drawing in the GBA's projection, as the
+  -- review sheet proves it (tests/model_check.lua): a tree's species alone on grass under the
+  -- settings being tuned, a building's spec, or the room the spot is in ──
+  local Check = dofile(ws.path .. "/tests/model_check.lua")
+  local proof, proofView = nil, 1
+  local VIEWS = { "drawing | model | marks", "the model over the drawing", "the marks" }
+  local ctx, rooms
+  local function panels(sheet)
+    local pw, h = math.floor(sheet.w / 3), sheet.h
+    local out = {}
+    for i = 0, 2 do
+      local d = love.image.newImageData(math.max(1, pw), math.max(1, h))
+      for y = 0, h - 1 do
+        for x = 0, pw - 1 do
+          local c = sheet.at(i * pw + x, y) or 0
+          -- (the model's empty pixels clear, so it lies over the drawing)
+          local a = (i == 1 and c == 0) and 0 or 1
+          d:setPixel(x, y, math.floor(c / 65536) % 256 / 255, math.floor(c / 256) % 256 / 255, c % 256 / 255, a)
+        end
+      end
+      local img = G.newImage(d)
+      img:setFilter("nearest", "nearest")
+      out[i + 1] = img
+    end
+    return out, pw, h
+  end
+  local function prove(quiet)
+    if not sel then if not quiet then say("Pick a tree or a building first (click it)") end; return end
+    local c = sel.cells[1]
+    local res, why, title
+    local okP, errP = xpcall(function()
+      local part = sel.tree and treePart(c)
+      local spec = c.model and c.model.model and c.model.model.spec
+      local specs = {}
+      for _, n in ipairs(hd._sceneSpecNames and hd._sceneSpecNames() or {}) do specs[n] = true end
+      if part and not Trees.kanto then
+        why = "the proof reads Kanto's tree models (Hoenn's trees are Emerald 3DS's cards)"
+      elseif part then
+        local _, _, _, k = Trees.partCell(part)
+        ctx = ctx or Check.layoutsOf(gameId, ws.path .. "/")
+        if not ctx then why = "the game's layouts could not be read"; return end
+        res, why = Check.tree(ctx, Trees, k)
+        title = "its species alone on grass, under these settings"
+      elseif spec and not specs[spec.name] then
+        why = tostring(spec.name) .. " is a part of the scene's own (a fence, a curb): no spec to prove"
+      elseif spec then
+        res = Check.building(hd, spec.name)
+        why = res == nil and ("no model " .. tostring(spec.name)) or nil
+        title = "its spec's rectangles"
+      else
+        rooms = rooms or (hd._rooms and hd._rooms()) or {}
+        for _, r in ipairs(rooms) do
+          if r.pieces and Check.mapIdOf(gameId, r.layout) == mapId then
+            res = Check.room(hd, rooms, r)
+            title = "every piece standing in the room"
+            break
+          end
+        end
+        if not res then why = "nothing modelled here to prove: pick a tree or a building" end
+      end
+    end, debug.traceback)
+    if not okP then why = tostring(errP); log(why) end
+    if not res then proof = nil; say("No proof: " .. tostring(why)); return end
+    local imgs, pw, ph = panels(res.sheet)
+    local stretched = type(res.stretched) == "table" and #res.stretched or 0
+    local counts = ("wrong %d, missing %d%s%s, stretched faces %d, of %d pixels judged"):format(res.wrong or 0,
+      res.missing or 0, res.extra and (", extra " .. res.extra) or "", res.over and (", over " .. res.over) or "",
+      stretched, res.judged or 0)
+    proof = { res = res, imgs = imgs, w = pw, h = ph, title = ("%s: %s"):format(res.name or "?", title), counts = counts }
+    if not quiet then say(("%s %s: %s"):format(res.ok and "Matches the drawing" or "Off the drawing", res.name or "", counts)) end
+  end
+
   local function rebuild()
     local t0 = love.timer.getTime()
     local s, why = ws.rebuild()
@@ -209,6 +281,7 @@ local function body(game, log)
       scope = keep
     end
     say(("Rebuilt in %d ms"):format((love.timer.getTime() - t0) * 1000))
+    if proof then prove(true) end
   end
 
   -- ── picking: the cell under the mouse ──
@@ -310,6 +383,8 @@ local function body(game, log)
     elseif key == "o" then cam.pitch, cam.yaw = 45, 0
     elseif key == "t" then cam.pitch, cam.yaw = 89, 0
     elseif key == "f5" then rebuild()
+    elseif key == "g" then if proof then proof = nil else prove() end
+    elseif key == "v" then if proof then proofView = proofView % #VIEWS + 1; say("Proof: " .. VIEWS[proofView]) end
     elseif key == "f12" then
       local path = ("%s/workshop_%d.png"):format(env("SHOT_DIR") or ".", os.time())
       G.captureScreenshot(function(data)
@@ -380,6 +455,34 @@ local function body(game, log)
     end
     G.polygon("line", pts)
   end
+  local function drawProof(W, H)
+    if not proof then return end
+    local AW, AH = W - PANEL_W - 32, H * 0.62
+    local pw, ph, gap = proof.w, proof.h, 10
+    local n = proofView == 1 and 3 or 1
+    local k = math.min(AW / (n * pw + (n - 1) * gap), (AH - 52) / ph)
+    if k >= 1 then k = math.floor(k) end
+    local bw, bh = n * pw * k + (n - 1) * gap + 24, ph * k + 64
+    local bx, by = 16, H - bh - 16
+    G.setColor(0.06, 0.07, 0.09, 0.94)
+    G.rectangle("fill", bx, by, bw, bh, 6)
+    G.setColor(proof.res.ok and 0.55 or 1, proof.res.ok and 1 or 0.55, 0.55, 1)
+    G.setFont(small)
+    G.print((proof.res.ok and "MATCHES  " or "OFF  ") .. proof.title, bx + 12, by + 8)
+    G.setColor(0.85, 0.88, 0.92, 1)
+    G.print(proof.counts .. "   (" .. VIEWS[proofView] .. "; V: next view, G: close)", bx + 12, by + 26)
+    local x, y = bx + 12, by + 48
+    G.setColor(1, 1, 1, 1)
+    if proofView == 1 then
+      for i = 1, 3 do G.draw(proof.imgs[i], x + (i - 1) * (pw * k + gap), y, 0, k, k) end
+    elseif proofView == 2 then
+      G.draw(proof.imgs[1], x, y, 0, k, k)
+      G.setColor(1, 1, 1, 0.5 + 0.5 * math.sin(love.timer.getTime() * 3))
+      G.draw(proof.imgs[2], x, y, 0, k, k)
+    else
+      G.draw(proof.imgs[3], x, y, 0, k, k)
+    end
+  end
   local function drawPanel(W, H)
     local x0 = W - PANEL_W
     G.setColor(0.08, 0.09, 0.11, 0.92)
@@ -440,6 +543,7 @@ local function body(game, log)
       "Up / Down: setting   Left / Right: change (Shift: x5)",
       "Backspace: back to default   Tab: all trees / this tree",
       "B: battle camera   O: 45 degrees   T: from above",
+      "G: check against the drawing (V: its view)",
       "Ctrl+S: save   Ctrl+R: back to saved   F5: rebuild   F12: shot",
       "Esc: quit",
     }
@@ -468,6 +572,7 @@ local function body(game, log)
       G.setColor(1, 0.85, 0.2, 1)
       for _, cell in ipairs(sel.cells) do outline(cell) end
     end
+    drawProof(W, H)
     drawPanel(W, H)
   end)
 
@@ -478,6 +583,7 @@ local function body(game, log)
   if env("WORKSHOP_SCRIPT") then
     return { select = selectCell, pick = pick, change = change, nudge = nudge, save = save, rebuild = rebuild,
              toggleHide = toggleHide, cam = cam, defs = defs, setRow = function(r) row = r end,
+             prove = prove, proof = function() return proof end, setView = function(v) proofView = v end, hd = hd,
              setScope = function(v) scope = v end, scene = function() return scene end, sel = function() return sel end,
              current = current, toScreen = toScreen, pose = pose, Camera = Camera, treePart = treePart,
              tuneFile = tuneFile, Tune = Tune, tuneGame = tuneGame, U = U, game = game,
