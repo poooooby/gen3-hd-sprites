@@ -1342,15 +1342,27 @@ do
   check(all.recorded[Prints.rectKey("LAYOUT_A", { 1, 1, 2, 1 })] == Prints.ids({ 1, 1 }, 2), "...and records the rectangles asked of it")
   -- Emerald's hand marks kept where Ruby draws Emerald's (src/scene/relief_post.lua)
   local Post = dofile("src/scene/relief_post.lua")
-  local fixes, order = Post.json('{"layouts":{"LAYOUT_A":{"base":16,"terraces":{"0,0":{"level":1},"9,8":{"level":2}},' ..
-    '"behind":{"8,8":1}},"LAYOUT_B":{"terraces":{"0,0":{"level":1}}},"LAYOUT_GONE":{"base":16}}}')
-  local recs = { LAYOUT_A = r, LAYOUT_B = C.layout("LAYOUT_B", 5, 4, at(false)) }
-  local dropped = Post.trustedFixes(fixes, order, function(name) return recs[name] end)
-  local A = fixes.layouts.LAYOUT_A
-  check(dropped == 4 and A and A.base == 16 and A.terraces["0,0"] and A.terraces["9,8"] == nil and next(A.behind) == nil,
-    "a mark is kept where its cell's block is Emerald's, the layout's own numbers kept")
-  check(fixes.layouts.LAYOUT_B == nil and fixes.layouts.LAYOUT_GONE == nil and #order[fixes.layouts] == 1
-    and #order[A.terraces] == 1, "a layout drawn another size or not there loses its marks; the orders follow")
+  -- (LAYOUT_A redrawn in one block of four keeps its marks; drawn redrawn in three of four, it
+  -- keeps them only in its one block drawn as Emerald's)
+  local mostly = C.layout("LAYOUT_A_MOSTLY", 10, 9, function(x, y) return (x >= 8 or y >= 8) and 2 or 1 end)
+  check(math.abs(r.share - 0.75) < 1e-9, "a layout's share of blocks drawn as Emerald's")
+  local function run(rec)
+    local f, o = Post.json('{"layouts":{"LAYOUT_A":{"base":16,"terraces":{"0,0":{"level":1},"9,8":{"level":2}},' ..
+      '"behind":{"8,8":1}},"LAYOUT_B":{"terraces":{"0,0":{"level":1}}},"LAYOUT_GONE":{"base":16}}}')
+    local recs = { LAYOUT_A = rec, LAYOUT_B = C.layout("LAYOUT_B", 5, 4, at(false)) }
+    return Post.trustedFixes(f, o, function(name) return recs[name] end), f, o
+  end
+  local dropped, f1, o1 = run(r)
+  local A = f1.layouts.LAYOUT_A
+  check(dropped == 2 and A and A.base == 16 and A.terraces["0,0"] and A.terraces["9,8"] and A.behind["8,8"],
+    "a layout redrawn in a few places keeps its marks, and its own numbers")
+  check(f1.layouts.LAYOUT_B == nil and f1.layouts.LAYOUT_GONE == nil and #o1[f1.layouts] == 1,
+    "a layout drawn another size or not there loses its marks; the orders follow")
+  mostly.share = 0.25
+  local dropped2, f2, o2 = run({ size = true, same = false, share = 0.25, ok = function(x, y) return x < 8 and y < 8 end })
+  local A2 = f2.layouts.LAYOUT_A
+  check(dropped2 == 4 and A2.base == 16 and A2.terraces["0,0"] and A2.terraces["9,8"] == nil and next(A2.behind) == nil
+    and #o2[A2.terraces] == 1, "one mostly redrawn keeps its marks only where its block is Emerald's")
 end
 
 -- the game's tileset family (src/scene/family.lua): Emerald's cuts and FireRed's

@@ -350,10 +350,14 @@ end
 
 --- Emerald's hand marks (fixes, order: Post.json's) kept, in place, where another game draws a layout
 --- as Emerald does (Ruby, Sapphire: src/scene/prints.lua). rec(name) -> the layout's record
---- (Prints' C.layout: same, size, ok(x, y)), or nil where the game has no such layout. A layout the
---- game lacks or draws another size loses its marks; in one the same size, each mark at a cell
---- (terraces, behind, cells) whose block the game draws otherwise is dropped, the layout's own
---- numbers (base, belt, edges past its border, drawn) kept. Returns the marks dropped.
+--- (Prints' C.layout: same, size, ok(x, y), share), or nil where the game has no such layout. A
+--- layout the game lacks or draws another size loses its marks. One the same size, redrawn in a few
+--- places (more of its blocks Emerald's than Post.MOSTLY: its changes are details - a ledge, a berry
+--- patch - the marks' levels hold over, and the solver alone reads them worse), keeps them all; one
+--- mostly redrawn (the Safari Zone's new corners) loses each mark at a cell (terraces, behind, cells)
+--- whose block it draws otherwise. The layout's own numbers (base, belt, edges past its border,
+--- drawn) are kept. Returns the marks (and layouts) dropped.
+Post.MOSTLY = 0.5
 function Post.trustedFixes(fixes, order, rec)
   local layouts = fixes.layouts or {}
   local kept, dropped = {}, 0
@@ -364,7 +368,8 @@ function Post.trustedFixes(fixes, order, rec)
       dropped = dropped + 1
     else
       kept[#kept + 1] = name
-      for _, part in ipairs(r.same and {} or { "terraces", "behind", "cells" }) do
+      local mostly = (r.share or 0) > Post.MOSTLY
+      for _, part in ipairs((r.same or mostly) and {} or { "terraces", "behind", "cells" }) do
         local t = spec[part]
         if type(t) == "table" then
           local gone = {}

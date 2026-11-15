@@ -19,7 +19,8 @@
 --   Prints.checker(T)                a checker over Emerald's table T (nil: everything holds):
 --     C.rect(layout, rect, ids)      whether a reference rectangle draws Emerald's metatiles
 --     C.layout(name, w, h, at)       its record: { same (the whole layout), size (the same size),
---                                    ok(x, y) (the cell's block is Emerald's) }, cached by name
+--                                    ok(x, y) (the cell's block is Emerald's), share (of its blocks,
+--                                    the part Emerald's: 0..1) }, cached by name
 --     C.record(on)                   (dev) record every rect asked about instead: C.recorded
 --
 -- Plain Lua (LuaJIT's bit library, or plain arithmetic without it).
@@ -102,15 +103,17 @@ function Prints.checker(T)
     local size = want ~= nil and want:match("^[^:]*:") == mine:match("^[^:]*:")
     local N = Prints.CHUNK
     local cols = math.ceil(w / N)
-    local okChunk = {}
+    local okChunk, n, alike = {}, 0, 0
     if size then
       local head = #mine:match("^[^:]*:")
       for k = 0, (#mine - head) / 8 - 1 do
         local a = head + k * 8 + 1
         okChunk[k] = mine:sub(a, a + 7) == want:sub(a, a + 7)
+        n = n + 1
+        if okChunk[k] then alike = alike + 1 end
       end
     end
-    r = { same = size and mine == want, size = size,
+    r = { same = size and mine == want, size = size, share = n > 0 and alike / n or 0,
           ok = function(x, y)
             if not size or x < 0 or y < 0 or x >= w or y >= h then return false end
             return okChunk[math.floor(y / N) * cols + math.floor(x / N)] == true

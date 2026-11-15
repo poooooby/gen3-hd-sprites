@@ -46,8 +46,8 @@ return function(deps)
     firered = { groups = 558, world = 5230, export = 45288, terraces = 13593, finish = 13401 },
     leafgreen = { groups = 558, world = 5230, export = 45288, terraces = 13593, finish = 13401 },
     -- (Ruby's and Sapphire's: Emerald's rules over their maps, measured the same way)
-    ruby = { groups = 428, world = 6747, export = 65819, terraces = 20767, finish = 195 },
-    sapphire = { groups = 428, world = 6747, export = 65819, terraces = 20857, finish = 195 },
+    ruby = { groups = 428, world = 6765, export = 65819, terraces = 21002, finish = 203 },
+    sapphire = { groups = 428, world = 6765, export = 65819, terraces = 21002, finish = 203 },
   }
   -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
   -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
@@ -57,7 +57,7 @@ return function(deps)
   -- r15: FireRed 3DS's relief over ours where it gives one, Run.borrow)
   -- (Ruby's and Sapphire's: Emerald's rules over their maps, kept where they draw Emerald's -
   -- src/scene/prints.lua - so their prints' version)
-  Run.RULES = { firered = 15, leafgreen = 15, ruby = 1, sapphire = 1 }
+  Run.RULES = { firered = 15, leafgreen = 15, ruby = 2, sapphire = 2 }
   -- Hoenn's games: Emerald 3DS's rules (its terraces, sea ramps and hand marks) read their maps
   Run.HOENN = { emerald = true, ruby = true, sapphire = true }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
