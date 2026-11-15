@@ -1567,6 +1567,14 @@ do
   local lvV, _, confV = Caves.read({ name = "LAYOUT_TEST_V", w = 6, h = 4, blocks = bV }, { pieces = { [9] = "F", [6] = "W" } })
   check(lvV[0] == 0 and lvV[3 * 6] == -2 and #confV == 1,
     "a two-face wall outvotes a one-tile end: the floor two levels under the rock")
+  -- a rim strip between a two-tile side (whose top is a level over the floor) and the floor it runs
+  -- into: the rims join each other, then the floor, and the step stands at the side
+  local rowsR = { { 7, 7, 1, 1, 1 }, { 7, 7, 1, 1, 1 }, { 7, 3, 3, 3, 1 } }
+  local bR = {}
+  for y = 0, 2 do for x = 0, 4 do bR[y * 5 + x] = rowsR[y + 1][x + 1] end end
+  local lvR, _, confR = Caves.read({ name = "LAYOUT_TEST_R", w = 5, h = 3, blocks = bR }, { pieces = { [7] = "E", [3] = "N" } })
+  check(lvR[2 * 5 + 1] == lvR[2 * 5 + 4] and lvR[2 * 5 + 3] == lvR[2 * 5 + 4] and #confR == 1 and confR[1][1] == 0
+    and confR[1][2] == 2, "a rim strip lies level with the floor it runs into, its step at the side")
   -- a side's head (the rim's corner over a side): it falls as the side does, its north edge a step
   local P3 = { [2] = "HW", [3] = "N", [4] = "HE", [6] = "W", [7] = "E", [8] = "SW", [9] = "F", [10] = "SE" }
   local rows3 = { { 1, 1, 1, 1, 1 }, { 1, 2, 3, 4, 1 }, { 1, 6, 5, 7, 1 }, { 1, 8, 9, 10, 1 }, { 1, 1, 1, 1, 1 } }

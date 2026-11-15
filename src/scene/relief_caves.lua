@@ -61,6 +61,8 @@ local function flat() return 0 end
 local BREAKS = { N = { n = true }, NW = { n = true, w = true }, NE = { n = true, e = true },
                  TW = { w = true }, TE = { e = true }, HW = { n = true }, HE = { n = true } }
 Caves.SHAPES, Caves.BREAKS = SHAPES, BREAKS
+-- the kinds flat over their cell (the floor's own, unnamed, and the rims and thin tops)
+local FLAT = { ["."] = true, N = true, NW = true, NE = true, TW = true, TE = true }
 
 --- Whether the layout `name` is read as a cave.
 function Caves.covers(C, name)
@@ -160,10 +162,13 @@ function Caves.read(L, C, tick, isWater)
             local d, same = pa[0] - pb[0], true
             for t = 1, N do if abs(pa[t] - pb[t] - d) > 1e-6 then same = false; break end end
             if same then
-              -- (by trust: the floor first, flat beside flat; then a piece beside the flat; then two pieces)
-              local rank = (ka == nil and 1 or 0) + (kb == nil and 1 or 0)
+              -- (by trust: the floor first, flat beside flat, and a rim beside a rim (flat, its
+              -- north edge a step); then by vote a piece beside the flat, a rim beside the floor
+              -- or a piece; then two pieces)
+              local rank = (FLAT[ka or "."] and 1 or 0) + (FLAT[kb or "."] and 1 or 0)
+              if rank == 2 and (ka == nil) ~= (kb == nil) then rank = 1 end
               local q = queued[rank]
-              q[#q + 1] = { a, b, d, x, y, nb[3] }
+              q[#q + 1] = { a, b, d, x, y, nb[3], floor = ka == nil or kb == nil }
             end
           end
         end
@@ -173,7 +178,7 @@ function Caves.read(L, C, tick, isWater)
   -- the floors and tops first (flat beside flat), then the walls (piece beside piece: a wall two
   -- tiles deep is two levels however its ends meet the floor), then each wall against the floors
   -- it meets by vote: the offsets the most edges agree on first, so a wall's few odd edges (a
-  -- one-tile end of a two-tile wall) disagree, not the wall
+  -- one-tile end of a two-tile wall) disagree, not the wall; on a tie, the join with the floor
   for _, j in ipairs(queued[2]) do join(j[1], j[2], j[3], j[4], j[5], j[6]) end
   for _, j in ipairs(queued[0]) do join(j[1], j[2], j[3], j[4], j[5], j[6]) end
   local votes, order = {}, {}
@@ -188,6 +193,7 @@ function Caves.read(L, C, tick, isWater)
       local v = votes[key]
       if not v then v = { n = 0, first = n }; votes[key] = v; order[#order + 1] = v end
       v.n = v.n + 1
+      if j.floor then v.floor = true end
       j.vote = v
     end
   end
@@ -196,6 +202,9 @@ function Caves.read(L, C, tick, isWater)
   table.sort(rest, function(a, b)
     local va, vb = a.vote and a.vote.n or 0, b.vote and b.vote.n or 0
     if va ~= vb then return va > vb end
+    -- (a tie: the join that meets the floor first)
+    local la, lb = a.vote and a.vote.floor or false, b.vote and b.vote.floor or false
+    if la ~= lb then return la end
     local fa, fb = a.vote and a.vote.first or 0, b.vote and b.vote.first or 0
     if fa ~= fb then return fa < fb end
     return a.n < b.n
