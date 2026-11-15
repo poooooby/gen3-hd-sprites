@@ -89,17 +89,22 @@ return function(K, H)
   -- every 4 px from x 11), its outline row 10 and highlight row 11; its hips shaded columns x 1-6
   -- and 73-78; the eave's dark band rows 45-51; the Poke Ball sign over the eave and the wall's
   -- top, rows 46-63 x 24-55; the facade from row 52 down, its bottom corners cut away. It stands
-  -- on its four blocked rows (z 16-80); the sign is a board just in front of the eave.
+  -- on its four blocked rows (z 16-80); the sign is a board just in front of the eave, its
+  -- underside sloping back to the wall at the sign's last row (edge-on at 45 degrees): the wall's
+  -- front is the drawing too, the ball's lower rows on it behind the board, and from the battle's
+  -- camera they showed under the board, a second ball. The eave behind the sign is laid with the
+  -- plain eave beside it (x 9-24), the side walls with the plain panel right of the door (x 56-72;
+  -- the one left of it carries the P.C letters).
   local function pokemon_center()
     local front_z, back_z, overhang = 80, 16, 2
     local zf, zb = front_z + overhang, back_z - overhang
     local roof = HipRoof("roof", 0, 80, zf, zb, zf - 52, {
-      fascia = Strip({ 45, 52 }, { wrap = { 9, 71 } }),
+      fascia = Strip({ 45, 52 }, { wrap = { 9, 71 }, patch = { 24, 56, 9, 24 } }),
       slope = Strip({ 16, 45 }, { rep = { 16, 20 }, wrap = { 11, 71 } }),
       teeth = { 11, 12 }, cap = { 10, 11 }, pitch = PITCH, run = 7,
       ridge_u = { 7, 73 }, end_tile = Tile(7, 10, 8, 11) })
     local wall_top = 28
-    local plaster = Tile(8, 64, 24, 72, { top = wall_top })
+    local plaster = Tile(56, 64, 72, 72, { top = wall_top })
     local walls = Prism("walls", 2, 78,
       { { front_z, 0 }, { front_z, wall_top }, { back_z, wall_top }, { back_z, 0 } },
       { edges = { [0] = Proj(52, 80), [2] = plaster }, skip = { 1, 3 },
@@ -107,8 +112,8 @@ return function(K, H)
     local zs = zf + 2
     local face = Tile(25, 56, 33, 64, { top = zs - 46 })
     local sign = Prism("sign", 24, 56,
-      { { zs, zs - 64 }, { zs, zs - 46 }, { front_z, zs - 46 }, { front_z, zs - 64 } },
-      { edges = { [0] = Proj(46, 64), [1] = Proj(), [3] = face }, skip = { 2 },
+      { { zs, zs - 64 }, { zs, zs - 46 }, { front_z, zs - 46 }, { front_z, front_z - 64 } },
+      { edges = { [0] = Proj(46, 64), [1] = Proj(), [3] = Proj(46, 63) }, skip = { 2 },
         caps = { Band(zs - 64, zs - 46, face, zs) } })
     return { walls, roof, sign }
   end
@@ -117,7 +122,8 @@ return function(K, H)
   -- 4 px tiles (lines every 4 rows from row 0, every 4 px from x 7) to its eave line at row 28,
   -- its hips x 1-6 and 57-62, darker toward the eave; a rounded white canopy over the door, rows
   -- 14-31 x 16-47; the facade rows 29-47 (the MART sign, the door, windows), the ground drawn
-  -- below it: its front wall stands at z 48, its back at 16. The slope's drawn rows (0-27) are as
+  -- below it: its front wall stands at z 48, its back at 16 (the canopy's underside slopes back to
+  -- the wall at its last row, as the Center's sign's). The slope's drawn rows (0-27) are as
   -- many as its run and rise show at a pitch of 31 degrees: its ridge is the drawing's top.
   local function poke_mart()
     local front_z, back_z, overhang = 48, 16, 2
@@ -136,8 +142,8 @@ return function(K, H)
     local zc = zf + 2
     local white = Tile(17, 22, 25, 28, { top = zc - 14 })
     local canopy = Prism("canopy", 16, 48,
-      { { zc, zc - 32 }, { zc, zc - 14 }, { front_z, zc - 14 }, { front_z, zc - 32 } },
-      { edges = { [0] = Proj(14, 32), [1] = Proj(), [3] = white }, skip = { 2 },
+      { { zc, zc - 32 }, { zc, zc - 14 }, { front_z, zc - 14 }, { front_z, front_z - 32 } },
+      { edges = { [0] = Proj(14, 32), [1] = Proj(), [3] = Proj(14, 31) }, skip = { 2 },
         caps = { Band(zc - 32, zc - 14, white, zc) } })
     return { walls, roof, canopy }
   end

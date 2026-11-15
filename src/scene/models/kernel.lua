@@ -217,11 +217,13 @@ Strip.__index = Strip
 --- row `start` (default d - 1), so the pattern carries on where the fixed rows end; with no
 --- repeat the last fixed row is held. `wrap` = { lo, hi }: u sampled from those columns only,
 --- cyclically; `offset` shifts u. `tail`: rows laid at the far end (a flat roof's back parapet);
---- `repeatOffset`: u shift for the repeated courses and the tail only.
+--- `repeatOffset`: u shift for the repeated courses and the tail only. `patch` = { a, b, lo, hi }:
+--- the drawing's columns [a, b) sampled from [lo, hi) instead, cyclically (what stands in front
+--- of the band drawn over it - a sign over an eave - left off the band behind).
 function K.Strip(fixed, o)
   o = o or {}
   local s = setmetatable({ fixed = fixed, rep = o.rep, wrap = o.wrap, offset = o.offset or 0,
-    fromEnd = o.fromEnd or false, tail = o.tail, repeatOffset = o.repeatOffset }, Strip)
+    fromEnd = o.fromEnd or false, tail = o.tail, repeatOffset = o.repeatOffset, patch = o.patch }, Strip)
   if o.rep and o.start == nil then s.start = o.rep[2] - 1 else s.start = o.start end
   return s
 end
@@ -265,6 +267,37 @@ end
 
 --- (s0, s1, du) spans: u = s + du inside each.
 function Strip:uPieces(s0, s1)
+  local pieces = self:wrapPieces(s0, s1)
+  local P = self.patch
+  if not P then return pieces end
+  -- (the patched columns: each span's part over [a, b) sampled from [lo, hi), cyclically)
+  local a, b, lo, hi = P[1], P[2], P[3], P[4]
+  local out = {}
+  for _, pc in ipairs(pieces) do
+    local x0, x1, du = pc[1], pc[2], pc[3]
+    local c0, c1 = max(x0, a - du), min(x1, b - du)
+    if c1 <= c0 + EPS then
+      out[#out + 1] = pc
+    else
+      if c0 > x0 + EPS then out[#out + 1] = { x0, c0, du } end
+      local period = hi - lo
+      local t = c0
+      local guard = 0
+      while t < c1 - EPS and guard < 4096 do
+        guard = guard + 1
+        local u = t + du
+        local k = floor((u - a) / period + EPS)
+        local e = min(c1, a + (k + 1) * period - du)
+        out[#out + 1] = { t, e, du + lo - a - k * period }
+        t = e
+      end
+      if x1 > c1 + EPS then out[#out + 1] = { c1, x1, du } end
+    end
+  end
+  return out
+end
+
+function Strip:wrapPieces(s0, s1)
   if not self.wrap then return { { s0, s1, self.offset } } end
   local lo, hi = self.wrap[1], self.wrap[2]
   local period = hi - lo

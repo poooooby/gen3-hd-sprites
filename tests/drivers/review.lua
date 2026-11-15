@@ -11,8 +11,12 @@
 -- Each item's sheet is three panels: the drawing | the model at 45 degrees | the marks.
 --   SHOT_DIR       where index.html and the sheets go
 --   REVIEW_KINDS   kinds to review, comma separated (default every kind)
---   REVIEW_SHOTS   in-game shots of the worst rooms and caves (default 10; 0 none): a battle just
---                  south of where the faults gather, as played and aimed at them
+--   REVIEW_SHOTS   in-game shots (default all; a number: that many of the worst; 0 none): a battle
+--                  just south of each item (where its faults gather, else its middle), as played
+--                  and aimed at it
+--   REVIEW_PAK     (FireRed) the FireRed 3DS build's pak, read to compare (never copied): whether it
+--                  models each building where we do, what it models that we don't, and how its
+--                  relief's levels meet ours in each cave
 -- Run from the engine root (tools/review.ps1 does this and opens the page):
 --   SHOT_DIR=<dir> POKEPORT_GAME=firered POKEPORT_VERSION=firered \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/review.lua love .
@@ -83,14 +87,26 @@ local function treeResults(ctx, Check, log)
   table.sort(ks)
   for _, K in ipairs(ks) do
     local res, why = Check.tree(ctx, Trees, K)
-    if res then out[#out + 1] = res else log(why) end
+    if res then
+      -- (where one stands, for the shots: its trunk's first cell in its layout)
+      local SP = Trees.species[K]
+      local lname = K == 0 and "LAYOUT_PALLET_TOWN" or (SP.layouts and SP.layouts[1])
+      local L = lname and ctx.inp.byName[lname]
+      local trunk = SP.alone and SP.alone.trunk and SP.alone.trunk[1]
+      if L and trunk then
+        for i = 0, L.w * L.h - 1 do
+          if L.blocks[i] % 1024 == trunk then res.layout, res.focus = lname, { i % L.w, floor(i / L.w) }; break end
+        end
+      end
+      out[#out + 1] = res
+    else log(why) end
   end
   return out
 end
 
 -- ── caves: the levels counted, and where the drawing disagrees ──
 local TINT = { [-2] = 0xFF0000, [-1] = 0xFF8000, [1] = 0x008CFF, [2] = 0x00DC5A, [3] = 0xDC00DC, [4] = 0xFFFF00 }
-local function caveResults(ctx, Check, log)
+local function caveResults(ctx, Check, log, pakRelief)
   local C = ctx.G.caves
   if not C then return {} end
   local Caves = ctx.load("src/scene/relief_caves.lua")
@@ -137,17 +153,115 @@ local function caveResults(ctx, Check, log)
       end
       local per = {}
       for _, c in ipairs(conf) do per[c[2] * 4096 + c[1]] = (per[c[2] * 4096 + c[1]] or 0) + 1 end
+      -- (no disagreement: the shot aimed where most rock stands)
+      if #conf == 0 then
+        for i = 0, L.w * L.h - 1 do if lv[i] ~= 0 then per[floor(i / L.w) * 4096 + i % L.w] = 1 end end
+      end
+      -- (the FireRed 3DS build's levels here, aligned with ours by the commonest difference)
+      local cmp
+      local pt = pakRelief and pakRelief.layouts[L.id]
+      if pakRelief then
+        local function theirs(i)
+          local g = pt and pt.cells[i]
+          if not g then return floor((pt and pt.base or 0) / 16 + 0.5) end
+          local m = -1e9
+          for k = 0, 24 do m = math.max(m, g[k]) end
+          return floor((m + (pt.base or 0)) / 16 + 0.5)
+        end
+        local function ours(i)
+          local f, hi = Caves.SHAPES[kinds[i]], 0
+          if f then for t = 0, 4 do for u = 0, 4 do hi = math.max(hi, f(u, t)) end end end
+          return floor(lv[i] + hi + 0.5)
+        end
+        local diffs, best, bn = {}, 0, -1
+        for i = 0, L.w * L.h - 1 do local d = theirs(i) - ours(i); diffs[d] = (diffs[d] or 0) + 1 end
+        for d, c in pairs(diffs) do if c > bn then best, bn = d, c end end
+        local theirsLv = {}
+        for i = 0, L.w * L.h - 1 do theirsLv[i] = theirs(i) - best end
+        local base = theirsLv
+        local zero = {}
+        for i = 0, L.w * L.h - 1 do zero[base[i]] = (zero[base[i]] or 0) + 1 end
+        local z, zn = 0, -1
+        for k, c in pairs(zero) do if c > zn then z, zn = k, c end end
+        cmp = { agree = 100 * bn / (L.w * L.h), raised = pt ~= nil,
+          sheet = { w = W, h = H, at = function(x, y)
+            local c = drawn(x, y)
+            local i = floor(y / 16) * L.w + floor(x / 16)
+            local t = TINT[theirsLv[i] - z] or (theirsLv[i] ~= z and 0xFFFFFF) or nil
+            if not t then return c end
+            local function mix(sh) return floor(floor(c / sh) % 256 * 0.55 + floor(t / sh) % 256 * 0.45) end
+            return mix(65536) * 65536 + mix(256) * 256 + mix(1)
+          end } }
+      end
       local levels = {}
       for i = 0, L.w * L.h - 1 do levels[lv[i]] = (levels[lv[i]] or 0) + 1 end
       local stood = 0
       for k, n in pairs(levels) do if k ~= 0 then stood = stood + n end end
       out[#out + 1] = { name = name:gsub("^LAYOUT_", ""):lower(), kind = "cave", ok = #conf == 0,
+        unsettled = #conf > 0, cmp = cmp,
         disagree = #conf, judged = L.w * L.h, raised = stood, layout = name, focus = Check.focus(per),
         sheet = Check.sheet(W, H, drawn, tinted,
           function(x, y) return marks[y * W + x] or tinted(x, y) end) }
     end
   end
   return out
+end
+
+-- ── another build's pak (Emerald 3DS's format, "EM3DPAK"), read to compare: its relief and the
+-- buildings it places ──
+local function u32(s, at) local a, b, c, d = s:byte(at + 1, at + 4); return a + b * 256 + c * 65536 + d * 16777216 end
+local function u16(s, at) local a, b = s:byte(at + 1, at + 2); return a + b * 256 end
+local function readPak(path)
+  local f = path and io.open(path, "rb")
+  if not f then return nil end
+  local s = f:read("*a")
+  f:close()
+  if s:sub(1, 7) ~= "EM3DPAK" then return nil end
+  local count, io_ = u32(s, 36), u32(s, 40)
+  local out = {}
+  for i = 0, count - 1 do
+    local e = io_ + 40 * i
+    if u32(s, e + 8) == 6 then
+      local off, size = u32(s, e + 16), u32(s, e + 24)
+      local data = s:sub(off + 1, off + size)
+      if data:sub(1, 4) == "VXL4" then out.relief = data
+      elseif data:sub(1, 3) == "VXB" then out.buildings = data end
+    end
+  end
+  return out
+end
+
+-- its buildings' placements: { [layout id] = { { x, y, w, h }, ... } } (VXB7: the header's counts,
+-- then pages, models, page-model links, placements)
+local function pakPlacements(b)
+  if not b or b:sub(1, 4) ~= "VXB7" then return nil end
+  local npages, nmodels, npm, nplace = u16(b, 4), u16(b, 6), u16(b, 8), u16(b, 10)
+  local o = 4 + 20
+  o = o + 8 * npages
+  local models = {}
+  for i = 0, nmodels - 1 do models[i] = { b:byte(o + 1), b:byte(o + 2) }; o = o + 16 end
+  local pms = {}
+  for i = 0, npm - 1 do pms[i] = u16(b, o); o = o + 8 end
+  local out, n = {}, 0
+  for _ = 1, nplace do
+    local L, pmi, x, y = u16(b, o), u16(b, o + 2), u16(b, o + 4), u16(b, o + 6)
+    local m = models[pms[pmi] or -1]
+    if m then
+      out[L] = out[L] or {}
+      table.insert(out[L], { x, y, m[1], m[2] })
+      n = n + 1
+    end
+    o = o + 16
+  end
+  return out, n
+end
+
+-- how much of rectangle a (x, y, w, h) another covers
+local function overlap(a, b)
+  local w = math.min(a[1] + a[3], b[1] + b[3]) - math.max(a[1], b[1])
+  local h = math.min(a[2] + a[4], b[2] + b[4]) - math.max(a[2], b[2])
+  if w <= 0 or h <= 0 then return 0 end
+  return w * h / (a[3] * a[4])
 end
 
 -- ── the page ──
