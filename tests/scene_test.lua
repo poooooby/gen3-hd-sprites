@@ -678,6 +678,20 @@ do
     check(Relief.lean(at, 0, 0, col[0]) == nil and Relief.lean(at, 0, 3, col[3]) == nil,
       "...the top and the floor keep their place")
   end
+  -- hand-set ground (the workshop's marks): a rounded corner meets the slopes beside it, a hollow too
+  do
+    local sw, west, south = Relief.markedCell(0, 5), Relief.markedCell(0, 3), Relief.markedCell(0, 1)
+    local hollow = Relief.markedCell(0, 9)
+    local okN, okE, okH = true, true, true
+    for i = 0, 4 do
+      if sw[i] ~= west[i] then okN = false end                       -- its north edge: the west slope's
+      if sw[i * 5 + 4] ~= south[i * 5 + 4] then okE = false end      -- its east edge: the south slope's
+      if hollow[4 * 5 + i] ~= west[4 * 5 + i] or hollow[i * 5] ~= south[i * 5] then okH = false end
+    end
+    check(okN and okE and sw[4] == 16 and sw[20] == 0 and Relief.markedCell(2, 0)[12] == 32,
+      "hand-set ground: a rounded corner's edges meet the slopes beside it; a flat cell stands at its level")
+    check(okH and hollow[20] == 0 and hollow[4] == 16, "...a hollow's edges meet them too, low at its corner")
+  end
   -- a tile cut corner to corner: one 45-degree side; a half cut straight across: none
   local tri = {}
   for j = 0, 15 do

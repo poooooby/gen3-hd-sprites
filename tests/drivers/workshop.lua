@@ -156,7 +156,60 @@ local function body(game, log)
     end
   end
 
+  -- ── ground cells: a group of cells whose level and shape are set by hand (Shift+click toggles a
+  -- cell, Shift+drag selects a box; src/scene/tune.lua `ground`, applied over the relief's reading
+  -- by the scene) ──
+  local function groundLabel(cells)
+    local id, lx, ly = placeOf(cells[1])
+    return ("%d ground cell%s on %s (from %s,%s): level and shape"):format(#cells, #cells == 1 and "" or "s",
+      tostring(id), tostring(lx), tostring(ly))
+  end
+  local function selectGround(cells)
+    if #cells == 0 then sel = nil; return end
+    sel = { cells = cells, ground = true, tree = false, label = groundLabel(cells) }
+    if GROUP ~= "ground" then useGroup("ground"); row = 1 end
+  end
+  local function toggleGround(c)
+    if not (c and placeOf(c)) then return end
+    local cells = {}
+    local had = false
+    for _, o in ipairs(sel and sel.ground and sel.cells or {}) do
+      if o.cx == c.cx and o.cy == c.cy then had = true else cells[#cells + 1] = o end
+    end
+    if not had then cells[#cells + 1] = c end
+    selectGround(cells)
+  end
+  local function boxGround(a, b)
+    if not (a and b) then return end
+    local cells = {}
+    for y = math.min(a.cy, b.cy), math.max(a.cy, b.cy) do
+      for x = math.min(a.cx, b.cx), math.max(a.cx, b.cx) do
+        local o = scene.grid.at(x, y)
+        if o and placeOf(o) then cells[#cells + 1] = o end
+      end
+    end
+    selectGround(cells)
+  end
+  -- (a ground cell's mark, and its level as the relief reads it)
+  local function groundMark(c)
+    local id, lx, ly = placeOf(c)
+    local m = id and Tune.markAt(tuneGame, id, lx, ly)
+    return m and m.ground
+  end
+  local function readLevel(c)
+    local Relief = ws.Relief
+    local g = c.gRead or c.g
+    if not (g and Relief) then return 0 end
+    return math.floor(Relief.centre(g) / 16 + 0.5)
+  end
+
   local function current(d)
+    if sel and sel.ground then
+      local gm = groundMark(sel.cells[1])
+      if gm and gm[d.key] ~= nil then return gm[d.key], "set by hand" end
+      if d.key == "level" then return readLevel(sel.cells[1]), "as the land reads it" end
+      return nil, "as the land reads it"
+    end
     local all = Tune.group(tuneGame, GROUP)
     local base = all[d.key]
     if scope == "one" and sel and sel.tree then
@@ -178,7 +231,12 @@ local function body(game, log)
     return m and m.hide == true or false
   end
   local function change(d, v)
-    if scope == "one" and sel and sel.tree then
+    if sel and sel.ground then
+      for _, c in ipairs(sel.cells) do
+        local id, lx, ly = placeOf(c)
+        if id then Tune.setMark(tuneGame, id, lx, ly, "ground", d.key, v) end
+      end
+    elseif scope == "one" and sel and sel.tree then
       for _, c in ipairs(sel.cells) do
         local id, lx, ly = placeOf(c)
         if id then Tune.setMark(tuneGame, id, lx, ly, GROUP, d.key, v) end
@@ -194,6 +252,8 @@ local function body(game, log)
     local v = current(d)
     if v == nil then
       v = d.key == "foot" and 0.70 or d.default or 0
+      -- (a shape not set yet: the first step goes to the first slope, not past it)
+      if d.key == "shape" then v = dir > 0 and 0 or 2; end
     end
     change(d, v + dir * d.step * (big and 5 or 1))
   end
@@ -305,7 +365,14 @@ local function body(game, log)
     if not s then say("Rebuild failed: " .. tostring(why)); return end
     scene = s
     -- (the selection's cells, in the new grid)
-    if sel then
+    if sel and sel.ground then
+      local cells = {}
+      for _, o in ipairs(sel.cells) do
+        local c = scene.grid.at(o.cx, o.cy)
+        if c then cells[#cells + 1] = c end
+      end
+      selectGround(cells)
+    elseif sel then
       local c = scene.grid.at(sel.cells[1].cx, sel.cells[1].cy)
       local keep = scope
       selectCell(c)
@@ -437,7 +504,8 @@ local function body(game, log)
       return
     end
     if x >= G.getWidth() - PANEL_W then return end
-    drag = { button = button, x = x, y = y, moved = false }
+    drag = { button = button, x = x, y = y, moved = false,
+             box = button == 1 and love.keyboard.isDown("lshift", "rshift") and pick(x, y) or nil }
   end)
   hook("mousemoved", function(x, y, dx, dy)
     if not drag then return end
@@ -445,6 +513,8 @@ local function body(game, log)
     if drag.button == 2 and not love.keyboard.isDown("lshift", "rshift") then
       cam.yaw = cam.yaw + dx * 0.3
       cam.pitch = math.max(5, math.min(89, cam.pitch + dy * 0.2))
+    elseif drag.box then
+      -- (Shift+drag: a box of ground cells, drawn while it is dragged)
     elseif drag.button == 3 or drag.button == 2 or (drag.button == 1 and drag.moved) then
       -- pan along the ground, as the view faces
       local yw = math.rad(cam.yaw)
@@ -454,7 +524,10 @@ local function body(game, log)
     end
   end)
   hook("mousereleased", function(x, y, button)
-    if drag and button == drag.button and button == 1 and not drag.moved then
+    if drag and drag.box and button == 1 then
+      if drag.moved then boxGround(drag.box, pick(x, y)) else toggleGround(drag.box) end
+      if sel then say(sel.label) end
+    elseif drag and button == drag.button and button == 1 and not drag.moved then
       selectCell(pick(x, y))
       if sel then say(sel.label) end
     end
@@ -533,7 +606,10 @@ local function body(game, log)
       G.setColor(1, 1, 1, on and 1 or 0.6)
       G.printf(label, x, 108, 176, "center")
     end
-    if GROUP == "trees" then
+    if GROUP == "ground" then
+      tab(("%d cells, by hand"):format(sel and sel.ground and #sel.cells or 0), true, x0 + 16)
+      tab("Shift+click / drag", false, x0 + 208)
+    elseif GROUP == "trees" then
       tab("All trees (Tab)", scope == "all", x0 + 16)
       tab(sel and sel.tree and "This tree" or "This tree (pick one)", scope == "one", x0 + 208)
     else
@@ -550,7 +626,8 @@ local function body(game, log)
       G.setColor(1, 1, 1, 1)
       G.setFont(font)
       G.print(d.label, x0 + 16, y + 4)
-      G.print(v ~= nil and (("%g %s"):format(v, d.unit)) or "-", x0 + 170, y + 4)
+      local shown = v ~= nil and (d.names and d.names[v] or ("%g %s"):format(v, d.unit)) or "-"
+      G.print(shown, x0 + 170, y + 4)
       G.setFont(small)
       G.setColor(0.65, 0.7, 0.75, 1)
       G.print(from, x0 + 16, y + 27)
@@ -575,6 +652,7 @@ local function body(game, log)
     -- the keys
     local keys = {
       "Left click: select   Right drag: orbit   Middle / left drag: pan",
+      "Shift+click / Shift+drag: ground cells (their level and shape)",
       "Wheel: zoom (over a setting: change it)",
       "Up / Down: setting   Left / Right: change (Shift: x5)",
       "Backspace: back to default   Tab: all trees / this tree",
@@ -630,7 +708,8 @@ local function body(game, log)
   end
   -- (dev: WORKSHOP_SCRIPT=file runs the workshop unattended - its own check - with these hooks)
   if env("WORKSHOP_SCRIPT") then
-    return { select = selectCell, pick = pick, change = change, nudge = nudge, save = save, rebuild = rebuild,
+    return { select = selectCell, selectGround = selectGround, boxGround = boxGround, toggleGround = toggleGround,
+             placeOf = placeOf, pick = pick, change = change, nudge = nudge, save = save, rebuild = rebuild,
              toggleHide = toggleHide, cam = cam, defs = function() return defs end, group = function() return GROUP end,
              setRow = function(r) row = r end,
              prove = prove, proof = function() return proof end, setView = function(v) proofView = v end, hd = hd,

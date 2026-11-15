@@ -1311,6 +1311,17 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     change it only away from 45 degrees, and its proof stays 0. A prop: its drawn subtiles
     (`Check.prop`; what lies flat counted `flat`, amber, not missing). `WORKSHOP_SCRIPT` hooks:
     `prove`, `proof`, `setView`, `hd`, `defs()` and `group()` (the panel's, following the selection).
+  - **Ground (Shift+click / Shift+drag):** Shift+click adds or drops a cell, Shift+drag selects a
+    box; the panel turns to the cells' `ground` (`Tune.DEFS.ground`, marks only): Level (levels
+    over the map's base; shown as the land reads it until set) and Shape (`Relief.GROUND_SHAPES`:
+    flat, a slope falling south / north / west / east a tile a level, a rounded outer corner falling
+    two ways - a quarter cone - or a rounded hollow at one corner; corners and hollows meet the
+    slopes beside them edge to edge). A change marks every selected cell. The scene applies the
+    marks where it reads the relief (`placeRelief`: `Relief.markedCell` over the cell's heights,
+    its read heights kept as `gRead`), with a wall record (`markCut`: the layout's face tile, block
+    walls) on it and on any unmarked neighbour left standing over it, so steps close; a map with no
+    relief of its own takes an empty one for its marks. No cache rebuild: they ride over the relief
+    in every battle as the trees' marks do, saved in the game's tune file (Ctrl+S).
   - **Props:** clicking a prop turns the panel to its own settings (`Tune.PROP_DEFS` by its shape,
     each spec its group `prop_<name>`, registered by the scene: `Tune.useProps(Props.SPECS)`): a
     turned prop's radius, height, depth (its squash) and stand; a heap's radius, height and stand;

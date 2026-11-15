@@ -243,7 +243,7 @@ return function(mod, hd, state)
   exports._workshop = function()
     local s = hd.scene
     if not s then return nil end
-    return { Tune = s.Tune, Camera = s.Camera, Trees = s.Trees, last = function() return s.last end, rebuild = s._rebuild,
+    return { Tune = s.Tune, Camera = s.Camera, Trees = s.Trees, Relief = s.Relief, last = function() return s.last end, rebuild = s._rebuild,
              view = s._view, path = mod.path, game = s._game }
   end
   -- (tests: the current battle scene alone, as image data w x h)

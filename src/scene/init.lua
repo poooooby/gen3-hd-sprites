@@ -31,7 +31,7 @@ return function(deps)
   if Render and deps.ScreenFx then Render.ScreenFx = deps.ScreenFx end
   local hd = deps.hd
 
-  local Scene = { enabled = false, Camera = Camera, Tune = deps.Tune, Trees = deps.Trees }
+  local Scene = { enabled = false, Camera = Camera, Tune = deps.Tune, Trees = deps.Trees, Relief = deps.Relief }
 
   -- love.graphics as it really is (the functions WoobleView wraps, unwrapped)
   local G = setmetatable({}, { __index = function(_, k) return hd.real[k] or love.graphics[k] end })
@@ -3485,6 +3485,15 @@ return function(deps)
 
   local function placeRelief(grid, env, R, px, py)
     local maps, clears = {}, {}
+    -- (a cell's ground mark, or nil: the Scene Workshop's, kept in the game's tune file)
+    local marked = {}
+    local markGround
+    if deps.Tune and deps.Tune.hasMarks(famGame) then
+      markGround = function(id, lx, ly)
+        local mk = id and deps.Tune.markAt(famGame, id, lx, ly)
+        return mk and mk.ground or nil
+      end
+    end
     for j = 0, grid.h - 1 do
       for i = 0, grid.w - 1 do
         local c = grid.rows[j][i]
@@ -3506,6 +3515,26 @@ return function(deps)
           -- (its cut record, and for the seam skirts which stretches of its north edge a wall may
           -- stand on: not where its cut tile clears the north row, voxel_mesh_builder.c SeamEdge)
           c.cut = c.g and m.L.cuts[ly * m.L.w + lx] or nil
+          -- (the workshop's ground marks, src/scene/tune.lua `ground`: a cell's level and shape set
+          -- by hand over the relief's reading, with a wall record so its steps close; a map with no
+          -- relief of its own takes an empty one for them)
+          local gm = markGround and markGround(id, lx, ly)
+          if gm then
+            if not m.L then
+              local ML = d.midLayout
+              m.L = { id = layoutIdOf(id) or -1, base = 0, w = ML and ML.trueWidth or m.w, h = ML and ML.trueHeight or m.h,
+                      drawn = false, belt = 0, ease = 0, easeRows = 0, cells = {}, cuts = {} }
+            end
+            c.gRead = c.g
+            local level = gm.level
+            if level == nil then level = math.floor(Relief.centre(c.g) / 16 + 0.5) end
+            c.g = Relief.markedCell(level, gm.shape)
+            c.s = nil
+            c.markCut = { variant = Relief.NO_VARIANT, foot = 0, wall = m.L.faceTile or c.mid,
+                          sides = 0xFF + Relief.BLOCK_WALLS }
+            c.cut = c.markCut
+            marked[#marked + 1] = c
+          end
           local v = c.cut and c.cut.variant ~= 0xFFFF and R.variants[c.cut.variant]
           if v then
             local clear = clears[c.cut.variant]
@@ -3519,6 +3548,17 @@ return function(deps)
             end
             c.northStands = st
           end
+        end
+      end
+    end
+    -- (a marked cell lowered under its neighbours: their edges over it close too)
+    for _, c in ipairs(marked) do
+      for _, d in ipairs({ { -1, 0 }, { 1, 0 }, { 0, -1 }, { 0, 1 } }) do
+        local o = grid.at(c.cx + d[1], c.cy + d[2])
+        if o and o.rmap == c.rmap and o.g and not o.cut then
+          o.markCut = { variant = Relief.NO_VARIANT, foot = 0, wall = (o.rmap.L and o.rmap.L.faceTile) or o.mid,
+                        sides = 0xFF + Relief.BLOCK_WALLS }
+          o.cut = o.markCut
         end
       end
     end
@@ -3667,7 +3707,7 @@ return function(deps)
             function B.cut(x, y)
               local o = grid.at(x, y)
               if not (o and o.rmap == m) then return nil end
-              return L.cuts[o.ly * L.w + o.lx]
+              return o.markCut or L.cuts[o.ly * L.w + o.lx]
             end
             function B.variant(k) return R.variants[k] end
             function B.tileUV(x, y)

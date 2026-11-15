@@ -1252,6 +1252,45 @@ end
 Relief.LEAN = 1
 Relief.LEAN_MAX = 16
 
+-- Hand-set ground (the Scene Workshop's ground marks, src/scene/tune.lua `ground`: a cell's level
+-- and shape set by eye where the reading is wrong). The shapes, each a cell's rise over its level
+-- (0..1 of a level) at lattice point (i across, j down, 0..4): flat; a slope falling south, north,
+-- west or east (a tile a level, as the faces and sides are); a rounded outer corner falling two
+-- ways (a quarter cone: its edges meet the slopes beside it); a rounded inner corner, a hollow at
+-- one corner (its edges meet them too).
+Relief.GROUND_SHAPES = { [0] = "flat", "slope south", "slope north", "slope west", "slope east",
+  "corner south-west", "corner south-east", "corner north-west", "corner north-east",
+  "hollow south-west", "hollow south-east", "hollow north-west", "hollow north-east" }
+local CORNER_FALL = { [5] = { "w", "s" }, [6] = { "e", "s" }, [7] = { "w", "n" }, [8] = { "e", "n" } }
+
+--- A hand-set cell's heights (pixels over its map's base): `level` levels, `shape` (GROUND_SHAPES).
+function Relief.markedCell(level, shape)
+  shape = shape or 0
+  local g = {}
+  for j = 0, N do
+    for i = 0, N do
+      local h = 0
+      if shape == 1 then h = 1 - j / N
+      elseif shape == 2 then h = j / N
+      elseif shape == 3 then h = i / N
+      elseif shape == 4 then h = 1 - i / N
+      elseif shape >= 5 and shape <= 12 then
+        local f = CORNER_FALL[shape <= 8 and shape or shape - 4]
+        -- (how far from the side it falls toward, across and down)
+        local u = f[1] == "w" and i / N or 1 - i / N
+        local v = f[2] == "s" and 1 - j / N or j / N
+        if shape <= 8 then
+          h = max(0, 1 - math.sqrt((1 - u) ^ 2 + (1 - v) ^ 2))
+        else
+          h = min(1, math.sqrt(u * u + v * v))
+        end
+      end
+      g[j * SIDE + i] = floor(((level or 0) + h) * 16 + 0.5)
+    end
+  end
+  return g
+end
+
 --- The depths of a cell (heights g at map cell x, y) leaning: nil where nothing in it falls south.
 --- cellAt(x, y): a cell's heights on the same map, or nil.
 function Relief.lean(cellAt, x, y, g)

@@ -70,6 +70,17 @@ function Tune.useProps(specs)
 end
 
 -- the keys a mark may hold besides a group's settings
+-- (the ground under a cell, set by hand: marks only, the workshop's ground panel)
+Tune.DEFS.ground = {
+  { key = "level", label = "Level", default = 0, min = -8, max = 40, step = 1, unit = "levels",
+    help = "the cell's height, in levels over its map's base (a level is a tile)" },
+  { key = "shape", label = "Shape", default = 0, min = 0, max = 12, step = 1, unit = "",
+    names = { [0] = "flat", "slope south", "slope north", "slope west", "slope east",
+      "corner south-west", "corner south-east", "corner north-west", "corner north-east",
+      "hollow south-west", "hollow south-east", "hollow north-west", "hollow north-east" },
+    help = "flat, a slope falling one way, a rounded corner falling two ways, or a rounded hollow at one corner" },
+}
+
 Tune.MARK_FLAGS = { hide = true }
 
 -- the game's tune file each game reads
