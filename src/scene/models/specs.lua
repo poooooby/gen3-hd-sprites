@@ -825,6 +825,7 @@ return function(K)
 
   -- a smooth dome over an ellipse, its drawing projected (a bush)
   local function ProjDome(name, cx, cz, rx, rz, h, o)
+    local tag = name:sub(-5) == "~proj" and name or name .. "~proj"
     o = o or {}
     local y0, seg, rings = o.y0 or 0, o.seg or 12, o.rings or 3
     return { name = name, emit = function(_, mesh)
@@ -840,7 +841,7 @@ return function(K)
       for k = 0, rings - 1 do
         for i = 0, seg - 1 do
           local a, b, c, d = pt(k, i), pt(k, i + 1), pt(k + 1, i + 1), pt(k + 1, i)
-          if k == rings - 1 then mesh:tri(a, b, c, 1.0, name) else mesh:poly({ a, b, c, d }, 1.0, name) end
+          if k == rings - 1 then mesh:tri(a, b, c, 1.0, tag) else mesh:poly({ a, b, c, d }, 1.0, tag) end
         end
       end
     end }
@@ -850,6 +851,8 @@ return function(K)
   local function ProjLathe(name, cx, cz, profile, o)
     o = o or {}
     local squash, seg, offset = o.squash or 1, o.seg or 12, o.offset or 0
+    -- (its drawing projected: no 1:1 reading, "~proj", as the kernel's own lathes)
+    local tag = name:sub(-5) == "~proj" and name or name .. "~proj"
     return { name = name, emit = function(_, mesh)
       local grow = 1 / math.cos(math.pi / seg)
       local function ring(y, r)
@@ -870,12 +873,12 @@ return function(K)
         for i = 1, seg do
           local i2 = i % seg + 1
           local quad = { lo[i], lo[i2], hi[i2], hi[i] }
-          if profile[j + 1][2] < 1e-6 then mesh:tri(quad[1], quad[2], quad[3], 1.0, name)
-          elseif profile[j][2] < 1e-6 then mesh:tri(quad[1], quad[3], quad[4], 1.0, name)
-          else mesh:poly(quad, 1.0, name) end
+          if profile[j + 1][2] < 1e-6 then mesh:tri(quad[1], quad[2], quad[3], 1.0, tag)
+          elseif profile[j][2] < 1e-6 then mesh:tri(quad[1], quad[3], quad[4], 1.0, tag)
+          else mesh:poly(quad, 1.0, tag) end
         end
       end
-      if profile[#profile][2] > 1e-6 then mesh:poly(rings[#rings], 1.0, name) end
+      if profile[#profile][2] > 1e-6 then mesh:poly(rings[#rings], 1.0, tag) end
     end }
   end
 

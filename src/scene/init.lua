@@ -913,6 +913,7 @@ return function(deps)
 
   -- ── props: objects found by their upper-layer subtiles (src/scene/props.lua) ──
   local Props = deps.Props
+  if deps.Tune and deps.Tune.useProps then deps.Tune.useProps(Props.SPECS) end
   local propModels, propFinds = {}, {}
   local function propSpec(name)
     for _, sp in ipairs(Props.SPECS) do if sp.props == name then return sp end end
@@ -927,10 +928,49 @@ return function(deps)
     local S = k and Tr.species and Tr.species[k]
     return S and not S.failed and S.ground and S.ground[m] or m
   end
+  -- the object's drawn pixels its model leaves bare at 45 degrees (a point (x, y, z) lands on
+  -- (x, z - y), as the GBA draws it): { [y * W + x] = true } - its shadow on the ground, a post
+  -- under a turned body, a fence's rail stubs. They lie flat on its cells' ground.
+  local function bareOf(tris, art)
+    local W, H = art.w, art.h
+    local cover = {}
+    for _, t in ipairs(tris) do
+      local tag = t.tag or ""
+      if not (tag:find("~behind", 1, true) or tag:find("~depth", 1, true)) then
+        local a, b, c = t[1], t[2], t[3]
+        local x0, y0, x1, y1, x2, y2 = a[1], a[3] - a[2], b[1], b[3] - b[2], c[1], c[3] - c[2]
+        local area = (x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)
+        if math.abs(area) > 1e-9 then
+          for py = math.max(0, math.floor(math.min(y0, y1, y2))), math.min(H - 1, math.ceil(math.max(y0, y1, y2))) do
+            for px = math.max(0, math.floor(math.min(x0, x1, x2))), math.min(W - 1, math.ceil(math.max(x0, x1, x2))) do
+              local cx, cy = px + 0.5, py + 0.5
+              local u = ((x1 - cx) * (y2 - cy) - (x2 - cx) * (y1 - cy)) / area
+              local v = ((x2 - cx) * (y0 - cy) - (x0 - cx) * (y2 - cy)) / area
+              if u >= -1e-7 and v >= -1e-7 and 1 - u - v >= -1e-7 then cover[py * W + px] = true end
+            end
+          end
+        end
+      end
+    end
+    local bare = {}
+    for y = 0, H - 1 do
+      for x = 0, W - 1 do
+        local i = y * W + x
+        if art.px[i * 4 + 4] >= 0.5 and not cover[i] then bare[i] = true end
+      end
+    end
+    return bare
+  end
+
   -- a variant's model (its offset in its cells and what is drawn of it), once a session: the
   -- object's subtiles as the map draws them, a Mound off them
   local function propModel(sp, f, cells, gx0, gy0, w, h, grid)
+    -- (the workshop's settings for it, src/scene/tune.lua: its model is built again when they change)
+    local t = deps.Tune and deps.Tune.group(famGame, deps.Tune.propGroup(sp.name)) or {}
+    local sig = ("%s/%s/%s/%s/%s"):format(tostring(t.radius or 1), tostring(t.height or 1), tostring(t.squash or 1),
+      tostring(t.stand or 0), tostring(t.rise or 1))
     local key = ("%s:%d%d:%s"):format(sp.name, f.sx % 2, f.sy % 2, f.key)
+    if sig ~= "1/1/1/0/1" then key = key .. "@" .. sig end
     if propModels[key] ~= nil then return propModels[key] or nil end
     propModels[key] = false
     local cx0, cy0 = math.floor(f.sx / 2), math.floor(f.sy / 2)
@@ -970,11 +1010,19 @@ return function(deps)
       -- a turned thing (a pot, a basket): smooth, its drawing projected, where this variant's
       -- half-cell offset puts it
       local c = sp.lathe
-      part = helpers.ProjLathe(sp.name, c.cx + dx, c.cz + dz, c.profile, { squash = c.squash or 1.0, seg = c.seg or 10 })
+      local profile = c.profile
+      if (t.radius or 1) ~= 1 or (t.height or 1) ~= 1 then
+        profile = {}
+        for n, q in ipairs(c.profile) do profile[n] = { q[1] * (t.height or 1), q[2] * (t.radius or 1) } end
+      end
+      part = helpers.ProjLathe(sp.name, c.cx + dx, c.cz + dz + (t.stand or 0), profile,
+        { squash = (c.squash or 1.0) * (t.squash or 1), seg = c.seg or 10 })
     elseif sp.shape == "dome" and helpers.ProjDome then
       -- a heap (fruit): a smooth dome, its drawing projected
       local c = sp.dome
-      part = helpers.ProjDome(sp.name, c.cx + dx, c.cz + dz, c.rx, c.rz, c.h, { seg = c.seg or 12, rings = c.rings or 3 })
+      local r = t.radius or 1
+      part = helpers.ProjDome(sp.name, c.cx + dx, c.cz + dz + (t.stand or 0), c.rx * r, c.rz * r, c.h * (t.height or 1),
+        { seg = c.seg or 12, rings = c.rings or 3 })
     elseif sp.shape == "flag" then
       -- a flag on its pole: a card standing at the pole's foot, over the whole grid (a frame of the
       -- cloth's animation reaches where the first does not draw)
@@ -986,7 +1034,7 @@ return function(deps)
       end
       part = Kernel.Card("flag~live", art, foot, 0, 0, { dx, dx + #grid0[1] * 8, dz })
     elseif not sp.shape then
-      part = Kernel.Mound("mound", tex, { rise = sp.rise, step = sp.step, ring = ring, rows = H })
+      part = Kernel.Mound("mound", tex, { rise = sp.rise * (t.rise or 1), step = sp.step, ring = ring, rows = H })
     end
     if not part then return nil end
     local mesh = Kernel.build({ part })
@@ -1008,7 +1056,7 @@ return function(deps)
     end
     local md = { spec = { name = key, owned = owned, ground = sp.ground }, ref = { w = w, h = h, template = {} },
                  core = core, art = art, tris = mesh.tris, image = image, _data = imageData, texW = tex.w, texH = tex.h,
-                 primaryOnly = true, quads = quads }
+                 primaryOnly = true, quads = quads, prop = sp.name, tex = tex, bare = bareOf(mesh.tris, art) }
     -- a flag's cloth: every pixel of its tiles follows the game's animation of them (the
     -- engine's bank for them is their upper layer, its colour 0 clear)
     if sp.live_tiles then
@@ -1090,7 +1138,7 @@ return function(deps)
           if not g or not g.mid then ok = false end
         end
         local md = ok and propModel(sp, f, cells, gx0, gy0, w, h, grid)
-        prepared[n] = { cells, x0, y0, w, h, gx0, gy0, md }
+        prepared[n] = { cells, x0, y0, w, h, gx0, gy0, md, f }
         if md then
           for _, c in ipairs(cells) do
             local g = grid.at(gx0 + c[1] - x0, gy0 + c[2] - y0)
@@ -1104,7 +1152,7 @@ return function(deps)
         end
       end
       for n in ipairs(list or {}) do
-        local cells, x0, y0, w, h, gx0, gy0, md = unpack(prepared[n], 1, 8)
+        local cells, x0, y0, w, h, gx0, gy0, md, f = unpack(prepared[n], 1, 9)
         if md then
           local pl = { model = md, cx = gx0, cy = gy0 }
           local tops = Buildings.tops(md)
@@ -1117,9 +1165,13 @@ return function(deps)
             end
           end
           -- the ground: each cell's own drawing, the object's quarters of its upper layer left out
+          -- but where its model leaves the object's drawing bare (md.bare: laid flat)
+          local ax0, ay0 = math.floor(f.sx / 2), math.floor(f.sy / 2)
+          local AW, apx = md.art.w, md.art.px
           pl.ground = imageOf(w * 16, h * 16, function(data)
             for _, c in ipairs(cells) do
               local i, j = c[1] - x0, c[2] - y0
+              local ai, aj = (c[1] - ax0) * 16, (c[2] - ay0) * 16
               local g = grid.at(gx0 + i, gy0 + j)
               local src = pixelSource(NativeTileset, g.pair)
               local wa = World.art(g.pair)
@@ -1132,7 +1184,10 @@ return function(deps)
                   local bit = 2 ^ ((y >= 8 and 2 or 0) + (x >= 8 and 1 or 0))
                   local mine = math.floor(q / bit) % 2 == 1
                   local p = mine and lower and lower[y * 16 + x]
-                  if p then
+                  local ak = (aj + y) * AW + ai + x
+                  if mine and md.bare[ak] and ai + x >= 0 and ai + x < AW then
+                    r, gg, b = apx[ak * 4 + 1], apx[ak * 4 + 2], apx[ak * 4 + 3]
+                  elseif p then
                     r, gg, b = p[1] / 255, p[2] / 255, p[3] / 255
                   elseif src then
                     r, gg, b = src.under(gm, x, y)

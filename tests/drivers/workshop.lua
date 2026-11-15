@@ -81,7 +81,14 @@ local function body(game, log)
   end
 
   -- ── what is selected ──
-  local sel          -- { cells = { cell... }, tree = bool, label }
+  local sel          -- { cells = { cell... }, tree = bool, prop = name?, label }
+  -- the settings the panel shows: the trees' group, or the selected prop's own (Tune.propGroup)
+  local GROUP = "trees"
+  local defs = Tune.DEFS[GROUP]
+  local function useGroup(g)
+    if g == GROUP or not Tune.DEFS[g] then return end
+    GROUP, defs = g, Tune.DEFS[g]
+  end
   local scope = "all"   -- "all" (the game's settings) or "one" (the selection's mark)
   local row = 1
   local status, statusT = "", 0
@@ -118,19 +125,22 @@ local function body(game, log)
       local id, lx, ly = placeOf(c)
       sel = { cells = cells, tree = true, label = ("Tree at %s (%s,%s)"):format(tostring(id), tostring(lx and lx - p % 2),
         tostring(ly and ly - math.floor(p / 2))) }
+      if GROUP ~= "trees" then useGroup("trees"); row = 1 end
     else
       local id, lx, ly = placeOf(c)
-      local what = c.model and c.model.model and c.model.model.spec and ("building " .. c.model.model.spec.name)
+      local md = c.model and c.model.model
+      local prop = md and md.prop
+      local what = prop and ("prop " .. prop) or md and md.spec and ("building " .. md.spec.name)
         or (c.up and "upright cut-out") or tostring(c.kind)
-      sel = { cells = { c }, tree = false, label = ("Cell %s (%s,%s): %s, metatile %s"):format(tostring(id),
+      sel = { cells = { c }, tree = false, prop = prop, label = ("Cell %s (%s,%s): %s, metatile %s"):format(tostring(id),
         tostring(lx), tostring(ly), what, c.mid and ("0x%03X"):format(c.mid) or "-") }
       scope = "all"
+      if prop and Tune.DEFS[Tune.propGroup(prop)] then
+        if GROUP ~= Tune.propGroup(prop) then useGroup(Tune.propGroup(prop)); row = 1 end
+      end
     end
   end
 
-  -- the settings the panel shows: the trees' group (the only one so far)
-  local GROUP = "trees"
-  local defs = Tune.DEFS[GROUP]
   local function current(d)
     local all = Tune.group(tuneGame, GROUP)
     local base = all[d.key]
@@ -177,7 +187,7 @@ local function body(game, log)
     local on = not hidden()
     for _, c in ipairs(sel.cells) do
       local id, lx, ly = placeOf(c)
-      if id then Tune.setMark(tuneGame, id, lx, ly, GROUP, "hide", on or nil) end
+      if id then Tune.setMark(tuneGame, id, lx, ly, "trees", "hide", on or nil) end
     end
     dirty, dirtyAt, unsaved = true, love.timer.getTime(), true
   end
@@ -231,7 +241,12 @@ local function body(game, log)
       local spec = c.model and c.model.model and c.model.model.spec
       local specs = {}
       for _, n in ipairs(hd._sceneSpecNames and hd._sceneSpecNames() or {}) do specs[n] = true end
-      if part and not Trees.kanto then
+      local md = c.model and c.model.model
+      if md and md.prop then
+        res = Check.prop(md)
+        why = res == nil and ("no texture kept for " .. md.prop) or nil
+        title = "its drawn subtiles, under these settings"
+      elseif part and not Trees.kanto then
         why = "the proof reads Kanto's tree models (Hoenn's trees are Emerald 3DS's cards)"
       elseif part then
         local _, _, _, k = Trees.partCell(part)
@@ -261,8 +276,9 @@ local function body(game, log)
     if not res then proof = nil; say("No proof: " .. tostring(why)); return end
     local imgs, pw, ph = panels(res.sheet)
     local stretched = type(res.stretched) == "table" and #res.stretched or 0
-    local counts = ("wrong %d, missing %d%s%s, stretched faces %d, of %d pixels judged"):format(res.wrong or 0,
+    local counts = ("wrong %d, missing %d%s%s%s, stretched faces %d, of %d pixels judged"):format(res.wrong or 0,
       res.missing or 0, res.extra and (", extra " .. res.extra) or "", res.over and (", over " .. res.over) or "",
+      res.flat and res.flat > 0 and (", flat " .. res.flat) or "",
       stretched, res.judged or 0)
     proof = { res = res, imgs = imgs, w = pw, h = ph, title = ("%s: %s"):format(res.name or "?", title), counts = counts }
     if not quiet then say(("%s %s: %s"):format(res.ok and "Matches the drawing" or "Off the drawing", res.name or "", counts)) end
@@ -502,8 +518,13 @@ local function body(game, log)
       G.setColor(1, 1, 1, on and 1 or 0.6)
       G.printf(label, x, 108, 176, "center")
     end
-    tab("All trees (Tab)", scope == "all", x0 + 16)
-    tab(sel and sel.tree and "This tree" or "This tree (pick one)", scope == "one", x0 + 208)
+    if GROUP == "trees" then
+      tab("All trees (Tab)", scope == "all", x0 + 16)
+      tab(sel and sel.tree and "This tree" or "This tree (pick one)", scope == "one", x0 + 208)
+    else
+      tab("Every " .. GROUP:gsub("^prop_", ""), true, x0 + 16)
+      tab("(click a tree for trees)", false, x0 + 208)
+    end
     for i, d in ipairs(defs) do
       local y = 150 + (i - 1) * 52
       if i == row then
@@ -582,7 +603,8 @@ local function body(game, log)
   -- (dev: WORKSHOP_SCRIPT=file runs the workshop unattended - its own check - with these hooks)
   if env("WORKSHOP_SCRIPT") then
     return { select = selectCell, pick = pick, change = change, nudge = nudge, save = save, rebuild = rebuild,
-             toggleHide = toggleHide, cam = cam, defs = defs, setRow = function(r) row = r end,
+             toggleHide = toggleHide, cam = cam, defs = function() return defs end, group = function() return GROUP end,
+             setRow = function(r) row = r end,
              prove = prove, proof = function() return proof end, setView = function(v) proofView = v end, hd = hd,
              setScope = function(v) scope = v end, scene = function() return scene end, sel = function() return sel end,
              current = current, toScreen = toScreen, pose = pose, Camera = Camera, treePart = treePart,

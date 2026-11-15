@@ -1358,6 +1358,18 @@ do
   Tune.setMark("firered", "FR_ROUTE_2", 6, 0, "trees", "hide", nil)
   check(Tune.markAt("firered", "FR_ROUTE_2", 6, 0) == nil and not Tune.hasMarks("firered"), "a mark cleared is gone")
   check(not Tune.hasMarks("emerald") and Tune.group("emerald", "trees").lean == 50, "...and Emerald's are its own")
+  -- the props' settings: each spec's group by its shape, each as read (1, 0) until set
+  local Props = dofile("src/scene/props.lua")
+  Tune.useProps(Props.SPECS)
+  local pl = Tune.group("firered", Tune.propGroup("fr_log"))
+  local pm = Tune.group("firered", Tune.propGroup("fr_sea_rock"))
+  check(pl.radius == 1 and pl.height == 1 and pl.squash == 1 and pl.stand == 0 and pm.rise == 1
+    and Tune.DEFS[Tune.propGroup("frontier_flag_east")] == nil, "a prop's settings: by its shape, as read until set (a flag has none)")
+  Tune.set("firered", Tune.propGroup("fr_log"), "radius", 1.25)
+  local T3 = dofile("src/scene/tune.lua")
+  T3.useProps(Props.SPECS)
+  T3.put("firered", assert(load(Tune.source("firered")))())
+  check(T3.group("firered", "prop_fr_log").radius == 1.25, "...and saved with the game's")
 end
 
 -- ------------------------------------------------------------------ Kanto's trees

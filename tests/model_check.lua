@@ -411,6 +411,51 @@ function Check.mapIdOf(gameName, layout)
   return nil
 end
 
+--- A prop's model as the scene stood it (src/scene/init.lua propModel: md with its drawn
+--- subtiles, `art`, and its texture, `tex`) against those subtiles in the GBA's projection, over
+--- their whole box: wrong, missing, extra (the model over the ground beside the object), and
+--- stretched faces. What the model leaves bare lies flat on its ground (md.bare): `flat`, not a
+--- fault (amber).
+function Check.prop(md)
+  local art, tex = md and md.art, md and md.tex
+  if not (art and tex and md.tris) then return nil end
+  local texArt = { w = tex.w, h = tex.h, at = function(x, y) return colourOf(tex.px, tex.w, x, y) end }
+  local _, _, _, img = Check.ortho({ tris = md.tris }, texArt, { { 0, 0, 0, 0 } }, 16)
+  local W, M = img.w, img.margin
+  local wrong, missing, extra, flat, judgedN, marks = 0, 0, 0, 0, 0, {}
+  for y = 0, art.h - 1 do
+    for x = 0, art.w - 1 do
+      local want = colourOf(art.px, art.w, x, y)
+      local idx = (y + M) * W + x + M
+      local got = img.color[idx]
+      if want then
+        judgedN = judgedN + 1
+        if got == nil and md.bare and md.bare[y * art.w + x] then flat = flat + 1; marks[idx] = 0xFFC000
+        elseif got == nil then missing = missing + 1; marks[idx] = 0xFF00FF
+        elseif got ~= want then wrong = wrong + 1; marks[idx] = 0xFF0000 end
+      elseif got ~= nil then
+        extra = extra + 1; marks[idx] = 0x00FFFF
+      end
+    end
+  end
+  local bad = Check.density({ tris = md.tris })
+  local name = md.prop or (md.spec and md.spec.name) or "prop"
+  return { name = name, kind = "prop", ok = wrong == 0 and missing == 0 and extra == 0 and #bad == 0,
+    wrong = wrong, missing = missing, extra = extra, flat = flat, judged = judgedN, stretched = bad,
+    sheet = Check.sheet(W, min(img.h, art.h + 2 * M),
+      function(x, y) local ax, ay = x - M, y - M
+        return ax >= 0 and ay >= 0 and ax < art.w and ay < art.h and colourOf(art.px, art.w, ax, ay) or nil end,
+      function(x, y)
+        local ax, ay = x - M, y - M
+        local c = img.color[y * W + x]
+        if c == nil and md.bare and ax >= 0 and ay >= 0 and ax < art.w and ay < art.h and md.bare[ay * art.w + ax] then
+          return colourOf(art.px, art.w, ax, ay)
+        end
+        return c
+      end,
+      function(x, y) return marks[y * W + x] or dim(img.color[y * W + x] or 0) end) }
+end
+
 --- A room's pieces (every piece standing in it: modelled there, reused there, or found by its
 --- pixels) against the room as drawn. rooms = hd._rooms(); r one of them.
 function Check.room(hd, rooms, r, log, probe)

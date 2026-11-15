@@ -32,6 +32,43 @@ Tune.DEFS = {
       help = "how far south of its own reading a Kanto tree stands (its trunk and the crown's axis)" },
   },
 }
+-- The props' settings (src/scene/props.lua Props.SPECS): each prop its own group, "prop_<name>",
+-- its settings by its shape, each a share of (or a shift from) the number its spec reads off the
+-- drawing - so 1 (or 0) draws it as read. Registered for the game's specs by the scene
+-- (Tune.useProps), so the workshop lists them and a tune file's values are read.
+Tune.PROP_DEFS = {
+  lathe = {
+    { key = "radius", label = "Radius", default = 1, min = 0.5, max = 2, step = 0.05, unit = "x",
+      help = "how wide it is turned, as a share of its reading (seen from the side; at 45 degrees its drawing holds)" },
+    { key = "height", label = "Height", default = 1, min = 0.5, max = 2, step = 0.05, unit = "x",
+      help = "how tall it stands, as a share of its reading" },
+    { key = "squash", label = "Depth", default = 1, min = 0.5, max = 2, step = 0.05, unit = "x",
+      help = "how deep it is front to back against how wide (its squash), as a share of its reading" },
+    { key = "stand", label = "Stand", default = 0, min = -6, max = 6, step = 0.5, unit = "px",
+      help = "how far south of its reading its axis stands" },
+  },
+  dome = {
+    { key = "radius", label = "Radius", default = 1, min = 0.5, max = 2, step = 0.05, unit = "x",
+      help = "how wide and deep the heap is, as a share of its reading" },
+    { key = "height", label = "Height", default = 1, min = 0.5, max = 2, step = 0.05, unit = "x",
+      help = "how tall the heap stands, as a share of its reading" },
+    { key = "stand", label = "Stand", default = 0, min = -6, max = 6, step = 0.5, unit = "px",
+      help = "how far south of its reading its middle stands" },
+  },
+  mound = {
+    { key = "rise", label = "Rise", default = 1, min = 0.25, max = 3, step = 0.05, unit = "x",
+      help = "how tall the mound stands for how deep it is drawn, as a share of its spec's" },
+  },
+}
+function Tune.propGroup(name) return "prop_" .. tostring(name) end
+--- Register the props' settings (Props.SPECS): each spec's group, by its shape (a flag has none).
+function Tune.useProps(specs)
+  for _, sp in ipairs(specs or {}) do
+    local defs = Tune.PROP_DEFS[sp.shape or "mound"]
+    if defs then Tune.DEFS[Tune.propGroup(sp.name)] = defs end
+  end
+end
+
 -- the keys a mark may hold besides a group's settings
 Tune.MARK_FLAGS = { hide = true }
 
