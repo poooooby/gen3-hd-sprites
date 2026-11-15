@@ -85,6 +85,11 @@ Props.OBJECTS = {
   -- 696 / 697 of its own tileset (rom_082d4b84), palette 11, over the paving or the grass
   fr_route23_stone = { land = true, tileset = "fr:general", secondary = "fr:rom082d4b84", palette = 11,
     grid = { { 680, 681 }, { 696, 697 } } },
+  -- the Safari Zone's wooden stakes: the General's tiles 340 over 356, palette 1, drawn only in the
+  -- lower layer of the Safari's cells (308-30A, under a tree's crest): read off it (`lower`), each
+  -- 8-pixel column a stake on the grass
+  fr_stake = { land = true, lower = true, tileset = "fr:general", secondary = "fr:rom082d4b54", palette = 1,
+    grid = { { 340 }, { 356 } } },
 }
 
 -- The props the scene models, in the specs' order. `shape`: a Mound (the default;
@@ -157,6 +162,10 @@ Props.SPECS = {
   -- rounded top the drawing's)
   { name = "fr_route23_stone", props = "fr_route23_stone", clip_art = true, ground = { 0x28A }, shape = "lathe",
     lathe = { cx = 8, cz = 8.5, squash = 0.64, seg = 14, profile = { { 0, 7 }, { 4.2, 7 } } } },
+  -- (the Safari's stake: the log post's shape - 6 px across, its round cap drawn rows 2-6, its foot
+  -- row 12, its shadow under it laid flat)
+  { name = "fr_stake", props = "fr_stake", clip_art = true, ground = { 0x001 }, shape = "lathe",
+    lathe = { cx = 3.5, cz = 10.6, squash = 0.8, seg = 8, profile = { { 0, 3.2 }, { 6.1, 3.2 } } } },
   -- a pile of fruit: a smooth dome under its drawing
   { name = "fruit", props = "fruit", clip_art = true, ground = { 0x211 }, shape = "dome",
     dome = { cx = 8.5, cz = 9, rx = 8.5, rz = 7.5, h = 7 } },
@@ -177,7 +186,7 @@ Props.short = short
 --- neighbours(L) -> { { L2, dx, dy } } (World.neighbours).
 function Props.find(L, subtiles, neighbours, names)
   local found = {}
-  local subs
+  local subsBy = {}
   local w, h = L.w, L.h
   local list = {}
   for name in pairs(Props.OBJECTS) do list[#list + 1] = name end
@@ -185,7 +194,10 @@ function Props.find(L, subtiles, neighbours, names)
   for _, name in ipairs(list) do
     local obj = Props.OBJECTS[name]
     if (not names or names[name]) and L.primary == obj.tileset and (obj.secondary or L.secondary) == L.secondary then
-      subs = subs or subtiles(L)
+      -- (an object drawn in the lower layer read off it: `lower`)
+      local lower = obj.lower == true
+      local subs = subsBy[lower] or subtiles(L, lower)
+      subsBy[lower] = subs
       if not subs then return found end
       local function subAt(sx, sy)
         if sx >= 0 and sx < w * 2 and sy >= 0 and sy < h * 2 then return subs.at[sy * 4096 + sx] end
@@ -194,7 +206,7 @@ function Props.find(L, subtiles, neighbours, names)
           local B, dx, dy = nb[1], nb[2], nb[3]
           if x - dx >= 0 and x - dx < B.w and y - dy >= 0 and y - dy < B.h then
             if B.primary ~= L.primary then return nil end
-            local bs = subtiles(B)
+            local bs = subtiles(B, lower)
             return bs and bs.at[((y - dy) * 2 + sy % 2) * 4096 + (x - dx) * 2 + sx % 2]
           end
         end

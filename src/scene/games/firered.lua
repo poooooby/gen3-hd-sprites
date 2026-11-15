@@ -382,9 +382,12 @@ F.components = {
 
 -- A secondary's own drawing of a General prop in its lower layer, read as the General's metatile
 -- (src/scene/init.lua propMid): Fuchsia's pickets (rom_082d4b54) - two posts 336 (0E7's), a post
--- and a run going south 337 (0ED's), a run seen down its length 33F (0F5's)
+-- and a run going south 337 (0ED's), a run seen down its length 33F (0F5's); and the cells whose
+-- lower layer draws a lower-layer prop (src/scene/props.lua `lower`), read as the plain ground the
+-- prop stands on: the Safari's stakes under a tree's crest (308-30A) on the grass (001)
 F.propAlias = {
-  ["fr:rom082d4b54"] = { [0x336] = 0x0E7, [0x337] = 0x0ED, [0x33F] = 0x0F5 },
+  ["fr:rom082d4b54"] = { [0x336] = 0x0E7, [0x337] = 0x0ED, [0x33F] = 0x0F5,
+                         [0x308] = 0x001, [0x309] = 0x001, [0x30A] = 0x001 },
 }
 
 return F

@@ -393,11 +393,11 @@ return function(deps)
   --- { at = { [sy * 4096 + sx] = tile + palette * 1024 + flips * 16384 }, order = { keys, row by
   --- row } }, or nil.
   --- (remap(m) -> the metatile to read a cell as, optional: a tree's tip cell as the ground it
-  --- lays, src/scene/init.lua placeProps)
-  function World.subtiles(L, remap)
+  --- lays, src/scene/init.lua placeProps; lower: its lower layer instead, the raw metatiles'.)
+  function World.subtiles(L, remap, lower)
     local s = load()
     if not (s and L and L.grid and L.tilesets) then return nil end
-    local slot = remap and "_subsR" or "_subs"
+    local slot = lower and "_subsL" or remap and "_subsR" or "_subs"
     if L[slot] ~= nil then return L[slot] or nil end
     L[slot] = false
     local Dataset = req("src.core.game3.dataset")
@@ -419,7 +419,7 @@ return function(deps)
         if m >= NM then ts, k = st, m - NM end
         if (k + 1) * 16 <= #ts then
           for q = 0, 3 do
-            local o = k * 16 + (4 + q) * 2 + 1
+            local o = k * 16 + ((lower and 0 or 4) + q) * 2 + 1
             local en = ts:byte(o) + ts:byte(o + 1) * 256
             if en % 1024 ~= 0 then
               local key = (y * 2 + math.floor(q / 2)) * 4096 + x * 2 + q % 2

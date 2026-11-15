@@ -997,11 +997,17 @@ return function(deps)
       local qx, qy = sx % 2, sy % 2
       local c = grid.at(gx0 + ci, gy0 + cj)
       local wa = c and c.mid and World.art(c.pair)
-      local upper = wa and wa.pixels(propMid(c.pair, c.mid), 1)
+      -- (an object drawn in the lower layer, `lower`: the cell's own lower layer, less what the
+      -- ground it is read as draws there alike - the grass round a stake)
+      local lowerObj = Props.OBJECTS[sp.props] and Props.OBJECTS[sp.props].lower
+      local upper = wa and wa.pixels(lowerObj and c.mid or propMid(c.pair, c.mid), lowerObj and 0 or 1)
+      local plain = lowerObj and wa and wa.pixels(propMid(c.pair, c.mid), 0)
       if not upper then return nil end
       for y = 0, 7 do
         for x = 0, 7 do
           local p = upper[(qy * 8 + y) * 16 + qx * 8 + x]
+          local g = plain and plain[(qy * 8 + y) * 16 + qx * 8 + x]
+          if p and g and g[1] == p[1] and g[2] == p[2] and g[3] == p[3] then p = nil end
           if p then
             local o = ((cj * 16 + qy * 8 + y) * W + ci * 16 + qx * 8 + x) * 4
             art.px[o + 1], art.px[o + 2], art.px[o + 3], art.px[o + 4] = p[1] / 255, p[2] / 255, p[3] / 255, 1
@@ -1143,7 +1149,9 @@ return function(deps)
       local list = L and propFinds[L.id]
       if L and not list then
         local pair = maps[id][3]
-        list = Props.find(L, function(LL)
+        list = Props.find(L, function(LL, lower)
+          -- (an object drawn in the lower layer: the raw metatiles' lower layer)
+          if lower then return World.subtiles(LL, nil, true) end
           if LL ~= L then return World.subtiles(LL) end
           return World.subtiles(LL, function(m) return propMid(pair, m) end)
         end, World.neighbours)
