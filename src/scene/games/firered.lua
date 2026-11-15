@@ -151,14 +151,21 @@ F.caves = {
     -- Mt Moon's alone (its side walls' tunnel mouths, the Lost Cave's, drawn on the side: 30A east, 309 west)
     { layouts = { "LAYOUT_MT_MOON_", "LAYOUT_VICTORY_ROAD_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
                   "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL" },
-      pieces = { [0x310] = "F", [0x311] = "F", [0x312] = "F", [0x314] = "F", [0x315] = "W", [0x313] = "W", [0x30D] = "W",
+      pieces = { [0x2A3] = "N", [0x2A4] = "N",
+                 [0x310] = "F", [0x311] = "F", [0x312] = "F", [0x314] = "F", [0x315] = "W", [0x313] = "W", [0x30D] = "W",
                  [0x316] = "E", [0x30E] = "E", [0x31E] = "E", [0x319] = "TW", [0x31A] = "TE", [0x30A] = "E", [0x309] = "W" } },
     -- Seafoam's (and the Icefall Cave's): a raised floor's west side over the sand 365 / 35D, its
     -- face's west end there 36D; the outer rock's tops rimmed where its side steps 355 / 356, and along
     -- the south wall over the floor 2A3 / 2A4
     { layouts = { "LAYOUT_SEAFOAM_ISLANDS_", "LAYOUT_FOUR_ISLAND_ICEFALL_CAVE_" },
-      pieces = { [0x365] = "W", [0x35D] = "W", [0x36D] = "SW", [0x355] = "N", [0x356] = "N", [0x2A3] = "N",
-                 [0x2A4] = "N", [0x2A0] = "N", [0x2A1] = "N", [0x2A2] = "N" } },
+      pieces = { [0x33D] = "W", [0x33E] = "HW", [0x30B] = "N", [0x2FE] = "NW", [0x2FF] = "NE", [0x367] = "NW", [0x366] = "NE", [0x36F] = "TW", [0x36E] = "TE",
+                 [0x365] = "W", [0x35D] = "W", [0x36D] = "SW", [0x355] = "N", [0x356] = "N", [0x2A3] = "N",
+                 [0x2A4] = "N", [0x2A0] = "HW", [0x2A1] = "N", [0x2A2] = "HE" } },
+    -- Diglett's Cave's entrances (their pits): the north wall's face 2E1, the west side 2DA, the
+    -- rim's ends along the south wall 2A3 / 2A4 (in the tunnel below the same tiles rim its raised
+    -- rock tops, read as drawn there without them)
+    { layouts = { "LAYOUT_DIGLETTS_CAVE_NORTH_ENTRANCE", "LAYOUT_DIGLETTS_CAVE_SOUTH_ENTRANCE" },
+      pieces = { [0x2E1] = "F", [0x2DA] = "E", [0x2A3] = "N", [0x2A4] = "N" } },
     -- Mt Ember's: its rims with ash on them 328 / 32A
     { layouts = { "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_" },
       pieces = { [0x328] = "N", [0x32A] = "N" } },
