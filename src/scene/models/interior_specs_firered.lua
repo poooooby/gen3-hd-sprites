@@ -494,6 +494,12 @@ local function silphFloor(f, more)
   for _, pc in ipairs(more or {}) do table.insert(out, 1, pc) end
   return out
 end
+-- the computer racks against the walls (5F's, and wherever else their pixels are drawn): a white
+-- top rows 44-52 under its outline, 19 rows of front to the foot at 72 (Oak's Lab's machines draw
+-- the same racks, but their tops behind the lab's wall are the wall's there)
+local SILPH_5F = {
+  piece("rack", { { 32, 44, 48, 72 } }, 19, { back = 63, leave = SILPH_FLOOR }),
+}
 -- 2F's furniture: the potted plants against the walls (cards, two cells), the desks (a grey top
 -- 27 rows deep over 8 rows of front and legs), their stools, the computer tables
 local SILPH_2F = {
@@ -772,7 +778,7 @@ end
 -- legs to 92), two rows of bookshelves (20 rows of front to 152), the potted plants by the door
 local LAB_FLOOR = { "eeeef6", "cdcdd5", "a4a4ac" }
 local OAKS_LAB = {
-  piece("machine_1", { { 0, 12, 16, 40 } }, 18, { back = 32, leave = LAB_FLOOR }),
+  piece("machine_1", { { 0, 12, 16, 40 } }, 18, { back = 32, leave = LAB_FLOOR, alone = true }),
   piece("machine_2", { { 16, 18, 32, 40 } }, 15, { back = 32, leave = LAB_FLOOR }),
   piece("desks", { { 32, 14, 96, 38 } }, 5, { back = 32, leave = cat({ "d5d5ac" }, LAB_FLOOR) }),
   piece("shelves_back", { { 144, 10, 208, 40 } }, 20, { back = 32, leave = cat({ "d5d5ac" }, LAB_FLOOR) }),
@@ -1049,7 +1055,7 @@ local ROOMS = {
   { name = "fr_silph_1f", interior = { layout = "LAYOUT_SILPH_CO_1F", ground = { 0x334 }, pieces = silphFloor("1F") } },
   { name = "fr_silph_3f", interior = { layout = "LAYOUT_SILPH_CO_3F", ground = { 0x334 }, pieces = silphFloor("3F") } },
   { name = "fr_silph_4f", interior = { layout = "LAYOUT_SILPH_CO_4F", ground = { 0x334 }, pieces = silphFloor("4F") } },
-  { name = "fr_silph_5f", interior = { layout = "LAYOUT_SILPH_CO_5F", ground = { 0x334 }, pieces = silphFloor("5F") } },
+  { name = "fr_silph_5f", interior = { layout = "LAYOUT_SILPH_CO_5F", ground = { 0x334 }, pieces = silphFloor("5F", SILPH_5F) } },
   { name = "fr_silph_6f", interior = { layout = "LAYOUT_SILPH_CO_6F", ground = { 0x334 }, pieces = silphFloor("6F") } },
   { name = "fr_silph_7f", interior = { layout = "LAYOUT_SILPH_CO_7F", ground = { 0x334 }, pieces = silphFloor("7F") } },
   { name = "fr_silph_8f", interior = { layout = "LAYOUT_SILPH_CO_8F", ground = { 0x334 }, pieces = silphFloor("8F") } },
