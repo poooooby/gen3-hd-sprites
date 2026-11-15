@@ -1290,7 +1290,7 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     It boots a new game in the engine (which must load this mod), stands the player at the spot,
     starts a wild battle with Battle Scene on (for the session only; no option or save changes),
     and opens the scene it built. The game is held still, and the workshop takes the window's
-    drawing and input. Its log and F12 shots go to `%TEMP%\woobleview-workshop`.
+    drawing and input. Its log and F12 shots go to `%TEMP%\woobleview-workshop`. It reads the land's relief (the 3D cache) first, building it if it isn't yet: the workshop holds the game still, so the frame hook that loads it in play never runs (without this every map lay flat there but its props and border).
   - **Use:** click a tree (or any cell) to select it; right-drag orbits, middle- or left-drag pans,
     the wheel zooms (WASD, Q/E, R/F, Z/X too); B is the battle's camera, O 45 degrees, T from
     above. The panel lists the trees' settings (`Tune.DEFS.trees`: crown lean, crown height, foot,

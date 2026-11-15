@@ -51,6 +51,20 @@ local function body(game, log)
   Player.targetX, Player.targetY, Player.facing = px, py, "up"
   if s0 and #(s0.party or {}) == 0 then Party.giveMon(s0, C:require("species", "SPECIES_PIDGEY"), 12) end
   U.wait(30)
+  -- the land's relief (the 3D cache): read, or built if it isn't yet, before the scene is built - in
+  -- play the frame hook does this, but the workshop holds the game still (without it every map
+  -- lay flat but its props and its border)
+  if hd._reliefStep then
+    local t0 = love.timer.getTime()
+    local st
+    for _ = 1, 200000 do
+      st = hd._reliefStep()
+      if st ~= "running" and st ~= "idle" then break end
+      if love.timer.getTime() - t0 > 600 then break end
+      U.wait(1)
+    end
+    log(("relief: %s in %.1f s"):format(tostring(st), love.timer.getTime() - t0))
+  end
   hd.setScene(true)
   local BattleBridge = require("src.core.game3.battle_bridge")
   local ok, err = BattleBridge.startWild(Runtime._mod, game,
