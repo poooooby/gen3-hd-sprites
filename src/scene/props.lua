@@ -65,6 +65,10 @@ Props.OBJECTS = {
   fr_log_side = { land = true, tileset = "fr:general", palette = 1, grid = { { 63 } } },
   -- a house's mailbox: tiles 336 / 337 over 352 / 353 over 368 / 369 of the General
   fr_mailbox = { land = true, tileset = "fr:general", palette = 2, grid = { { 336, 337 }, { 352, 353 }, { 368, 369 } } },
+  -- a round shrub a cell across (Cerulean's, the towns' hedgerows): tiles 12 / 13 over 28 / 29 of the
+  -- General, palette 0, on the grass (metatile 005: blocked, it stood up as a card, a run of them
+  -- one tall card of shrubs)
+  fr_bush = { land = true, tileset = "fr:general", palette = 0, grid = { { 12, 13 }, { 28, 29 } } },
 }
 
 -- The props the scene models, in the specs' order. `shape`: a Mound (the default;
@@ -117,6 +121,9 @@ Props.SPECS = {
     lathe = { cx = 8, cz = 11, squash = 0.7, seg = 16, profile = { { 0, 8.5 }, { 5, 8.5 } } } },
   { name = "basket_red", props = "basket_red", ground = { 0x211 }, shape = "lathe", clip_art = true,
     lathe = { cx = 8, cz = 11, squash = 0.7, seg = 16, profile = { { 0, 8.5 }, { 5, 8.5 } } } },
+  -- (FireRed's round shrub: a dome under its drawing, about as tall as it is wide)
+  { name = "fr_bush", props = "fr_bush", clip_art = true, ground = { 0x001 }, shape = "dome",
+    dome = { cx = 8, cz = 9, rx = 8, rz = 7, h = 12 } },
   -- a pile of fruit: a smooth dome under its drawing
   { name = "fruit", props = "fruit", clip_art = true, ground = { 0x211 }, shape = "dome",
     dome = { cx = 8.5, cz = 9, rx = 8.5, rz = 7.5, h = 7 } },
