@@ -25,7 +25,9 @@
 --         besides waterNames), stand (tiles a level the rock stands:
 --         1 or none, as drawn; more, taller), sheer (its sides sheer walls, not ramps a tile across:
 --         Caves.standing), pieces = { [metatile] = kind },
---         groups = { { layouts, pieces }, ... } (a tileset's own pieces, over the shared ones) }
+--         groups = { { layouts, pieces }, ... } (a tileset's own pieces, over the shared ones;
+--         a group may give its own face and ground, read `over` the relief's reading, and hand
+--         marks: marks = { [layout name] = { ["x,y"] = kind, "." flat } }) }
 --   kind: "F" a face; "W" / "E" a side falling west / east; "SW" / "SE" a face's end, the side
 --         falling west / east; "FE" / "FW" an inside corner, the rock north and west / east;
 --         "N" / "NW" / "NE" a rim (flat, its north edge / and its west or east edge a step); "TW" /
@@ -64,12 +66,22 @@ Caves.SHAPES, Caves.BREAKS = SHAPES, BREAKS
 -- the kinds flat over their cell (the floor's own, unnamed, and the rims and thin tops)
 local FLAT = { ["."] = true, N = true, NW = true, NE = true, TW = true, TE = true }
 
---- Whether the layout `name` is read as a cave.
+--- Whether the layout `name` is read as a cave (a prefix, or a whole name ending "$").
 function Caves.covers(C, name)
   for _, p in ipairs(C.layouts or {}) do
-    if name:sub(1, #p) == p then return true end
+    if p:sub(-1) == "$" then
+      if name == p:sub(1, -2) then return true end
+    elseif name:sub(1, #p) == p then return true end
   end
   return false
+end
+
+--- The group a layout's own pieces come from that sets `key` (its face, ground, over), or nil.
+function Caves.groupWith(C, name, key)
+  for _, g in ipairs(C.groups or {}) do
+    if g[key] ~= nil and Caves.covers(g, name) then return g end
+  end
+  return nil
 end
 
 --- The pieces read in the layout `name`: the shared ones and its groups'.
@@ -92,6 +104,15 @@ function Caves.read(L, C, tick, isWater)
   for i = 0, w * h - 1 do
     local m = L.blocks[i] % 1024
     kinds[i] = pieces[m] or (isWater and isWater(L, m) and "water") or nil
+  end
+  -- (the hand marks: a cell's kind set by sight where the drawing contradicts itself, "." flat)
+  for _, g in ipairs(C.groups or {}) do
+    local mk = g.marks and g.marks[L.name]
+    for key, k in pairs(mk or {}) do
+      local x, y = key:match("^(%d+),(%d+)$")
+      x, y = tonumber(x), tonumber(y)
+      if x and x < w and y < h then kinds[y * w + x] = k ~= "." and k or nil end
+    end
   end
   -- a side's head only over its side (a rim's corner over more rock is the rim's flat corner)
   for i = 0, w * h - 1 do
@@ -398,13 +419,24 @@ function Caves.apply(model, input, C, tick, waterNames)
   local n = 0
   local ids = {}
   for id, L in pairs(input.layouts) do
-    if Caves.covers(C, L.name) and not model.layouts[id] then ids[#ids + 1] = id end
+    -- (a cave the relief has read already is its; but a group `over` it reads it afresh)
+    if Caves.covers(C, L.name) and (not model.layouts[id] or Caves.groupWith(C, L.name, "over")) then
+      ids[#ids + 1] = id
+    end
   end
   table.sort(ids)
   for _, id in ipairs(ids) do
     local L = input.layouts[id]
     local w, h = L.w, L.h
     local levels, kinds = Caves.read(L, C, tick, isWater)
+    -- (the walls' face and the ground behind a rim: the tileset's own where its group says)
+    local gf, gg = Caves.groupWith(C, L.name, "face"), Caves.groupWith(C, L.name, "ground")
+    local face, ground = gf and gf.face or C.face, gg and gg.ground or C.ground
+    -- (read over the relief's: its records for the layout go)
+    if model.layouts[id] then
+      for k in pairs(model.cuts) do if floor(k / 65536) == id then model.cuts[k] = nil end end
+      model.layouts[id] = nil
+    end
     -- (heights standing as C.stand says; depths where the drawing puts each point)
     local grids, depths = {}, {}
     for i = 0, w * h - 1 do
@@ -453,11 +485,11 @@ function Caves.apply(model, input, C, tick, waterNames)
           for t = 0, N do hi = max(hi, g[t]) end
           if hi - lo >= LEVEL then
             back, foot = L.blocks[i - w] % 1024, lo
-            if kinds[i - w] then back = C.ground end
+            if kinds[i - w] then back = ground end
           end
         end
         if wall or back then
-          model.cuts[id * 65536 + x * 256 + y] = { NO, foot, back or NO, C.face or NO, wall and 0xFF or 0,
+          model.cuts[id * 65536 + x * 256 + y] = { NO, foot, back or NO, face or NO, wall and 0xFF or 0,
                                                    wall and BLOCK_WALLS or 0 }
           cells[i] = cells[i] or g
         end

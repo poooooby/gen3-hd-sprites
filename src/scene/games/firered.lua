@@ -122,7 +122,8 @@ F.caves = {
               "LAYOUT_DIGLETTS_CAVE_", "LAYOUT_SEAFOAM_ISLANDS_", "LAYOUT_FIVE_ISLAND_LOST_CAVE_",
               "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL", "LAYOUT_SIX_ISLAND_ALTERING_CAVE",
               "LAYOUT_FOUR_ISLAND_ICEFALL_CAVE_", "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_",
-              "LAYOUT_NAVEL_ROCK_", "LAYOUT_SIX_ISLAND_DOTTED_HOLE_" },
+              "LAYOUT_NAVEL_ROCK_", "LAYOUT_SIX_ISLAND_DOTTED_HOLE_", "LAYOUT_MT_EMBER_EXTERIOR$",
+              "LAYOUT_MT_EMBER_SUMMIT$" },
   face = 0x299,
   ground = 0x281,
   -- (water besides the relief's own: Seafoam's currents and fast water, drawn as water)
@@ -166,6 +167,26 @@ F.caves = {
     -- rock tops, read as drawn there without them)
     { layouts = { "LAYOUT_DIGLETTS_CAVE_NORTH_ENTRANCE", "LAYOUT_DIGLETTS_CAVE_SOUTH_ENTRANCE" },
       pieces = { [0x2E1] = "F", [0x2DA] = "E", [0x2A3] = "N", [0x2A4] = "N" } },
+    -- Mt Ember's outside and its summit (the Sevii Islands' outdoor tileset: grey rock stepped as a
+    -- mountain's, read as a cave's by sight - the summit's sand at the top has a side falling west
+    -- on its west, 353, and one falling east on its east, 355). The light top 351 is flat; its
+    -- faces 35C / 359, a cave's mouth 346, the stairs 091 / 089; the sides falling west 353, over
+    -- sand 336 / 354, over grass 34E, and east 355, over sand 337, over grass 34F; a face's west
+    -- end 35B (over sand 33E, grass 345), its east end 35D (33F, 347); the inside corners, the
+    -- rock north and east 335 (a west side's head beside a face's end) and north and west 334.
+    -- The sand, grass, ledges, boulders and the summit's rock lip lie flat. Read over the
+    -- relief's (the outdoor reading leaves the mountain flat), its walls in its own face and sand
+    { layouts = { "LAYOUT_MT_EMBER_EXTERIOR$", "LAYOUT_MT_EMBER_SUMMIT$" }, over = true, face = 0x35C, ground = 0x385,
+      pieces = { [0x35C] = "F", [0x359] = "F", [0x346] = "F", [0x091] = "F", [0x089] = "F",
+                 [0x353] = "W", [0x336] = "W", [0x354] = "W", [0x34E] = "W",
+                 [0x355] = "E", [0x337] = "E", [0x34F] = "E",
+                 [0x35B] = "SW", [0x33E] = "SW", [0x345] = "SW", [0x35D] = "SE", [0x33F] = "SE", [0x347] = "SE",
+                 [0x335] = "FW", [0x334] = "FE" },
+      -- by sight, where the summit's drawing contradicts itself: the crater's foot lies level with
+      -- the sand (its last face, and the sides beside the sand's tongue, drawn a level too many)
+      marks = { LAYOUT_MT_EMBER_SUMMIT = { ["8,3"] = ".", ["9,3"] = ".", ["6,6"] = ".", ["6,7"] = ".",
+                                           ["12,6"] = ".", ["12,7"] = ".", ["7,3"] = ".", ["7,4"] = ".",
+                                           ["10,3"] = ".", ["10,4"] = "." } } },
     -- Mt Ember's: its rims with ash on them 328 / 32A
     { layouts = { "LAYOUT_MT_EMBER_RUBY_PATH_", "LAYOUT_MT_EMBER_SUMMIT_PATH_" },
       pieces = { [0x328] = "N", [0x32A] = "N" } },

@@ -1587,6 +1587,17 @@ do
   local lvR, _, confR = Caves.read({ name = "LAYOUT_TEST_R", w = 5, h = 3, blocks = bR }, { pieces = { [7] = "E", [3] = "N" } })
   check(lvR[2 * 5 + 1] == lvR[2 * 5 + 4] and lvR[2 * 5 + 3] == lvR[2 * 5 + 4] and #confR == 1 and confR[1][1] == 0
     and confR[1][2] == 2, "a rim strip lies level with the floor it runs into, its step at the side")
+  -- a whole name ("$") covers that layout alone; a group's hand marks set a cell's kind by sight
+  local CX = { layouts = { "LAYOUT_PEAK$" }, pieces = { [9] = "F" }, groups = { { layouts = { "LAYOUT_PEAK$" }, over = true, face = 77,
+    pieces = { [9] = "F" }, marks = { LAYOUT_PEAK = { ["1,1"] = "." } } } } }
+  check(Caves.covers(CX, "LAYOUT_PEAK") and not Caves.covers(CX, "LAYOUT_PEAK_PATH"),
+    "a whole name covers its layout and not the names it begins")
+  check(Caves.groupWith(CX, "LAYOUT_PEAK", "face").face == 77 and Caves.groupWith(CX, "LAYOUT_PEAK", "ground") == nil,
+    "...its group gives its own face where it sets one")
+  local bX = { [0] = 1, 1, 1, 9, 9, 9, 1, 1, 1 }
+  local _, kX = Caves.read({ name = "LAYOUT_PEAK", w = 3, h = 3, blocks = bX }, CX)
+  local _, kY = Caves.read({ name = "LAYOUT_PEAK_PATH", w = 3, h = 3, blocks = bX }, CX)
+  check(kX[3] == "F" and kX[4] == nil and kX[5] == "F" and kY[4] == "F", "...and its marks set a cell flat by sight, there alone")
   -- a side's head (the rim's corner over a side): it falls as the side does, its north edge a step
   local P3 = { [2] = "HW", [3] = "N", [4] = "HE", [6] = "W", [7] = "E", [8] = "SW", [9] = "F", [10] = "SE" }
   local rows3 = { { 1, 1, 1, 1, 1 }, { 1, 2, 3, 4, 1 }, { 1, 6, 5, 7, 1 }, { 1, 8, 9, 10, 1 }, { 1, 1, 1, 1, 1 } }

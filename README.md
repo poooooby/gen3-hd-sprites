@@ -215,7 +215,8 @@ Open **OPTIONS → MODS → WoobleView**.
   and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them, and in FireRed and
   LeafGreen so do the caves: Mt Moon's ridges, Rock Tunnel's and Victory Road's rock walls and
-  raised paths, and the other caves' rock stand around the cave floor, and
+  raised paths, and the other caves' rock stand around the cave floor, and Mt Ember climbs in
+  stepped terraces from its foot to the summit, and
   the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk).
