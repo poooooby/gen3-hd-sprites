@@ -113,38 +113,40 @@ return function(K, H)
     local face = Tile(25, 56, 33, 64, { top = zs - 46 })
     local sign = Prism("sign", 24, 56,
       { { zs, zs - 64 }, { zs, zs - 46 }, { front_z, zs - 46 }, { front_z, front_z - 64 } },
-      { edges = { [0] = Proj(46, 64), [1] = Proj(), [3] = Proj(46, 63) }, skip = { 2 },
+      { edges = { [0] = Proj(46, 64), [1] = Proj(), [2] = face, [3] = Proj(46, 63) },
         caps = { Band(zs - 64, zs - 46, face, zs) } })
     return { walls, roof, sign }
   end
 
-  -- The Poke Mart (the General's, every town: Cerulean's at 27-30 x 26-29, 64 x 64): a blue roof of
-  -- 4 px tiles (lines every 4 rows from row 0, every 4 px from x 7) to its eave line at row 28,
-  -- its hips x 1-6 and 57-62, darker toward the eave; a rounded white canopy over the door, rows
-  -- 14-31 x 16-47; the facade rows 29-47 (the MART sign, the door, windows), the ground drawn
-  -- below it: its front wall stands at z 48, its back at 16 (the canopy's underside slopes back to
-  -- the wall at its last row, as the Center's sign's). The slope's drawn rows (0-27) are as
-  -- many as its run and rise show at a pitch of 31 degrees: its ridge is the drawing's top.
+  -- The Poke Mart (the General's, every town: Cerulean's at 27-30 x 25-28, 64 x 64): a blue roof of
+  -- 4 px tiles (its outline row 2, lines every 4 rows, every 4 px from x 7) to its eave line at row
+  -- 44, its hips x 1-6 and 57-62, darker toward the eave; a rounded white canopy over the door,
+  -- rows 30-47 x 16-47; the facade rows 45-63 (the MART sign, the door, windows): its front wall
+  -- stands at z 64, its back at 16, on its three blocked rows (the canopy's underside slopes back
+  -- to the wall at its last row, as the Center's sign's). The slope's drawn rows (2-43) are as
+  -- many as its run and rise show at a pitch of 31 degrees: its ridge is the drawing's top. (The
+  -- spec once started a row lower, its roof's top 14 rows lying flat behind it as the map draws
+  -- them; the side walls take a plain column of the facade's panel right of the door.)
   local function poke_mart()
-    local front_z, back_z, overhang = 48, 16, 2
+    local front_z, back_z, overhang = 64, 16, 2
     local zf, zb = front_z + overhang, back_z - overhang
-    local roof = HipRoof("roof", 0, 64, zf, zb, zf - 29, {
-      fascia = Strip({ 28, 29 }, { wrap = { 4, 24 } }),
-      slope = Strip({ 4, 28 }, { rep = { 0, 4 }, wrap = { 7, 55 } }),
-      teeth = { 0, 1 }, cap = { 0, 1 }, pitch = 31.0, run = 7,
-      ridge_u = { 7, 57 }, end_tile = Tile(7, 0, 8, 1) })
+    local roof = HipRoof("roof", 0, 64, zf, zb, zf - 45, {
+      fascia = Strip({ 44, 45 }, { wrap = { 4, 24 } }),
+      slope = Strip({ 20, 44 }, { rep = { 16, 20 }, wrap = { 7, 55 } }),
+      teeth = { 2, 3 }, cap = { 2, 3 }, pitch = 31.0, run = 7,
+      ridge_u = { 7, 57 }, end_tile = Tile(7, 2, 8, 3) })
     local wall_top = 19
-    local plaster = Tile(8, 40, 24, 47, { top = wall_top })
+    local plaster = Tile(50, 46, 54, 63, { top = wall_top })
     local walls = Prism("walls", 1, 63,
       { { front_z, 0 }, { front_z, wall_top }, { back_z, wall_top }, { back_z, 0 } },
-      { edges = { [0] = Proj(29, 48), [2] = plaster }, skip = { 1, 3 },
+      { edges = { [0] = Proj(45, 64), [2] = plaster }, skip = { 1, 3 },
         caps = { Band(0, wall_top, plaster, front_z, { z1 = back_z }) } })
     local zc = zf + 2
-    local white = Tile(17, 22, 25, 28, { top = zc - 14 })
+    local white = Tile(17, 38, 25, 44, { top = zc - 30 })
     local canopy = Prism("canopy", 16, 48,
-      { { zc, zc - 32 }, { zc, zc - 14 }, { front_z, zc - 14 }, { front_z, front_z - 32 } },
-      { edges = { [0] = Proj(14, 32), [1] = Proj(), [3] = Proj(14, 31) }, skip = { 2 },
-        caps = { Band(zc - 32, zc - 14, white, zc) } })
+      { { zc, zc - 48 }, { zc, zc - 30 }, { front_z, zc - 30 }, { front_z, front_z - 48 } },
+      { edges = { [0] = Proj(30, 48), [1] = Proj(), [2] = white, [3] = Proj(30, 47) },
+        caps = { Band(zc - 48, zc - 30, white, zc) } })
     return { walls, roof, canopy }
   end
 
@@ -317,7 +319,9 @@ return function(K, H)
       teeth = { 8, 9 }, cap = { 8, 9 }, pitch = 12.0, run = 11,
       ridge_u = { 11, w - 11 }, end_tile = Tile(11, 8, 12, 9) })
     local wall_top = front - 40
-    local side = Tile(64, 48, 80, 62, { top = wall_top - 8 })
+    -- (its sides and back: the beige siding left of the door, rows 49-56; the windows tiled there
+    -- stood two rows high on a wall of one storey)
+    local side = Tile(8, 49, 24, 57, { top = wall_top })
     local walls = Prism("walls", 1, w - 1,
       { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
       { edges = { [0] = Proj(40, front), [2] = side }, skip = { 1, 3 },
@@ -971,9 +975,9 @@ return function(K, H)
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0E4 },
       exact = { { 2, 64, 78, 74 }, { 8, 52, 72, 64 }, { 24, 46, 56, 64 }, { 9, 45, 71, 52 }, { 11, 16, 69, 45 } },
       parts = pokemon_center },
-    { name = "poke_mart", layout = "LAYOUT_CERULEAN_CITY", rect = { 27, 26, 4, 4 },
+    { name = "poke_mart", layout = "LAYOUT_CERULEAN_CITY", rect = { 27, 25, 4, 4 },
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0E4, 0x0D4, 0x0DC },
-      exact = { { 1, 32, 63, 48 }, { 16, 14, 48, 32 }, { 7, 0, 55, 14 }, { 7, 14, 16, 20 }, { 48, 14, 55, 20 } },
+      exact = { { 1, 48, 63, 64 }, { 16, 30, 48, 48 }, { 11, 4, 53, 8 }, { 7, 8, 55, 30 }, { 7, 30, 16, 36 }, { 48, 30, 55, 36 } },
       parts = poke_mart },
     { name = "viridian_house_a", layout = "LAYOUT_VIRIDIAN_CITY", rect = { 24, 8, 5, 4 },
       ground = { 0x176, 0x16E, 0x001, 0x008, 0x009, 0x010, 0x011 },

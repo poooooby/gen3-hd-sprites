@@ -270,7 +270,11 @@ function Strip:uPieces(s0, s1)
   local pieces = self:wrapPieces(s0, s1)
   local P = self.patch
   if not P then return pieces end
-  -- (the patched columns: each span's part over [a, b) sampled from [lo, hi), cyclically)
+  return Strip.patched(pieces, P)
+end
+
+-- (the patched columns: each span's part over [a, b) sampled from [lo, hi), cyclically)
+function Strip.patched(pieces, P)
   local a, b, lo, hi = P[1], P[2], P[3], P[4]
   local out = {}
   for _, pc in ipairs(pieces) do
