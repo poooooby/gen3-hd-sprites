@@ -1661,6 +1661,24 @@ do
   local M3 = { layouts = { [7] = { w = 4, h = 4, flags = 0, base = 0, belt = 0, ease = 0, level = false,
                                    cells = { [5] = g } } }, cuts = {}, variants = {}, nVariants = 0 }
   check(not Relief.encode(M3):find("DPTH", 1, true), "...a relief with none writes no depths (Emerald's bytes unchanged)")
+  -- another build's relief over ours (relief_run.lua Run.borrow): its layouts, cuts and edges taken
+  local Run = dofile("src/scene/relief_run.lua")({ Relief = Relief })
+  local ours = { layouts = { [7] = { w = 4, h = 4, cells = { [5] = g } }, [8] = { w = 2, h = 2, cells = {} } },
+    variants = { [0] = { layout = 7, metatile = 1, rows = {} } }, nVariants = 1,
+    cuts = { [7 * 65536 + 1 * 256 + 1] = { 0, 0, 0, 0, 0, 0 }, [8 * 65536] = { 0, 0, 0, 0, 0, 0 } },
+    edges = { { 7, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, { 8, 0, 0, 0, 0, 0, 0, 0, 0, 0 } }, depths = { [7 * 65536 + 257] = d } }
+  local them = { layouts = { [7] = { w = 4, h = 4, cells = {} } },
+    variants = { [0] = { layout = 7, metatile = 2, rows = {} } }, nVariants = 1,
+    cuts = { [7 * 65536 + 2 * 256 + 2] = { 0, 3, 4, 5, 6, 7 }, [7 * 65536 + 3] = { Relief.NO_VARIANT, 0, 0, 0, 0, 0 } },
+    edges = { { 7, 1, 0, 0, 0, 0, 0, 0, 0, 0 } } }
+  local taken = Run.borrow(ours, them)
+  check(taken[7] and not taken[8] and ours.layouts[7] == them.layouts[7] and ours.layouts[8].w == 2,
+    "borrowed relief: the layouts it gives taken, ours kept elsewhere")
+  check(ours.cuts[7 * 65536 + 257] == nil and ours.cuts[8 * 65536] and ours.cuts[7 * 65536 + 514][1] == 1
+    and ours.cuts[7 * 65536 + 3][1] == Relief.NO_VARIANT and ours.nVariants == 2 and ours.variants[1].metatile == 2,
+    "...its cut tiles for ours there, their variants after ours")
+  check(#ours.edges == 2 and ours.edges[1][1] == 8 and ours.edges[2][2] == 1 and not ours.depths[7 * 65536 + 257],
+    "...its edges for ours there, our depths there dropped")
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))

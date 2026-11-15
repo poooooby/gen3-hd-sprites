@@ -98,8 +98,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Game Corner, Silph Co., the Pokémon Mansion, Cinnabar's capsule-shaped lab, the Power Plant
   with its four smokestacks, the Pokémon League with its trees and statues, Bill's sea cottage
   with his machine on the roof, the route gatehouses, the Cycling Road's gate, and the islands'
-  houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them, their
-  faces and stairs sloping up like real hillsides, and
+  houses and harbours. Their cliffs, rock and mountain slopes rise with the land of Pokémon FireRed
+  3DS, their faces and stairs sloping up like real hillsides, and
   Kanto's pine trees stand as real trees too, round crowns on their trunks with their shadows on the
   grass, and so do the broad leafy trees of Viridian Forest and the Sevii Islands' Berry Forest and
   Pattern Bush, all drawn from your own cartridge.
@@ -214,10 +214,10 @@ Open **OPTIONS → MODS → WoobleView**.
   Island's market stall with its crates, tills, pots and flowers) and their white picket and log fences,
   mailboxes, boulders, round shrubs and the caves' rubble. Signs, street lamps
   and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
-  terraces, ledges, stairs and the rocks at sea rise as the map draws them, and in FireRed and
-  LeafGreen so do the caves: Mt Moon's ridges, Rock Tunnel's and Victory Road's rock walls and
-  raised paths, and the other caves' rock stand around the cave floor, and Mt Ember climbs in
-  stepped terraces from its foot to the summit, and
+  terraces, ledges, stairs and the rocks at sea rise as the map draws them. In FireRed and
+  LeafGreen the land is Pokémon FireRed 3DS's wherever it shapes a map: the towns' and islands'
+  cliffs and the caves' ridges and rock walls; WoobleView's own reading fills the rest (Mt Ember
+  climbs in stepped terraces from its foot to the summit), and
   the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk).
@@ -258,12 +258,15 @@ Open **OPTIONS → MODS → WoobleView**.
   the weather's light and haze, the drifting patches of sunlight, the rays, dust and glow, the
   rain, sand, ash and fog in the scene, the diorama blur and the entrance's cinema bars, blur,
   speed lines and flash.
+- **Kanto's land** in FireRed and LeafGreen is
+  [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS)'s, by
+  NachoGonzalez2001: the shape it gives Kanto's and the Sevii Islands' maps, cliffs, rock and caves.
 
 ## 💡 Inspirations
 
 - [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS) by
-  NachoGonzalez2001 first showed Kanto standing in 3D. WoobleView's FireRed and LeafGreen buildings,
-  land and trees are its own reading of the games' art, by Emerald 3DS's method.
+  NachoGonzalez2001 first showed Kanto standing in 3D. WoobleView's FireRed and LeafGreen buildings
+  and trees are its own reading of the games' art, by Emerald 3DS's method.
 
 ---
 

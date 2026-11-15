@@ -1130,7 +1130,8 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - `Solve.useGame(game)` points the solver's tables at the game's own (`Solve.GAMES`, filled by main.lua from `src/scene/games/`). Emerald keeps its original tables, so its build is unchanged.
   - `Roles.useGame` does the same for the roles; the terraces read `Solve.game.terraces` (`T.G`), and `T.NP` is the family's primary size.
   - `groups = "drawn"`: every FireRed map read as drawn is rebuilt terrace by terrace (Emerald's are a chosen list).
-  - **Post-pass (FireRed only, `relief_run.lua`):** a cell a building model stands on is flattened to the level of the first cell south of it that no model holds, and its cuts are removed. A building drawn into a cliff (Lavender's tower, its door a cave door) then stands on its door's ground, not on a plateau.
+  - **FireRed 3DS's relief (r15, `Run.borrow`):** `assets/scene/firered_relief.bin` is the `VXL4` section of FireRed 3DS's pak (`luajit tools/fr3ds_relief.lua <firered3ds.pak>`, modkitignored). After our own solve, terraces and caves, every layout it gives (any it encodes: cells or a base) takes its cells, cut tiles (their variants appended after ours, the cuts' indices shifted), edges and flags; ours there are dropped with our cave depths. Layouts it leaves out keep ours (Mt Ember's outside: theirs is flat). The building post-pass then runs again on the layouts taken, and the last passes (`cutFeet`, seam eases) run over the whole. `deps.borrowed(game)` (main.lua) serves the bytes for FireRed and LeafGreen. The workshop's ground marks ride over it as over ours. Review: `REVIEW_KINDS=relief` sets ours beside theirs layout by layout.
+    - **Post-pass (FireRed only, `relief_run.lua`):** a cell a building model stands on is flattened to the level of the first cell south of it that no model holds, and its cuts are removed. A building drawn into a cliff (Lavender's tower, its door a cave door) then stands on its door's ground, not on a plateau.
 - **FireRed's buildings (`src/scene/models/specs_firered.lua`):** our own reading of each building,
   by Emerald 3DS's method, on our kernel. main.lua loads the file for FireRed and LeafGreen
   (`sceneDeps.SpecsByGame`), and `useFamily` picks the game's specs (Emerald keeps `specs.lua`).
@@ -1270,7 +1271,7 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - **Unsettled caves:** a cave whose drawing disagrees with itself somewhere is "unsettled", not
     "off" (the drawing allows either level there; they were checked in game).
   - **Another build (`REVIEW_PAK`, `-Pak`):** a pak in Emerald 3DS's format (FireRed 3DS's) read to
-    compare, never copied: its `VXL4` relief's levels tinted beside each cave's (and how many cells
+    compare: its `VXL4` relief's levels tinted beside each cave's (and how many cells
     agree once aligned; it lifts rock a single level), and its `VXB7` buildings' placements against
     ours (`_layoutModels` in every layout: each building "models it in n of our m places"; a list of
     the places it models a building and we model nothing). With `REVIEW_KINDS=relief` and

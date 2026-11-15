@@ -43,15 +43,16 @@ return function(deps)
   Run.TICKS = {
     emerald = { groups = 1165, world = 8601, export = 82851, terraces = 24157, finish = 256 },
     -- (FireRed's, measured the same way; LeafGreen draws the same maps)
-    firered = { groups = 426, world = 5230, export = 45288, terraces = 12843, finish = 3993 },
-    leafgreen = { groups = 426, world = 5230, export = 45288, terraces = 12843, finish = 3993 },
+    firered = { groups = 558, world = 5230, export = 45288, terraces = 13593, finish = 13401 },
+    leafgreen = { groups = 558, world = 5230, export = 45288, terraces = 13593, finish = 13401 },
   }
   -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
   -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
   -- rules are Emerald 3DS's, its key as it always was
   -- (r11: the cells new building models own - the harbors' gantries, Two Island's stall, Trainer
-  -- Tower - take the level south of them; r12: a cave's rims join their floor before its walls)
-  Run.RULES = { firered = 14, leafgreen = 14 }
+  -- Tower - take the level south of them; r12: a cave's rims join their floor before its walls;
+  -- r15: FireRed 3DS's relief over ours where it gives one, Run.borrow)
+  Run.RULES = { firered = 15, leafgreen = 15 }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end
@@ -180,10 +181,10 @@ return function(deps)
     -- path - or the level its spec gives it (a number, pixels: Trainer Tower's platform on the rock,
     -- its porch down on the grass). Emerald 3DS's own rules read its houses' levels; Emerald's
     -- relief is theirs)
-    if keyId ~= "emerald" and deps.models then
+    local function standBuildings(only)
       local floor_ = math.floor
       for id, t in pairs(model.layouts) do
-        local L = S.input.layouts[id]
+        local L = (not only or only[id]) and S.input.layouts[id]
         local own = L and deps.models(L.name, tick)
         if own and next(own) then
           local function K(x, y) return (y + 4096) * 16384 + (x + 4096) end
@@ -209,11 +210,22 @@ return function(deps)
         end
       end
     end
+    if keyId ~= "emerald" and deps.models then standBuildings(nil) end
     -- (another game's caves, counted off their own tilesets' pieces: src/scene/relief_caves.lua)
     local G = S.Solve and S.Solve.game
     if keyId ~= "emerald" and deps.Caves and G and G.caves then
       deps.Caves.apply(model, S.input, G.caves, tick, deps.Roles and deps.Roles.WATER_NAMES)
       phase("caves")
+    end
+    -- (FireRed 3DS's relief, where it gives a layout one: its levels, cut tiles and edges over
+    -- ours, our own kept where it has none - Mt Ember's outside; our building models' cells then
+    -- stand on the ground before their doors again. deps.borrowed(game): its relief.bin's bytes)
+    local lent = keyId ~= "emerald" and deps.borrowed and deps.borrowed(keyId)
+    local theirs = type(lent) == "string" and Relief.decode(lent, tick) or nil
+    if theirs then
+      local taken = Run.borrow(model, theirs)
+      if deps.models then standBuildings(taken) end
+      phase("borrowed")
     end
     -- the last passes, over the maps as the solver read them
     local input = S.input
@@ -252,6 +264,30 @@ return function(deps)
     local bytes = Relief.encode(model, Post.seamEases(model, world), tick)
     phase("encode")
     return bytes
+  end
+
+  --- Another build's relief (a decoded VXL4) over a model, in place: each layout it gives takes
+  --- its cells, cut tiles (their variants appended to ours) and edges, ours dropped there with our
+  --- depths. Returns the layouts taken ({ [id] = true }).
+  function Run.borrow(model, B)
+    local floor_ = math.floor
+    local taken = {}
+    for id, t in pairs(B.layouts) do model.layouts[id], taken[id] = t, true end
+    for k in pairs(model.cuts) do if taken[floor_(k / 65536)] then model.cuts[k] = nil end end
+    if model.depths then
+      for k in pairs(model.depths) do if taken[floor_(k / 65536)] then model.depths[k] = nil end end
+    end
+    local edges = {}
+    for _, e in ipairs(model.edges or {}) do if not taken[e[1]] then edges[#edges + 1] = e end end
+    for _, e in ipairs(B.edges or {}) do edges[#edges + 1] = e end
+    model.edges = edges
+    local at = model.nVariants or 0
+    for k = 0, (B.nVariants or 0) - 1 do model.variants[at + k] = B.variants[k] end
+    model.nVariants = at + (B.nVariants or 0)
+    for k, c in pairs(B.cuts) do
+      model.cuts[k] = { c[1] ~= Relief.NO_VARIANT and c[1] + at or c[1], c[2], c[3], c[4], c[5], c[6] }
+    end
+    return taken
   end
 
   function Run.start()

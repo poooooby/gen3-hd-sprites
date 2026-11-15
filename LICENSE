@@ -133,6 +133,12 @@ run in the game once over the player's own cartridge data instead of offline, sl
 milliseconds a frame; Python's own arithmetic and ordering (its hash-ordered sets, compensated
 sums, rounding) reproduced where the result depends on them, so the bytes come out the same.
 
+FireRed's and LeafGreen's terrain relief (assets/scene/firered_relief.bin, laid over the scene's
+own reading by src/scene/relief_run.lua) is the relief of Pokémon FireRed 3DS by
+NachoGonzalez2001 (https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS), taken from its
+build's pak with the author's project credited. Changes: only the relief section kept; WoobleView's
+own relief fills the maps it leaves flat.
+
 Which layout a map is drawn with (src/scene/world.lua's settle) adapts Emerald 3DS's
 src/voxel/voxel_world.c (FillInstance, NeighbourLayoutId and its sLayoutSwaps): a neighbour drawn
 with the layout its script swaps in. Changes: the engine keeps no layout id for the current map,

@@ -35,3 +35,4 @@ tools/register-workshop-link.ps1
 tests/drivers/room_check.lua
 tests/drivers/review.lua
 tools/review.ps1
+tools/fr3ds_relief.lua

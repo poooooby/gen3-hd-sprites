@@ -212,6 +212,13 @@ return function(mod)
         Relief = sceneDeps.Relief, Post = Post, WorldMaps = WorldMaps, Terraces = Terraces, Roles = sceneDeps.Roles,
         Caves = loadSibling(mod, "src/scene/relief_caves.lua", true),
         fixes = mod:read("assets/scene/relief_fixes.json"),
+        -- (FireRed 3DS's relief, laid over ours where it gives a layout one: FireRed and
+        -- LeafGreen draw the same maps)
+        borrowed = function(game)
+          if game ~= "firered" and game ~= "leafgreen" then return nil end
+          local okB, b = pcall(function() return mod:read("assets/scene/firered_relief.bin") end)
+          return okB and b or nil
+        end,
         cache = mod.cache, hooks = mod.hooks, log = mod.log,
         version = okV and GameVersion or nil,
         -- (rel under the engine's cache root: src/scene/cache.lua)
