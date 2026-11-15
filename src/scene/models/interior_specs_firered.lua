@@ -219,12 +219,13 @@ local PEWTER_GROUND = { "c5bd8b", "a48b73", "836a52", "624a31" }
 local function pewterGym()
   local out = {
     -- (each boulder its drawn ellipse in its cell: rows 2-14, a row lower on the stone and the
-    -- back row, whose edges cross the cell's top)
+    -- back row, whose edges cross the cell's top; turned as a dome fitted to its drawing, which a
+    -- box's top - its shape's bounds - overreached by a row)
     repeated("rock", { { 4, 5 }, { 8, 5 }, { 3, 7 }, { 9, 7 }, { 11, 8 }, { 11, 10 } }, 12,
-      { shape = { { "ellipse", 72, 88.5, 7.5, 6.5 } } }),
-    repeated("rock_stone", { { 5, 7 }, { 7, 7 }, { 4, 9 }, { 8, 9 } }, 12, { shape = { { "ellipse", 88, 121.5, 7.5, 6.5 } } }),
-    repeated("rock_dirt", { { 1, 8 }, { 1, 10 } }, 12, { shape = { { "ellipse", 24, 136.5, 7.5, 6.5 } } }),
-    repeated("rock_back", { { 5, 3 }, { 7, 3 } }, 12, { shape = { { "ellipse", 88, 57.5, 7.5, 6.5 } } }),
+      { shape = { { "ellipse", 72, 88.5, 7.5, 6.5 } }, round = "dome" }),
+    repeated("rock_stone", { { 5, 7 }, { 7, 7 }, { 4, 9 }, { 8, 9 } }, 12, { shape = { { "ellipse", 88, 121, 7.5, 6.5 } }, round = "dome" }),
+    repeated("rock_dirt", { { 1, 8 }, { 1, 10 } }, 12, { shape = { { "ellipse", 24, 136.5, 7.5, 6.5 } }, round = "dome" }),
+    repeated("rock_back", { { 5, 3 }, { 7, 3 } }, 12, { shape = { { "ellipse", 88, 57, 7.5, 6.5 } }, round = "dome" }),
     piece("boulder", { { "ellipse", 104, 92, 16, 12 } }, 18, {}),
     piece("wall", { { 16, 0, 192, 48 } }, 32, { fill = 16, foot = 48 }),
   }

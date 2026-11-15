@@ -70,7 +70,9 @@ local function body(game, log)
         end
         if not res.ok then
           local names = {}
-          for name, n in pairs(res.byPiece) do names[#names + 1] = ("%s w%d m%d"):format(name, n.wrong, n.missing) end
+          for name, n in pairs(res.byPiece) do
+            names[#names + 1] = ("%s w%d m%d @%d,%d-%d,%d"):format(name, n.wrong, n.missing, n.x0, n.y0, n.x1, n.y1)
+          end
           table.sort(names)
           if #names > 0 then log("    " .. table.concat(names, ", ")) end
           if #res.stretched > 0 then log("    stretched: " .. table.concat(res.stretched, ", ")) end

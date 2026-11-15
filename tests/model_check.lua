@@ -333,11 +333,13 @@ function Check.room(hd, rooms, r, log)
   end
   local color, owner = Check.render(meshes, W, H)
   local wrong, missing, over, covered, marks, byPiece = 0, 0, 0, 0, {}, {}
-  local function note(k, what)
+  local function note(k, what, x, y)
     local m = meshes[k]
     local name = m and m.piece.name or "?"
-    byPiece[name] = byPiece[name] or { wrong = 0, missing = 0 }
-    byPiece[name][what] = byPiece[name][what] + 1
+    local b = byPiece[name]
+    if not b then b = { wrong = 0, missing = 0, x0 = x, y0 = y, x1 = x, y1 = y }; byPiece[name] = b end
+    b[what] = b[what] + 1
+    b.x0, b.y0, b.x1, b.y1 = min(b.x0, x), min(b.y0, y), max(b.x1, x), max(b.y1, y)
   end
   -- (a pixel the covering piece doesn't own - a top rising over what is drawn behind it, at 45
   -- degrees as Emerald 3DS's rooms stand - is counted apart: over)
@@ -350,7 +352,7 @@ function Check.room(hd, rooms, r, log)
       if own and not own[(y - m.oy) * 4096 + (x - m.ox)] then
         over = over + 1; marks[idx] = 0xFFC000
       else
-        wrong = wrong + 1; marks[idx] = 0xFF0000; note(owner[idx], "wrong")
+        wrong = wrong + 1; marks[idx] = 0xFF0000; note(owner[idx], "wrong", x, y)
       end
     end
   end
@@ -358,7 +360,7 @@ function Check.room(hd, rooms, r, log)
     for key in pairs(m.piece.own or {}) do
       local x, y = m.ox + key % 4096, m.oy + floor(key / 4096)
       if x >= 0 and y >= 0 and x < W and y < H and color[y * W + x] == nil then
-        missing = missing + 1; marks[y * W + x] = 0xFF00FF; note(k, "missing")
+        missing = missing + 1; marks[y * W + x] = 0xFF00FF; note(k, "missing", x, y)
       end
     end
   end
