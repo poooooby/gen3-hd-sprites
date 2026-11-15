@@ -209,12 +209,12 @@ Open **OPTIONS → MODS → WoobleView**.
   you play. Say no and it never asks again; you can switch it on any time in **OPTIONS → MODS →
   WoobleView**. Its messages carry the WoobleView name, so you always know which mod is asking.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
-  trees stand as real trees with leafy crowns (Viridian Forest's, the Berry Forest's golden ones and
-  Four Island's slim saplings too), and in Emerald most of its town buildings, fences, hedges, curbs
+  trees stand as real trees with leafy crowns (Viridian Forest's, the Berry Forest's golden ones, the Safari
+  Zone's broad flat-topped ones and Four Island's slim saplings too), and in Emerald most of its town buildings, fences, hedges, curbs
   and railings stand in 3D too, as do the buildings of FireRed and LeafGreen (Trainer Tower on its
   rock, the red gantries by the Sevii harbors and the Power Plant, Vermilion's dock canopies, Two
-  Island's market stall with its crates, tills, pots and flowers) and their white picket and log fences,
-  mailboxes, boulders, round shrubs and the caves' rubble. Signs, street lamps
+  Island's market stall with its crates, tills, pots and flowers) and their white picket and log fences
+  (seen end-on too, post behind post), mailboxes, boulders, round shrubs and the caves' rubble. Signs, street lamps
   and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them. In FireRed and
   LeafGreen the land is Pokémon FireRed 3DS's wherever it shapes a map: the towns' and islands'

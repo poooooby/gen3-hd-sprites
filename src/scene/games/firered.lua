@@ -280,5 +280,45 @@ F.trees.forests[3] = {
                     rgb(0xBD, 0x94, 0x8B), rgb(0x7B, 0x7B, 0x83) },
   ground = { [0x2BF] = 0x0E6 }, leavesBelow = true, leafGround = 0x008,
 }
+-- The Safari Zone's own tree: 3 cells across, a broad flat crown on a forked trunk, drawn four
+-- rows tall - its crown's crest in the cell over its tip row (310-312 on the grass, 300-302 on the
+-- tall grass, 308-30A over a ledge, 315-317 under the foot of the tree behind), its tip row (318 /
+-- 319 / 31A alone), its crown row (the crown's underside and the trunk's top: 30B / 306 / 30C
+-- alone) and its trunk row (its foot ringed with low leaves and a shadow: 313 / 30E / 314 alone) -
+-- and stacked two rows apart through the woods, as Viridian Forest's is: there the crown row is
+-- 2F5-2F7 (305-307 where the trunk row below it is its own, 320-322 at a wood's west or east
+-- edge, 2FC at an east edge with a ledge beside it, 328-32D over a roof's back), the trunk row
+-- 2FD-2FF (the next tree's tip; 31D-31F under the crest at a stack's top, 323 / 31A at a wood's
+-- edges, 304 by the ledge), alone 325-327 / 30D-30F. The woods are drawn on the lower layer, the
+-- alone tree's crown on the upper (306, its middle, below): its leaves are either layer's, less
+-- the ground's colours (the grass, the shadow and its ring). Read off the alone trees in the north
+-- (19-21 and 29-31, rows 7-10; 48 x 64 from the crest row's top): the crown's top drawn at row 11,
+-- its skirt's front edge at row 37 (the shade under it, the trunk's fork below), the tree standing
+-- at column 24 on row 50 (the trunk's foot at 53, its shadow's middle), its crown 0.4 of its width
+-- in depth as the forest's; the trunk in its three colours.
+F.trees.forests[4] = {
+  layouts = { "LAYOUT_SAFARI_ZONE_NORTH", "LAYOUT_SAFARI_ZONE_CENTER", "LAYOUT_SAFARI_ZONE_EAST",
+              "LAYOUT_SAFARI_ZONE_WEST" }, w = 3,
+  parts = {
+    [0x2F5] = 0, [0x305] = 0, [0x30B] = 0, [0x320] = 0, [0x328] = 0, [0x32B] = 0,
+    [0x2F6] = 1, [0x306] = 1, [0x321] = 1, [0x329] = 1, [0x32C] = 1,
+    [0x2F7] = 2, [0x307] = 2, [0x30C] = 2, [0x322] = 2, [0x2FC] = 2, [0x32A] = 2, [0x32D] = 2,
+    [0x2FD] = 3, [0x31D] = 3, [0x318] = 3, [0x323] = 3, [0x325] = 3, [0x313] = 3, [0x30D] = 3,
+    [0x2FE] = 4, [0x31E] = 4, [0x319] = 4, [0x326] = 4, [0x30E] = 4,
+    [0x2FF] = 5, [0x31F] = 5, [0x31A] = 5, [0x304] = 5, [0x327] = 5, [0x314] = 5, [0x30F] = 5,
+  },
+  alone = { crest = { 0x310, 0x311, 0x312 }, tip = { 0x318, 0x319, 0x31A }, crown = { 0x30B, 0x306, 0x30C },
+            trunk = { 0x313, 0x30E, 0x314 } },
+  cone = { axis = 24, depth = 50, radius = 24, squash = 0.4, tip = 5, skirt = 37, lid = 33 },
+  trunk = { rgb(0x41, 0x39, 0x31), rgb(0x5A, 0x62, 0x31), rgb(0x8B, 0x83, 0x31) },
+  groundColours = { rgb(0x73, 0xCD, 0xA4), rgb(0x41, 0xB4, 0x8B), rgb(0xA4, 0xE6, 0xC5), rgb(0x39, 0x8B, 0x62),
+                    rgb(0x39, 0xAC, 0x9C), rgb(0x8B, 0xDE, 0xBD) },
+  -- (a crest over plain ground lies as that ground; the tip row under a crest, or atop a stack, is
+  -- that tip)
+  ground = { [0x310] = 0x008, [0x311] = 0x009, [0x312] = 0x008, [0x300] = 0x00D, [0x301] = 0x00D, [0x302] = 0x00D },
+  tipToo = { [0x2FD] = true, [0x2FE] = true, [0x2FF] = true, [0x31D] = true, [0x31E] = true, [0x31F] = true,
+             [0x318] = true, [0x319] = true, [0x31A] = true, [0x323] = true, [0x304] = true },
+  leavesBelow = true,
+}
 
 return F

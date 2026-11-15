@@ -974,7 +974,9 @@ return function(deps)
     if propModels[key] ~= nil then return propModels[key] or nil end
     propModels[key] = false
     local cx0, cy0 = math.floor(f.sx / 2), math.floor(f.sy / 2)
-    local W, H = w * 16, h * 16
+    -- (`extend`: the drawing carried down that many rows past the object's last drawn row - a post
+    -- seen down its fence, whose body the next post's cap hides, has its body's colours there)
+    local W, H = w * 16, h * 16 + (sp.extend or 0)
     local art = { w = W, h = H, px = {} }
     for i = 1, W * H * 4 do art.px[i] = 0 end
     -- which quarter of which cell each drawn subtile is: what the ground leaves out under it
@@ -999,6 +1001,19 @@ return function(deps)
       end
       local qk = ci .. "," .. cj
       quads[qk] = (quads[qk] or 0) + 2 ^ (qy * 2 + qx)
+    end
+    if sp.extend then
+      for x = 0, W - 1 do
+        local last
+        for y = 0, H - 1 do if art.px[(y * W + x) * 4 + 4] > 0 then last = y end end
+        if last then
+          local s = (last * W + x) * 4
+          for y = last + 1, math.min(H - 1, last + sp.extend) do
+            local o = (y * W + x) * 4
+            for c = 1, 4 do art.px[o + c] = art.px[s + c] end
+          end
+        end
+      end
     end
     local ring = {}
     for _, c in ipairs(sp.ring or {}) do ring[c[1] * 65536 + c[2] * 256 + c[3]] = true end

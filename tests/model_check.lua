@@ -348,9 +348,9 @@ function Check.tree(ctx, Trees, K)
     Trees.kantoArt(px, function(x, y, r, g, b)
       atlas[y * DIM + x] = floor(r * 255 + 0.5) * 65536 + floor(g * 255 + 0.5) * 256 + floor(b * 255 + 0.5)
     end, K)
-    local A = SP.alone
-    local rows = { A.tip, A.crown, A.trunk }
-    local W, H = SP.w * 16, 48
+    local rows = Trees.rowsOf(SP.alone)
+    local nR = #rows
+    local W, H = SP.w * 16, 16 * nR
     local drawn = {}
     for v = 0, H - 1 do
       for x = 0, W - 1 do
@@ -369,7 +369,7 @@ function Check.tree(ctx, Trees, K)
     for row = 0, 1 do
       for col = 0, SP.w - 1 do
         local id = K == 0 and row * 2 + col or 16 + (K - 1) * 8 + row * SP.w + col
-        parts[id] = { col, row + 1, rows[row + 2][col + 1] }
+        parts[id] = { col, row + nR - 2, rows[row + nR - 1][col + 1] }
       end
     end
     for part, p in pairs(parts) do
@@ -378,9 +378,9 @@ function Check.tree(ctx, Trees, K)
         return nil
       end, {})
     end
-    -- (the tip row's ground: its lower layer, the grass)
-    put({ 0, 0, 0 }, { SP.w, 0, 0 }, { SP.w, 0, 1 }, { 0, 0, 1 }, SP.art.groundTexX, SP.art.texY,
-      SP.art.groundTexX + W, SP.art.texY + 16, "ground")
+    -- (the tip row's ground, and a crest row's: its lower layer, the grass)
+    put({ 0, 0, 0 }, { SP.w, 0, 0 }, { SP.w, 0, nR - 2 }, { 0, 0, nR - 2 }, SP.art.groundTexX, SP.art.texY,
+      SP.art.groundTexX + W, SP.art.texY + 16 * (nR - 2), "ground")
     local color = Check.render({ { tris = tris, ox = 0, oy = 0, at = function(u, v) return atlas[v * DIM + u] end } }, W, H)
     local wrong, missing, marks = 0, 0, {}
     for i = 0, W * H - 1 do
