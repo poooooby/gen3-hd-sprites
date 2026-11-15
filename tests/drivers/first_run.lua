@@ -37,11 +37,15 @@ local function body(game, log)
     loader.modOptions[id].display = "off"
   end
   if env("FIRST_RUN_CLEAR") and hd._cacheClear then log("cache cleared:", tostring(hd._cacheClear())) end
-  -- FIRST_RUN_RESET=1: as a first run again (the flag file gone, Battle Scene on CLASSIC)
+  -- FIRST_RUN_RESET=1: as a first run again (every game's flag file gone, Battle Scene on CLASSIC,
+  -- or on FIRST_RUN_SCENE: overworld, as if 3D battles were chosen in another game)
   if env("FIRST_RUN_RESET") then
     os.remove("mod_cache/gen3-hd-sprites/state/first_run_asked")
+    for _, g in ipairs({ "ruby", "sapphire", "firered", "leafgreen" }) do
+      os.remove("mod_cache/gen3-hd-sprites/state/first_run_asked_" .. g)
+    end
     loader.modOptions["gen3-hd-sprites"] = loader.modOptions["gen3-hd-sprites"] or {}
-    loader.modOptions["gen3-hd-sprites"].battle_scene = "classic"
+    loader.modOptions["gen3-hd-sprites"].battle_scene = env("FIRST_RUN_SCENE") or "classic"
   end
   -- (FIRST_RUN_SPOT=MAP:x:y: another game's field, FireRed's Route 1)
   local spotMap, sx, sy = (env("FIRST_RUN_SPOT") or "EM_ROUTE101:10:10"):match("([^:]+):(%d+):(%d+)")

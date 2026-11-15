@@ -1018,12 +1018,19 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   into a press and swallows every pointer event meanwhile.
 - **Options:** set through `ManagerState.setOption` with the Gen 3 manager's proxy
   (`P.setOption`). That saves them, emits `mod.options_changed`, and the pane shows them.
-- **First run (Emerald only, `GameVersion.get() == "emerald"`):** `core.update` wrapper waits for
+- **First run (each game in `P.GAMES_3D`, once):** `core.update` wrapper waits for
   45 quiet frames of the field (`Field.running`, no battle, `Runtime.uiBusy()` false, engine modules
-  through `require`: a mod's `package.loaded` is not the engine's). If the flag file
-  `state/first_run_asked` is not in `mod.cache`, it asks "Battle in the world around you?" (yes:
-  `battle_scene` = overworld, then "Build the 3D world now?"). Either answer writes the flag; with
-  Overworld already chosen it only writes the flag.
+  through `require`: a mod's `package.loaded` is not the engine's). `mod.cache` is the install's,
+  shared by every game, so each game has its own flag file, `P.flagFor(game)`: Emerald's keeps the
+  first name, `state/first_run_asked` (players asked before stay asked), the others add `_<game>`.
+  If this game's flag is missing:
+  - Battle Scene not on Overworld: "Battle in the world around you?" (yes: `battle_scene` =
+    overworld, then "Build the 3D world now?").
+  - Already on Overworld (chosen in another game) and this game's relief still building
+    (`Scene.reliefRun.state()` "running"; started here if "idle", as the frame hook would):
+    "Build <Game>'s 3D world now?" alone.
+  - Already on Overworld and built (served from the cache): nothing asked, the flag written.
+  Any answer writes the flag. `tests/scene_test.lua` checks each case with fake engine modules.
 - **No garbage while idle:** the hook runs every frame for the whole session, so it allocates
   nothing (0.01 KB a tick, measured with the GC stopped). The engine modules are required once
   they load and kept, since the sandbox's `require` allocates on every call. The flag is kept in
@@ -1033,7 +1040,6 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
 - **Build 3D Cache / Clear 3D Cache:** `choice` rows (`idle` / `go`, `visible_if` Overworld) under
   Battle Scene. `main.lua`'s `mod.options_changed` handler runs a row set to `go` and sets it back
   (Build's when the panel closes). A `go` left from the launcher runs once the field is quiet.
-  Build is Emerald only for now.
 - **Build as I play:** the progress panel's one button, `Build as I play (B)`, is taken by B or a
   click, never by A, so mashing through text can't close it.
   - It closes the panel and keeps the job (`bgJob`). The build carries on as it would have in the
@@ -1220,7 +1226,7 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - **Corners (`notch`):** FireRed's pieces (`corners`, on by default in `interior_specs_firered.lua`) reach back to their `back` column by column, each only as far as the drawing shows a thing there: not past the floor (or its shade), a wall, or a piece standing behind (its foot no nearer than the top's back) drawn where its back would be seen, above the piece's own pixels. A corner rounded or cut keeps its shape at 45 degrees (tables, counters, pillars, the slot machines, a pedestal's corners beside its figure, a barrel's round top before the barrel behind it); a figure standing in front stops it. `Relief` takes it per column (`notch`); Emerald's pieces don't set it.
   - **Copies (`at`):** `repeated` writes each copy's cell as the cell its shape starts in; the room moves them to stand by the piece's rectangle (where its first drawn pixels are), a row or two lower when the shape is drawn over the cells above (Silph 2F's stools and plants, Cinnabar's quiz machines).
   - **The proof (`tests/drivers/room_check.lua`, `Check.render` in `tests/model_check.lua`):** every piece standing in a room drawn together at 45 degrees, the nearer over the farther, against the room's drawing (`exports._roomLayout`): wrong (a covered pixel in another colour, but for `over`: a top rising over what another piece owns), missing (a piece's own pixels left bare), stretched faces. Emerald's own rooms, ported number for number and confirmed against Emerald 3DS's release, set the bar: 0-10% of covered pixels wrong (the Center 0.8%, the Mart 5.0%, the lab 10.6%), nothing missing, only the cut corners stretched. FireRed's: all 71 rooms 0 wrong, nothing missing, nothing stretched (LeafGreen's the same); Emerald's 145 of 193 under the same proof. What lies under the ground (a face's skirt, run a unit below the floor so no seam shows) is hidden by the floor in the game, and the proof hides it too. `ROOM_PROBE=x,y;...` logs every face covering those pixels (piece, tag, depth, texel): the way to find which part draws a wrong pixel. A room whose build failed is listed as such. A piece reused in a later room is listed with the room it was modelled in (its `reused_at`, or `bare_at` when found by its own pixels): the proof looks through every room's pieces. `ROOM_VERBOSE=<text>` lists what each room places. `ROOM_CHECK=name,...` picks rooms; each writes `room_<name>.ppm` (drawing | the room at 45 degrees | marks).
-- **First run (`src/prompt.lua`):** the question and Build 3D Cache come up in the games whose world is built in 3D (`P.GAMES_3D`: Emerald, FireRed, LeafGreen). `Run.TICKS` holds each game's measured build (FireRed 62,662 ticks against Emerald's 117,030; LeafGreen draws the same maps). Measured in the scratch engine: FireRed's whole build in 46 s, LeafGreen's in 41 s. `tests/drivers/first_run.lua` takes `FIRST_RUN_SPOT=MAP:x:y` for another game's field (`FR_ROUTE_1:10:20`).
+- **First run (`src/prompt.lua`):** the question and Build 3D Cache come up in the games whose world is built in 3D (`P.GAMES_3D`: Ruby, Sapphire, Emerald, FireRed, LeafGreen). `Run.TICKS` holds each game's measured build (FireRed 62,662 ticks against Emerald's 117,030; LeafGreen draws the same maps). Measured in the scratch engine: FireRed's whole build in 46 s, LeafGreen's in 41 s. `tests/drivers/first_run.lua` takes `FIRST_RUN_SPOT=MAP:x:y` for another game's field (`FR_ROUTE_1:10:20`).
 - **FireRed's caves (`src/scene/relief_caves.lua`, `F.caves` in `games/firered.lua`):** our own rule, after Emerald 3DS's counted levels (they leave their caves flat but Rusturf Tunnel). The solver reads outdoor maps only, so caves had no relief; `relief_run` now adds them after the terraces (not for Emerald).
   - **Pieces:** each cave piece is a shape over its cell, in levels over its own base: a face 1 → 0 down its rows, a west / east side 0 → 1 / 1 → 0 across its columns (a slope a tile across a level, as drawn), a face's end (`SW` / `SE`: the lower of face and side), an inside corner (`FE` / `FW`: the higher), a rim (`N`, `NW`, `NE`: flat, its north edge, and a corner's west or east edge, a step: the top's back), a side's head (`HW` / `HE`: a block's rim corner over its side, falling as the side does, as Emerald 3DS's band heads; flat corners left the side and the rim apart, and the top looked sunk between them; over anything but its side the same piece is the rim's flat corner, `NW` / `NE`), a thin wall's sheer side (`TW` / `TE`), the dark past the rock (`void`) and the water (`water`: by behaviour, the relief's water names plus the table's own, Seafoam's currents; it joins nothing and lies at the lowest of its banks, so banks at two levels no longer tie together through it). Everything else is flat; the General's carved stairs (091, Cerulean Cave's) are faces.
   - **Levels:** two neighbours join wherever their shared edges have the same profile (offset = the level step); edges whose profiles differ are steps that `Relief.cliffWalls` closes. Joins go through a union-find with offsets: flat beside flat first (the floors and tops, and a rim beside a rim: flat, its north edge a step), then piece beside piece (the walls: a wall two faces or two sides deep is two levels however its ends meet the floor), then each wall against the flat it meets, and each rim against the floor or a piece, by vote, the offsets the most edges agree on first, and on a tie the join with the floor (a rim strip between a two-tile side and the floor it runs into lies level with the floor, its step at the side: a rim joined to the side first left the Dunsparce Tunnel's pit rim a level low, a hole beside it in game). A misread piece, or a one-tile end of a two-tile wall, shows as a disagreement at its own edges and never tears a floor apart or flattens a wall (first come, a wall's one-tile end outvoted the wall: Mt Ember's B5F chamber read a level shallow). Each connected part counts from the level most of its flat cells stand at (0). The void takes the highest top of the rock it touches and spreads through itself.
@@ -1424,7 +1430,8 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   slices over every phase, one or two a town: the collector's pauses on the build's heap, not any
   one piece of work.
 - **LeafGreen:** it draws FireRed's maps with its own palettes. All FireRed specs pass against LeafGreen's drawings, and placements match FireRed's. Its caves read the same as FireRed's (all 78, layout for layout), its 71 rooms check the same (`room_check.lua` with `POKEPORT_GAME=leafgreen`, room for room), and its three trees (the General, Viridian Forest's, Berry Forest's) are 0 wrong at 45 degrees; Oak's lab, the forests, the caves and the Power Plant checked in game.
-- **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, `FIRST_RUN_CLEAR`,
+- **Driver:** `tests/drivers/first_run.lua` (`FIRST_RUN_RESET`, which removes every game's flag,
+  `FIRST_RUN_SCENE=overworld` with it for the build-only question, `FIRST_RUN_CLEAR`,
   `FIRST_RUN_ANSWERS`, `FIRST_RUN_ACTIONS`). A driver's frames skip `core.update`, so it ticks the
   prompt through `exports._promptTick`.
 

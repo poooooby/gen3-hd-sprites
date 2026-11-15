@@ -367,7 +367,7 @@ return function(mod)
   end
   pcall(install)
 
-  -- WoobleView's own prompts (src/prompt.lua): the first-run question about 3D battles (Emerald),
+  -- WoobleView's own prompts (src/prompt.lua): the first-run question about 3D battles (each 3D game, once),
   -- the 3D cache's progress bar, short notices
   local Prompt
   if Engine.Scene then

@@ -203,11 +203,13 @@ Open **OPTIONS → MODS → WoobleView**.
 
 ## 📌 Good to Know
 
-- 👋 **The first time you play Ruby, Sapphire, Emerald, FireRed or LeafGreen** with WoobleView, it asks whether you'd like your battles
-  in 3D, and if so whether to build the 3D world now (with a progress bar) or let it build while
-  you play. Changed your mind while it builds? Press B and it carries on in the background while
-  you play. Say no and it never asks again; you can switch it on any time in **OPTIONS → MODS →
-  WoobleView**. Its messages carry the WoobleView name, so you always know which mod is asking.
+- 👋 **The first time you play each of Ruby, Sapphire, Emerald, FireRed and LeafGreen** with
+  WoobleView, it asks whether you'd like your battles in 3D, and if so whether to build that game's
+  3D world now (with a progress bar) or let it build while you play. Already chose 3D in another
+  game? Then it only offers to build the new game's world. Changed your mind while it builds? Press
+  B and it carries on in the background while you play. Say no and that game never asks again; you
+  can switch it on any time in **OPTIONS → MODS → WoobleView**. Its messages carry the WoobleView
+  name, so you always know which mod is asking.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
   trees stand as real trees with leafy crowns (Viridian Forest's, the Berry Forest's golden ones, the Safari
   Zone's broad flat-topped ones and Four Island's slim saplings too), and in Ruby, Sapphire and Emerald most of Hoenn's town buildings, fences, hedges, curbs

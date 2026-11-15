@@ -9,7 +9,7 @@
 -- The engine has no prompt, progress or option-setting API for mods: the layer is the screen
 -- stack's (src.ui.game3.stack), an option is set through the Mod Manager's own setter
 -- (src.mods.ManagerState.setOption, as the Gen 3 manager calls it), and "asked already" is a
--- file in the mod's cache (P.FLAG), kept apart from what Clear 3D Cache deletes.
+-- file in the mod's cache for each game (P.flagFor), kept apart from what Clear 3D Cache deletes.
 --
 -- deps = { mod, Scene (src/scene/init.lua: cacheJob, cacheClear) }.
 
@@ -75,27 +75,55 @@ return function(deps)
     return ok
   end
 
-  -- (once asked, it stays asked: kept in memory too, so the frame hook never reads the disk again)
-  local askedYet = false
-  local function asked()
-    if askedYet then return true end
-    local c = mod.cache
-    local ok, yes = pcall(c.exists, c, P.FLAG)
-    askedYet = ok and yes == true
-    return askedYet
-  end
-  local function markAsked()
-    askedYet = true
-    pcall(function() mod.cache:write(P.FLAG, "asked") end)
-  end
-
   -- (the games whose world is built in 3D: Emerald's by Emerald 3DS's tables - Ruby's and
   -- Sapphire's too, where they draw Emerald's maps, src/scene/prints.lua - FireRed's and
   -- LeafGreen's by our own, src/scene/games/)
   P.GAMES_3D = { emerald = true, ruby = true, sapphire = true, firered = true, leafgreen = true }
-  local function has3D()
+  P.NAMES = { emerald = "Emerald", ruby = "Ruby", sapphire = "Sapphire", firered = "FireRed", leafgreen = "LeafGreen" }
+  local function current()
     local GV = engine("src.core.GameVersion")
-    return GV ~= nil and GV.get ~= nil and P.GAMES_3D[GV.get()] == true
+    local ok, g = pcall(function() return GV and GV.get and GV.get() end)
+    return ok and g or nil
+  end
+  local function has3D() return P.GAMES_3D[current()] == true end
+
+  --- The flag file that says a game was asked: each game its own (mod.cache is the install's, shared
+  --- by every game), Emerald's the first one's name, so a player asked before keeps their answer.
+  function P.flagFor(g)
+    if g == "emerald" then return P.FLAG end
+    return P.FLAG .. "_" .. tostring(g)
+  end
+
+  -- (once asked, it stays asked: kept in memory too, so the frame hook never reads the disk again)
+  local askedIn = {}
+  local function asked()
+    local g = current()
+    if not g then return true end
+    if askedIn[g] then return true end
+    local c = mod.cache
+    local ok, yes = pcall(c.exists, c, P.flagFor(g))
+    askedIn[g] = ok and yes == true
+    return askedIn[g]
+  end
+  local function markAsked()
+    local g = current()
+    if not g then return end
+    askedIn[g] = true
+    pcall(function() mod.cache:write(P.flagFor(g), "asked") end)
+  end
+
+  -- whether this game's 3D world still has to be built: its relief neither cached nor broken (with
+  -- the battle scene on, the relief's frame hook has begun it - served from the cache or building -
+  -- and a driver's frames, which skip that hook, begin it here)
+  local function needsBuild()
+    local run = Scene.reliefRun
+    if not (run and run.state) then return false end
+    local st = run.state()
+    if st == "idle" then
+      pcall(run.start)
+      st = run.state()
+    end
+    return st == "running"
   end
 
   -- ── the layer that pauses the field and takes the buttons ─────────────
@@ -151,6 +179,7 @@ return function(deps)
     end
     if state then
       state.phase, state.t, state.job, state.shown = "building", 0, job, 0
+      state.title, state.body = nil, nil   -- (the question's own words, if it had them)
     else
       open("building", { job = job })
     end
@@ -168,6 +197,7 @@ return function(deps)
         close()
       end
     elseif ph == "askBuild" then
+      markAsked()
       if i == 1 then startBuild() else close() end
     elseif ph == "building" then
       -- build as you play: the panel goes, the build carries on a few ms a frame (relief_run's
@@ -344,7 +374,7 @@ return function(deps)
     y = y + 24 * s + 16 * s
     G.setFont(titleF)
     col(INK, a)
-    G.print(def.title, px + pad, floor(y))
+    G.print(state.title or def.title, px + pad, floor(y))
     y = y + titleF:getHeight()
     if body then
       y = y + 12 * s
@@ -555,10 +585,17 @@ return function(deps)
       startBuild()
     elseif not asked() then
       quiet = 0
-      if option("battle_scene", "classic") == "overworld" then
-        markAsked()       -- (already chosen: nothing to ask)
-      else
+      if option("battle_scene", "classic") ~= "overworld" then
         open("ask3d")
+      elseif needsBuild() then
+        -- (3D battles chosen in another game, or in the options: only this game's world to build)
+        local name = P.NAMES[current()] or "this game"
+        open("askBuild", { title = ("Build %s's 3D world now?"):format(name),
+          body = ("3D battles are on. %s's world is built once: a minute or two now, and every battle "
+            .. "loads it straight away from then on. Or skip it, and it builds a little at a time in "
+            .. "the background while you play."):format(name) })
+      else
+        markAsked()       -- (already chosen and built: nothing to ask)
       end
     end
   end

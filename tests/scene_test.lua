@@ -1738,5 +1738,74 @@ do
     "...its edges for ours there, our depths there dropped")
 end
 
+-- ------------------------------------------------------------------ first-run prompt
+-- (src/prompt.lua: each 3D game asked once - the mod's cache is the install's, shared by every game -
+-- and with 3D battles already on, only a world not yet built is asked about)
+do
+  local savedLove = love
+  love = love or { graphics = {}, timer = { getTime = os.clock } }
+  local game = "emerald"
+  local layers = {}
+  local fakes = {
+    ["src.core.GameVersion"] = { get = function() return game end },
+    ["src.core.game3.field"] = { running = true },
+    ["src.core.game3.battle"] = { isActive = function() return false end },
+    ["src.core.game3.runtime"] = { uiBusy = function() return false end },
+    ["src.ui.game3.stack"] = {
+      _layers = layers,
+      push = function(id, l) layers[#layers + 1] = { id = id, layer = l } end,
+      pop = function(id) for i = #layers, 1, -1 do if layers[i].id == id then table.remove(layers, i) end end end,
+      top = function() return layers[#layers] end,
+    },
+  }
+  local saved = {}
+  for k, v in pairs(fakes) do saved[k] = package.loaded[k]; package.loaded[k] = v end
+  local files, opts = {}, { battle_scene = "classic" }
+  local mod = {
+    cache = { exists = function(_, p) return files[p] ~= nil end, write = function(_, p, s) files[p] = s end },
+    options = { get = function(_, k) return opts[k] end },
+  }
+  local runState = "idle"
+  local run = { state = function() return runState end, start = function() runState = "ready" end }
+  local P = dofile("src/prompt.lua")({ mod = mod, Scene = { reliefRun = run } })
+  local F = fakes["src.core.game3.field"]
+  local function settle()
+    F.running = false; P._tick()
+    F.running = true
+    for _ = 1, P.QUIET_FRAMES do P._tick() end
+  end
+  local function press(b)
+    local top = layers[#layers]
+    top.layer.handleInput({ wasPressed = function(_, k) return k == b end })
+  end
+  settle()
+  check(P.phase() == "ask3d", "prompt: a first run in Emerald asks about 3D battles")
+  press("b")
+  check(P.phase() == nil and files["state/first_run_asked"], "...No thanks closes it, Emerald's flag (the old name) kept")
+  settle()
+  check(P.phase() == nil, "...and Emerald is not asked again")
+  game = "ruby"
+  settle()
+  check(P.phase() == "ask3d", "...Ruby, opened for the first time, asks too (its own flag)")
+  press("b")
+  check(files["state/first_run_asked_ruby"] ~= nil, "...and keeps its own answer")
+  -- 3D battles on (chosen in another game): a world still building is offered, a built one is not
+  opts.battle_scene = "overworld"
+  game, runState = "firered", "running"
+  settle()
+  check(P.phase() == "askBuild", "...FireRed with 3D on and its world unbuilt asks only to build it")
+  press("b")
+  check(P.phase() == nil and files["state/first_run_asked_firered"] ~= nil, "...Later closes it and keeps the answer")
+  game, runState = "leafgreen", "idle"
+  settle()
+  check(P.phase() == nil and files["state/first_run_asked_leafgreen"] ~= nil,
+    "...LeafGreen with its world already built asks nothing (its relief served from the cache)")
+  game = "red"
+  settle()
+  check(P.phase() == nil and files["state/first_run_asked_red"] == nil, "...a game with no 3D world asks nothing")
+  for k in pairs(fakes) do package.loaded[k] = saved[k] end
+  love = savedLove
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end
