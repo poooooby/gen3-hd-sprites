@@ -1234,6 +1234,10 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     drawn rows, and each cave's levels as `relief_caves.lua` counts them, an edge marked where its
     two sides draw it at different levels. Each sheet is the drawing | the model at 45 degrees (a
     cave: its levels tinted) | the marks.
+  - **Shots:** the worst rooms and caves (`REVIEW_SHOTS`, default 10; `-Shots` in the launcher) get
+    two in-game shots each: a wild battle started three cells south of where their faults gather
+    (`Check.focus`: the cell whose 5 x 5 neighbourhood holds the most), as played, and the camera
+    aimed at the faults (`_sceneLook`). The relief is built first if it isn't cached.
   - **The page:** filters by kind and name, only-mismatches (on by default), sorting by the share
     or the count of pixels off. Each item takes "looks fine" / "needs work" and a note, kept in the
     browser (`localStorage`, by game); "copy my notes" lists them as text to paste back.

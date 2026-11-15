@@ -11,6 +11,8 @@
 -- Each item's sheet is three panels: the drawing | the model at 45 degrees | the marks.
 --   SHOT_DIR       where index.html and the sheets go
 --   REVIEW_KINDS   kinds to review, comma separated (default every kind)
+--   REVIEW_SHOTS   in-game shots of the worst rooms and caves (default 10; 0 none): a battle just
+--                  south of where the faults gather, as played and aimed at them
 -- Run from the engine root (tools/review.ps1 does this and opens the page):
 --   SHOT_DIR=<dir> POKEPORT_GAME=firered POKEPORT_VERSION=firered \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/review.lua love .
@@ -231,12 +233,14 @@ local function caveResults(ctx, Check, log)
           for u = 0, 15 do for d = -2, 1 do marks[((y + 1) * 16 + d) * W + x * 16 + u] = 0xFF0000 end end
         end
       end
+      local per = {}
+      for _, c in ipairs(conf) do per[c[2] * 4096 + c[1]] = (per[c[2] * 4096 + c[1]] or 0) + 1 end
       local levels = {}
       for i = 0, L.w * L.h - 1 do levels[lv[i]] = (levels[lv[i]] or 0) + 1 end
       local stood = 0
       for k, n in pairs(levels) do if k ~= 0 then stood = stood + n end end
       out[#out + 1] = { name = name:gsub("^LAYOUT_", ""):lower(), kind = "cave", ok = #conf == 0,
-        disagree = #conf, judged = L.w * L.h, raised = stood,
+        disagree = #conf, judged = L.w * L.h, raised = stood, layout = name, focus = Check.focus(per),
         sheet = Check.sheet(W, H, drawn, tinted,
           function(x, y) return marks[y * W + x] or tinted(x, y) end) }
     end
@@ -274,6 +278,8 @@ main{padding:12px 16px;display:grid;gap:12px}
 .sheet{margin-top:8px;overflow:auto;max-width:100%;background:#000;border-radius:6px}
 .sheet img{display:block;image-rendering:pixelated;cursor:zoom-in}
 .panes{display:flex;color:#bbb;background:#000;font-size:11px;padding:2px 0 4px}.panes span{flex:1;padding-left:4px}
+.shots{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}.shots figure{margin:0;flex:1 1 300px;max-width:600px}
+.shots img{width:100%;display:block;border-radius:6px;cursor:zoom-in}.shots figcaption{color:var(--mute);font-size:11px;margin-top:2px}
 .verdict{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
 .verdict button{font:inherit;font-size:12px;background:var(--chip);color:inherit;border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}
 .verdict button.on.fine{background:var(--ok);color:#fff}.verdict button.on.fix{background:var(--bad);color:#fff}
@@ -359,10 +365,19 @@ function render(){
       + '<div class="nums">' + numbers(it) + '</div>'
       + (it.pieces ? '<div class="pieces"></div>' : "")
       + '<div class="sheet"><img loading="lazy" alt=""><div class="panes">' + (PANES[it.kind] || PANES.model).map(t => "<span>" + t + "</span>").join("") + '</div></div>'
+      + (it.shots && it.shots.length ? '<div class="shots"></div>' : "")
       + '<div class="verdict"><button class="fine">looks fine</button><button class="fix">needs work</button><input placeholder="note (what is wrong)"></div>';
     c.querySelector(".name").textContent = it.name;
     c.querySelector(".kind").textContent = it.kind;
     if (it.pieces) c.querySelector(".pieces").textContent = it.pieces;
+    if (it.shots && it.shots.length) {
+      const box = c.querySelector(".shots");
+      it.shots.forEach((f, k) => {
+        const fig = document.createElement("figure"), im = document.createElement("img"), cap = document.createElement("figcaption");
+        im.src = f; im.loading = "lazy"; im.alt = ""; cap.textContent = k === 0 ? "in battle" : "aimed at the faults";
+        im.onclick = () => window.open(f, "_blank"); fig.append(im, cap); box.appendChild(fig);
+      });
+    }
     const img = c.querySelector("img"), panes = c.querySelector(".panes"); img.src = it.png; let z = it.zoom;
     function size(){ img.style.width = panes.style.width = (it.w * z) + "px"; }
     size(); img.onclick = () => { z = z >= 4 ? 1 : z + 1; size(); };
@@ -401,6 +416,107 @@ local FLAT = {
   },
 }
 
+-- -- in-game shots of the worst items: a battle started just south of where the faults gather,
+-- the battle as played and the camera aimed at them (REVIEW_SHOTS: how many, default 10; 0 none) --
+local function mapIdOf(gameName, layout)
+  local words = {}
+  for w in layout:gsub("^LAYOUT_", ""):gmatch("[^_]+") do words[#words + 1] = w end
+  local root = gameName .. "/data/generated/gba/native/layouts/"
+  for first = 1, #words do
+    local tail = table.concat(words, "_", first)
+    for _, pre in ipairs({ "FR_", "SEVII_", "LG_", "EM_" }) do
+      local f = io.open(root .. pre .. tail .. ".mid", "rb")
+      if f then f:close(); return pre .. tail end
+    end
+  end
+  return nil
+end
+
+local function shoot(game, hd, items, dir, gameName, log)
+  local want = tonumber(env("REVIEW_SHOTS") or "10") or 10
+  if want <= 0 then return end
+  local U = require("tests.drivers.util")
+  local function off(it) return it.disagree or ((it.wrong or 0) + (it.missing or 0) + (it.extra or 0)) end
+  local list = {}
+  for _, it in ipairs(items) do
+    if not it.ok and it.layout and it.focus and off(it) > 0 then list[#list + 1] = it end
+  end
+  table.sort(list, function(a, b) return off(a) / math.max(1, a.judged) > off(b) / math.max(1, b.judged) end)
+  if #list == 0 then return end
+  -- (the relief first, as play builds it: a cached one is served at once)
+  if hd._reliefStep then
+    local t0 = love.timer.getTime()
+    while love.timer.getTime() - t0 < 900 do
+      local st = hd._reliefStep()
+      if st ~= "running" and st ~= "idle" then break end
+      U.wait(1)
+    end
+  end
+  love.window.setMode(1440, 960, { resizable = true })
+  local Runtime = require("src.core.game3.runtime")
+  local Map = require("src.core.game3.map")
+  local Player = require("src.core.game3.player")
+  local C = require("src.core.game3.constants").of(gameName)
+  local Party = require("src.core.game3.party")
+  local BattleBridge = require("src.core.game3.battle_bridge")
+  local Ui = require("src.core.game3.battle.ui")
+  local Anim = require("src.core.game3.battle.anim")
+  local n = 0
+  for _, it in ipairs(list) do
+    if n >= want then break end
+    local mapId = mapIdOf(gameName, it.layout)
+    if not mapId then
+      log(("shot %s: no map for %s"):format(it.name, it.layout))
+    else
+      local fx, fy = it.focus[1], it.focus[2]
+      local px, py = fx, fy + 3
+      pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "up" })
+      local s = Runtime.getSession()
+      if s then s.x, s.y = px, py end
+      Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
+      Player.targetX, Player.targetY, Player.facing = px, py, "up"
+      if s and #(s.party or {}) == 0 then Party.giveMon(s, C:require("species", "SPECIES_TORCHIC"), 12) end
+      U.wait(30)
+      hd.setScene(true)
+      local ok, why = BattleBridge.startWild(Runtime._mod, game,
+        { species = C:require("species", "SPECIES_WURMPLE"), level = 3 }, { fade = false })
+      if ok then
+        for _ = 1, 3000 do
+          if Ui.dialogPending and Ui.dialogPending() then U.tap(game, "a") end
+          if Ui._mode == "menu" and not Anim.busy() then break end
+          U.wait(1)
+        end
+        hd.setFill(true)
+        U.wait(30)
+        local base = ("shot_%s_%s"):format(it.kind, it.name):gsub("[^%w_%-]", "_")
+        it.shots = {}
+        if U.shot(game, dir .. "/" .. base .. "_battle.png") then it.shots[#it.shots + 1] = base .. "_battle.png" end
+        if hd._sceneLook and hd._sceneLook(fx + 0.5, fy + 0.5, 45, 10) then
+          U.wait(4)
+          local data = hd._sceneShot and hd._sceneShot(1200, 800)
+          if data then
+            local f = io.open(dir .. "/" .. base .. "_close.png", "wb")
+            if f then f:write(data:encode("png"):getString()); f:close(); it.shots[#it.shots + 1] = base .. "_close.png" end
+          end
+        end
+        n = n + 1
+        log(("shot %s at %s (%d,%d)"):format(it.name, mapId, fx, fy))
+        -- (the battle ended, for the next)
+        pcall(BattleBridge.finishPending, "win")
+        local Battle = require("src.core.game3.battle")
+        for _ = 1, 600 do
+          if not (Battle.isActive and Battle.isActive()) then break end
+          if Ui.dialogPending and Ui.dialogPending() then U.tap(game, "a") end
+          U.wait(1)
+        end
+        U.wait(30)
+      else
+        log(("shot %s: no battle at %s (%s)"):format(it.name, mapId, tostring(why)))
+      end
+    end
+  end
+end
+
 local function body(game, log)
   local U = require("tests.drivers.util")
   local dir = env("SHOT_DIR") or "/tmp/hd_review"
@@ -428,6 +544,7 @@ local function body(game, log)
       missing = res.missing, extra = res.extra, over = res.over, judged = res.judged,
       stretched = type(res.stretched) == "table" and #res.stretched or nil, disagree = res.disagree,
       raised = res.raised, pieces = res.piecesText, png = file, w = res.sheet.w,
+      layout = type(res.layout) == "string" and res.layout or nil, focus = res.focus,
       zoom = W <= 64 and 4 or W <= 160 and 2 or 1 }
     U.wait(1)
   end
@@ -472,6 +589,8 @@ local function body(game, log)
       end
     else log("trees, caves: no layouts read for " .. gameName) end
   end
+  local okS, errS = xpcall(shoot, debug.traceback, game, hd, items, dir, gameName, log)
+  if not okS then log("shots: " .. tostring(errS)) end
   local bad = 0
   for _, it in ipairs(items) do if not it.ok then bad = bad + 1 end end
   local data = { game = gameName, when = os.date("%Y-%m-%d %H:%M"), items = items,

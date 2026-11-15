@@ -199,6 +199,19 @@ local function dim(g)
 end
 Check.dim = dim
 
+--- The cell { x, y } the most faults gather round (5 x 5 cells), of per = { [cy * 4096 + cx] = n },
+--- or nil.
+function Check.focus(per)
+  local best, bx, by = 0, nil, nil
+  for k in pairs(per) do
+    local cx, cy = k % 4096, floor(k / 4096)
+    local n = 0
+    for dy = -2, 2 do for dx = -2, 2 do n = n + (per[(cy + dy) * 4096 + cx + dx] or 0) end end
+    if n > best then best, bx, by = n, cx, cy end
+  end
+  return bx and { bx, by } or nil
+end
+
 --- Three W x H panels side by side, each at(x, y) -> colour or nil (black).
 function Check.sheet(W, H, a, b, c)
   local panels = { a, b, c }
@@ -351,10 +364,18 @@ function Check.room(hd, rooms, r, log)
   end
   local placed = {}
   for _, m in ipairs(meshes) do placed[m.piece.name] = (placed[m.piece.name] or 0) + 1 end
+  -- (where the faults gather: the cell whose 5 x 5 cells round it hold the most, for a shot there)
+  local per = {}
+  for idx, c in pairs(marks) do
+    if c ~= 0xFFC000 then
+      local k = floor(floor(idx / W) / 16) * 4096 + floor(idx % W / 16)
+      per[k] = (per[k] or 0) + 1
+    end
+  end
   return { name = r.name, kind = "room", layout = r.layout, error = r.error,
     ok = wrong == 0 and missing == 0 and #stretched == 0,
     wrong = wrong, missing = missing, over = over, judged = covered, pieces = #meshes,
-    stretched = stretched, byPiece = byPiece, placed = placed,
+    stretched = stretched, byPiece = byPiece, placed = placed, focus = Check.focus(per),
     sheet = Check.sheet(W, H,
       function(x, y) return drawn(x, y) end,
       function(x, y) return color[y * W + x] or drawn(x, y) end,

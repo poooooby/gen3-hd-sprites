@@ -9,6 +9,7 @@
 param(
   [string]$Game = "firered",
   [string]$Kinds = "",
+  [int]$Shots = 10,
   [string]$Engine = (Join-Path $PSScriptRoot "..\..\gen1recomp"),
   [string]$Love = "C:\Program Files\LOVE\lovec.exe"
 )
@@ -25,12 +26,13 @@ $env:POKEPORT_VERSION = $Game
 $env:POKEPORT_DRIVER = "mods/gen3-hd-sprites/tests/drivers/review.lua"
 $env:POKEPORT_BACKGROUND = "1"
 $env:REVIEW_KINDS = $Kinds
+$env:REVIEW_SHOTS = "$Shots"
 $env:SHOT_DIR = $out
 Write-Host "Building the review sheet (a few minutes)..."
 Push-Location $engine
 try { & $Love . | Out-Null } finally {
   Pop-Location
-  Remove-Item Env:POKEPORT_DRIVER, Env:POKEPORT_BACKGROUND, Env:REVIEW_KINDS, Env:SHOT_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:POKEPORT_DRIVER, Env:POKEPORT_BACKGROUND, Env:REVIEW_KINDS, Env:REVIEW_SHOTS, Env:SHOT_DIR -ErrorAction SilentlyContinue
 }
 $page = Join-Path $out "index.html"
 if (Test-Path $page) {
