@@ -118,22 +118,23 @@ return function(K, H)
     return { walls, roof, sign }
   end
 
-  -- The Poke Mart (the General's, every town: Cerulean's at 27-30 x 25-28, 64 x 64): a blue roof of
-  -- 4 px tiles (its outline row 2, lines every 4 rows, every 4 px from x 7) to its eave line at row
-  -- 44, its hips x 1-6 and 57-62, darker toward the eave; a rounded white canopy over the door,
-  -- rows 30-47 x 16-47; the facade rows 45-63 (the MART sign, the door, windows): its front wall
-  -- stands at z 64, its back at 16, on its three blocked rows (the canopy's underside slopes back
-  -- to the wall at its last row, as the Center's sign's). The slope's drawn rows (2-43) are as
-  -- many as its run and rise show at a pitch of 31 degrees: its ridge is the drawing's top. (The
-  -- spec once started a row lower, its roof's top 14 rows lying flat behind it as the map draws
-  -- them; the side walls take a plain column of the facade's panel right of the door.)
+  -- The Poke Mart (the General's, every town: Cerulean's at 27-30 x 25-28, 64 x 64), built as the
+  -- Center is (one kit, the user's call): a blue roof of 4 px tiles (its outline row 2, lines every
+  -- 4 rows, every 4 px from x 7), its hips x 1-6 and 57-62, at the Center's pitch; its eave the dark
+  -- blue band rows 36-44, a fascia as the Center's red band is; the white sign rows 30-47 x 16-47 a
+  -- board in front of the fascia; the facade rows 45-63 (the MART sign, the door, windows): its
+  -- front wall stands at z 64, its back at 20, where the roof's drawn rows (2-35, its run and rise
+  -- at 22 degrees) put it (the sign's underside slopes back to the wall at its last row, as the
+  -- Center's sign's). (The spec once started a row lower, its roof's top 14 rows lying flat behind
+  -- it; then a thin eave and a 31-degree roof, the sign standing up before it like a plank. The
+  -- side walls take a plain column of the facade's panel right of the door.)
   local function poke_mart()
-    local front_z, back_z, overhang = 64, 16, 2
+    local front_z, back_z, overhang = 64, 20, 2
     local zf, zb = front_z + overhang, back_z - overhang
     local roof = HipRoof("roof", 0, 64, zf, zb, zf - 45, {
-      fascia = Strip({ 44, 45 }, { wrap = { 4, 24 } }),
-      slope = Strip({ 20, 44 }, { rep = { 16, 20 }, wrap = { 7, 55 } }),
-      teeth = { 2, 3 }, cap = { 2, 3 }, pitch = 31.0, run = 7,
+      fascia = Strip({ 36, 45 }, { wrap = { 7, 57 }, patch = { 16, 48, 8, 16 } }),
+      slope = Strip({ 20, 36 }, { rep = { 16, 20 }, wrap = { 7, 55 } }),
+      teeth = { 2, 3 }, cap = { 2, 3 }, pitch = PITCH, run = 7,
       ridge_u = { 7, 57 }, end_tile = Tile(7, 2, 8, 3) })
     local wall_top = 19
     local plaster = Tile(50, 46, 54, 63, { top = wall_top })
