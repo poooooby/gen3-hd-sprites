@@ -295,6 +295,9 @@ function Gen3.wrapFit(Engine, hd)
     -- through require: a mod's package.loaded is not the engine's
     local okB2, BattleMod = pcall(require, "src.core.game3.battle")
     if not okB2 then BattleMod = nil end
+    -- (each battler's presentation: whether its sprite is still up, src/core/game3/battle/anim.lua)
+    local okAnim, Anim = pcall(require, "src.core.game3.battle.anim")
+    if not (okAnim and type(Anim) == "table") then okAnim, Anim = false, nil end
     if okPk and okUi and type(Pokemon) == "table" and type(Ui) == "table"
         and type(Ui.battlerSpriteCenter) == "function" and type(Ui.picArgs) == "function" then
       local spots = {
@@ -315,7 +318,15 @@ function Gen3.wrapFit(Engine, hd)
             local battler = (id == 0 and st.player) or (id == 1 and st.enemy)
               or (st.battlers and st.battlers[id])
             local mon = battler and battler.mon
-            if h and mon and not (st.absent and st.absent[id]) and (tonumber(mon.hp) or 1) > 0 then
+            -- (a battler knocked out is still in until its faint hides it: through the hit's blink
+            -- it stays fitted where it rests, else the camera followed the blink - with one foe
+            -- left, the only one of its side - the picture jumping sideways every few frames)
+            local inBattle = (tonumber(mon and mon.hp) or 1) > 0
+            if not inBattle and mon then
+              local pres = okAnim and type(Anim._present) == "table" and rawget(Anim._present, id)
+              inBattle = type(pres) == "table" and pres.visible ~= false
+            end
+            if h and mon and not (st.absent and st.absent[id]) and inBattle then
               local sp = Pokemon.speciesOf(mon)
               if sp then
                 local picSp, shiny, personality = Ui.picArgs(battler, sp)
