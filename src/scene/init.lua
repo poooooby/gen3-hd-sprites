@@ -459,6 +459,10 @@ return function(deps)
     end
     -- (and the game's own rock, src/scene/games/: Emerald 3DS's for Emerald)
     if deps.Roles and deps.Roles.useGame then deps.Roles.useGame(deps.Games and deps.Games[famGame] or nil) end
+    -- (its own runs of no fixed shape: Route 23's walls, ...)
+    if deps.Components and deps.Components.useGame then
+      deps.Components.useGame(deps.Games and deps.Games[famGame] or nil)
+    end
     -- (its own tree - Kanto's; Hoenn's are the module's own - and the workshop's settings for its
     -- trees, src/scene/tune.lua)
     if deps.Trees and deps.Trees.useGame then

@@ -630,6 +630,25 @@ return function(K, H)
     return slabs("statue", STATUE, 24, Tile(2, 20, 14, 28, { top = 32 }), { 16, 20 })
   end
 
+  -- Route 23's arches (the gates' gaps, 3 cells between two of the walls' pillars, 48 x 48 from the
+  -- cap row's top): two lintels across the gap on the pillars' tops and two struts between them,
+  -- drawn in the walls' top rows. The walls' front stands at z 79 and their top at 31
+  -- (src/scene/games/firered.lua `components`); the arch stands on it, its front at z 74, 8 deep:
+  -- the lower lintel from 30 to 38 high (its top drawn rows 28-36, its front 36-44), the upper one
+  -- from 59 to 62 (its top rows 4-12, its front 12-15), and between them, upright at its front,
+  -- the struts and the upper lintel's flared ends (rows 15-28). Where nothing is drawn the faces
+  -- are clear: the grass, the water or the path under the arch is the map's.
+  local function route23_arch()
+    local zf, zb = 74, 66
+    local function box(name, y0, y1)
+      return Prism(name, 0, 48, { { zb, y0 }, { zf, y0 }, { zf, y1 }, { zb, y1 } },
+        { edges = { [1] = Proj(zf - y1, zf - y0), [2] = Proj(zb - y1, zf - y1) }, skip = { 0, 3 } })
+    end
+    local struts = Prism("struts", 0, 48, { { zf - 1, 46 }, { zf, 46 }, { zf, 59 }, { zf - 1, 59 } },
+      { edges = { [1] = Proj(15, 28) }, skip = { 0, 2, 3 } })
+    return { box("lintel_low", 30, 38), box("lintel_high", 59, 62), struts }
+  end
+
   -- the Pokemon League (Indigo Plateau, 6-16 x 0-6, 176 x 112, and its statues' feet): a flat
   -- corrugated top from the map's top edge to its outline, row 64; the facade below, its foot row
   -- 103 (the front at z 104); before it, standing on its last row, four trees (their outline read
@@ -1322,6 +1341,11 @@ return function(K, H)
       parts = league },
     { name = "league_statue", layout = "LAYOUT_INDIGO_PLATEAU_EXTERIOR", rect = { 8, 9, 1, 2 },
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 0, 0, 16, 32 } }, parts = statue },
+    -- (Route 23's arch over a gap in its walls: over the grass, over the water, over the path - the
+    -- lintels drawn alike over each: `anywhere`)
+    { name = "route23_arch", layout = "LAYOUT_ROUTE_23", rect = { 6, 135, 3, 3 }, anywhere = true,
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x28A, 0x12B }, exact = { { 0, 4, 48, 44 } },
+      parts = route23_arch },
     { name = "network_center", layout = "LAYOUT_ONE_ISLAND", rect = { 11, 0, 7, 6 }, ground = SEVII_GROUND,
       exact = { { 8, 69, 104, 94 }, { 7, 64, 105, 69 }, { 7, 17, 105, 64 } },
       parts = network_center },

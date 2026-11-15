@@ -111,6 +111,20 @@ return function(K, Fence)
   -- specs are Hoenn's: FireRed's tilesets are named apart, so none is drawn by them)
   C.family = nil
   function C.useFamily(F) C.family = F end
+  -- (a game's own runs, src/scene/games/<game>.lua `components`, after Hoenn's: FireRed's name its
+  -- tilesets with the family's "fr:", so neither game's are drawn by the other's)
+  C.HOENN = C.SPECS
+  function C.useGame(G)
+    local own = type(G) == "table" and G.components or nil
+    if not own then C.SPECS = C.HOENN; return end
+    local list = {}
+    for _, sp in ipairs(C.HOENN) do list[#list + 1] = sp end
+    for _, sp in ipairs(own) do
+      if type(sp.tiles) == "table" and sp.tiles[1] then sp.tiles = set(sp.tiles) end
+      list[#list + 1] = sp
+    end
+    C.SPECS = list
+  end
   function C.names(pair)
     if type(pair) ~= "string" then return nil end
     local p, s

@@ -324,4 +324,24 @@ F.trees.forests[4] = {
   leavesBelow = true,
 }
 
+-- Runs of no fixed shape (src/scene/models/components.lua), in the tilesets as this game's family
+-- names them ("fr:" + the engine's name: Route 23's secondary is rom_082d4b84).
+-- Route 23's badge-gate walls (to Victory Road): long blocks of any length, east-west and
+-- north-south, drawn as a slatted top lined with white column ridges (28C / 28D / 28E), their caps
+-- over whatever lies north (2C0-2C3 over the trees, 284-286 the grass, 2A5 / 2A6 / 2AE / 2AF / 320
+-- / 321 / 29A the water, 2A2 the sand, 2A8 / 2AC, 2AD / 2B5 and 328 / 32C an arch's posts) and a front: a cornice (294 /
+-- 295 / 298 / 299) over a façade of mesh and doors (2A0 / 2A1), a statue before each pillar (297 /
+-- 29C / 29D: the league's statue, a building spec of its own, so each pillar's front ends at its
+-- plinth a row behind the façade, an alcove the statue stands in). Read off the drawing: the front is the cornice's dark band and the façade, rows 33-63
+-- of the two rows (31 texels, a door 16 tall in it); all the rest is the top. Its upper layer
+-- alone is the wall. The arch's beams over a gap (2B1-2B3, 2B9-2BB, 325-32F, 2A9-2AB, 2BD-2BF)
+-- are not the wall's, nor the statues' pedestals and shadows below the front.
+F.components = {
+  { name = "fr_route23_wall", secondary = "fr:rom082d4b84", upper = true, height = 31, hull = 0, bridge = 0,
+    tiles = { 0x28C, 0x28D, 0x28E, 0x294, 0x295, 0x298, 0x299, 0x2A0, 0x2A1,
+              0x2C0, 0x2C1, 0x2C2, 0x2C3, 0x284, 0x285, 0x286, 0x2A5, 0x2A6, 0x2AE, 0x2AF, 0x320, 0x321,
+              0x29A, 0x2A2, 0x2A8, 0x2AC, 0x2AD, 0x2B5, 0x328, 0x32C, 0x2B0, 0x2B4, 0x2B8, 0x2BC },
+    ground = { 0x28A, 0x008, 0x009, 0x12B } },
+}
+
 return F

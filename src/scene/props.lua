@@ -81,6 +81,10 @@ Props.OBJECTS = {
   -- General, palette 0, on the grass (metatile 005: blocked, it stood up as a card, a run of them
   -- one tall card of shrubs)
   fr_bush = { land = true, tileset = "fr:general", palette = 0, grid = { { 12, 13 }, { 28, 29 } } },
+  -- Route 23's round stones (the court before Victory Road, by the gates): tiles 680 / 681 over
+  -- 696 / 697 of its own tileset (rom_082d4b84), palette 11, over the paving or the grass
+  fr_route23_stone = { land = true, tileset = "fr:general", secondary = "fr:rom082d4b84", palette = 11,
+    grid = { { 680, 681 }, { 696, 697 } } },
 }
 
 -- The props the scene models, in the specs' order. `shape`: a Mound (the default;
@@ -148,6 +152,11 @@ Props.SPECS = {
   -- (FireRed's round shrub: a dome under its drawing, about as tall as it is wide)
   { name = "fr_bush", props = "fr_bush", clip_art = true, ground = { 0x001 }, shape = "dome",
     dome = { cx = 8, cz = 9, rx = 8, rz = 7, h = 12 } },
+  -- (Route 23's round stone: 14 px across, its rim's ellipse rows 0-9 - 0.64 of its width deep -
+  -- its front's foot at row 13, its shadow below laid flat: a squat turned stone 4.2 tall, its
+  -- rounded top the drawing's)
+  { name = "fr_route23_stone", props = "fr_route23_stone", clip_art = true, ground = { 0x28A }, shape = "lathe",
+    lathe = { cx = 8, cz = 8.5, squash = 0.64, seg = 14, profile = { { 0, 7 }, { 4.2, 7 } } } },
   -- a pile of fruit: a smooth dome under its drawing
   { name = "fruit", props = "fruit", clip_art = true, ground = { 0x211 }, shape = "dome",
     dome = { cx = 8.5, cz = 9, rx = 8.5, rz = 7.5, h = 7 } },
