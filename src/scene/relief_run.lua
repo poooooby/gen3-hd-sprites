@@ -318,12 +318,73 @@ return function(deps)
     return taken
   end
 
+  -- ── an older build's files: deleted once a game's cache moves on ──
+  -- A version bump (Run.VERSION, Run.RULES, the models' version) or new map data gives a game a
+  -- new cache: the old one is never read again, and the mod's cache cannot list a folder, so each
+  -- game's own record (Run.recordFor) names the relief file and the models folder it used last.
+  -- When they change, the old ones' files are deleted a few a frame (Run.PRUNE_PER_FRAME, by the
+  -- frame hook) and Run.rebuildFlag(game) is written, for the prompt's one question about it.
+  Run.PRUNE_PER_FRAME = 8
+  local pruneQ, pruneAt, pruneN = {}, 1, 0
+  local noted = {}
+  function Run.recordFor(g) return "state/cache_" .. tostring(g) end
+  function Run.rebuildFlag(g) return "state/rebuild_" .. tostring(g) end
+  local function cacheRead(p)
+    local ok, s = pcall(function() return deps.cache and deps.cache:read(p) end)
+    return ok and type(s) == "string" and s or nil
+  end
+  local function cacheWrite(p, s) pcall(function() if deps.cache then deps.cache:write(p, s) end end) end
+  -- (only what a record can name: a relief file or a models folder's files - never anything else)
+  local function prune(path)
+    if type(path) == "string" and (path:find("^relief/v%d+/[%w%-_]+%.[%a]+$") or path:find("^models/v%d+/[%w%-_]+/")) then
+      pruneN = pruneN + 1
+      pruneQ[pruneN] = path
+    end
+  end
+  local function noteKey()
+    if noted[game] then return end
+    noted[game] = true
+    local models = deps.modelsDir and deps.modelsDir(gameKeyOf) or ""
+    local now = key .. "\n" .. models
+    local rec = Run.recordFor(game)
+    local old = cacheRead(rec)
+    if old == now then return end
+    if old and old ~= "" then
+      local oldRelief, oldModels = old:match("^([^\n]*)\n?(.*)$")
+      if oldRelief and oldRelief ~= key then
+        prune(oldRelief)
+        prune((oldRelief:gsub("%.bin$", ".ticks")))
+      end
+      if oldModels and oldModels ~= "" and oldModels ~= models and deps.modelFiles then
+        local okF, files = pcall(deps.modelFiles, oldModels)
+        for _, name in ipairs(okF and files or {}) do prune(oldModels .. "/" .. name) end
+      end
+      cacheWrite(Run.rebuildFlag(game), "1")
+      log("%s: the cache moved on (%s); the old one's %d files to delete", game, key, pruneN - pruneAt + 1)
+    end
+    cacheWrite(rec, now)
+  end
+  --- Delete up to n of the old files queued (the frame hook's share). Returns how many are left.
+  local function delete(p) if deps.cache and deps.cache.delete then deps.cache:delete(p) end end
+  function Run.pruneStep(n)
+    if pruneAt > pruneN then return 0 end
+    local stop = math.min(pruneN, pruneAt + (n or Run.PRUNE_PER_FRAME) - 1)
+    for i = pruneAt, stop do
+      pcall(delete, pruneQ[i])
+      pruneQ[i] = nil
+    end
+    pruneAt = stop + 1
+    if pruneAt > pruneN then pruneAt, pruneN = 1, 0 end
+    return pruneN - pruneAt + 1
+  end
+
   function Run.start()
     if state == "running" or state == "ready" then return end
     clock = (love and love.timer and love.timer.getTime) or os.clock
     local k, id = cacheKey()
     if not k then state, detail = "idle", "no game"; return end
     key, game = k, id
+    noteKey()
     local okR, cached = pcall(function() return deps.cache and deps.cache:read(key) end)
     if okR and type(cached) == "string" and #cached > 16 and Relief.decode(cached) then
       ready(cached, "cached")
@@ -434,6 +495,7 @@ return function(deps)
     deps.hooks:wrap("core.update", function(next, g, dt)
       next(g, dt)
       if deps.onFrame then pcall(deps.onFrame) end
+      if pruneN > 0 then Run.pruneStep() end
       -- (only while it is wanted: deps.wanted(), the battle scene on)
       if state == "idle" and (not deps.wanted or deps.wanted()) then Run.start() end
       Run.step()

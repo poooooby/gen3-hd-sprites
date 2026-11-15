@@ -3501,32 +3501,50 @@ return function(deps)
 
   --- The whole 3D cache cleared (Clear Cache): the relief's file and every model's, room's and
   --- bridge's, and what is kept of them in memory, so they are built again when next wanted.
+  --- The files a models folder of the cache can hold (the mod's cache cannot list a folder): every
+  --- game's buildings and bridges by name, and the rooms its own rooms.index names (read(name) ->
+  --- that folder's bytes). Clear 3D Cache deletes them in the current folder; relief_run.lua's
+  --- pruning, in an older one.
+  function Scene.modelFiles(read)
+    local out, seen = {}, {}
+    local function add(name)
+      if not seen[name] then seen[name] = true; out[#out + 1] = name end
+    end
+    local lists = { Specs or {}, EMERALD_SPECS or {} }
+    for _, list in pairs(deps.SpecsByGame or {}) do lists[#lists + 1] = list end
+    for _, list in ipairs(lists) do
+      for _, spec in ipairs(list) do
+        if type(spec) == "table" and spec.name then
+          add(spec.name .. ".lua")
+          add(spec.name .. ".rgba")
+        end
+      end
+    end
+    for name in pairs(Bridge and Bridge.BRIDGES or {}) do
+      add(name .. ".bridge")
+      add(name .. ".bridge.rgba")
+    end
+    -- (the rooms' files, named in their index)
+    local okR, blob = pcall(read, "rooms.index")
+    local text = okR and unpackData(blob)
+    local chunk = text and load(text, "=rooms.index", "t", {})
+    local ok, idx = pcall(chunk or error)
+    if ok and type(idx) == "table" then
+      for _, f in ipairs(idx.pieces or {}) do
+        if f.room then
+          add("room_" .. f.room .. ".dat")
+          add("room_" .. f.room .. ".rgba")
+        end
+      end
+    end
+    add("rooms.index")
+    return out
+  end
+
   function Scene.cacheClear()
     local c = Scene.modelCache
     if c and c.delete then
-      for _, spec in ipairs(Specs or {}) do
-        c.delete(spec.name .. ".lua")
-        c.delete(spec.name .. ".rgba")
-      end
-      for name in pairs(Bridge and Bridge.BRIDGES or {}) do
-        c.delete(name .. ".bridge")
-        c.delete(name .. ".bridge.rgba")
-      end
-      -- (the rooms' files, named in their index)
-      local text = unpackData(c.read("rooms.index"))
-      local chunk = text and load(text, "=rooms.index", "t", {})
-      local ok, idx = pcall(chunk or error)
-      if ok and type(idx) == "table" then
-        local seen = {}
-        for _, f in ipairs(idx.pieces or {}) do
-          if f.room and not seen[f.room] then
-            seen[f.room] = true
-            c.delete("room_" .. f.room .. ".dat")
-            c.delete("room_" .. f.room .. ".rgba")
-          end
-        end
-      end
-      c.delete("rooms.index")
+      for _, name in ipairs(Scene.modelFiles(c.read)) do c.delete(name) end
     end
     if Scene.reliefRun and Scene.reliefRun.clear then Scene.reliefRun.clear() end
     Scene.setReliefBytes(nil)

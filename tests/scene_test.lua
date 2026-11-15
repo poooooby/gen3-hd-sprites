@@ -1762,11 +1762,13 @@ do
   for k, v in pairs(fakes) do saved[k] = package.loaded[k]; package.loaded[k] = v end
   local files, opts = {}, { battle_scene = "classic" }
   local mod = {
-    cache = { exists = function(_, p) return files[p] ~= nil end, write = function(_, p, s) files[p] = s end },
+    cache = { exists = function(_, p) return files[p] ~= nil end, write = function(_, p, s) files[p] = s end,
+              delete = function(_, p) files[p] = nil end },
     options = { get = function(_, k) return opts[k] end },
   }
   local runState = "idle"
-  local run = { state = function() return runState end, start = function() runState = "ready" end }
+  local run = { state = function() return runState end, start = function() runState = "ready" end,
+                rebuildFlag = function(g) return "state/rebuild_" .. g end }
   local P = dofile("src/prompt.lua")({ mod = mod, Scene = { reliefRun = run } })
   local F = fakes["src.core.game3.field"]
   local function settle()
@@ -1800,11 +1802,148 @@ do
   settle()
   check(P.phase() == nil and files["state/first_run_asked_leafgreen"] ~= nil,
     "...LeafGreen with its world already built asks nothing (its relief served from the cache)")
+  -- an update that builds a game's world differently (relief_run.lua's flag): asked once, to rebuild
+  -- (Sapphire asked in an earlier session; this one's relief start flagged the rebuild)
+  game, files["state/first_run_asked_sapphire"], files["state/rebuild_sapphire"] = "sapphire", "asked", "1"
+  settle()
+  check(P.phase() == "askBuild", "...Sapphire, asked before, its cache moved on: asked once to rebuild it")
+  press("b")
+  check(P.phase() == nil and files["state/rebuild_sapphire"] == nil, "...Later closes it, the flag gone")
+  settle()
+  check(P.phase() == nil, "...and it is not asked again")
   game = "red"
   settle()
   check(P.phase() == nil and files["state/first_run_asked_red"] == nil, "...a game with no 3D world asks nothing")
   for k in pairs(fakes) do package.loaded[k] = saved[k] end
   love = savedLove
+end
+
+-- ------------------------------------------------------------------ an old cache's files pruned
+-- (relief_run.lua: each game's record of its last relief file and models folder; when its key
+-- moves on, the old one's files are deleted a few a frame and the rebuild question flagged)
+do
+  local files = {}
+  local cache = {
+    read = function(_, p) return files[p] end, write = function(_, p, s) files[p] = s end,
+    delete = function(_, p) files[p] = nil end, exists = function(_, p) return files[p] ~= nil end,
+  }
+  local function runFor(rules)
+    local R = dofile("src/scene/relief_run.lua")({
+      cache = cache, version = { get = function() return "ruby" end },
+      readCache = function(rel) return rel == "map_tree/census.json" and "census" or nil end,
+      modelsDir = function(k) return "models/v7/" .. k end,
+      modelFiles = function() return { "rs_gym.lua", "rs_gym.rgba", "rooms.index" } end,
+    })
+    R.RULES.ruby = rules
+    return R
+  end
+  local R1 = runFor(2)
+  R1.start()
+  local key1 = "ruby-r2-" .. R1.gameKey():match("%-(%x+)$")
+  check(files["state/cache_ruby"] == "relief/v1/" .. key1 .. ".bin\nmodels/v7/" .. key1
+    and files["state/rebuild_ruby"] == nil, "cache record: a game's first build noted, nothing to rebuild")
+  for _, f in ipairs({ "relief/v1/" .. key1 .. ".bin", "relief/v1/" .. key1 .. ".ticks",
+                       "models/v7/" .. key1 .. "/rs_gym.lua", "models/v7/" .. key1 .. "/rooms.index" }) do files[f] = "x" end
+  files["state/first_run_asked_ruby"] = "asked"
+  local R2 = runFor(3)
+  R2.start()
+  check(files["state/rebuild_ruby"] ~= nil and files["state/cache_ruby"]:find("ruby%-r3%-"),
+    "...its rules bumped: the rebuild flagged, the record moved on")
+  check(files["relief/v1/" .. key1 .. ".bin"] ~= nil, "...the old files deleted a few a frame, not at once")
+  local left = R2.pruneStep(2)
+  check(left == 3 and files["relief/v1/" .. key1 .. ".bin"] == nil, "...two a step (" .. tostring(left) .. " left)")
+  check(R2.pruneStep(100) == 0 and files["relief/v1/" .. key1 .. ".ticks"] == nil
+    and files["models/v7/" .. key1 .. "/rs_gym.lua"] == nil and files["models/v7/" .. key1 .. "/rooms.index"] == nil
+    and files["state/first_run_asked_ruby"] ~= nil, "...then the rest: the old relief and models, nothing else")
+  files["state/cache_ruby"] = "../../outside.bin\nstate"
+  files["state/rebuild_ruby"] = nil
+  local R3 = runFor(4)
+  R3.start()
+  check(R3.pruneStep(100) == 0 and files["state/first_run_asked_ruby"] ~= nil,
+    "...a record naming anything but a relief file or a models folder deletes nothing")
+end
+
+-- ------------------------------------------------------------------ the 3D cache's versions
+-- A player's 3D cache is built once and read back until its key changes: Run.VERSION, a game's
+-- Run.RULES (the land) or Scene.MODELS_VERSION (buildings and rooms). A change to what is built
+-- without a bump leaves players on the old world. tests/cache_guard.txt keeps those versions and a
+-- hash of every file the caches are built from (comments and blank lines left out): change one and
+-- this fails until you either bump a version (the change alters what is built) or record the new
+-- hash as it is (it does not). CACHE_GUARD_WRITE=1 writes the line shown.
+do
+  local Prints = dofile("src/scene/prints.lua")
+  local function listing(cmd)
+    local out = {}
+    local p = io.popen(cmd)
+    if p then
+      for line in p:lines() do out[#out + 1] = (line:gsub("\\", "/"):gsub("%s+$", "")) end
+      p:close()
+    end
+    return out
+  end
+  local GLOBS = { { "src/scene", "lua" }, { "src/scene/models", "lua" }, { "src/scene/games", "lua" },
+                  { "assets/scene", "json" }, { "assets/scene", "bin" } }
+  local files = {}
+  for _, gl in ipairs(GLOBS) do
+    -- (a POSIX shell's ls, or Windows' dir, as io.popen's shell has it)
+    local names = package.config:sub(1, 1) == "\\"
+      and listing(('dir /b "%s\\*.%s" 2>nul'):format(gl[1]:gsub("/", "\\"), gl[2]))
+      or listing(("ls %s/*.%s 2>/dev/null"):format(gl[1], gl[2]))
+    for _, name in ipairs(names) do
+      files[#files + 1] = name:find("/") and name or (gl[1] .. "/" .. name)
+    end
+  end
+  -- (only what a cache is built from: the camera, the light, the weather, the screen effects, the
+  -- drawing and the workshop's tuning are read fresh every session)
+  local FRESH = { camera = true, stage = true, render = true, light = true, lighting = true, sunfx = true,
+                  weather = true, screenfx = true, tune = true, cache = true, trees = true }
+  local h, n = 2166136261, 0
+  table.sort(files)
+  for _, path in ipairs(files) do
+    local base = path:match("([^/]+)%.%w+$")
+    if base and not FRESH[base] and not base:find("_tune$") then
+      local f = io.open(path, "rb")
+      local s = f and f:read("*a") or ""
+      if f then f:close() end
+      if path:find("%.lua$") then
+        local kept = {}
+        for line in (s:gsub("\r\n", "\n") .. "\n"):gmatch("([^\n]*)\n") do
+          if not line:find("^%s*%-%-") and line:find("%S") then kept[#kept + 1] = line end
+        end
+        s = table.concat(kept, "\n")
+      elseif not path:find("%.bin$") then
+        s = s:gsub("\r\n", "\n")   -- (text as git checks it out on any machine)
+      end
+      h = Prints.fnv(path .. "\0" .. s .. "\0", h)
+      n = n + 1
+    end
+  end
+  local Run = dofile("src/scene/relief_run.lua")({})
+  local rules = {}
+  for g, r in pairs(Run.RULES) do rules[#rules + 1] = g .. "=" .. r end
+  table.sort(rules)
+  local initText = io.open("src/scene/init.lua", "rb"):read("*a")
+  local mv = initText:match("Scene%.MODELS_VERSION%s*=%s*(%d+)")
+  local line = ("relief=v%d %s models=v%s inputs=%08x"):format(Run.VERSION, table.concat(rules, ","), tostring(mv), h)
+  local g = io.open("tests/cache_guard.txt", "rb")
+  local want = g and g:read("*a"):match("[^\r\n]+") or ""
+  if g then g:close() end
+  if os.getenv("CACHE_GUARD_WRITE") == "1" then
+    local w = io.open("tests/cache_guard.txt", "wb")
+    w:write(line, "\n")
+    w:close()
+    want = line
+  end
+  check(n > 40, "cache guard: the files the 3D cache is built from were found (" .. n .. ")")
+  if want ~= line then
+    print("  the 3D cache's inputs or versions changed:")
+    print("    was " .. want)
+    print("    now " .. line)
+    print("  If the change alters the land, bump Run.VERSION or the game's Run.RULES (relief_run.lua);")
+    print("  if it alters buildings or rooms, Scene.MODELS_VERSION (scene/init.lua). Then (or if it")
+    print("  alters neither) run CACHE_GUARD_WRITE=1 luajit tests/scene_test.lua to record it.")
+  end
+  check(want == line, "cache guard: the 3D cache's inputs match their recorded versions (tests/cache_guard.txt)")
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))

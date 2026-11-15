@@ -280,6 +280,12 @@ return function(mod)
         -- (Ruby's and Sapphire's check of their maps against Emerald's prints: src/scene/prints.lua)
         prints = function() return Engine.Scene.prints and Engine.Scene.prints() or nil end,
         onFrame = function() Engine.Scene.warmStep() end,
+        -- (a game key's models folder, and the files an older one can hold: its cache's record, and
+        -- the pruning of an old one once the cache moves on, relief_run.lua)
+        modelsDir = function(k) return "models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k end,
+        modelFiles = function(dir)
+          return Engine.Scene.modelFiles(function(name) return mod.cache:read(dir .. "/" .. name) end)
+        end,
         -- (built only while the battle scene is on: a player who keeps Classic never pays for it)
         wanted = function() return Engine.Scene.enabled == true end,
       })

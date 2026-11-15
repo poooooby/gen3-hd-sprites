@@ -38,3 +38,4 @@ tools/review.ps1
 tools/fr3ds_relief.lua
 tests/drivers/flat_census.lua
 tests/drivers/emerald_prints.lua
+tests/cache_guard.txt

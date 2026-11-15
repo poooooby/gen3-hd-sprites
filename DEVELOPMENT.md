@@ -884,6 +884,27 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   `ref` and `art` are recomputed (cheap; the art feeds look-alike matching). Bump
   `Scene.MODELS_VERSION` when the kernel or a spec changes what it builds. 104 models: 13 MB,
   built in 1.9 s, read in 0.85 s; `sceneModels` counts both.
+- **When a game's cache moves on (`relief_run.lua`, `src/prompt.lua`):** a version bump
+  (`Run.VERSION`, `Run.RULES`, `Scene.MODELS_VERSION`) or new map data gives a game a new key, and
+  the old cache is never read again.
+  - **Record:** `Run.start` keeps each game's last relief file and models folder in
+    `state/cache_<game>`. The mod's cache cannot list a folder, so this is how the old files are
+    found.
+  - **Pruning:** when the record changes, the old relief (`.bin`, `.ticks`) and every file its
+    models folder can hold (`Scene.modelFiles`: every game's specs and bridges by name, the rooms its
+    `rooms.index` names) are queued and deleted 8 a frame by the frame hook (`Run.pruneStep`;
+    Ruby's old models, 677 files, in 85 frames). A record can only name `relief/v<N>/<file>` or
+    `models/v<N>/<key>/` paths; anything else is ignored. Empty folders stay (the cache cannot
+    delete one).
+  - **The question:** the same change writes `state/rebuild_<game>`. A player asked before, with
+    Battle Scene on Overworld, is asked once "Rebuild <Game>'s 3D world?" (Build now / Later); any
+    answer deletes the flag.
+  - **The guard:** `tests/scene_test.lua` hashes every file the caches are built from (`src/scene`,
+    its `models` and `games`, `assets/scene` data; comments, blank lines and the render-only files
+    left out) and checks it, with the versions, against `tests/cache_guard.txt`. Change one and it
+    fails until you bump a version (the change alters what is built) or record it as it is:
+    `CACHE_GUARD_WRITE=1 luajit tests/scene_test.lua`. `exports._reliefPrune(n)` steps the pruning
+    in drivers (`first_run.lua` runs it after the prompt closes).
 - `roles.lua`: `voxel_cells.py` whole (every cell's role: water, ledge, stair, floor, signpost,
   wall, tree, fence, cliff, shelf), over an adapter of a layout; matches the Python cell for cell
   on 21 layouts. Its drawings are exact layers from the atlas blobs (`Roles.blobPixels`: colour

@@ -210,6 +210,8 @@ Open **OPTIONS → MODS → WoobleView**.
   B and it carries on in the background while you play. Say no and that game never asks again; you
   can switch it on any time in **OPTIONS → MODS → WoobleView**. Its messages carry the WoobleView
   name, so you always know which mod is asking.
+- 🔄 **When an update improves a game's 3D world**, WoobleView asks once whether to rebuild it now
+  or let it rebuild while you play, and clears the old copy off your device by itself.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
   trees stand as real trees with leafy crowns (Viridian Forest's, the Berry Forest's golden ones, the Safari
   Zone's broad flat-topped ones and Four Island's slim saplings too), and in Ruby, Sapphire and Emerald most of Hoenn's town buildings, fences, hedges, curbs

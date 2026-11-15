@@ -112,6 +112,26 @@ return function(deps)
     pcall(function() mod.cache:write(P.flagFor(g), "asked") end)
   end
 
+  -- whether this game's 3D cache moved on since it was last built (a WoobleView update that builds
+  -- it differently: relief_run.lua writes the flag), kept in memory once the relief has looked
+  local noRebuild = {}
+  local function rebuildPending()
+    local g, run = current(), Scene.reliefRun
+    if not (g and run and run.rebuildFlag) or noRebuild[g] then return false end
+    if run.state and run.state() == "idle" then pcall(run.start) end
+    local c = mod.cache
+    local ok, yes = pcall(c.exists, c, run.rebuildFlag(g))
+    if ok and yes == true then return true end
+    if run.state and run.state() ~= "idle" then noRebuild[g] = true end
+    return false
+  end
+  local function clearRebuild()
+    local g, run = current(), Scene.reliefRun
+    if not (g and run and run.rebuildFlag) then return end
+    noRebuild[g] = true
+    pcall(function() mod.cache:delete(run.rebuildFlag(g)) end)
+  end
+
   -- whether this game's 3D world still has to be built: its relief neither cached nor broken (with
   -- the battle scene on, the relief's frame hook has begun it - served from the cache or building -
   -- and a driver's frames, which skip that hook, begin it here)
@@ -190,6 +210,7 @@ return function(deps)
     local ph = state.phase
     if ph == "ask3d" then
       markAsked()
+      clearRebuild()
       if i == 1 then
         P.setOption("battle_scene", "overworld")
         state.phase, state.t, state.focus = "askBuild", 0, 1
@@ -198,6 +219,7 @@ return function(deps)
       end
     elseif ph == "askBuild" then
       markAsked()
+      clearRebuild()
       if i == 1 then startBuild() else close() end
     elseif ph == "building" then
       -- build as you play: the panel goes, the build carries on a few ms a frame (relief_run's
@@ -596,7 +618,16 @@ return function(deps)
             .. "the background while you play."):format(name) })
       else
         markAsked()       -- (already chosen and built: nothing to ask)
+        clearRebuild()
       end
+    elseif option("battle_scene", "classic") == "overworld" and rebuildPending() then
+      -- (asked before, and an update builds this game's world differently: once, to rebuild it)
+      quiet = 0
+      local name = P.NAMES[current()] or "this game"
+      open("askBuild", { rebuild = true, title = ("Rebuild %s's 3D world?"):format(name),
+        body = ("WoobleView's 3D world for %s has been updated since it was built. Rebuild it now, in "
+          .. "a minute or two, and every battle loads it straight away. Or skip it, and it rebuilds a "
+          .. "little at a time in the background while you play."):format(name) })
     end
   end
 

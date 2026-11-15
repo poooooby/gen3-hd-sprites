@@ -201,6 +201,11 @@ return function(mod, hd, state)
     run.step()
     return run.state()
   end
+  -- (dev: n of an older cache's files deleted, as the frame hook does a few a frame) -> how many left
+  exports._reliefPrune = function(n)
+    local run = hd.scene and hd.scene.reliefRun
+    return run and run.pruneStep and run.pruneStep(n) or 0
+  end
   -- (dev: a layout's bridge read afresh - its blocks, the curb's height, the read - and a block's
   -- triangles)
   exports._bridgeBlocks = function(name)

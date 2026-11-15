@@ -46,6 +46,11 @@ local function body(game, log)
     end
     loader.modOptions["gen3-hd-sprites"] = loader.modOptions["gen3-hd-sprites"] or {}
     loader.modOptions["gen3-hd-sprites"].battle_scene = env("FIRST_RUN_SCENE") or "classic"
+  elseif env("FIRST_RUN_SCENE") then
+    -- (FIRST_RUN_SCENE alone: a player asked before, Battle Scene on it - the rebuild question
+    -- once a game's cache record names an older one, src/scene/relief_run.lua)
+    loader.modOptions["gen3-hd-sprites"] = loader.modOptions["gen3-hd-sprites"] or {}
+    loader.modOptions["gen3-hd-sprites"].battle_scene = env("FIRST_RUN_SCENE")
   end
   -- (FIRST_RUN_SPOT=MAP:x:y: another game's field, FireRed's Route 1)
   local spotMap, sx, sy = (env("FIRST_RUN_SPOT") or "EM_ROUTE101:10:10"):match("([^:]+):(%d+):(%d+)")
@@ -94,6 +99,12 @@ local function body(game, log)
     opt("battle_scene"), opt("scene_build"), tostring(hd.stats and hd.stats().sceneReliefRun)))
   wait(30)
   U.shot(game, dir .. "/9_after.png")
+  -- an older cache's files, deleted a few a frame by the frame hook (stepped by hand here)
+  if hd._reliefPrune then
+    local steps, left = 0, hd._reliefPrune(0)
+    while left > 0 and steps < 100000 do left = hd._reliefPrune(); steps = steps + 1 end
+    log("old cache pruned in", steps, "steps")
+  end
   -- FIRST_RUN_BG=1 (with FIRST_RUN_ANSWERS ending in b: Build as I play): the build left to carry
   -- on in the background - stepped by hand, as the frame hook would (a driver's frames skip it) -
   -- until it is done, then the notice that says so
