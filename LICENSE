@@ -183,7 +183,10 @@ specs (src/scene/models/specs_firered.lua) are WoobleView's own reading of those
 run by the adapted relief solver, terraces and modelling primitives above. The proofs those specs
 pass (tests/model_check.lua, a development tool, not shipped) adapt Emerald 3DS's ortho_check
 and density_check (3ds_port/scripts/voxel_building.py). Changes: rewritten in Lua over the
-kernel's meshes, run in the game. No code of Pokemon FireRed 3DS (NachoGonzalez2001) is used.
+kernel's meshes, run in the game. No code of Pokemon FireRed 3DS (NachoGonzalez2001) is used;
+its relief is (above), and the specs for the places its build stands a building that none of
+WoobleView's once did (the huts, rest houses, fountain, warehouse, pillar, ruins and gatehouses)
+are shaped after its models of them.
 
 Pokemon is (c) Nintendo, Game Freak and Creatures. WoobleView contains none of their content.
 
