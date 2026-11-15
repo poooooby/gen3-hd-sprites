@@ -928,6 +928,12 @@ return function(deps)
     local Tr = deps.Trees
     if not (Tr and Tr.kanto and pair and m) then return m end
     local sec = Tr.tilesets(pair)
+    -- (a secondary's own drawing of a General prop in its lower layer, read as the General's
+    -- metatile: the game's `propAlias`, by the tileset as Components names it - Fuchsia's pickets)
+    local G = deps.Games and deps.Games[famGame]
+    local alias = G and G.propAlias and Components and select(2, Components.names(pair))
+    local a = alias and G.propAlias[alias]
+    if a and a[m] then return a[m] end
     -- (the General tree's tips too: one drawn over a picket, its posts in the lower layer)
     return sec and Tr.groundMetatile(sec, m) or m
   end

@@ -365,6 +365,26 @@ F.components = {
     tiles = { 0x318, 0x319, 0x31C, 0x329, 0x30D, 0x31A, 0x31D, 0x31E, 0x323, 0x325, 0x326, 0x328, 0x32A, 0x32D,
               0x32E, 0x33E, 0x320, 0x322, 0x343, 0x344, 0x345, 0x346, 0x347 },
     ground = { 0x2E9, 0x008, 0x009 } },
+  -- Fuchsia's pens (the Safari Zone's tileset, rom_082d4b54): low hedges round three sides, their
+  -- light top along a row 290-295 (its rim drawn over the grass north of it) and down a column 29B,
+  -- their ends 29C; read off the drawing (Fuchsia 9 x 6-7): the top to row 22, the dark front rows
+  -- 23-31 - 9 texels.
+  { name = "fr_fuchsia_hedge", secondary = "fr:rom082d4b54", upper = true, height = 9, hull = 0, bridge = 0,
+    tiles = { 0x290, 0x291, 0x292, 0x293, 0x294, 0x295, 0x298, 0x29B, 0x29C },
+    ground = { 0x008, 0x009, 0x010, 0x011 } },
+  -- and the low grey fence of panels across a pen's open side and along the town's north edge (28E /
+  -- 28F, 338 / 339 with the pen's sign): its top rows 1-3, its panels' front rows 4-15 - 12 texels.
+  -- (338 / 339 draw it in their lower layer: both layers read, less the grass)
+  { name = "fr_fuchsia_fence", secondary = "fr:rom082d4b54", height = 12, hull = 0, bridge = 0,
+    tiles = { 0x28E, 0x28F, 0x338, 0x339 },
+    ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0BE } },
+}
+
+-- A secondary's own drawing of a General prop in its lower layer, read as the General's metatile
+-- (src/scene/init.lua propMid): Fuchsia's pickets (rom_082d4b54) - two posts 336 (0E7's), a post
+-- and a run going south 337 (0ED's), a run seen down its length 33F (0F5's)
+F.propAlias = {
+  ["fr:rom082d4b54"] = { [0x336] = 0x0E7, [0x337] = 0x0ED, [0x33F] = 0x0F5 },
 }
 
 return F
