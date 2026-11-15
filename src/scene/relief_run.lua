@@ -132,9 +132,11 @@ return function(deps)
     return keyOf, id
   end
 
-  local function ready(bytes, how)
+  -- (M: the bytes already decoded, when they are - decoding a cached relief twice as a save
+  -- opened cost a phone a second frame of it)
+  local function ready(bytes, how, M)
     state, detail = "ready", how
-    if deps.onReady then pcall(deps.onReady, bytes) end
+    if deps.onReady then pcall(deps.onReady, bytes, M) end
   end
 
   -- the whole pipeline, run inside the coroutine
@@ -386,8 +388,9 @@ return function(deps)
     key, game = k, id
     noteKey()
     local okR, cached = pcall(function() return deps.cache and deps.cache:read(key) end)
-    if okR and type(cached) == "string" and #cached > 16 and Relief.decode(cached) then
-      ready(cached, "cached")
+    local M = okR and type(cached) == "string" and #cached > 16 and Relief.decode(cached) or nil
+    if M then
+      ready(cached, "cached", M)
       log("%s: relief read from the cache (%d KiB)", game, math.floor(#cached / 1024))
       return
     end

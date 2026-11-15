@@ -877,13 +877,30 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   (`exports._sceneModelArt`, `_sceneModelBounds`, built afresh), `SCENE_PROBE_PNG=<spec>,...`
   saves each one's art as `art_<spec>.png` (`exports._sceneModelArtRaw`); `SCENE_PIXELS=pair:mid:x:y,...`
   a metatile's two layers at a pixel through the scene's pixel source (`exports._scenePixel`). The dev `WOOBLE_RELIEF_BIN`
-  path still overrides it. **Scene Cache** (`scene_cache`, `Scene.cacheModels`): on the first
-  `map.entered`, `Scene.warmAll` queues every spec; `ready` reads a model from `mod.cache`
-  (`models/v<MODELS_VERSION>/<game key>/<spec>.lua`, a Lua chunk of its triangles, core cells and
-  texture size, plus `<spec>.rgba`, the texture's bytes) or builds it and keeps it. A model's
-  `ref` and `art` are recomputed (cheap; the art feeds look-alike matching). Bump
-  `Scene.MODELS_VERSION` when the kernel or a spec changes what it builds. 104 models: 13 MB,
-  built in 1.9 s, read in 0.85 s; `sceneModels` counts both.
+  path still overrides it. **Scene Cache** (`scene_cache`, `Scene.cacheModels`): `ready` reads a
+  model from `mod.cache` (`models/v<MODELS_VERSION>/<game key>/<spec>.lua`, a Lua chunk of its
+  triangles, core cells and texture size, plus `<spec>.rgba`, the texture's bytes) or builds it and
+  keeps it. Bump `Scene.MODELS_VERSION` when the kernel or a spec changes what it builds. 104
+  models: 13 MB, built in 1.9 s, read in 0.85 s; `sceneModels` counts both.
+  - **What loads as a save opens:** `map.entered` runs `Scene.warm(mapId)` first (that map's
+    specs, read one a frame), then `Scene.warmAll`. warmAll's items are wrapped `{ all = item }`,
+    and `warmStep` passes over any the cache already holds (`Scene.modelCache.exists`, up to
+    `Scene.WARM_SKIPS` a frame). A skipped spec leaves `warmed`, so the map that shows it queues
+    it again. warmAll is there to fill the cache (Build as I play, `Scene.cacheJob`), not to read
+    every town back: that took a phone's first 5-10 seconds.
+  - **A cached model's `art`** (its drawing off the tilesets, the ground a placement lays under
+    it) is read the first time something asks `md.art` (a metatable on the model, dropped once
+    read). Look-alike matching uses the texture's data (`Buildings.texPixels` / `texCover`) and
+    must not touch `md.art` where `md._data` is there. Reading every model's art at warm-up was
+    about 70% of the cost.
+  - **The relief** is decoded once: `Run.start` hands its decode to `onReady`, and
+    `Scene.setReliefBytes(bytes, M)` views it.
+  - **`tests/drivers/load_hitch.lua`** times this. It opens a new game with Battle Scene on
+    Overworld and steps the frame hook's work by hand, frame by frame. It logs the slowest frames
+    by item, plus each model's parts. `HITCH_NOJIT=1` turns LuaJIT's compiler off, as LOVE runs
+    on Android. Emerald, cache built, JIT off: 126 frames and 4.1 s of work before, 38 frames and
+    0.35 s after. Still left: the first `Scene.warm` loads the World (about 0.2 s), and the relief
+    is read (about 0.14 s).
 - **When a game's cache moves on (`relief_run.lua`, `src/prompt.lua`):** a version bump
   (`Run.VERSION`, `Run.RULES`, `Scene.MODELS_VERSION`) or new map data gives a game a new key, and
   the old cache is never read again.

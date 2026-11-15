@@ -506,7 +506,7 @@ end
 --- { w, h, [Y * w + X] = true }. Off the texture's image data where the model keeps it.
 function Buildings.texCover(md)
   if md.texCover then return md.texCover end
-  local data, art = md._data, md.art
+  local data = md._data
   local out
   if data and data.getPixel then
     local w, h = data:getWidth(), data:getHeight()
@@ -518,6 +518,8 @@ function Buildings.texCover(md)
       end
     end
   else
+    -- (md.art read only here: a cached model's is read off the tilesets the first time it is asked)
+    local art = md.art
     local w, h, px = art.w, art.h, art.px
     out = { w = w, h = h }
     for k = 0, w * h - 1 do
@@ -534,7 +536,7 @@ end
 function Buildings.texPixels(md)
   if md.texPx then return md.texPx end
   local data = md._data
-  local out = md.art
+  local out
   if data and data.getPixel then
     local w, h = data:getWidth(), data:getHeight()
     local px = {}
@@ -545,6 +547,8 @@ function Buildings.texPixels(md)
       end
     end
     out = { w = w, h = h, px = px }
+  else
+    out = md.art
   end
   md.texPx = out
   return out

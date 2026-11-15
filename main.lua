@@ -275,7 +275,7 @@ return function(mod)
         version = okV and GameVersion or nil,
         -- (rel under the engine's cache root: src/scene/cache.lua)
         readCache = function(rel) return SceneCache and SceneCache.read(rel) or nil end,
-        onReady = function(bytes) Engine.Scene.setReliefBytes(bytes) end,
+        onReady = function(bytes, M) Engine.Scene.setReliefBytes(bytes, M) end,
         models = function(name, tick) return Engine.Scene.modelCells(name, tick) end,
         -- (Ruby's and Sapphire's check of their maps against Emerald's prints: src/scene/prints.lua)
         prints = function() return Engine.Scene.prints and Engine.Scene.prints() or nil end,
@@ -306,6 +306,11 @@ return function(mod)
           delete = function(name)
             local k = run.gameKey()
             return k and pcall(function() mod.cache:delete("models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k .. "/" .. name) end)
+          end,
+          exists = function(name)
+            local k = run.gameKey()
+            local okE, e = pcall(function() return k and mod.cache:exists("models/v" .. Engine.Scene.MODELS_VERSION .. "/" .. k .. "/" .. name) end)
+            return okE and e == true
           end,
         }
       else
@@ -361,10 +366,10 @@ return function(mod)
   if Engine.Scene then
     mod.events:on("map.entered", function(ev)
       if not (ev and ev.mapId and Engine.Scene.enabled) then return end
-      -- (Scene Cache: every town's models from the first map on, read from the cache or built
-      -- and kept; else this map's)
-      if Engine.Scene.cacheModels and Engine.Scene.warmAll then pcall(Engine.Scene.warmAll) end
+      -- (this map's models first; then, Scene Cache on, every town's built and kept that the
+      -- cache does not hold yet)
       pcall(Engine.Scene.warm, ev.mapId)
+      if Engine.Scene.cacheModels and Engine.Scene.warmAll then pcall(Engine.Scene.warmAll) end
     end)
   end
   if reliefRun then

@@ -869,14 +869,23 @@ return function(deps)
     local src = pixelSource(NativeTileset, ref.pair)
     if not src then return false end
     spec._model = false
-    local art = Buildings.art(spec, ref, layerSource(spec.layout, src))
     local hit = cachedModel(spec)
     if hit then
-      hit.spec, hit.ref, hit.art = spec, ref, art
+      -- (its drawing - the ground a battle lays under it - read the first time a placement asks:
+      -- reading every town's off the tilesets as a save opens took most of its first seconds)
+      hit.spec, hit.ref = spec, ref
+      setmetatable(hit, { __index = function(t, k)
+        if k ~= "art" then return nil end
+        setmetatable(t, nil)
+        local a = Buildings.art(spec, ref, layerSource(spec.layout, src))
+        t.art = a
+        return a
+      end })
       spec._model = hit
       Scene.modelsFromCache = Scene.modelsFromCache + 1
       return hit
     end
+    local art = Buildings.art(spec, ref, layerSource(spec.layout, src))
     -- (parts read off the drawing come with a texture of their own: the drawing and its bands; a
     -- few read another building's drawing too, by its reference)
     local artCtx = { layoutArt = function(layout, x, y, w, h, ground)
@@ -3025,8 +3034,10 @@ return function(deps)
   -- relief.bin a dev driver hands over (Emerald 3DS's own, read locally to check the renderer
   -- against; never shipped); the port of its solver comes next
   local reliefData
-  function Scene.setReliefBytes(bytes)
-    reliefData = bytes and Relief and Relief.parse(bytes) or nil
+  function Scene.setReliefBytes(bytes, M)
+    -- (M: the bytes decoded already, Relief.decode's model)
+    if M and Relief then reliefData = Relief.view(M)
+    else reliefData = bytes and Relief and Relief.parse(bytes) or nil end
     return reliefData ~= nil
   end
   function Scene.reliefData() return reliefData end
@@ -3401,29 +3412,59 @@ return function(deps)
     warmedAll = true
     local n = 0
     if World then warmQueue[#warmQueue + 1] = function() World.posts() end end
+    -- (each wrapped { all = item }: Scene.warmStep passes over one the cache keeps already)
     for _, spec in ipairs(Specs) do
       if spec._model == nil and not warmed[spec] then
         warmed[spec] = true
-        warmQueue[#warmQueue + 1] = spec
+        warmQueue[#warmQueue + 1] = { all = spec }
         n = n + 1
       end
     end
     -- (and the rooms, and the bridges, a slice a frame)
     if Interiors and not (roomRun and roomRun.done) then
-      warmQueue[#warmQueue + 1] = { rooms = true }
+      warmQueue[#warmQueue + 1] = { all = { rooms = true } }
       n = n + 1
     end
     for name in pairs(Bridge and Bridge.BRIDGES or {}) do
       if not (bridges[name] and bridges[name].done) then
-        warmQueue[#warmQueue + 1] = { bridge = name }
+        warmQueue[#warmQueue + 1] = { all = { bridge = name } }
         n = n + 1
       end
     end
     return n
   end
+  -- whether the cache keeps an item of warmAll's whole (a spec's model, a bridge, the rooms)
+  local function keptAlready(item)
+    local c = Scene.cacheModels and Scene.modelCache
+    if not (c and c.exists) then return false end
+    local ok, kept = pcall(function()
+      if item.rooms then return c.exists("rooms.index") end
+      if item.bridge then return c.exists(item.bridge .. ".bridge") and c.exists(item.bridge .. ".bridge.rgba") end
+      return c.exists(item.name .. ".lua") and c.exists(item.name .. ".rgba")
+    end)
+    return ok and kept == true
+  end
+  -- (warmAll's items looked over in a frame, at most: the ones kept already passed over)
+  Scene.WARM_SKIPS = 16
   --- One model readied, from the frame hook. Returns how many are left.
+  --- warmAll's whole is there to fill the cache: what the cache keeps already is not read now but
+  --- left to the map that shows it (Scene.warm) and the battle that needs it - reading every
+  --- town's models, rooms and bridges back as a save opened made a phone's first seconds crawl.
   function Scene.warmStep()
     local spec = table.remove(warmQueue, 1)
+    local looked = 0
+    while type(spec) == "table" and spec.all ~= nil do
+      local item = spec.all
+      if looked >= Scene.WARM_SKIPS then
+        table.insert(warmQueue, 1, spec)
+        return #warmQueue
+      end
+      looked = looked + 1
+      if not keptAlready(item) then spec = item; break end
+      -- (a spec passed over: the map that shows it queues it again)
+      if not (item.rooms or item.bridge) then warmed[item] = nil end
+      spec = table.remove(warmQueue, 1)
+    end
     if type(spec) == "function" then
       pcall(spec)
     elseif type(spec) == "table" and spec.rooms then
