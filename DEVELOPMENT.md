@@ -1134,27 +1134,53 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     rectangle a model reads (`Buildings.reference`: specs, solids, Fortree, `layoutArt`), its print;
     and for each room layout pret names apart (`LAYOUT_POKEMON_CENTER_1F`), the names of the maps
     Emerald draws with it (`aliases`). `Prints.checker(T)` answers `rect(layout, rect, ids)` and
-    `layout(name, w, h, at)` -> `{ same, size, ok(x, y) }`; `Scene.prints()` is Ruby's and
+    `layout(name, w, h, at)` -> `{ same, size, ok(x, y), share }`; `Scene.prints()` is Ruby's and
     Sapphire's checker over the table, any other game's passes everything.
   - **Where it applies:** a reference rectangle holds where its metatiles print as Emerald's
     (`ctx.trust`; else the spec has no reference: Slateport's Battle Tent and boats, the Space
-    Center, the Safari wings drop out). Rooms are found by name or alias (`roomLayout`) where the
-    layout is Emerald's size; a room's pieces over blocks Ruby draws otherwise are dropped
-    (`trustedPieces`). Hand marks (`Post.trustedFixes`, run by `WorldMaps.solve`'s `trustFixes` once
-    the maps are read): a layout of another size loses them; in one the same size each mark at a
-    cell whose block differs is dropped (4216 of 26295 in Ruby), the layout's own numbers kept.
-    The terrace groups, sea ramps and Emerald's rock tables run as for Emerald (`Run.HOENN`).
+    Center, the Safari wings drop out). Emerald's rooms are found by name or alias (`roomLayout`:
+    the alias drawn as Emerald's, else the first of Emerald's size, its record under the name it
+    was found by) where the layout is Emerald's size; a room's pieces over blocks Ruby draws
+    otherwise are dropped (`trustedPieces`). Hand marks (`Post.trustedFixes`, run by
+    `WorldMaps.solve`'s `trustFixes` once the maps are read): a layout of another size loses them;
+    one the same size with more than `Post.MOSTLY` (half) of its blocks Emerald's keeps them all
+    (Ruby's changes are details; dropping them block by block left the solver to read those blocks
+    alone, worse: Route 120 896 cells off Emerald's, 2 with them kept); one mostly redrawn (the
+    Safari Zone's corners) loses each mark in a redrawn block. 726 of 26295 dropped in Ruby. The
+    terrace groups, sea ramps and Emerald's rock tables run as for Emerald (`Run.HOENN`); relief
+    rules `ruby-r2` / `sapphire-r2`.
+  - **Their own (`own`, never checked against the prints):** main.lua builds Ruby's and Sapphire's
+    spec list (Emerald's and `models/specs_rs.lua`'s, with Emerald's named fields: `kits`,
+    `decks`, `helpers`) and room list (Emerald's, each own room in the place of Emerald's of its
+    layout or of the name it `replaces`, and `models/interior_specs_rs.lua`'s). `interior_specs.lua`
+    exports its readers (`ROOMS.helpers`: piece, ownShell, runRects, gymBlock, rectPieces, cutRuns,
+    tierTops, cellsRects, runsOf, rowsOf, cellsOf, trickHouseShell, ...).
+    - Rooms, each proved by `room_check` over Ruby's drawing: the eight gyms (Ruby's own but
+      Petalburg's, which Emerald's pieces hold in its unchanged blocks: 0 wrong but Rustboro's 34,
+      the same 34 as Emerald's own, and Dewford's 4); the Trick House's puzzles (Emerald 3DS's
+      puzzle maps are Emerald's blocked cells, rows 2-21 - checked - so Ruby's are Ruby's, at
+      Emerald's heights); Team Magma's hideout (the Aqua Hideout's tiles and recipe); the Center's
+      2F; and Emerald's rooms adopted whole (`adopt`, less the pieces Ruby doesn't draw: `drop`)
+      where they read Ruby's drawing as Emerald's (the Mart, the League's lobby and corridors - Ruby's
+      Corridor1 / 4 are Emerald's short hall / Hall4 - the Battle Tower's rooms, the lab, Devon, ...).
+      Rooms no battle can take place in (contest halls and lobbies, the Battle Tower's lobby, a
+      house) are not modelled.
+    - Buildings, proved by `model_check`: the contest hall of Slateport, Verdanturf and Fallarbor
+      (`flat_block` with its roof's back at z 30: `flat_block` takes `o.back`, 16 as before), the
+      Space Center (Ruby's office block), and Emerald's wide Mossdeep house and Safari south wing
+      adopted over Ruby's drawing.
   - **Regenerate** after any change to the specs' rectangles or the room specs' layouts: run
     `tests/drivers/emerald_prints.lua` in Emerald (it builds every spec afresh with the checker
     recording, then writes the table; `OUT=<file>` writes elsewhere).
-  - **Check (scratch engine, Ruby):** the 19 identical layouts with relief match Emerald's cell for
-    cell but 4 (1-7 cells each, by their seams with redrawn neighbours); the building proofs read as
-    Emerald's (29 specs without a reference, all of them where Ruby draws otherwise or Emerald-only);
-    rooms 80 of 193 pass (Emerald 145), the rest absent (Emerald-only or redrawn) or within a few
-    tenths of a percent of Emerald's own; Emerald's relief, rooms and models unchanged. Build: about
-    the same ticks as Emerald (`Run.TICKS.ruby`), `ruby-r1-<fp>.bin`.
-  - **Known:** Ruby's Mart draws a pot on its right-hand shelf; the reused shelf piece stands there
-    again under it (the pixel finder, not Emerald's data).
+  - **Check (scratch engine, Ruby; Sapphire's maps are Ruby's):** the 19 identical layouts with
+    relief match Emerald's cell for cell but 4 (1-7 cells each, by their seams with redrawn
+    neighbours); Mt Chimney (joined to no map) sits 80 higher than Emerald's, the same shape. The
+    building placements are Emerald's but for what Ruby draws otherwise or Emerald alone has (the
+    Battle Frontier, Mirage Tower, Trainer Hill, Route 109's extra chairs); left flat: the Battle
+    Tower's grounds (no battle there) and Slateport's harbour boats. Emerald's relief, rooms and
+    models unchanged. Build: about Emerald's ticks (`Run.TICKS.ruby`).
+  - **Known:** the Mart's right-hand shelf stands again under the pot Ruby (and Emerald) draw on it
+    (Emerald 3DS's own reading: its Mart has the same 629 pixels wrong).
 - **FireRed's relief (`src/scene/games/firered.lua`):** Emerald 3DS's counted levels, run on our own
   reading of FireRed's General rock. No FireRed 3DS code is used (its FireRed files carry no
   licence); its screenshots were a visual reference only.

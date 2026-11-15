@@ -226,9 +226,12 @@ Open **OPTIONS → MODS → WoobleView**.
   the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk).
-  Ruby and Sapphire take Emerald's 3D wherever their maps are drawn as Emerald's: where Emerald
-  redrew a spot (every gym, Slateport's harbour, Mossdeep's shore, corners of some routes and the
-  Safari Zone), the land there keeps its own reading and what Emerald built for that spot is left out.
+  Ruby and Sapphire take Emerald's 3D wherever their maps are drawn as Emerald's, and have their
+  own where they're drawn differently: all eight of their gyms, Team Magma's hideout, the Trick
+  House's puzzles, the Center's upstairs, the contest halls of Slateport,
+  Verdanturf and Fallarbor, and Mossdeep's Space Center. What only Emerald has (the Battle
+  Frontier, Mirage Tower, Trainer Hill) isn't there, and the Battle Tower's grounds and
+  Slateport's harbour boats lie flat as drawn.
   Indoors, the rooms not rebuilt show their furniture flat, but for the pieces they
   share with the rooms that are; FireRed's and LeafGreen's other rooms are drawn flat for now. A battle
   with no overworld around it, or no open ground near you, keeps the game's own background.
