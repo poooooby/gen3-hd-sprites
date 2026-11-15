@@ -924,9 +924,8 @@ return function(deps)
     local Tr = deps.Trees
     if not (Tr and Tr.kanto and pair and m) then return m end
     local sec = Tr.tilesets(pair)
-    local k = sec and Tr.forestBySec and Tr.forestBySec[sec]
-    local S = k and Tr.species and Tr.species[k]
-    return S and not S.failed and S.ground and S.ground[m] or m
+    -- (the General tree's tips too: one drawn over a picket, its posts in the lower layer)
+    return sec and Tr.groundMetatile(sec, m) or m
   end
   -- the object's drawn pixels its model leaves bare at 45 degrees (a point (x, y, z) lands on
   -- (x, z - y), as the GBA draws it): { [y * W + x] = true } - its shadow on the ground, a post
@@ -3047,6 +3046,61 @@ return function(deps)
       local list = {}
       placeComponents(grid, NativeTileset, list, where)
       for _, pl in ipairs(list) do add(pl, pl.plan) end
+    end
+    return out
+  end
+  -- (dev: tests/drivers/flat_census.lua) the cells of a whole layout nothing stands: every model
+  -- the scene places (buildings, rooms, props, bridges, components: placeBuildings) and the trees
+  -- (a tree part, or a cell laid as other ground) taken off; of the rest, those that draw on their
+  -- upper layer or block the player: { { x, y, mid, upper (opaque upper-layer pixels), blocked } }
+  function Scene._layoutCover(name)
+    useFamily()
+    local NativeTileset = req("src.core.game3.tileset_native")
+    local L = World and World.layout(name)
+    if not (L and L.grid and L.pair and NativeTileset) then return nil, "no layout " .. tostring(name) end
+    local rows, coll = {}, {}
+    for y = 0, L.h - 1 do
+      local row = {}
+      for x = 0, L.w - 1 do
+        local i = (y * L.w + x) * 2 + 1
+        local v = L.grid:byte(i) + L.grid:byte(i + 1) * 256
+        row[x] = { cx = x, cy = y, mid = v % 1024, pair = L.pair }
+        coll[y * L.w + x] = math.floor(v / 1024) % 4
+      end
+      rows[y] = row
+    end
+    local grid = { x0 = 0, y0 = 0, w = L.w, h = L.h, rows = rows }
+    function grid.at(x, y)
+      local row = rows[y]
+      return row and row[x] or nil
+    end
+    local okB, err = pcall(placeBuildings, grid, NativeTileset, function(cx, cy) return nil, cx, cy, name, 0, 0 end)
+    if not okB then return nil, tostring(err) end
+    local src = pixelSource(NativeTileset, L.pair)
+    local Tr = deps.Trees
+    local sec = Tr and Tr.tilesets and Tr.tilesets(L.pair)
+    local uppers = {}
+    local out = {}
+    for y = 0, L.h - 1 do
+      for x = 0, L.w - 1 do
+        local c = rows[y][x]
+        local tree = Tr and sec and (Tr.part(sec, c.mid) ~= nil or Tr.groundMetatile(sec, c.mid) ~= c.mid)
+        if not c.model and not tree then
+          local n = uppers[c.mid]
+          if n == nil then
+            n = 0
+            for yy = 0, 15 do
+              for xx = 0, 15 do
+                local _, _, _, a = src.over(c.mid, xx, yy)
+                if a and a > 0.5 then n = n + 1 end
+              end
+            end
+            uppers[c.mid] = n
+          end
+          local blocked = coll[y * L.w + x] ~= 0
+          if n > 0 or blocked then out[#out + 1] = { x, y, c.mid, n, blocked } end
+        end
+      end
     end
     return out
   end

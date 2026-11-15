@@ -218,6 +218,10 @@ return function(mod, hd, state)
   exports._layoutModels = function(name, runs)
     return hd.scene and hd.scene._layoutModels and hd.scene._layoutModels(name, runs) or nil
   end
+  exports._layoutCover = function(name)
+    if not (hd.scene and hd.scene._layoutCover) then return nil, "no scene" end
+    return hd.scene._layoutCover(name)
+  end
   -- (dev: the rooms read afresh up to `upto`, and a piece's model)
   exports._rooms = function(upto)
     if not (hd.scene and hd.scene._rooms) then return nil end

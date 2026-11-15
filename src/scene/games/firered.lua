@@ -204,7 +204,10 @@ F.caves = {
 --   * crown row: 01E / 01F alone on grass, 01C / 01D with the tree above's foot behind;
 --   * trunk row: 024 / 025 alone on grass (the trunk shows), 014 / 015 and 016 / 017 with the next
 --     tree's crown or the wood's edge behind, 026 / 027 on the darker ground;
---   * the crown's tip is drawn in the cell above the tree: 00E / 00F, grass under it (001's).
+--   * the crown's tip is drawn in the cell above the tree: 00E / 00F, grass under it (001's);
+--   * by the sea (Six Island): the crown row 0FA / 0FB over the shore, its tip 255 / 25D over the
+--     sea (273's); and over a picket fence (Celadon, Routes 4, 16, 18): its tip 0D6 / 0D7, the
+--     fence drawn in the lower layer, read as the plain fence (0E7) so its posts stand as its props.
 -- Every variant stands as the one tree (its art, Trees.kantoArt, read off the alone tree's three
 -- rows); the one-wide sapling (01B over 023, Four Island's) is a species of its own, below.
 -- It stands as its own model (Trees.kantoTree): its crown a cone, its trunk upright, its shadow on
@@ -217,14 +220,14 @@ F.caves = {
 F.trees = {
   general = F.general,
   parts = {
-    [0x01C] = 0, [0x01E] = 0, [0x01D] = 1, [0x01F] = 1,
+    [0x01C] = 0, [0x01E] = 0, [0x0FA] = 0, [0x01D] = 1, [0x01F] = 1, [0x0FB] = 1,
     [0x014] = 2, [0x016] = 2, [0x024] = 2, [0x026] = 2,
     [0x015] = 3, [0x017] = 3, [0x025] = 3, [0x027] = 3,
   },
   alone = { tip = { 0x00E, 0x00F }, crown = { 0x01E, 0x01F }, trunk = { 0x024, 0x025 } },
   cone = { axis = 16, depth = 40, radius = 16, squash = 0.65, tip = 3, skirt = 41 },
   trunk = { rgb(0x41, 0x39, 0x31), rgb(0x73, 0x62, 0x62) },
-  ground = { [0x00E] = 0x001, [0x00F] = 0x001 },
+  ground = { [0x00E] = 0x001, [0x00F] = 0x001, [0x255] = 0x273, [0x25D] = 0x273, [0x0D6] = 0x0E7, [0x0D7] = 0x0E7 },
   -- Viridian Forest's own tree (its tileset's, Six Island's Pattern Bush's too): 3x3 cells, a tip
   -- row over the grass (288-28A), a crown row (290-292 in a stack, 2A0-2A2 at its foot, 28E / 2A1
   -- / 28F alone) and a trunk row (298-29A in a stack, the next tree's crown behind; 2A3-2A5 alone),
