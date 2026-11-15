@@ -354,6 +354,17 @@ F.components = {
               0x347, 0x348, 0x349, 0x34A, 0x310, 0x311, 0x312, 0x313, 0x314, 0x315,
               0x308, 0x309, 0x30A, 0x30B },
     ground = { 0x12B } },
+  -- Saffron's iron railing round the city and before its houses (rom_082d4b9c): a top rail over
+  -- bars, along a row 318 / 319 / 31C / 329 / 30D, its turns and ends 31A / 31D / 31E / 323 / 325 /
+  -- 326 / 328 / 32A / 32D / 32E / 33E, down a column 320 / 322 / 343-347 (its top rail seen from
+  -- above). Read off the drawing (Saffron 15-34 x 9): the top rail rows 3-5, the bars to row 13 - 11
+  -- texels, each bar's column a whole front (`hull`), the paving between them clear; a run down a
+  -- column shows the bars of the run along a row on its sides (`flank`, as Rustboro's railing).
+  { name = "fr_saffron_railing", block = 4, secondary = "fr:rom082d4b9c", upper = true, height = 11, hull = 11,
+    bridge = 3, flank = 0x319,
+    tiles = { 0x318, 0x319, 0x31C, 0x329, 0x30D, 0x31A, 0x31D, 0x31E, 0x323, 0x325, 0x326, 0x328, 0x32A, 0x32D,
+              0x32E, 0x33E, 0x320, 0x322, 0x343, 0x344, 0x345, 0x346, 0x347 },
+    ground = { 0x2E9, 0x008, 0x009 } },
 }
 
 return F
