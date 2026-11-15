@@ -1188,11 +1188,15 @@ local function reliefEmit(self, mesh)
     end
     return out
   end
-  local function solid(runs)
+  -- (notch[u]: the rows column u's top stops short of the back - its corner, rounded or cut, as
+  -- drawn at 45 degrees)
+  local notch = self.notch or {}
+  local function solid(runs, u)
     local out = {}
     for k, d in ipairs(drawn(runs)) do
       local z0, z1, top = d[1], d[2], d[3]
-      if self.back ~= nil and top == H and self.back < z0 then z0 = self.back
+      local back = self.back ~= nil and self.back + (u and notch[u] or 0) or nil
+      if back ~= nil and top == H and back < z0 then z0 = back
       elseif self.against and top == H and z0 < self.back and self.back < z1 then z0 = self.back end
       out[k] = { z0, z1, top }
     end
@@ -1202,8 +1206,8 @@ local function reliefEmit(self, mesh)
   local u = 0
   while u < W do
     local u1 = u + 1
-    while u1 < W and runsEqual(cols[u1], cols[u]) do u1 = u1 + 1 end
-    local sol, dr = solid(cols[u]), drawn(cols[u])
+    while u1 < W and runsEqual(cols[u1], cols[u]) and (notch[u1] or 0) == (notch[u] or 0) do u1 = u1 + 1 end
+    local sol, dr = solid(cols[u], u), drawn(cols[u])
     for k = 1, #sol do
       local z0, z1, top = sol[k][1], sol[k][2], sol[k][3]
       local zd, va = dr[k][1], dr[k][4]
@@ -1274,8 +1278,8 @@ local function reliefEmit(self, mesh)
   end
   local low = -skirt
   for uu = 0, W do
-    local left = uu > 0 and covered(solid(cols[uu - 1])) or {}
-    local right = uu < W and covered(solid(cols[uu])) or {}
+    local left = uu > 0 and covered(solid(cols[uu - 1], uu - 1)) or {}
+    local right = uu < W and covered(solid(cols[uu], uu)) or {}
     for _, side in ipairs({ { left, right, 1 }, { right, left, -1 } }) do
       local pieces, others, facing = side[1], side[2], side[3]
       for _, pc in ipairs(pieces) do
@@ -1337,13 +1341,14 @@ end
 --- rows tall; the faces the drawing never shows take `side`, a tile of its own front.
 --- o = { hull, bridge (railings: gaps closed down a column, across columns), foot, solid, back,
 ---       top_tile, against, seam = { rows, openS, openN }, flank_tile, seam_x = { west, east },
----       proj_back, skirt (default 1), see_through }
+---       proj_back, skirt (default 1), see_through, notch = { [column] = rows short of the back } }
 function K.Relief(name, art, height, side, o)
   o = o or {}
   return { name = name, art = art, height = height, side = side, hull = o.hull or 0, bridge = o.bridge or 0,
            foot = o.foot, solid = o.solid or (o.back ~= nil), back = o.back, top_tile = o.top_tile,
            against = o.against, seam = o.seam, flank_tile = o.flank_tile, seam_x = o.seam_x or { {}, {} },
-           proj_back = o.proj_back, skirt = o.skirt or 1, see_through = o.see_through, emit = reliefEmit }
+           proj_back = o.proj_back, skirt = o.skirt or 1, see_through = o.see_through, notch = o.notch,
+           emit = reliefEmit }
 end
 
 --- What a model paints flat on the ground in its cells: a quad per cell (or per box of it), half a

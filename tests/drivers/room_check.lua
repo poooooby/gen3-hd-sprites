@@ -41,7 +41,10 @@ local function body(game, log)
   if not okR or not rooms then log("FAIL rooms: " .. tostring(rooms)); return end
   local pass, judged = 0, 0
   for _, r in ipairs(rooms) do
-    if (not want or want[r.name]) and r.pieces then
+    if (not want or want[r.name]) and not r.pieces then
+      judged = judged + 1
+      log(("%-24s FAIL  not built: %s"):format(r.name, tostring(r.error)))
+    elseif (not want or want[r.name]) and r.pieces then
       judged = judged + 1
       if env("ROOM_VERBOSE") then
         for _, pc in ipairs(r.pieces) do

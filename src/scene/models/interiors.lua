@@ -1067,7 +1067,7 @@ end
 --- A piece on legs built (table_parts): its top lifted onto its legs; posts as deep as they are
 --- wide, each with a copy at the top's back where the top hides it at 45 degrees; a pedestal and
 --- an apron as deep as the top. Its sides are table_plan's image, at `voff` of its art.
-local function tableParts(pc, obj, plan, hem, foot, back, topTile, voff)
+local function tableParts(pc, obj, plan, hem, foot, back, topTile, voff, notch)
   local runs, rects = plan.runs, plan.rects
   local W, Hh = obj.w, obj.h
   local height = floor(pc.height)
@@ -1096,7 +1096,7 @@ local function tableParts(pc, obj, plan, hem, foot, back, topTile, voff)
   end
   local parts = { K.Lifted(K.Relief(pc.name, cut(0, W, 0, hem), height - legs, tile("slab"),
     { foot = hem, solid = true, back = back ~= nil and back - legs or nil, top_tile = topTile, proj_back = true,
-      against = against, skirt = 0 }), legs) }
+      against = against, skirt = 0, notch = notch }), legs) }
   for n, r in ipairs(runs) do
     local u0, u1 = r.u0, r.u1
     if r.kind == "apron" then
@@ -2408,6 +2408,26 @@ function I.room(spec, io, reg, tick)
       end
       local parts
       local back
+      -- (pc.corners: each column's top reaches back only as far as the drawing shows a thing
+      -- there - not past the floor or a wall drawn where its back would be seen: a corner rounded
+      -- or cut, the top's first rows drawn as the floor's shade, the wall over a till's back, a
+      -- pedestal's corners beside the figure it carries)
+      local function notchOf()
+        if not (pc.corners and back ~= nil) then return nil end
+        local out = {}
+        local r0 = y0 * 16 + back - floor(pc.height)
+        local function open(i)
+          local o = owner[i]
+          local by = o ~= nil and pieces[o]
+          return o == nil or (o ~= k and by ~= nil and truthy(by.fill))
+        end
+        for u = 0, w * 16 - 1 do
+          local x, n = x0 * 16 + u, 0
+          while r0 + n >= 0 and r0 + n < H and open((r0 + n) * W + x) do n = n + 1 end
+          if n > 0 then out[u] = n end
+        end
+        return out
+      end
       if pc.facet then
         local a, b = pc.facet[1], pc.facet[2]
         local ox, oz = x0 * 16, y0 * 16
@@ -2541,11 +2561,11 @@ function I.room(spec, io, reg, tick)
             back = foot - 2
           end
           if legsOf[k] then
-            parts = tableParts(pc, obj, plan, legsOf[k] - y0 * 16, foot, back, topTile, 2 * h * 16)
+            parts = tableParts(pc, obj, plan, legsOf[k] - y0 * 16, foot, back, topTile, 2 * h * 16, notchOf())
           else
             local relief = K.Relief(pc.name, toArt(obj), pc.height, side, {
               foot = foot, solid = solid, back = back, top_tile = topTile, proj_back = not shell,
-              against = pc.against ~= nil, see_through = pc.through == true })
+              against = pc.against ~= nil, see_through = pc.through == true, notch = notchOf() })
             parts = { truthy(pc.base) and K.Lifted(relief, pc.base) or relief }
           end
         end

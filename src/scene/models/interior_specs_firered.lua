@@ -30,7 +30,7 @@ local function piece(name, shape, height, o)
            run = o.run or {}, plan = o.plan, skip = o.skip or {}, when = o.when, at = o.at or {},
            tiles = o.tiles, anim = o.anim, ribbon = o.ribbon, found = o.found or false,
            flat = o.flat or false, variants = o.variants or false, posts = o.posts, squash = o.squash,
-           turn = o.turn, alone = o.alone }
+           turn = o.turn, alone = o.alone, corners = o.corners ~= false }
 end
 
 --- A chamfered corner: a wall along its foot from a = { x, top, foot } to b, carrying the side
