@@ -385,7 +385,7 @@ function render(){
       + '<div class="nums">' + numbers(it) + '</div>'
       + (it.pieces ? '<div class="pieces"></div>' : "")
       + '<div class="sheet"><img loading="lazy" alt=""><div class="panes">' + (PANES[it.kind] || PANES.model).map(t => "<span>" + t + "</span>").join("") + '</div></div>'
-      + (it.cmpPng ? '<div class="shots"><figure><img class="cmp" alt="" loading="lazy"><figcaption>FireRed 3DS's levels, tinted as ours</figcaption></figure></div>' : "")
+      + (it.cmpPng ? '<div class="shots"><figure><img class="cmp" alt="" loading="lazy"><figcaption>FireRed 3DS levels, tinted as ours</figcaption></figure></div>' : "")
       + (it.shots && it.shots.length ? '<div class="shots"></div>' : "")
       + '<div class="verdict"><button class="fine">looks fine</button><button class="fix">needs work</button>'
       + (it.open ? '<a class="open" title="Opens the Scene Workshop at this item (once: tools/register-workshop-link.ps1)">open in workshop</a>' : "")
