@@ -782,7 +782,12 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   where the mesh is laid (`B.depth` in `init.lua`, once a cell; a relief's own depths win), so
   the relief's bytes are unchanged (Emerald's still Emerald 3DS's). The user's call, both games,
   after side shots of Route 112 and Mt Ember; half a tile a level was tried too. Ground a tile a
-  level in front of a cliff lies under its slope (Route 112's stair cliff reaches over its sign). In
+  level in front of a cliff lies under its slope (Route 112's stair cliff reaches over its sign).
+  **No cards in Kanto:** with Kanto's trees models (`Trees.kanto`), nothing stands as a picture
+  card (`cells.lua` stood a column's whole run of blocked cells when one was leafy: rock, water,
+  fences and wall corners beside trees stood up with them - Vermilion's sea, Viridian's cliffs).
+  A leafy blocked cell no tree model is of (a tree's tip or crown drawn over a fence or a wall's
+  edge: `cell.leafy`) lies as its lower layer, the tree beside it standing its leaves. In
   `init.lua`, `placeRelief` finds each cell's map (`env.where`) and layout id (the cache's
   `map_tree/maps/G_N/header.json`; the engine pads a layout of odd size to even with a copy of
   its last row or column, `width`/`height`, and places its neighbours by that, as `env.where`

@@ -90,7 +90,11 @@ function Cells.build(env, x0, y0, w, h)
           local r = rows[j][i]
           run[#run + 1] = r
           r.up, r.base = n, base
-          if not stands and env.stands(r.mid, r.pair) then stands = true end
+          -- (each cell's own: drawn as leaves - src/scene/render.lua lays a leafy cell no tree
+          -- model is of without its leaves, the tree beside it standing them)
+          local leafy = env.stands and env.stands(r.mid, r.pair) or false
+          r.leafy = leafy or nil
+          if leafy then stands = true end
           n = n + 1
           j = j - 1
         end

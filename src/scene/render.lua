@@ -693,8 +693,14 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
         local a, b, c, d = { x0, dy, z0 }, { x1, dy, z0 }, { x1, dy, z1 }, { x0, dy, z1 }
         -- (a tree's cell lays the tree's own ground, unless it stands in water the ground lays)
         local treeGround = part and Trees.laysGround(sec, cell.mid)
-        -- what stands as a card: a blocked cell no model covers (a tree's, a crown's over it)
-        local card = cell.up and not part and mid == cell.mid
+        -- what stands as a card: a blocked cell no model covers (a tree's, a crown's over it) - but
+        -- where Kanto's trees are models (Trees.kanto): nothing stands as a card there (a column
+        -- of rock, water or fence beside a tree stood up with it), and a leafy cell no tree model is
+        -- of (a tree's tip or crown drawn over a fence, a wall's edge) lies as its lower layer, the
+        -- tree beside it standing its leaves
+        local kantoModels = Trees and Trees.kanto ~= nil
+        local card = cell.up and not part and mid == cell.mid and not kantoModels
+        local leavesOff = kantoModels and cell.leafy and not part
         local flat = card and Render.FLAT_MARK or 1
         -- (a lifted cell's ground is its relief's: src/scene/relief.lua, but a tree's)
         -- (a counter or a machine stands up instead of lying as ground)
@@ -703,7 +709,9 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
           -- (lit as ground: refined where a shadow's edge crosses it, not past every map)
           local kind = { refine = not cell.border, lift = dy }
           put("lower", t.image, t.quad(slot), a, b, c, d, 1, flat, kind)
-          put("upper", t.overImage, t.overQuad(slot), a, b, c, d, 1, flat, { refine = not cell.border, lift = dy })
+          if not leavesOff then
+            put("upper", t.overImage, t.overQuad(slot), a, b, c, d, 1, flat, { refine = not cell.border, lift = dy })
+          end
         end
         if cell.border then block(cell, t, part) end
         if marks then
