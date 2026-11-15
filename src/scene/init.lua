@@ -3529,7 +3529,17 @@ return function(deps)
             local level = gm.level
             if level == nil then level = math.floor(Relief.centre(c.g) / 16 + 0.5) end
             c.g = Relief.markedCell(level, gm.shape)
-            c.s = nil
+            -- (its drawing stays where it lay, at the foot of what was read there: raised or
+            -- lowered by hand, it stands straight up or sinks straight down, its walls upright -
+            -- not moved a level south a level up as the drawn relief's points are)
+            local foot = 0
+            if c.gRead then
+              foot = 1e9
+              for k = 0, 24 do foot = math.min(foot, c.gRead[k]) end
+            end
+            local s = {}
+            for k = 0, 24 do s[k] = foot end
+            c.s = s
             c.markCut = { variant = Relief.NO_VARIANT, foot = 0, wall = m.L.faceTile or c.mid,
                           sides = 0xFF + Relief.BLOCK_WALLS }
             c.cut = c.markCut

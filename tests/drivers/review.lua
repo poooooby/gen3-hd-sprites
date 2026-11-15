@@ -207,6 +207,63 @@ local function caveResults(ctx, Check, log, pakRelief)
   return out
 end
 
+-- ── every layout's relief, ours against another build's: the drawing, ours tinted by level, theirs
+-- tinted (each by its levels over its commonest), the layouts that differ most first ──
+local function reliefResults(ctx, Check, log, ours, theirs, limit)
+  local function level(t, i)
+    local g = t and t.cells[i]
+    local m = 0
+    if g then m = -1e9; for k = 0, 24 do m = math.max(m, g[k]) end end
+    return floor((m + (t and t.base or 0)) / 16 + 0.5)
+  end
+  local rows = {}
+  for _, L in pairs(ctx.inp.layouts) do
+    local a, b = ours.layouts[L.id], theirs.layouts[L.id]
+    if (a or b) and not (a and b and (a.w ~= b.w or a.h ~= b.h)) and L.w * L.h > 0 then
+      local la, lb, diffs = {}, {}, {}
+      for i = 0, L.w * L.h - 1 do
+        la[i], lb[i] = level(a, i), level(b, i)
+        local d = lb[i] - la[i]
+        diffs[d] = (diffs[d] or 0) + 1
+      end
+      local bn = -1
+      for _, c in pairs(diffs) do if c > bn then bn = c end end
+      rows[#rows + 1] = { L = L, la = la, lb = lb, bad = L.w * L.h - bn }
+    end
+  end
+  table.sort(rows, function(x, y) return x.bad > y.bad end)
+  local out = {}
+  for n = 1, math.min(limit, #rows) do
+    local r = rows[n]
+    local L = r.L
+    local P = ctx.pairOf(L)
+    local A = ctx.Art.layoutArt(L, P)
+    local W, H = L.w * 16, L.h * 16
+    local function drawn(x, y)
+      return P.cellImage(A.metatile(floor(x / 16), floor(y / 16)))[(y % 16) * 16 + x % 16] or 0
+    end
+    local function tintBy(lv)
+      local zero, z, zn = {}, 0, -1
+      for i = 0, L.w * L.h - 1 do zero[lv[i]] = (zero[lv[i]] or 0) + 1 end
+      for k, c in pairs(zero) do if c > zn then z, zn = k, c end end
+      return function(x, y)
+        local c = drawn(x, y)
+        local i = floor(y / 16) * L.w + floor(x / 16)
+        local t = TINT[lv[i] - z] or (lv[i] ~= z and 0xFFFFFF) or nil
+        if not t then return c end
+        local function mix(s) return floor(floor(c / s) % 256 * 0.55 + floor(t / s) % 256 * 0.45) end
+        return mix(65536) * 65536 + mix(256) * 256 + mix(1)
+      end
+    end
+    out[#out + 1] = { name = L.name:gsub("^LAYOUT_", ""):lower(), kind = "relief", ok = r.bad == 0,
+      disagree = r.bad, judged = L.w * L.h, layout = L.name,
+      captions = { "drawn", "ours", "FireRed 3DS" },
+      sheet = Check.sheet(W, H, drawn, tintBy(r.la), tintBy(r.lb)) }
+    log(("relief %s: %d cells differ"):format(L.name, r.bad))
+  end
+  return out
+end
+
 -- ── another build's pak (Emerald 3DS's format, "EM3DPAK"), read to compare: its relief and the
 -- buildings it places ──
 local function u32(s, at) local a, b, c, d = s:byte(at + 1, at + 4); return a + b * 256 + c * 65536 + d * 16777216 end
@@ -637,7 +694,7 @@ local function body(game, log)
       end
     else log("rooms: " .. tostring(rooms)) end
   end
-  if not want or want.tree or want.cave then
+  if not want or want.tree or want.cave or want.relief then
     local ctx = Check.layoutsOf(gameName, MOD)
     if ctx then
       if not want or want.tree then
@@ -647,6 +704,20 @@ local function body(game, log)
       if not want or want.cave then
         local ok, res = xpcall(caveResults, debug.traceback, ctx, Check, log, pakRelief)
         if ok then for _, r in ipairs(res) do add(r) end else log("caves: " .. tostring(res)) end
+      end
+      -- (REVIEW_OURS: our relief cache, to set against the pak's on every layout)
+      local oursFile = env("REVIEW_OURS")
+      if pakRelief and oursFile and want and want.relief then
+        local f = io.open(oursFile, "rb")
+        local s = f and f:read("*a")
+        if f then f:close() end
+        local Relief = dofile(MOD .. "src/scene/relief.lua")
+        local oursRelief = s and Relief.decode(s)
+        if oursRelief then
+          local ok, res = xpcall(reliefResults, debug.traceback, ctx, Check, log, oursRelief, pakRelief,
+            tonumber(env("REVIEW_RELIEF_TOP") or "") or 40)
+          if ok then for _, r in ipairs(res) do add(r) end else log("relief: " .. tostring(res)) end
+        else log("relief: our cache unreadable: " .. tostring(oursFile)) end
       end
     else log("trees, caves: no layouts read for " .. gameName) end
   end

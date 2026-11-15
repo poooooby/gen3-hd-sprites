@@ -1273,7 +1273,9 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     compare, never copied: its `VXL4` relief's levels tinted beside each cave's (and how many cells
     agree once aligned; it lifts rock a single level), and its `VXB7` buildings' placements against
     ours (`_layoutModels` in every layout: each building "models it in n of our m places"; a list of
-    the places it models a building and we model nothing).
+    the places it models a building and we model nothing). With `REVIEW_KINDS=relief` and
+    `REVIEW_OURS=<our relief cache .bin>`, every layout's levels side by side (drawn | ours |
+    theirs, each tinted over its commonest level), the `REVIEW_RELIEF_TOP` (40) that differ most.
   - **The page:** filters by kind and name, only-mismatches (on by default), sorting by the share
     or the count of pixels off. Each item takes "looks fine" / "needs work" and a note, kept in the
     browser (`localStorage`, by game); "copy my notes" lists them as text to paste back. "Open in
@@ -1318,7 +1320,9 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     two ways - a quarter cone - or a rounded hollow at one corner; corners and hollows meet the
     slopes beside them edge to edge). A change marks every selected cell. The scene applies the
     marks where it reads the relief (`placeRelief`: `Relief.markedCell` over the cell's heights,
-    its read heights kept as `gRead`), with a wall record (`markCut`: the layout's face tile, block
+    its read heights kept as `gRead`; its depths `s` flat at the foot of `gRead`, so its drawing
+    stays where it lay and a raised cell stands straight up - the relief's own points stand a level
+    south a level up, which would lean a hand-raised block's walls back 45 degrees), with a wall record (`markCut`: the layout's face tile, block
     walls) on it and on any unmarked neighbour left standing over it, so steps close; a map with no
     relief of its own takes an empty one for its marks. No cache rebuild: they ride over the relief
     in every battle as the trees' marks do, saved in the game's tune file (Ctrl+S).
