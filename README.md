@@ -212,7 +212,7 @@ Open **OPTIONS → MODS → WoobleView**.
   and railings stand in 3D too, as do the buildings of FireRed and LeafGreen (Trainer Tower on its
   rock, the red gantries by the Sevii harbors and the Power Plant, Vermilion's dock canopies, Two
   Island's market stall with its crates, tills, pots and flowers) and their white picket and log fences,
-  mailboxes and boulders. Signs, street lamps
+  mailboxes, boulders, round shrubs and the caves' rubble. Signs, street lamps
   and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them, and in FireRed and
   LeafGreen so do the caves: Mt Moon's ridges, Rock Tunnel's and Victory Road's rock walls and
