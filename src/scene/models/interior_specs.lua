@@ -3297,4 +3297,10 @@ for _, f in ipairs({ "1F", "2F", "3F", "4F", "5F" }) do
   ROOMS.swaps["LAYOUT_SKY_PILLAR_" .. f] = "LAYOUT_SKY_PILLAR_" .. f .. "_CLEAN"
 end
 
+-- (the readers other games' rooms share with these: Ruby's and Sapphire's own,
+-- src/scene/models/interior_specs_rs.lua)
+ROOMS.helpers = { piece = piece, facet = facet, cat = cat, hexes = hexes, ownShell = ownShell, runRects = runRects,
+                  gymBlock = gymBlock, gymStatue = gymStatue, GYM_WALL_SIDE = GYM_WALL_SIDE,
+                  centerWalls = centerWalls, WALL_COLOURS = WALL_COLOURS }
+
 return ROOMS

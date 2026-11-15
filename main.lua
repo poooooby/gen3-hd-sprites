@@ -135,6 +135,19 @@ return function(mod)
       sceneDeps.Specs = specs
       if okS and type(solidSpecsOf) == "function" then pcall(solidSpecsOf, sceneDeps.Kernel, specs) end
       if type(fortreeOf) == "function" then pcall(fortreeOf, sceneDeps.Kernel, specs) end
+      -- (Ruby's and Sapphire's: Emerald's - held where they draw Emerald's maps - and our own, read
+      -- off their own drawing where they draw otherwise: src/scene/models/specs_rs.lua)
+      local rsOf = loadSibling(mod, "src/scene/models/specs_rs.lua", true)
+      local okR, rs = pcall(function() return type(rsOf) == "function" and rsOf(sceneDeps.Kernel, specs.helpers) or nil end)
+      if not okR then mod.log:warn("Ruby's and Sapphire's building specs: %s", tostring(rs)) end
+      local list = { helpers = specs.helpers }
+      for _, s in ipairs(specs) do list[#list + 1] = s end
+      for _, s in ipairs(okR and type(rs) == "table" and rs or {}) do
+        s.own = true
+        list[#list + 1] = s
+      end
+      sceneDeps.SpecsByGame = sceneDeps.SpecsByGame or {}
+      sceneDeps.SpecsByGame.ruby, sceneDeps.SpecsByGame.sapphire = list, list
     end
     local okF, fence = pcall(fenceOf, sceneDeps.Kernel)
     if okF and type(fence) == "table" and type(componentsOf) == "function" then
@@ -163,6 +176,37 @@ return function(mod)
     local frRooms = loadSibling(mod, "src/scene/models/interior_specs_firered.lua", true)
     if okI and type(interiors) == "table" and type(frRooms) == "table" then
       sceneDeps.RoomSpecsByGame = { firered = frRooms, leafgreen = frRooms }
+    end
+    -- (Ruby's and Sapphire's: Emerald 3DS's rooms where they draw Emerald's, and our own reading of
+    -- the rooms they draw otherwise, each in the place of Emerald's of the same layout:
+    -- src/scene/models/interior_specs_rs.lua)
+    local rsRoomsOf = loadSibling(mod, "src/scene/models/interior_specs_rs.lua", true)
+    if okI and type(interiors) == "table" and type(rooms) == "table" then
+      local okR, own = pcall(function() return type(rsRoomsOf) == "function" and rsRoomsOf(rooms.helpers) or {} end)
+      if not okR then mod.log:warn("Ruby's and Sapphire's rooms: %s", tostring(own)); own = {} end
+      local byLayout, placed = {}, {}
+      for _, r in ipairs(own) do
+        r.own = true
+        byLayout[r.interior.layout] = byLayout[r.interior.layout] or {}
+        table.insert(byLayout[r.interior.layout], r)
+      end
+      local list = { ids = rooms.ids, swaps = rooms.swaps, helpers = rooms.helpers }
+      for _, r in ipairs(rooms) do
+        local mine = byLayout[r.interior.layout]
+        if not mine then list[#list + 1] = r
+        elseif not placed[mine] then
+          placed[mine] = true
+          for _, m in ipairs(mine) do list[#list + 1] = m end
+        end
+      end
+      for _, r in ipairs(own) do
+        if not placed[byLayout[r.interior.layout]] then
+          placed[byLayout[r.interior.layout]] = true
+          for _, m in ipairs(byLayout[r.interior.layout]) do list[#list + 1] = m end
+        end
+      end
+      sceneDeps.RoomSpecsByGame = sceneDeps.RoomSpecsByGame or {}
+      sceneDeps.RoomSpecsByGame.ruby, sceneDeps.RoomSpecsByGame.sapphire = list, list
     end
   end
   local worldOf = loadSibling(mod, "src/scene/world.lua")

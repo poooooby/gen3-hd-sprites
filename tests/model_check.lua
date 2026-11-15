@@ -297,15 +297,18 @@ function Check.layoutsOf(gameName, mod)
   local Post = load_("src/scene/relief_post.lua")
   local Family = load_("src/scene/family.lua")
   local base = gameName == "leafgreen" and "firered" or gameName
+  -- (Hoenn's games have no table of their own: Emerald 3DS's are the modules')
   local okG, G = pcall(load_, "src/scene/games/" .. base .. ".lua")
-  if not okG then return nil end
+  if not okG then G = nil end
   local root = gameName .. "/data/generated/gba"
   local function read(rel)
     local f = io.open(root .. "/" .. rel, "rb")
     if not f then return nil end
     local s = f:read("*a"); f:close(); return s
   end
-  local okB, B = pcall(dofile, "src/core/game3/constants/" .. base .. "/metatile_behaviors.lua")
+  -- (Sapphire's behaviours are Ruby's: the engine keeps one table for both)
+  local okB, B = pcall(dofile, "src/core/game3/constants/" .. (gameName == "sapphire" and "ruby" or base)
+    .. "/metatile_behaviors.lua")
   local behaviours = {}
   for n, v in pairs(okB and B.byName or {}) do
     if type(n) == "string" and n:match("^MB_") and type(v) == "number" then behaviours[n] = v end

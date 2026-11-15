@@ -477,12 +477,13 @@ return function(deps)
   -- a layout's record against Emerald's prints (src/scene/prints.lua: same, size, ok(x, y)) in Ruby
   -- and Sapphire (their own layout, by name), false where it cannot be read; nil in any other game
   -- (all of it holds)
-  local function emeraldRecord(L)
+  local function emeraldRecord(L, name)
     if not copiesEmerald() then return nil end
     local C = Scene.prints()
-    if not (C and L and L.grid and L.name) then return false end
+    name = name or (L and L.name)
+    if not (C and L and L.grid and name) then return false end
     local grid, w = L.grid, L.w
-    return C.layout(L.name, L.w, L.h, function(x, y)
+    return C.layout(name, L.w, L.h, function(x, y)
       local i = (y * w + x) * 2
       return grid:byte(i + 1) + grid:byte(i + 2) * 256
     end)
@@ -549,7 +550,8 @@ return function(deps)
       end,
       -- (a model's reference rectangle, read off Emerald's drawing: in Ruby and Sapphire only
       -- where they draw it alike, src/scene/prints.lua)
-      trust = function(layout, rect, mids)
+      trust = function(layout, rect, mids, spec)
+        if spec and spec.own then return true end
         local C = Scene.prints()
         if not C then return not copiesEmerald() end
         return C.rect(layout, rect, mids)
@@ -879,7 +881,7 @@ return function(deps)
     -- few read another building's drawing too, by its reference)
     local artCtx = { layoutArt = function(layout, x, y, w, h, ground)
       local other = { name = spec.name .. "/ref", layout = layout, rect = { x, y, w, h }, ground = ground,
-                      ground_px = true }
+                      ground_px = true, own = spec.own }
       local oref = Buildings.reference(other, ctx)
       local osrc = oref and pixelSource(NativeTileset, oref.pair)
       return osrc and Buildings.art(other, oref, layerSource(layout, osrc)) or nil
@@ -1639,20 +1641,43 @@ return function(deps)
     if copiesEmerald() then return nil end
     return RoomSpecs.ids and RoomSpecs.ids[name]
   end
-  -- a modelled room's layout: by the specs' number; in Ruby and Sapphire by name, or by the name of
+  -- a modelled room's layout (and, in Ruby and Sapphire, its record against Emerald's prints:
+  -- emeraldRecord): by the specs' number; in Ruby and Sapphire by name, or by the name of
   -- a map Emerald draws with it (a layout pret names apart, LAYOUT_POKEMON_CENTER_1F: Oldale's
   -- Center's, src/scene/games/emerald_prints.lua's aliases), where they draw it as Emerald does
+  -- the layouts a game's own room specs read (Ruby's and Sapphire's: `own`, read off their own
+  -- drawing, never checked against Emerald's)
+  local ownRoomsOf = setmetatable({}, { __mode = "k" })
+  local function ownRoom(name)
+    if not RoomSpecs then return false end
+    local set = ownRoomsOf[RoomSpecs]
+    if not set then
+      set = {}
+      for _, r in ipairs(RoomSpecs) do
+        if r.own and r.interior then set[r.interior.layout] = true end
+      end
+      ownRoomsOf[RoomSpecs] = set
+    end
+    return set[name] == true
+  end
   local function roomLayout(name)
     if not World then return nil end
+    if copiesEmerald() and ownRoom(name) then return World.layout(name) end
     if copiesEmerald() then
       local L = World.layout(name)
+      -- (by its name, else by the maps Emerald draws with it: the first drawn as Emerald's, else
+      -- the first of Emerald's size)
       local P = deps.EmeraldPrints
-      for _, alias in ipairs(not L and P and P.aliases and P.aliases[name] or {}) do
-        L = World.layout(alias)
-        if L then break end
+      local r = L and emeraldRecord(L, name)
+      if r and r.size then return L, r end
+      local sized, sizedR
+      for _, alias in ipairs(P and P.aliases and P.aliases[name] or {}) do
+        local A = World.layout(alias)
+        local ra = A and emeraldRecord(A, alias)
+        if ra and ra.same then return A, ra end
+        if ra and ra.size and not sized then sized, sizedR = A, ra end
       end
-      local r = L and emeraldRecord(L)
-      return r and r.size and L or nil
+      return sized, sizedR
     end
     local num = roomNum(name)
     return num and World.layout(num) or World.layout(name)
@@ -1660,10 +1685,9 @@ return function(deps)
   -- a room's pieces, less those over cells Ruby and Sapphire draw otherwise than Emerald (each
   -- piece's cells, its rect, in its room: its own 8x8 blocks Emerald's); all of them elsewhere
   local function trustedPieces(spec, pieces)
-    if type(pieces) ~= "table" or not copiesEmerald() then return pieces end
-    local L = roomLayout(spec.interior.layout)
-    local r = L and emeraldRecord(L)
-    if not r then return {} end
+    if type(pieces) ~= "table" or not copiesEmerald() or spec.own then return pieces end
+    local L, r = roomLayout(spec.interior.layout)
+    if not (L and r) then return {} end
     if r.same then return pieces end
     local out = {}
     for _, pc in ipairs(pieces) do
