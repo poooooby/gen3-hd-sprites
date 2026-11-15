@@ -46,6 +46,22 @@ Input.ALTERNATES = {
   [392] = { "LAYOUT_ROUTE111_NO_MIRAGE_TOWER", "LAYOUT_ROUTE111" },
   [438] = { "LAYOUT_SKY_PILLAR_TOP_CLEAN", "LAYOUT_SKY_PILLAR_TOP" },
 }
+-- FireRed's and LeafGreen's (their scripts' setmaplayoutindex; each matched to its base by its
+-- cells: the Dunsparce Tunnel dug open, which the game draws from the start (special 403), the
+-- currents stopped in Seafoam B3F / B4F, the Seven Island house's room with its door open; our
+-- names)
+Input.ALTERNATES_FRLG = {
+  [264] = { "LAYOUT_SEVEN_ISLAND_HOUSE_ROOM1_DOOR_OPEN", "LAYOUT_SEVEN_ISLAND_HOUSE_ROOM1" },
+  [278] = { "LAYOUT_SEAFOAM_ISLANDS_B3F_CURRENT_STOPPED", "LAYOUT_SEAFOAM_ISLANDS_B3F" },
+  [279] = { "LAYOUT_SEAFOAM_ISLANDS_B4F_CURRENT_STOPPED", "LAYOUT_SEAFOAM_ISLANDS_B4F" },
+  [319] = { "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL_OPEN", "LAYOUT_THREE_ISLAND_DUNSPARCE_TUNNEL" },
+}
+
+--- A game's alternates and the prefix its maps' baked layouts take (native/layouts/<prefix><name>).
+function Input.alternatesFor(game)
+  if game == "firered" or game == "leafgreen" then return Input.ALTERNATES_FRLG, "FR_" end
+  return Input.ALTERNATES, "EM_"
+end
 
 local DIRECTIONS = { north = "up", south = "down", west = "left", east = "right",
                      up = "up", down = "down", left = "left", right = "right" }
@@ -258,9 +274,11 @@ function Input.build(io, palettesOf)
   -- the alternates: the engine's baked cells (Input.alternateBlocks), the base's tilesets, events
   -- and outdoor-ness
   local function baked(name) return Input.baked(io.read(ROOT .. "native/layouts/" .. name .. ".mid")) end
-  for id, row in pairs((F == nil or F.name == "rse") and Input.ALTERNATES or {}) do
+  local alternates, prefix = Input.alternatesFor(io.game)
+  if F and F.name ~= "rse" and alternates == Input.ALTERNATES then alternates = {} end
+  for id, row in pairs(alternates) do
     local base = out.byName[row[2]]
-    local blocks = base and Input.alternateBlocks(base, baked("alt_" .. id), baked("EM_" .. base.name:sub(8)),
+    local blocks = base and Input.alternateBlocks(base, baked("alt_" .. id), baked(prefix .. base.name:sub(8)),
       io.collBlocked, tick)
     if blocks then
       local L = { id = id, name = row[1], w = base.w, h = base.h, blocks = blocks, primary = base.primary,

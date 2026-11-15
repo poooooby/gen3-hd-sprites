@@ -51,7 +51,7 @@ return function(deps)
   -- rules are Emerald 3DS's, its key as it always was
   -- (r11: the cells new building models own - the harbors' gantries, Two Island's stall, Trainer
   -- Tower - take the level south of them; r12: a cave's rims join their floor before its walls)
-  Run.RULES = { firered = 13, leafgreen = 13 }
+  Run.RULES = { firered = 14, leafgreen = 14 }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end

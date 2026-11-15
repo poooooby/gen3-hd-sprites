@@ -166,9 +166,14 @@ return function(deps)
     -- drawn with it: voxel_props.connections), and the engine's collision codes (`codes`)
     local Perm = req("src.core.CollPermissions")
     local alternates = {}
+    local altPrefix = "EM_"
     if s.emerald then
       for id, row in pairs(Input and Input.ALTERNATES or {}) do alternates[id] = row end
       for id, row in pairs(World.ROOM_ALTERNATES) do alternates[id] = row end
+    elseif Input and Input.alternatesFor then
+      local t
+      t, altPrefix = Input.alternatesFor(s.game)
+      if t ~= Input.ALTERNATES then for id, row in pairs(t) do alternates[id] = row end end
     end
     for id, row in pairs(Input and alternates or {}) do
       local base = s.byName[row[2]]
@@ -178,7 +183,7 @@ return function(deps)
         for i = 0, base.w * base.h - 1 do bb[i] = base.grid:byte(i * 2 + 1) + base.grid:byte(i * 2 + 2) * 256 end
         local alt = baked("alt_" .. id)
         local okA, blocks = pcall(Input.alternateBlocks, { w = base.w, h = base.h, blocks = bb }, alt,
-          baked("EM_" .. base.name:sub(8)), function(c) return Perm.isWall(c) or Perm.isLedge(c) end)
+          baked(altPrefix .. base.name:sub(8)), function(c) return Perm.isWall(c) or Perm.isLedge(c) end)
         if okA and blocks then
           local bytes, codes = {}, {}
           for i = 0, base.w * base.h - 1 do
