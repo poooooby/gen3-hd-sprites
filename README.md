@@ -97,8 +97,10 @@ resolution, and the camera pulls back so even the biggest ones fit.
   gyms, Professor Oak's lab, Pewter's museum, the Pokémon Tower, Celadon's Department Store and
   Game Corner, Silph Co., the Pokémon Mansion, Cinnabar's capsule-shaped lab, the Power Plant
   with its four smokestacks, the Pokémon League with its trees and statues, Bill's sea cottage
-  with his machine on the roof, the route gatehouses, the Cycling Road's gate, and the islands'
-  houses and harbours. Their cliffs, rock and mountain slopes rise with the land of Pokémon FireRed
+  with his machine on the roof, the route gatehouses, the Cycling Road's gate, the underground
+  path's huts, the routes' little houses, the Safari Zone's rest houses, Viridian Forest's
+  gatehouse, Celadon's fountain, and the islands' houses and harbours, the Rocket warehouse, the
+  Memorial Pillar and Tanoby's ruins. Their cliffs, rock and mountain slopes rise with the land of Pokémon FireRed
   3DS, their faces and stairs sloping up like real hillsides, and
   Kanto's pine trees stand as real trees too, round crowns on their trunks with their shadows on the
   grass, and so do the broad leafy trees of Viridian Forest and the Sevii Islands' Berry Forest and
@@ -260,7 +262,9 @@ Open **OPTIONS → MODS → WoobleView**.
   speed lines and flash.
 - **Kanto's land** in FireRed and LeafGreen is
   [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS)'s, by
-  NachoGonzalez2001: the shape it gives Kanto's and the Sevii Islands' maps, cliffs, rock and caves.
+  NachoGonzalez2001: the shape it gives Kanto's and the Sevii Islands' maps, cliffs, rock and caves;
+  and the buildings it stands where WoobleView once stood none - the huts, rest houses, fountain,
+  warehouse, pillar and ruins - are WoobleView's own models shaped after its own.
 
 ## 💡 Inspirations
 

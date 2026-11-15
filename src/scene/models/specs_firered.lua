@@ -973,6 +973,142 @@ return function(K, H)
   for j = 0, 5 do for i = 0, 8 do leagueGateCells[#leagueGateCells + 1] = { i, j } end end
   for i = 3, 5 do leagueGateCells[#leagueGateCells + 1] = { i, 6 } end
 
+  -- ── the places FireRed 3DS models a building and these specs once modelled nothing: each our
+  -- own reading of the drawing, shaped after FireRed 3DS's mesh of it (the user's call: its sheds,
+  -- boxes, hipped roofs and pitches - a normal 3D world over the drawing's flat tops) ──
+
+  -- A shed (the underground path's huts, the Rocket warehouse): walls x 0..w, the drawn rows
+  -- eave..front on the front wall (the fascia over the facade, its foot at z `front`); the roof
+  -- rising from the eave back to the back wall `rise` pixels higher, laid with the drawn slope rows
+  -- (o.slope, its last row at the eave; o.rep repeated past them); the back and sides o.side.
+  local function shed(w, front, back, eave, rise, o)
+    local h = front - eave
+    local hb = h + rise
+    return Prism("body", 0, w, { { back, 0 }, { front, 0 }, { front, h }, { back, hb } },
+      { edges = { [1] = Proj(eave, front), [2] = Strip(o.slope, { rep = o.rep }), [3] = o.side }, skip = { 0 },
+        caps = { Band(0, hb + 1, o.side, front, { z1 = back }) } })
+  end
+
+  -- A box (the Safari Zone's rest houses): walls x 0..w, the facade's rows facade..front on the
+  -- front wall (its foot at z `front`); a flat top over the whole of it to the back wall, laid with
+  -- the drawn roof rows (o.roof, its last row at the front edge; o.rep repeated past them) - the
+  -- drawing shows less of it than it is deep; the back and sides o.side.
+  local function box_house(w, front, back, facade, o)
+    local h = front - facade
+    return Prism("body", 0, w, { { back, 0 }, { front, 0 }, { front, h }, { back, h } },
+      { edges = { [1] = Proj(facade, front), [2] = Strip(o.roof, { rep = o.rep }), [3] = o.side }, skip = { 0 },
+        caps = { Band(0, h + 1, o.side, front, { z1 = back }) } })
+  end
+
+  -- A plain hipped house (Route 2's and Route 12's, Saffron's narrow one): walls x 1..w-1 from z
+  -- `back` to `front`, up to the eave; a hipped roof at FireRed 3DS's 28 degrees: its fascia the
+  -- drawn rows o.fascia, its slope o.slope (lines repeating o.rep) between the hips (x 0..12 and
+  -- the last 12), its ridge's outline o.ridge; the sides and back o.side.
+  local function hip_house(w, front, back, o)
+    local overhang = 2
+    local zf, zb = front + overhang, back - overhang
+    local f = o.fascia
+    local roof = HipRoof("roof", 0, w, zf, zb, zf - f[2], {
+      fascia = Strip(f, { wrap = { 12, w - 12 } }),
+      slope = Strip(o.slope, { rep = o.rep, wrap = { 12, w - 12 } }),
+      teeth = o.ridge, cap = o.ridge, pitch = 28.0, run = 12,
+      ridge_u = { 12, w - 12 }, end_tile = Tile(12, o.ridge[1], 13, o.ridge[2]) })
+    local wall_top = zf - f[2]
+    local walls = Prism("walls", 1, w - 1,
+      { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
+      { edges = { [0] = Proj(front - wall_top, front), [2] = o.side }, skip = { 1, 3 },
+        caps = { Band(0, wall_top, o.side, front, { z1 = back }) } })
+    return { walls, roof }
+  end
+
+  -- The underground path's huts (Routes 5-8, 4 x 4, 64 x 64; the General's): a corrugated roof
+  -- rows 1-34 (panels every 8 px), the eave's dark band rows 35-39, the facade rows 40-63 (brick,
+  -- the door, white posts at x 1-6 and 57-62), on its three blocked rows (z 16-64). FireRed 3DS
+  -- stands it as a shed rising to the back (12 px over its depth): so here.
+  local function underground_hut()
+    return { shed(64, 64, 16, 35, 12, { slope = { 1, 35 }, rep = { 9, 33 }, side = Tile(32, 44, 48, 52, { top = 29 }) }) }
+  end
+
+  -- The Rocket warehouse (Five Island's meadow, 9-14 x 17-21, 96 x 80): orange corrugations running
+  -- down its roof rows 8-47 (tree tops drawn over its first rows, the map's), the eave rows 48-54,
+  -- the facade rows 55-79 (siding, the double door); a shed rising to the back as FireRed 3DS's.
+  local function rocket_warehouse()
+    return { shed(96, 80, 16, 48, 12, { slope = { 8, 48 }, rep = { 16, 40 }, side = Tile(40, 58, 56, 66, { top = 32 }) }) }
+  end
+
+  -- The Safari Zone's rest houses (5 x 4, 80 x 64; the top cell row grass): a flat sand-coloured
+  -- top rows 8-39 (its tiles' marks every 8 rows, the posts' tops x 0-7 and 72-79), the facade
+  -- rows 40-63 (the door, windows or plants); a box as FireRed 3DS's, flat over its three blocked
+  -- rows. The secret house (6 x 5, 96 x 80): its top rows 0-47, its facade rows 48-79.
+  local function rest_house()
+    return { box_house(80, 64, 16, 40, { roof = { 8, 40 }, rep = { 12, 28 }, side = Tile(3, 44, 13, 60, { top = 24 }) }) }
+  end
+  local function secret_house()
+    return { box_house(96, 80, 16, 48, { roof = { 0, 48 }, rep = { 8, 40 }, side = Tile(3, 52, 13, 68, { top = 32 }) }) }
+  end
+
+  -- Route 2's house (14-18 x 20-22, 80 x 48; Route 12's and 16's draw their door and window the
+  -- other way round): a blue hipped roof rows 1-24 (lines every 7 rows), its hips x 0-11 and 68-79;
+  -- the eave's navy band rows 25-29; the facade rows 30-47 on its two blocked rows (z 16-48).
+  local function route_house()
+    return hip_house(80, 48, 16, { fascia = { 25, 30 }, slope = { 1, 25 }, rep = { 6, 13 }, ridge = { 0, 1 },
+      side = Tile(40, 31, 46, 45, { top = 20 }) })
+  end
+
+  -- Saffron's narrow house (26-28 x 17-21, 48 x 80): a green hipped roof rows 8-40, the eave rows
+  -- 41-45, the facade rows 46-79 (windows, the yellow band, the door), on its four blocked rows.
+  local function saffron_narrow()
+    return hip_house(48, 80, 16, { fascia = { 41, 46 }, slope = { 9, 41 }, rep = { 16, 32 }, ridge = { 8, 9 },
+      side = Tile(2, 48, 8, 60, { top = 36 }) })
+  end
+
+  -- Celadon's fountain (12-14 x 18-21, 48 x 64): a round basin x 4-44, its water's top drawn rows
+  -- 13-50 and its rim's front rows 50-57 (7 px tall, its foot at z 57); the jet a sheet of water
+  -- x 18-30 standing in it, drawn rows 23-37.
+  local function fountain()
+    local basin = K.Cylinder("basin", 24, 38.5, 19.7, 18.3, 0, 7, Tile(16, 50, 32, 57), { sides = 48, proj = false })
+    local jet = Prism("jet", 18, 30, { { 44, 7 }, { 45, 7 }, { 45, 21 }, { 44, 21 } },
+      { edges = { [1] = Proj(24, 38), [2] = Proj() }, skip = { 0, 3 },
+        caps = { Band(7, 22, Tile(22, 24, 24, 38, { top = 21 }), 45, { z1 = 44 }) } })
+    return { basin, jet }
+  end
+
+  -- The Memorial Pillar (Five Island, 8-9 x 40-43, 32 x 64): stacked stone, read column by column
+  -- (its outline's top row each column), its foot row 63 (the front at z 64), 16 px deep
+  local PILLAR_TOPS = { 47, 45, 25, 21, 20, 18, 15, 14, 12, 6, 5, 4, 2, 1, 0, 0, 0, 0, 1, 2, 4, 6, 11, 13, 14, 15,
+    18, 19, 21, 23, 45, 47 }
+  local PILLAR = {}
+  for x, t in ipairs(PILLAR_TOPS) do
+    local last = PILLAR[#PILLAR]
+    if last and last[3] == t then last[2] = x else PILLAR[#PILLAR + 1] = { x - 1, x, t, 63 } end
+  end
+  local function memorial_pillar()
+    return slabs("pillar", PILLAR, 48, Tile(10, 30, 20, 40, { top = 64 }), { 30, 40 })
+  end
+
+  -- Tanoby's ruins (Seven Island's Tanoby Ruins, 3 x 4 from the stone's first row, 48 x 64; seven
+  -- alike): a block of stone, its top drawn rows 8-39 (as deep as drawn: z 32-64), its front rows
+  -- 40-63 (the pillars, the dark doorway, the steps); above it the rock, the map's.
+  local function tanoby_ruin()
+    return { flat_top(0, 48, 64, 32, 8, 40, { side = Tile(1, 44, 5, 60, { top = 24 }), fall = { 8, 16 } }) }
+  end
+
+  -- Viridian Forest's gatehouses: the north one (0-10 x 0-9, 176 x 160) its corrugated roof from
+  -- the map's top edge down to row 107, the eave rows 108-111, the facade rows 112-159 (windows,
+  -- brick, the entrance), flat-topped as deep as drawn and falling away behind; the south one's
+  -- roof (24-34 x 63-68), and the Safari Zone's gate's (22-29 x 31-35), at the map's foot, their
+  -- buildings beyond it: a roof rising to the south as FireRed 3DS's, from a wall 12 px tall at its
+  -- northern edge to 40 px at the map's.
+  local function forest_gate()
+    return { flat_top(0, 176, 160, 0, 0, 112, { side = Tile(24, 128, 40, 144, { top = 48 }), fall = { 8, 16 } }) }
+  end
+  local function gate_roof(w, depth, rows)
+    local side = Tile(0, 0, 8, 8, { top = 12 })
+    return { Prism("roof", 0, w, { { 0, 0 }, { depth, 0 }, { depth, 40 }, { 0, 12 } },
+      { edges = { [2] = Strip(rows, { rep = { 8, 40 } }), [3] = side }, skip = { 0, 1 },
+        caps = { Band(0, 41, side, depth, { z1 = 0 }) } }) }
+  end
+
   local specs = {
     { name = "pallet_house", layout = "LAYOUT_PALLET_TOWN", rect = { 5, 3, 5, 5 }, ground = PALLET_GROUND,
       exact = { { 1, 48, 80, 80 }, { 8, 44, 72, 48 }, { 12, 40, 67, 44 }, { 12, 9, 67, 40 } },
@@ -981,6 +1117,11 @@ return function(K, H)
       exact = { { 0, 47, 112, 80 }, { 0, 40, 112, 47 }, { 3, 17, 80, 40 }, { 104, 17, 108, 40 }, { 80, 25, 104, 36 } },
       parts = oaks_lab },
     { name = "pokemon_center", layout = "LAYOUT_CERULEAN_CITY", rect = { 20, 15, 5, 5 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0E4 },
+      exact = { { 2, 64, 78, 74 }, { 8, 52, 72, 64 }, { 24, 46, 56, 64 }, { 9, 45, 71, 52 }, { 11, 16, 69, 45 } },
+      parts = pokemon_center },
+    -- (the Center in a town's own colours, which no look-alike reads as Cerulean's: Lavender's)
+    { name = "pokemon_center_lavender", layout = "LAYOUT_LAVENDER_TOWN", rect = { 4, 1, 5, 5 },
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0E4 },
       exact = { { 2, 64, 78, 74 }, { 8, 52, 72, 64 }, { 24, 46, 56, 64 }, { 9, 45, 71, 52 }, { 11, 16, 69, 45 } },
       parts = pokemon_center },
@@ -1311,6 +1452,38 @@ return function(K, H)
       ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x0D0, 0x0D1 }, owned = ownedOf(plantCells),
       exact = { { 39, 0, 105, 103 }, { 13, 0, 32, 95 }, { 112, 0, 131, 95 } },
       parts = power_plant },
+    -- (the places FireRed 3DS models a building and we once modelled nothing)
+    { name = "underground_hut", layout = "LAYOUT_ROUTE_5", rect = { 30, 28, 4, 4 }, match_rows = { 1, 4 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 0, 35, 64, 64 } }, parts = underground_hut },
+    { name = "route_house", layout = "LAYOUT_ROUTE_2", rect = { 14, 20, 5, 3 }, match_rows = { 1, 3 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 12, 25, 68, 30 }, { 2, 32, 78, 47 } },
+      parts = route_house },
+    { name = "route_house_b", layout = "LAYOUT_ROUTE_12", rect = { 11, 84, 5, 3 }, match_rows = { 1, 3 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 12, 25, 68, 30 }, { 2, 32, 78, 47 } },
+      parts = route_house },
+    { name = "safari_rest_house", layout = "LAYOUT_SAFARI_ZONE_EAST", rect = { 39, 11, 5, 4 }, match_rows = { 1, 4 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011, 0x00D }, exact = { { 0, 40, 80, 64 } }, parts = rest_house },
+    { name = "safari_rest_house_b", layout = "LAYOUT_SAFARI_ZONE_CENTER", rect = { 28, 22, 5, 4 }, match_rows = { 1, 4 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 0, 40, 80, 64 } }, parts = rest_house },
+    { name = "safari_secret_house", layout = "LAYOUT_SAFARI_ZONE_WEST", rect = { 10, 3, 6, 5 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 0, 48, 96, 80 } }, parts = secret_house },
+    { name = "safari_gate_roof", layout = "LAYOUT_SAFARI_ZONE_CENTER", rect = { 22, 31, 8, 5 },
+      ground = { 0x0E6 }, exact = {}, parts = function() return gate_roof(128, 80, { 0, 80 }) end },
+    { name = "saffron_narrow_house", layout = "LAYOUT_SAFFRON_CITY", rect = { 26, 17, 3, 5 }, match_rows = { 1, 5 },
+      ground = SAFFRON_GROUND, exact = { { 2, 46, 46, 80 } }, parts = saffron_narrow },
+    { name = "celadon_fountain", layout = "LAYOUT_CELADON_CITY", rect = { 12, 18, 3, 4 },
+      ground = { 0x004, 0x008, 0x009, 0x010, 0x011, 0x176 }, exact = { { 12, 16, 36, 44 } }, parts = fountain },
+    { name = "rocket_warehouse", layout = "LAYOUT_FIVE_ISLAND_MEADOW", rect = { 9, 17, 6, 5 }, match_rows = { 1, 5 },
+      ground = { 0x015, 0x016, 0x017, 0x01C, 0x01D, 0x01E, 0x01F, 0x010, 0x011, 0x009 }, exact = { { 0, 48, 96, 80 } },
+      parts = rocket_warehouse },
+    { name = "memorial_pillar", layout = "LAYOUT_FIVE_ISLAND_MEMORIAL_PILLAR", rect = { 8, 40, 2, 4 },
+      ground = { 0x004, 0x008, 0x009, 0x0D0, 0x0D2, 0x0D8, 0x0DA }, exact = { { 2, 26, 30, 63 } }, parts = memorial_pillar },
+    { name = "tanoby_ruin", layout = "LAYOUT_SEVEN_ISLAND_TANOBY_RUINS", rect = { 10, 3, 3, 4 },
+      ground = { 0x0A0, 0x0A2, 0x0A8, 0x0AA, 0x0AF, 0x115, 0x12D }, exact = { { 0, 8, 48, 64 } }, parts = tanoby_ruin },
+    { name = "forest_gate", layout = "LAYOUT_VIRIDIAN_FOREST", rect = { 0, 0, 11, 10 }, match_rows = { 6, 10 },
+      ground = { 0x001, 0x008, 0x009, 0x010, 0x011 }, exact = { { 0, 0, 176, 160 } }, parts = forest_gate },
+    { name = "forest_gate_roof", layout = "LAYOUT_VIRIDIAN_FOREST", rect = { 24, 63, 11, 6 },
+      ground = { 0x292, 0x29A }, exact = {}, parts = function() return gate_roof(176, 96, { 0, 96 }) end },
   }
   -- (the props' shapes - a turned thing, a dome - from Emerald 3DS's helpers: geometry alone)
   specs.helpers = { ProjLathe = H.ProjLathe, ProjDome = H.ProjDome }

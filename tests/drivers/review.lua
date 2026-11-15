@@ -655,6 +655,14 @@ local function body(game, log)
   end
   if not want or want.building then
     local names = hd._sceneSpecNames()
+    -- (REVIEW_ONLY: these buildings alone, comma separated)
+    local only
+    for k in (env("REVIEW_ONLY") or ""):gmatch("[^,]+") do only = only or {}; only[k] = true end
+    if only then
+      local kept = {}
+      for _, n in ipairs(names) do if only[n] then kept[#kept + 1] = n end end
+      names = kept
+    end
     log(("buildings: %d"):format(#names))
     for _, name in ipairs(names) do
       local ok, res = xpcall(Check.building, debug.traceback, hd, name)

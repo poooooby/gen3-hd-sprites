@@ -719,7 +719,7 @@ local function cylinderEmit(self, mesh)
     if nx * ((xa + xb) / 2 - self.cx) + nz * ((za + zb) / 2 - self.cz) < 0 then nx, nz = -nx, -nz end
     nz = nz / hypot(nx, nz)
     local quad = { { xa, y0, za }, { xb, y0, zb }, { xb, y1, zb }, { xa, y1, za } }
-    if nz > 0.2 and self.proj then
+    if nz > (self.projMin or 0.2) and self.proj then
       projPoly(mesh, quad, K.SHADE_ART, self.name .. ".side")
     else
       local w = hypot(xb - xa, zb - za)
@@ -734,11 +734,12 @@ local function cylinderEmit(self, mesh)
 end
 
 --- A short upright cylinder of elliptical footprint (a vent): its top and the side facing the
---- camera projected, the far side and flanks a tile of the drawn near side.
+--- camera projected, the far side and flanks a tile of the drawn near side. o.projMin: how far a
+--- side must face the camera to be projected (0.2; a broad basin's flanks, projected, stretch).
 function K.Cylinder(name, cx, cz, rx, rz, y0, y1, backTile, o)
   o = o or {}
   return { name = name, cx = cx, cz = cz, rx = rx, rz = rz, y0 = y0, y1 = y1, back_tile = backTile,
-           sides = o.sides or 16, proj = o.proj ~= false, emit = cylinderEmit }
+           sides = o.sides or 16, proj = o.proj ~= false, projMin = o.projMin, emit = cylinderEmit }
 end
 
 local function plainWallEmit(self, mesh)
