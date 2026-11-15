@@ -98,7 +98,8 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Game Corner, Silph Co., the Pokémon Mansion, Cinnabar's capsule-shaped lab, the Power Plant
   with its four smokestacks, the Pokémon League with its trees and statues, Bill's sea cottage
   with his machine on the roof, the route gatehouses, the Cycling Road's gate, and the islands'
-  houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them, and
+  houses and harbours. Their cliffs, terraces and mountain slopes rise as the map draws them, their
+  faces and stairs sloping up like real hillsides, and
   Kanto's pine trees stand as real trees too, round crowns on their trunks with their shadows on the
   grass, and so do the broad leafy trees of Viridian Forest and the Sevii Islands' Berry Forest and
   Pattern Bush, all drawn from your own cartridge.

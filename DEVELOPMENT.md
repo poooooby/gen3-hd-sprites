@@ -770,7 +770,19 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   parts of `voxel_mesh_builder.c` / `voxel_atlas.c`): its `relief.bin` format (`Relief.parse`),
   cut tiles (`cutDiagonals`, `cutClear`, `cutTexture`), the seam step between maps, and a lifted
   cell's geometry (`emitCell`: its drawing on its 5x5 lattice at (u, h, v + h), a cut tile's flat
-  layer and the ground run on under it, cliff walls, a back's north face; `treeStep`). In
+  layer and the ground run on under it, cliff walls, a back's north face; `treeStep`).
+  **Faces lean** (`Relief.lean`, `Relief.LEAN` tiles a level, 1; WoobleView's own: Emerald 3DS
+  stands every face upright, a point as far south as it stands high, so a face drawn a tile tall
+  is a wall a level tall and the 45-degree view is the drawing). Leaning, a point on a southward
+  descent (a face, a stair, a stack of faces, a face's end) stands as far south as the top it
+  falls from (up its lattice column, and on through the cells north while their edges meet and
+  the ground keeps rising): the face lies as its lattice draws it, a 45-degree slope a tile a
+  level leaning out over the ground in front, a stair of two rows over two tiles; a face's end
+  rounds off where its side lowers it. Flats, sides and tops keep their place. It is computed
+  where the mesh is laid (`B.depth` in `init.lua`, once a cell; a relief's own depths win), so
+  the relief's bytes are unchanged (Emerald's still Emerald 3DS's). The user's call, both games,
+  after side shots of Route 112 and Mt Ember; half a tile a level was tried too. Ground a tile a
+  level in front of a cliff lies under its slope (Route 112's stair cliff reaches over its sign). In
   `init.lua`, `placeRelief` finds each cell's map (`env.where`) and layout id (the cache's
   `map_tree/maps/G_N/header.json`; the engine pads a layout of odd size to even with a copy of
   its last row or column, `width`/`height`, and places its neighbours by that, as `env.where`

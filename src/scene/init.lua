@@ -3650,9 +3650,19 @@ return function(deps)
               local o = grid.at(x, y)
               return o and o.rmap == m and o.g or nil
             end
+            -- (a cell's depths: its relief's where it gives them, else leaning where it falls south,
+            -- Relief.lean, read once a cell)
+            local leant = {}
             function B.depth(x, y)
               local o = grid.at(x, y)
-              return o and o.rmap == m and (o.s or o.g) or nil
+              if not (o and o.rmap == m) then return nil end
+              if o.s or not o.g then return o.s or o.g end
+              local d = leant[o]
+              if d == nil then
+                d = (Relief.LEAN or 0) > 0 and Relief.lean(B.cell, x, y, o.g) or false
+                leant[o] = d
+              end
+              return d or o.g
             end
             function B.cut(x, y)
               local o = grid.at(x, y)

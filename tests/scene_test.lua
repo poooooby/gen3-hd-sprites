@@ -665,6 +665,19 @@ do
     "...its cut record and variant, the map's face tile its commonest wall")
   check(Relief.isSlope(L.cells[1]) and Relief.centre(L.cells[1]) == 8 and Relief.sample(L.cells[1], 0.5, 0) == 16,
     "...a slope, its middle and its points sampled")
+  -- faces lean: a column of two faces under a top (32 px) over a floor; each face's points stand as
+  -- far south as the top they fall from, the top and the floor where their heights put them
+  do
+    local function grid(f) local g = {}; for j = 0, 4 do for a = 0, 4 do g[j * 5 + a] = f(j, a) end end; return g end
+    local col = { [0] = grid(function() return 32 end), grid(function(j) return 32 - 4 * j end),
+                  grid(function(j) return 16 - 4 * j end), grid(function() return 0 end) }
+    local function at(x, y) return x == 0 and col[y] or nil end
+    local d1, d2 = Relief.lean(at, 0, 1, col[1]), Relief.lean(at, 0, 2, col[2])
+    check(d1 and d1[0] == 32 and d1[24] == 32 and d2 and d2[0] == 32 and d2[24] == 32,
+      "faces lean: a stack of faces stands as far south as its top, one slope a tile a level")
+    check(Relief.lean(at, 0, 0, col[0]) == nil and Relief.lean(at, 0, 3, col[3]) == nil,
+      "...the top and the floor keep their place")
+  end
   -- a tile cut corner to corner: one 45-degree side; a half cut straight across: none
   local tri = {}
   for j = 0, 15 do

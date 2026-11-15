@@ -1239,6 +1239,50 @@ function Relief.treeStep(B, x, y)
   if c.wall then Relief.cliffWalls(B, x, y, g, g, c.wall, nil, y, c.sides, false) end
 end
 
+-- Faces lean (Battle Scene's own; Emerald 3DS stands them upright): a point stands as far south
+-- as it stands high ((u, h, v + h)), so a face drawn a tile tall is a wall a level tall. Leaning,
+-- a point on a southward descent (a face, a stair, a stack of them) stands as far south as the top
+-- it falls from instead: the face lies as the slope its lattice draws (16, 12, 8, 4, 0: a level a
+-- tile, 45 degrees), leaning out from the top over the ground in front, a stair of two rows over
+-- two tiles. Flats, sides and the tops keep their place; the heights are the relief's own.
+-- Relief.LEAN: the tiles a face leans out a level (1: 45 degrees; 0 or nil: upright).
+Relief.LEAN = 1
+
+--- The depths of a cell (heights g at map cell x, y) leaning: nil where nothing in it falls south.
+--- cellAt(x, y): a cell's heights on the same map, or nil.
+function Relief.lean(cellAt, x, y, g)
+  local out
+  for a = 0, N do
+    for j = 0, N do
+      local k = j * SIDE + a
+      local h = g[k]
+      local desc = (j < N and g[k + SIDE] < h) or (j > 0 and g[k - SIDE] > h)
+      if desc then
+        -- (up the descent to its top: north through the cell, and on through the cells north of
+        -- it while their edges meet and the ground keeps rising)
+        local top, G, r, cy = h, g, j, y
+        for _ = 1, 4 * 64 do
+          if r > 0 then
+            local nh = G[(r - 1) * SIDE + a]
+            if nh > top then top, r = nh, r - 1 else break end
+          else
+            local n = cellAt(x, cy - 1)
+            if not n or n[N * SIDE + a] ~= G[a] then break end
+            G, r, cy = n, N, cy - 1
+          end
+        end
+        if top ~= h then
+          out = out or {}
+          out[k] = top - (top - h) * (1 - Relief.LEAN)
+        end
+      end
+    end
+  end
+  if not out then return nil end
+  for k = 0, SIDE * SIDE - 1 do out[k] = out[k] or g[k] end
+  return out
+end
+
 --- A lifted cell (heights g), as the ground pass draws it: its drawing on its relief, a cut tile's
 --- flat layer and the ground run on under it, its cliff walls and its back. Returns true when it
 --- drew the cell (false: the cell is a model's, laid flat by the caller at Relief.centre).
