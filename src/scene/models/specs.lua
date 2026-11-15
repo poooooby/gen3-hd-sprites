@@ -254,7 +254,8 @@ return function(K)
     o = o or {}
     local x0 = o.x0 or 0
     local x1 = o.x1 or width
-    local front, back = height, 16
+    -- (o.back: where its roof's back stands, 16 unless a drawing's roof says otherwise)
+    local front, back = height, o.back or 16
     local wall = height - facade_top
     local c0, c1 = cornice[1], cornice[2]
     local top = wall + (c1 - c0)

@@ -138,9 +138,11 @@ return function(mod)
       -- (Ruby's and Sapphire's: Emerald's - held where they draw Emerald's maps - and our own, read
       -- off their own drawing where they draw otherwise: src/scene/models/specs_rs.lua)
       local rsOf = loadSibling(mod, "src/scene/models/specs_rs.lua", true)
-      local okR, rs = pcall(function() return type(rsOf) == "function" and rsOf(sceneDeps.Kernel, specs.helpers) or nil end)
+      local okR, rs = pcall(function() return type(rsOf) == "function" and rsOf(sceneDeps.Kernel, specs.helpers, specs) or nil end)
       if not okR then mod.log:warn("Ruby's and Sapphire's building specs: %s", tostring(rs)) end
-      local list = { helpers = specs.helpers }
+      -- (its named fields too: the kits - Rustboro's blocks - and the helpers)
+      local list = {}
+      for k, v in pairs(specs) do if type(k) ~= "number" then list[k] = v end end
       for _, s in ipairs(specs) do list[#list + 1] = s end
       for _, s in ipairs(okR and type(rs) == "table" and rs or {}) do
         s.own = true
