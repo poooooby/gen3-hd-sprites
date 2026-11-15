@@ -1259,13 +1259,27 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
     drawn rows, and each cave's levels as `relief_caves.lua` counts them, an edge marked where its
     two sides draw it at different levels. Each sheet is the drawing | the model at 45 degrees (a
     cave: its levels tinted) | the marks.
-  - **Shots:** the worst rooms and caves (`REVIEW_SHOTS`, default 10; `-Shots` in the launcher) get
-    two in-game shots each: a wild battle started three cells south of where their faults gather
-    (`Check.focus`: the cell whose 5 x 5 neighbourhood holds the most), as played, and the camera
-    aimed at the faults (`_sceneLook`). The relief is built first if it isn't cached.
+  - **Shots:** every item (`REVIEW_SHOTS`, default `all`; a number: that many of the worst) gets
+    in-game shots: a wild battle three cells south of where its faults gather (`Check.focus`: the
+    cell whose 5 x 5 neighbourhood holds the most; with none, where most rock stands, or a tree's
+    trunk), as played, and the camera aimed at it (`_sceneLook`); a building two rows south of its
+    rectangle, shot from the front, both front corners and behind (its sides and back: where a
+    facade tile papered over them shows). The relief is built first if it isn't cached. Items are
+    shot map by map; all of FireRed takes a long while.
+  - **Unsettled caves:** a cave whose drawing disagrees with itself somewhere is "unsettled", not
+    "off" (the drawing allows either level there; they were checked in game).
+  - **Another build (`REVIEW_PAK`, `-Pak`):** a pak in Emerald 3DS's format (FireRed 3DS's) read to
+    compare, never copied: its `VXL4` relief's levels tinted beside each cave's (and how many cells
+    agree once aligned; it lifts rock a single level), and its `VXB7` buildings' placements against
+    ours (`_layoutModels` in every layout: each building "models it in n of our m places"; a list of
+    the places it models a building and we model nothing).
   - **The page:** filters by kind and name, only-mismatches (on by default), sorting by the share
     or the count of pixels off. Each item takes "looks fine" / "needs work" and a note, kept in the
-    browser (`localStorage`, by game); "copy my notes" lists them as text to paste back.
+    browser (`localStorage`, by game); "copy my notes" lists them as text to paste back. "Open in
+    workshop" starts the Scene Workshop at the item (its map, the shots' spot, its cell selected
+    and proved: `WORKSHOP_SELECT`) through a `woobleview-workshop:<game>/<MAP:x:y>/<x,y>` link,
+    registered once for your Windows user by `tools/register-workshop-link.ps1` (`-Remove` takes it
+    away; `tools/workshop.ps1 -Url` reads it).
   - `tests/drivers/model_check.lua` and `room_check.lua` run the same proofs (`Check.building`,
     `Check.room`) and write `.ppm` sheets, for one spec or room at a time. The trees' and caves'
     proofs read the game's layouts as the relief reads them (`Check.layoutsOf`); a tree species is

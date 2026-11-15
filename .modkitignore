@@ -31,6 +31,7 @@ tests/model_check.lua
 tests/drivers/model_check.lua
 tests/drivers/workshop.lua
 tools/workshop.ps1
+tools/register-workshop-link.ps1
 tests/drivers/room_check.lua
 tests/drivers/review.lua
 tools/review.ps1

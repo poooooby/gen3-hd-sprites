@@ -282,7 +282,8 @@ h1{margin:0 0 4px;font-size:18px}.sub{color:var(--mute);font-size:13px}
 .tot b{font-variant-numeric:tabular-nums}
 main{padding:12px 16px;display:grid;gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;min-width:0}
-.card.bad{border-left:4px solid var(--bad)}.card.good{border-left:4px solid var(--ok)}
+.card.bad{border-left:4px solid var(--bad)}.card.good{border-left:4px solid var(--ok)}.card.warn{border-left:4px solid var(--warn)}
+.badge.warn{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .top{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
 .name{font-weight:600;font-size:15px}.kind{color:var(--mute);font-size:12px;text-transform:uppercase;letter-spacing:.04em}
 .badge{font-size:12px;padding:1px 8px;border-radius:10px;font-weight:600}
@@ -299,6 +300,7 @@ main{padding:12px 16px;display:grid;gap:12px}
 .verdict{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;align-items:center}
 .verdict button{font:inherit;font-size:12px;background:var(--chip);color:inherit;border:1px solid var(--line);border-radius:6px;padding:2px 8px;cursor:pointer}
 .verdict button.on.fine{background:var(--ok);color:#fff}.verdict button.on.fix{background:var(--bad);color:#fff}
+.verdict a.open{font-size:12px;background:var(--chip);color:inherit;border:1px solid var(--line);border-radius:6px;padding:2px 8px;text-decoration:none}
 .verdict input{flex:1;min-width:160px;font:inherit;font-size:12px;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:3px 8px}
 .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12px;color:var(--mute);margin-top:8px}
 .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
@@ -339,9 +341,9 @@ function totals(){
   const t = $("tot"); t.innerHTML = "";
   for (const k of Object.keys(KINDS)) {
     const all = R.items.filter(i => i.kind === k); if (!all.length) continue;
-    const bad = all.filter(i => !i.ok).length;
+    const bad = all.filter(i => !i.ok && !i.unsettled).length, unsettled = all.filter(i => i.unsettled).length;
     const s = document.createElement("span");
-    s.innerHTML = KINDS[k] + ": <b>" + (all.length - bad) + "</b> exact, <b>" + bad + "</b> off";
+    s.innerHTML = KINDS[k] + ": <b>" + (all.length - bad - unsettled) + "</b> exact, " + (unsettled ? "<b>" + unsettled + "</b> unsettled, " : "") + "<b>" + bad + "</b> off";
     t.appendChild(s);
   }
   const marked = Object.values(notes).filter(n => n.v).length;
@@ -356,7 +358,7 @@ function kinds(){
   }
 }
 function numbers(it){
-  if (it.kind === "cave") return "<b>" + it.disagree + "</b> disagreeing edges - " + it.raised + " of " + it.judged + " cells raised";
+  if (it.kind === "cave") return "<b>" + it.disagree + "</b> disagreeing edges" + (it.unsettled ? " (the drawing allows either level there; checked in game)" : "") + " - " + it.raised + " of " + it.judged + " cells raised" + (it.pakAgree != null ? " - FireRed 3DS's levels agree on " + it.pakAgree.toFixed(0) + "% of cells (it lifts rock a single level)" : "");
   const p = [];
   p.push("<b>" + (it.wrong||0) + "</b> wrong");
   p.push("<b>" + (it.missing||0) + "</b> missing");
@@ -364,6 +366,7 @@ function numbers(it){
   if (it.kind === "room") p.push((it.over||0) + " over");
   if (it.stretched) p.push("<b>" + it.stretched + "</b> stretched faces");
   p.push(pct(it).toFixed(2) + "% of " + it.judged + " px");
+  if (it.pak) p.push(it.pak);
   return p.join(" - ");
 }
 function render(){
@@ -375,22 +378,28 @@ function render(){
   const L = $("list"); L.innerHTML = "";
   if (!items.length) { const e = document.createElement("div"); e.className = "card"; e.textContent = "Nothing to show with these filters."; L.appendChild(e); }
   for (const it of items) {
-    const c = document.createElement("div"); c.className = "card " + (it.ok ? "good" : "bad");
+    const st = it.ok ? "good" : it.unsettled ? "warn" : "bad";
+    const c = document.createElement("div"); c.className = "card " + st;
     const n = notes[it.id] || {};
-    c.innerHTML = '<div class="top"><span class="name"></span><span class="kind"></span><span class="badge ' + (it.ok ? "good" : "bad") + '">' + (it.ok ? "exact" : "off") + '</span></div>'
+    c.innerHTML = '<div class="top"><span class="name"></span><span class="kind"></span><span class="badge ' + st + '">' + (it.ok ? "exact" : it.unsettled ? "unsettled" : "off") + '</span></div>'
       + '<div class="nums">' + numbers(it) + '</div>'
       + (it.pieces ? '<div class="pieces"></div>' : "")
       + '<div class="sheet"><img loading="lazy" alt=""><div class="panes">' + (PANES[it.kind] || PANES.model).map(t => "<span>" + t + "</span>").join("") + '</div></div>'
+      + (it.cmpPng ? '<div class="shots"><figure><img class="cmp" alt="" loading="lazy"><figcaption>FireRed 3DS's levels, tinted as ours</figcaption></figure></div>' : "")
       + (it.shots && it.shots.length ? '<div class="shots"></div>' : "")
-      + '<div class="verdict"><button class="fine">looks fine</button><button class="fix">needs work</button><input placeholder="note (what is wrong)"></div>';
+      + '<div class="verdict"><button class="fine">looks fine</button><button class="fix">needs work</button>'
+      + (it.open ? '<a class="open" title="Opens the Scene Workshop at this item (once: tools/register-workshop-link.ps1)">open in workshop</a>' : "")
+      + '<input placeholder="note (what is wrong)"></div>';
     c.querySelector(".name").textContent = it.name;
     c.querySelector(".kind").textContent = it.kind;
     if (it.pieces) c.querySelector(".pieces").textContent = it.pieces;
+    if (it.open) c.querySelector("a.open").href = it.open;
+    if (it.cmpPng) { const ci = c.querySelector("img.cmp"); ci.src = it.cmpPng; ci.style.imageRendering = "pixelated"; }
     if (it.shots && it.shots.length) {
-      const box = c.querySelector(".shots");
+      const box = c.querySelectorAll(".shots")[it.cmpPng ? 1 : 0];
       it.shots.forEach((f, k) => {
         const fig = document.createElement("figure"), im = document.createElement("img"), cap = document.createElement("figcaption");
-        im.src = f; im.loading = "lazy"; im.alt = ""; cap.textContent = k === 0 ? "in battle" : "aimed at the faults";
+        im.src = f; im.loading = "lazy"; im.alt = ""; cap.textContent = (it.captions && it.captions[k]) || (k === 0 ? "in battle" : "aimed at it");
         im.onclick = () => window.open(f, "_blank"); fig.append(im, cap); box.appendChild(fig);
       });
     }
@@ -404,6 +413,12 @@ function render(){
     fine.onclick = () => set("fine"); fix.onclick = () => set("fix");
     inp.oninput = () => { n.t = inp.value; notes[it.id] = n; save(); };
     L.appendChild(c);
+  }
+  if (R.pakOnly && R.pakOnly.length && (kind === "all" || kind === "building") && !q) {
+    const f = document.createElement("div"); f.className = "flat";
+    f.innerHTML = "<b>FireRed 3DS models a building here, and we don't</b><ul></ul>";
+    for (const t of R.pakOnly) { const li = document.createElement("li"); li.textContent = t; f.querySelector("ul").appendChild(li); }
+    L.appendChild(f);
   }
   if (R.flat.length && (kind === "all") && !q) {
     const f = document.createElement("div"); f.className = "flat";
@@ -426,9 +441,8 @@ kinds(); totals(); render();
 -- what still lies flat (no model yet), for the page's foot
 local FLAT = {
   firered = {
-    "Mt Ember's volcano rock (no piece table for its tileset yet: it lies as drawn)",
     "Rooms no battle is fought in (houses, the Dept. Store, the Museum, the Fan Club, ...): drawn flat",
-    "Cave edges marked red above: where the drawing's two sides disagree on the level, the rock steps",
+    "Caves marked unsettled: where the drawing's two sides disagree on the level the rock steps (checked in game)",
   },
 }
 
@@ -436,15 +450,22 @@ local FLAT = {
 -- the battle as played and the camera aimed at them (REVIEW_SHOTS: how many, default 10; 0 none) --
 local function shoot(game, hd, items, dir, gameName, log)
   local Check = dofile(MOD .. "tests/model_check.lua")
-  local want = tonumber(env("REVIEW_SHOTS") or "10") or 10
+  -- (REVIEW_SHOTS: "all" (the default) or how many of the worst)
+  local all = (env("REVIEW_SHOTS") or "all") == "all"
+  local want = all and math.huge or (tonumber(env("REVIEW_SHOTS")) or 10)
   if want <= 0 then return end
   local U = require("tests.drivers.util")
   local function off(it) return it.disagree or ((it.wrong or 0) + (it.missing or 0) + (it.extra or 0)) end
   local list = {}
   for _, it in ipairs(items) do
-    if not it.ok and it.layout and it.focus and off(it) > 0 then list[#list + 1] = it end
+    if it.layout and it.focus and (all or (not it.ok and off(it) > 0)) then list[#list + 1] = it end
   end
-  table.sort(list, function(a, b) return off(a) / math.max(1, a.judged) > off(b) / math.max(1, b.judged) end)
+  if all then
+    -- (map by map, a map's items together)
+    table.sort(list, function(a, b) if a.layout ~= b.layout then return a.layout < b.layout end return a.name < b.name end)
+  else
+    table.sort(list, function(a, b) return off(a) / math.max(1, a.judged) > off(b) / math.max(1, b.judged) end)
+  end
   if #list == 0 then return end
   -- (the relief first, as play builds it: a cached one is served at once)
   if hd._reliefStep then
@@ -472,7 +493,10 @@ local function shoot(game, hd, items, dir, gameName, log)
       log(("shot %s: no map for %s"):format(it.name, it.layout))
     else
       local fx, fy = it.focus[1], it.focus[2]
-      local px, py = fx, fy + 3
+      local px, py = math.floor(fx), math.floor(fy) + 3
+      -- (a building: the player on the ground two rows south of its rectangle, the shots aimed at
+      -- its middle from the front, both front corners and behind)
+      if it.rect then px, py = math.floor(it.rect[1] + it.rect[3] / 2), it.rect[2] + it.rect[4] + 1 end
       pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "up" })
       local s = Runtime.getSession()
       if s then s.x, s.y = px, py end
@@ -494,12 +518,21 @@ local function shoot(game, hd, items, dir, gameName, log)
         local base = ("shot_%s_%s"):format(it.kind, it.name):gsub("[^%w_%-]", "_")
         it.shots = {}
         if U.shot(game, dir .. "/" .. base .. "_battle.png") then it.shots[#it.shots + 1] = base .. "_battle.png" end
-        if hd._sceneLook and hd._sceneLook(fx + 0.5, fy + 0.5, 45, 10) then
-          U.wait(4)
-          local data = hd._sceneShot and hd._sceneShot(1200, 800)
-          if data then
-            local f = io.open(dir .. "/" .. base .. "_close.png", "wb")
-            if f then f:write(data:encode("png"):getString()); f:close(); it.shots[#it.shots + 1] = base .. "_close.png" end
+        local looks = it.looks or { { 45, 10, 0, "aimed at it" } }
+        it.captions = { "in battle" }
+        for li, lk in ipairs(looks) do
+          if hd._sceneLook and hd._sceneLook(fx + 0.5, fy + 0.5, lk[1], lk[2], lk[3]) then
+            U.wait(4)
+            local data = hd._sceneShot and hd._sceneShot(960, 640)
+            if data then
+              local name = ("%s_look%d.png"):format(base, li)
+              local f = io.open(dir .. "/" .. name, "wb")
+              if f then
+                f:write(data:encode("png"):getString()); f:close()
+                it.shots[#it.shots + 1] = name
+                it.captions[#it.shots] = lk[4]
+              end
+            end
           end
         end
         n = n + 1
@@ -537,18 +570,30 @@ local function body(game, log)
   local Check = dofile(MOD .. "tests/model_check.lua")
   local want
   for k in (env("REVIEW_KINDS") or ""):gmatch("[^,]+") do want = want or {}; want[k] = true end
+  -- (REVIEW_PAK: another build's pak, read to compare - its relief, its buildings' places)
+  local pak = readPak(env("REVIEW_PAK"))
+  local pakRelief, pakPlaces, pakPlaceCount
+  if pak then
+    local Relief = dofile(MOD .. "src/scene/relief.lua")
+    pakRelief = pak.relief and Relief.decode(pak.relief) or nil
+    pakPlaces, pakPlaceCount = pakPlacements(pak.buildings)
+    log(("pak: relief %s, %s building placements"):format(pakRelief and "read" or "none", tostring(pakPlaceCount)))
+  end
   local items = {}
   local function add(res)
     local id = res.kind .. ":" .. res.name
     local file = (res.kind .. "_" .. res.name):gsub("[^%w_%-]", "_") .. ".png"
     writePNG(dir .. "/" .. file, res.sheet)
+    if res.cmp then writePNG(dir .. "/cmp_" .. file, res.cmp.sheet) end
     local W = floor(res.sheet.w / 3)
     items[#items + 1] = { id = id, name = res.name, kind = res.kind, ok = res.ok, wrong = res.wrong,
       missing = res.missing, extra = res.extra, over = res.over, judged = res.judged,
       stretched = type(res.stretched) == "table" and #res.stretched or nil, disagree = res.disagree,
       raised = res.raised, pieces = res.piecesText, png = file, w = res.sheet.w,
-      layout = type(res.layout) == "string" and res.layout or nil, focus = res.focus,
-      zoom = W <= 64 and 4 or W <= 160 and 2 or 1 }
+      captions = res.captions, pak = res.pak, pakAgree = res.cmp and res.cmp.agree or nil,
+      layout = type(res.layout) == "string" and res.layout or nil, focus = res.focus, rect = res.rect,
+      looks = res.looks, unsettled = res.unsettled,
+      zoom = W <= 64 and 4 or W <= 160 and 2 or 1, cmpPng = res.cmp and ("cmp_" .. file) or nil }
     U.wait(1)
   end
   if not want or want.building then
@@ -556,7 +601,20 @@ local function body(game, log)
     log(("buildings: %d"):format(#names))
     for _, name in ipairs(names) do
       local ok, res = xpcall(Check.building, debug.traceback, hd, name)
-      if ok and res then add(res) else log(("building %s: %s"):format(name, tostring(res))) end
+      if ok and res then
+        -- (where it stands in its reference layout, for the shots)
+        local md = hd._sceneModel(name)
+        local sp = md and md.spec
+        if sp and sp.layout and sp.rect then
+          local r = sp.rect
+          res.layout, res.rect = sp.layout, r
+          res.focus = { r[1] + r[3] / 2 - 0.5, r[2] + r[4] / 2 - 0.5 }
+          local d = math.max(r[3], r[4]) + 5
+          res.looks = { { 15, d, 0, "front" }, { 20, d, 45, "from the south-west" }, { 20, d, -45, "from the south-east" },
+                        { 25, d, 180, "from behind" } }
+        end
+        add(res)
+      else log(("building %s: %s"):format(name, tostring(res))) end
     end
   end
   if not want or want.room then
@@ -587,16 +645,63 @@ local function body(game, log)
         if ok then for _, r in ipairs(res) do add(r) end else log("trees: " .. tostring(res)) end
       end
       if not want or want.cave then
-        local ok, res = xpcall(caveResults, debug.traceback, ctx, Check, log)
+        local ok, res = xpcall(caveResults, debug.traceback, ctx, Check, log, pakRelief)
         if ok then for _, r in ipairs(res) do add(r) end else log("caves: " .. tostring(res)) end
       end
     else log("trees, caves: no layouts read for " .. gameName) end
+  end
+  -- (the other build's buildings against ours: where each of ours stands, whether it models a
+  -- building there too; and what it models where we model nothing)
+  local pakOnly
+  if pakPlaces and (not want or want.building) then
+    local okC, ctx2 = pcall(Check.layoutsOf, gameName, MOD)
+    if okC and ctx2 then
+      local per, only = {}, {}
+      for id, L in pairs(ctx2.inp.layouts) do
+        local okM, ours = pcall(hd._layoutModels, L.name)
+        ours = okM and ours or {}
+        local theirs = pakPlaces[id] or {}
+        for _, m in ipairs(ours) do
+          local a, hit = { m.x, m.y, m.w, m.h }, false
+          for _, t in ipairs(theirs) do if overlap(a, t) >= 0.5 then hit = true; break end end
+          local e = per[m.name] or { n = 0, hit = 0 }
+          per[m.name] = e
+          e.n = e.n + 1
+          if hit then e.hit = e.hit + 1 end
+        end
+        for _, t in ipairs(theirs) do
+          local any = false
+          for _, m in ipairs(ours) do if overlap(t, { m.x, m.y, m.w, m.h }) >= 0.5 then any = true; break end end
+          if not any then only[#only + 1] = ("%s at %d,%d (%d x %d cells)"):format(L.name:gsub("^LAYOUT_", ""), t[1], t[2], t[3], t[4]) end
+        end
+      end
+      for _, it in ipairs(items) do
+        local e = it.kind == "building" and per[it.name]
+        if e then it.pak = ("FireRed 3DS models it in %d of our %d places"):format(e.hit, e.n) end
+      end
+      table.sort(only)
+      pakOnly = only
+      log(("pak: %d placements of theirs where we model nothing"):format(#only))
+    end
+  end
+  -- (each item's workshop link: its map, the spot the shots stand at, the cell to select)
+  for _, it in ipairs(items) do
+    local mapId = it.layout and it.focus and Check.mapIdOf(gameName, it.layout)
+    if mapId then
+      local fx, fy = math.floor(it.focus[1] + 0.5), math.floor(it.focus[2] + 0.5)
+      local px, py = fx, fy + 3
+      if it.rect then
+        px, py = math.floor(it.rect[1] + it.rect[3] / 2), it.rect[2] + it.rect[4] + 1
+        fx, fy = px, it.rect[2] + it.rect[4] - 1
+      end
+      it.open = ("woobleview-workshop:%s/%s:%d:%d/%d,%d"):format(gameName, mapId, px, py, fx, fy)
+    end
   end
   local okS, errS = xpcall(shoot, debug.traceback, game, hd, items, dir, gameName, log)
   if not okS then log("shots: " .. tostring(errS)) end
   local bad = 0
   for _, it in ipairs(items) do if not it.ok then bad = bad + 1 end end
-  local data = { game = gameName, when = os.date("%Y-%m-%d %H:%M"), items = items,
+  local data = { game = gameName, when = os.date("%Y-%m-%d %H:%M"), items = items, pakOnly = pakOnly or {},
     flat = FLAT[gameName == "leafgreen" and "firered" or gameName] or {} }
   local f = io.open(dir .. "/index.html", "wb")
   if f then

@@ -205,7 +205,9 @@ return function(K, H)
   -- rows 11-39, its foot where the roof is drawn at row 40.
   local function viridian_house()
     return gable_house(80, 64, 16, { facade = 48, eave = { 45, 48 }, slope = { 8, 45 },
-      side = Tile(1, 48, 9, 61, { top = 16 }), chimney = { 48, 64, 8, 11, 40 } })
+      -- (its sides and gable ends: the plain cream between the door and the window; the facade's
+      -- corner, its outline and a pillar's edge, tiled into stripes)
+      side = Tile(34, 50, 39, 58, { top = 16 }), chimney = { 48, 64, 8, 11, 40 } })
   end
 
   -- A FireRed gym (Viridian's at 33-38 x 6-10, 96 x 80): a hipped yellow roof, a line every second
@@ -1199,7 +1201,8 @@ return function(K, H)
       exact = { { 1, 46, 63, 62 }, { 1, 44, 63, 46 }, { 2, 9, 63, 44 } },
       parts = function()
         return gable_house(64, 64, 16, { facade = 46, eave = { 44, 46 }, slope = { 8, 44 },
-          side = Tile(18, 48, 22, 56, { top = 18 }) })
+          -- (its sides: the plain panel left of the door; the door's frame tiled into stripes)
+          side = Tile(3, 48, 10, 56, { top = 18 }) })
       end },
     -- the Resort Gorgeous house (38-42 x 5-8, 80 x 64): the Sevii kit in orange, a fence drawn over
     -- its top; its eave rows 42-45, its facade rows 46-61

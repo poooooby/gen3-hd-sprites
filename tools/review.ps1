@@ -3,13 +3,17 @@
 # opens in the browser. Mark each item "looks fine" / "needs work" with a note, then "copy my notes".
 #   .\tools\review.ps1                                  # FireRed, everything
 #   .\tools\review.ps1 -Game leafgreen -Kinds room,cave
+#   .\tools\review.ps1 -Kinds building -Shots 10        # in-game shots of only the 10 worst
+#   .\tools\review.ps1 -Pak D:\firered3ds.pak           # compare with another build's pak (never copied)
+# Each item gets in-game shots (a battle beside it; buildings from the front, both corners, behind).
 #   .\tools\review.ps1 -Engine D:\gen1recomp -Love "C:\Program Files\LOVE\love.exe"
 # The engine must load this mod (its mods\gen3-hd-sprites linked to this folder) and have the game
 # imported. The sheets show the game's own art: they stay in %TEMP%\woobleview-review\<game>.
 param(
   [string]$Game = "firered",
   [string]$Kinds = "",
-  [int]$Shots = 10,
+  [string]$Shots = "all",
+  [string]$Pak = "",
   [string]$Engine = (Join-Path $PSScriptRoot "..\..\gen1recomp"),
   [string]$Love = "C:\Program Files\LOVE\lovec.exe"
 )
@@ -27,12 +31,13 @@ $env:POKEPORT_DRIVER = "mods/gen3-hd-sprites/tests/drivers/review.lua"
 $env:POKEPORT_BACKGROUND = "1"
 $env:REVIEW_KINDS = $Kinds
 $env:REVIEW_SHOTS = "$Shots"
+$env:REVIEW_PAK = $Pak
 $env:SHOT_DIR = $out
-Write-Host "Building the review sheet (a few minutes)..."
+Write-Host "Building the review sheet (with every item's shots this takes a while)..."
 Push-Location $engine
 try { & $Love . | Out-Null } finally {
   Pop-Location
-  Remove-Item Env:POKEPORT_DRIVER, Env:POKEPORT_BACKGROUND, Env:REVIEW_KINDS, Env:REVIEW_SHOTS, Env:SHOT_DIR -ErrorAction SilentlyContinue
+  Remove-Item Env:POKEPORT_DRIVER, Env:POKEPORT_BACKGROUND, Env:REVIEW_KINDS, Env:REVIEW_SHOTS, Env:REVIEW_PAK, Env:SHOT_DIR -ErrorAction SilentlyContinue
 }
 $page = Join-Path $out "index.html"
 if (Test-Path $page) {

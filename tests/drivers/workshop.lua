@@ -6,7 +6,8 @@
 -- battle with Battle Scene on and opens the world it built. Run from the engine root:
 --   POKEPORT_GAME=firered POKEPORT_VERSION=firered WORKSHOP_SPOT=FR_ROUTE_2:5:5 \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/workshop.lua love .
--- (tools/workshop.ps1 does this from PowerShell.) The keys are on its panel. Battle Scene is turned
+-- (tools/workshop.ps1 does this from PowerShell.) WORKSHOP_SELECT=x,y selects that cell and opens
+-- its proof. The keys are on its panel. Battle Scene is turned
 -- on for the session only; FireRed's land needs its 3D cache built (Build 3D Cache), its trees do not.
 
 local function env(name)
@@ -600,6 +601,19 @@ local function body(game, log)
   -- ── the loop: the game held still meanwhile ──
   local update = rawget(game, "update")
   game.update = function() end
+  -- WORKSHOP_SELECT=x,y (map cells): that cell selected, the camera on it and its proof open (the
+  -- review page's "Open in workshop" buttons)
+  local selX, selY = (env("WORKSHOP_SELECT") or ""):match("(%-?%d+),(%-?%d+)")
+  if selX and scene then
+    local c = scene.grid.at(tonumber(selX), tonumber(selY))
+    if c then
+      selectCell(c)
+      cam.tx, cam.tz = c.cx + 0.5, c.cy + 0.5
+      prove()
+    else
+      say(("Cell %s,%s is outside the scene built here"):format(selX, selY))
+    end
+  end
   -- (dev: WORKSHOP_SCRIPT=file runs the workshop unattended - its own check - with these hooks)
   if env("WORKSHOP_SCRIPT") then
     return { select = selectCell, pick = pick, change = change, nudge = nudge, save = save, rebuild = rebuild,
