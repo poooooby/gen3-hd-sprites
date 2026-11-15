@@ -99,8 +99,19 @@ Family.FRLG = make({
   end,
 })
 
+-- Ruby's and Sapphire's: Emerald's family (the same cuts and attributes), their maps and baked
+-- layouts named apart ("RU_LITTLEROOT_TOWN", "SA_LITTLEROOT_TOWN")
+local function named(base, prefixes)
+  local t = {}
+  for k, v in pairs(base) do t[k] = v end
+  t.prefixes = prefixes
+  return t
+end
+Family.RUBY = named(Family.RSE, { "RU_" })
+Family.SAPPHIRE = named(Family.RSE, { "SA_" })
+
 Family.GAMES = {
-  emerald = Family.RSE, ruby = Family.RSE, sapphire = Family.RSE,
+  emerald = Family.RSE, ruby = Family.RUBY, sapphire = Family.SAPPHIRE,
   firered = Family.FRLG, leafgreen = Family.FRLG,
 }
 

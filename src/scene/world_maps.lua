@@ -70,6 +70,9 @@ return function(deps)
     opt = opt or {}
     local input, why = WorldMaps.input(opt.tick)
     if not input then return nil, why end
+    -- (the hand marks kept where the maps are read as they were marked: opt.trustFixes(input) ->
+    -- fixes, order, for Ruby and Sapphire; src/scene/relief_run.lua)
+    if opt.trustFixes then opt.fixes, opt.fixesOrder = opt.trustFixes(input) end
     -- (the solver's parts, then any more the caller joins: the terraces')
     local parts = {}
     for _, p in ipairs(deps.parts) do parts[#parts + 1] = p end

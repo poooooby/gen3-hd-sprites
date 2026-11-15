@@ -83,9 +83,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
 - 🗺️ **Battle where you stand:** With **Battle Scene** set to **Overworld**, a battle takes
   place in the world around you instead of on a painted backdrop: the paths, grass, water,
   trees and houses of the spot where it started, laid out in 2.5D and fading into the distance.
-- 🏠 **Real buildings:** In Emerald, houses, Pokémon Centers, Marts, gyms and the big buildings
-  of Hoenn's towns stand in 3D, rebuilt from their own overworld art: walls, roofs, porches and
-  all, down to the round battle tents, the Space Center's domes, the boats in Slateport's harbour,
+- 🏠 **Real buildings:** In Ruby, Sapphire and Emerald, houses, Pokémon Centers, Marts, gyms and
+  the big buildings of Hoenn's towns stand in 3D, rebuilt from their own overworld art: walls,
+  roofs, porches and all, down to Emerald's round battle tents, the Space Center's domes, the boats in Slateport's harbour,
   the parasols on Route 109's beach, Slateport's stone lantern and Rustboro's fountain, its jet
   on its dish. Fortree's tree houses sit up in the treetops on their decks, joined by rope
   bridges, with ladders down to the forest floor and palms leaning over the wood. Route 110's
@@ -105,7 +105,7 @@ resolution, and the camera pulls back so even the biggest ones fit.
   Kanto's pine trees stand as real trees too, round crowns on their trunks with their shadows on the
   grass, and so do the broad leafy trees of Viridian Forest and the Sevii Islands' Berry Forest and
   Pattern Bush, all drawn from your own cartridge.
-- 🛋️ **Furnished rooms:** In Emerald, battles indoors take place in furnished rooms, rebuilt
+- 🛋️ **Furnished rooms:** In Ruby, Sapphire and Emerald, battles indoors take place in furnished rooms, rebuilt
   from their own art: the Pokémon Centers and Poké Marts (the counter with its Poké Balls, the
   healing machine, stools, the escalator), the houses of Littleroot and the common houses of
   Hoenn (tables and chairs, kitchens, beds, TVs, plants, stairs set into the back wall),
@@ -178,7 +178,7 @@ Open **OPTIONS → MODS → WoobleView**.
 | **Fill Screen** | On / Off | On | The battle fills your screen in any shape. Wide: the text box and HP bars along the bottom. Upright phone: a full-width text box above the controls, the foe's HP box above the battle. The summary, party, bag, Pokédex page, evolution and nickname screens in a battle fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokédex, party, bag, options, mods). Off: the usual framed battle screen. Needs Battle Fit. |
 | **Pokedex & Summary HD** | On / Off | On | Pokémon in the Pokédex and on the summary screen at full resolution, fitted to their frame. |
 | **Battle Scene** | Classic / Overworld | Classic | FireRed, LeafGreen, Ruby, Sapphire and Emerald. Overworld: battles take place in the world around you, in 2.5D. Classic: the game's own battle backgrounds. Needs Battle Fit. |
-| **Build 3D Cache** | Press A | – | Emerald, FireRed and LeafGreen, with Battle Scene on Overworld: build the whole 3D world now, with a progress bar and the time left (a minute or two), and keep it on this device so every battle loads its world straight away. Press B to keep playing while it finishes in the background; a message tells you when it's ready. Otherwise it builds a little at a time while you play. |
+| **Build 3D Cache** | Press A | – | Ruby, Sapphire, Emerald, FireRed and LeafGreen, with Battle Scene on Overworld: build the whole 3D world now, with a progress bar and the time left (a minute or two), and keep it on this device so every battle loads its world straight away. Press B to keep playing while it finishes in the background; a message tells you when it's ready. Otherwise it builds a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Delete the 3D world kept on this device, to free the space or start afresh. It is built again the next time it is needed. |
 | **Scene Blur** | On / Off | On | With Battle Scene on Overworld: a soft tilt-shift blur on the far distance and the nearest ground, so the world looks like a miniature. Off: the whole world sharp. |
 | **Scene Cache** | On / Off | On | With Battle Scene on Overworld: every town's 3D buildings and every furnished room are built the first time you step into the world, a little each frame while you play, and kept on disk, so neither arriving in a town nor its first battle waits on them. Off: a town's buildings are built when you arrive, the rooms read again each time the game starts, and both dropped when it closes. |
@@ -203,14 +203,14 @@ Open **OPTIONS → MODS → WoobleView**.
 
 ## 📌 Good to Know
 
-- 👋 **The first time you play Emerald, FireRed or LeafGreen** with WoobleView, it asks whether you'd like your battles
+- 👋 **The first time you play Ruby, Sapphire, Emerald, FireRed or LeafGreen** with WoobleView, it asks whether you'd like your battles
   in 3D, and if so whether to build the 3D world now (with a progress bar) or let it build while
   you play. Changed your mind while it builds? Press B and it carries on in the background while
   you play. Say no and it never asks again; you can switch it on any time in **OPTIONS → MODS →
   WoobleView**. Its messages carry the WoobleView name, so you always know which mod is asking.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Hoenn's and Kanto's
   trees stand as real trees with leafy crowns (Viridian Forest's, the Berry Forest's golden ones, the Safari
-  Zone's broad flat-topped ones and Four Island's slim saplings too), and in Emerald most of its town buildings, fences, hedges, curbs
+  Zone's broad flat-topped ones and Four Island's slim saplings too), and in Ruby, Sapphire and Emerald most of Hoenn's town buildings, fences, hedges, curbs
   and railings stand in 3D too, as do the buildings of FireRed and LeafGreen (Trainer Tower on its
   rock, the red gantries by the Sevii harbors and the Power Plant, Vermilion's dock canopies, Two
   Island's market stall with its crates, tills, pots and flowers, Route 23's gate walls with their
@@ -218,7 +218,7 @@ Open **OPTIONS → MODS → WoobleView**.
   Saffron's iron railings, Fuchsia's pens with their hedges and fences, the
   Safari Zone's wooden stakes) and their white picket and log fences
   (seen end-on too, post behind post), mailboxes, boulders, round shrubs and the caves' rubble. Signs, street lamps
-  and posts stand as little solids of their own pixels. In Emerald, FireRed and LeafGreen the land has its shape too: cliffs,
+  and posts stand as little solids of their own pixels. In every one of these games the land has its shape too: cliffs,
   terraces, ledges, stairs and the rocks at sea rise as the map draws them. In FireRed and
   LeafGreen the land is Pokémon FireRed 3DS's wherever it shapes a map: the towns' and islands'
   cliffs and the caves' ridges and rock walls; WoobleView's own reading fills the rest (Mt Ember
@@ -226,8 +226,10 @@ Open **OPTIONS → MODS → WoobleView**.
   the land past the map's edges carries on at their height (a cave's rock, a crater's rim), all
   read off your own cartridge the first time you play (it builds quietly in the background for a
   minute or two while you walk, or all at once from **Build 3D Cache**, then stays on disk).
-  Rocks and buildings in Ruby and Sapphire lie flat on the ground as the game draws them.
-  Indoors, Emerald's few rooms not rebuilt show their furniture flat, but for the pieces they
+  Ruby and Sapphire take Emerald's 3D wherever their maps are drawn as Emerald's: where Emerald
+  redrew a spot (every gym, Slateport's harbour, Mossdeep's shore, corners of some routes and the
+  Safari Zone), the land there keeps its own reading and what Emerald built for that spot is left out.
+  Indoors, the rooms not rebuilt show their furniture flat, but for the pieces they
   share with the rooms that are; FireRed's and LeafGreen's other rooms are drawn flat for now. A battle
   with no overworld around it, or no open ground near you, keeps the game's own background.
 - The camera only pulls back for Pokémon drawn by a sprite mod that supports this one. With

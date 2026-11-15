@@ -1112,7 +1112,7 @@ return function(S)
     -- (Emerald's maps: another game's of the same name is not one of them. A game whose own pieces
     -- say "drawn" has every map read as drawn rebuilt: a member of each drawn group)
     local game = S.input and S.input.game
-    local groups = (game == nil or game == "emerald") and T.GROUPS or {}
+    local groups = (game == nil or game == "emerald" or game == "ruby" or game == "sapphire") and T.GROUPS or {}
     if G and G.groups == "drawn" then
       groups = {}
       for _, g in ipairs(S.DRAWN) do groups[#groups + 1] = g.members[1] end

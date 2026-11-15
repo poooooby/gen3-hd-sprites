@@ -451,6 +451,42 @@ return function(deps)
   end
   -- (dev: the game being played now, as the scene names it - the workshop's tune file's)
   function Scene._game() family(); return famGame end
+  -- whether the game draws with Emerald's maps where they are drawn alike: Ruby's and Sapphire's,
+  -- whose Emerald 3DS models, rooms and hand marks hold only there (src/scene/prints.lua)
+  local function copiesEmerald()
+    family()
+    return famGame == "ruby" or famGame == "sapphire"
+  end
+  -- the game's check of its maps against Emerald's prints: Ruby's and Sapphire's against
+  -- src/scene/games/emerald_prints.lua (none there: nothing of Emerald's holds); every other
+  -- game's passes everything (it reads its own maps) - Emerald's records the prints asked about
+  -- (dev: tests/drivers/emerald_prints.lua). nil without src/scene/prints.lua
+  local printsOf = {}
+  function Scene.prints()
+    local Pr = deps.Prints
+    if not Pr then return nil end
+    local copy = copiesEmerald()
+    local g = famGame or "?"
+    local c = printsOf[g]
+    if not c then
+      c = Pr.checker(copy and (deps.EmeraldPrints or {}) or nil)
+      printsOf[g] = c
+    end
+    return c
+  end
+  -- a layout's record against Emerald's prints (src/scene/prints.lua: same, size, ok(x, y)) in Ruby
+  -- and Sapphire (their own layout, by name), false where it cannot be read; nil in any other game
+  -- (all of it holds)
+  local function emeraldRecord(L)
+    if not copiesEmerald() then return nil end
+    local C = Scene.prints()
+    if not (C and L and L.grid and L.name) then return false end
+    local grid, w = L.grid, L.w
+    return C.layout(L.name, L.w, L.h, function(x, y)
+      local i = (y * w + x) * 2
+      return grid:byte(i + 1) + grid:byte(i + 2) * 256
+    end)
+  end
   -- every plain module that reads tileset names or cuts, told the game's family
   local function useFamily()
     local F = family()
@@ -510,6 +546,13 @@ return function(deps)
           if x < 0 or y < 0 or x >= W or y >= H then return nil end
           return L:midAt(x, y)
         end }
+      end,
+      -- (a model's reference rectangle, read off Emerald's drawing: in Ruby and Sapphire only
+      -- where they draw it alike, src/scene/prints.lua)
+      trust = function(layout, rect, mids)
+        local C = Scene.prints()
+        if not C then return not copiesEmerald() end
+        return C.rect(layout, rect, mids)
       end,
     }
   end
@@ -1590,20 +1633,68 @@ return function(deps)
     return blocks
   end
   local bankManifests = {}
+  -- a modelled room's layout number: the specs' own (RoomSpecs.ids: Emerald's, FireRed's); Ruby and
+  -- Sapphire number their layouts otherwise, and find Emerald's rooms by name
+  local function roomNum(name)
+    if copiesEmerald() then return nil end
+    return RoomSpecs.ids and RoomSpecs.ids[name]
+  end
+  -- a modelled room's layout: by the specs' number; in Ruby and Sapphire by name, or by the name of
+  -- a map Emerald draws with it (a layout pret names apart, LAYOUT_POKEMON_CENTER_1F: Oldale's
+  -- Center's, src/scene/games/emerald_prints.lua's aliases), where they draw it as Emerald does
+  local function roomLayout(name)
+    if not World then return nil end
+    if copiesEmerald() then
+      local L = World.layout(name)
+      local P = deps.EmeraldPrints
+      for _, alias in ipairs(not L and P and P.aliases and P.aliases[name] or {}) do
+        L = World.layout(alias)
+        if L then break end
+      end
+      local r = L and emeraldRecord(L)
+      return r and r.size and L or nil
+    end
+    local num = roomNum(name)
+    return num and World.layout(num) or World.layout(name)
+  end
+  -- a room's pieces, less those over cells Ruby and Sapphire draw otherwise than Emerald (each
+  -- piece's cells, its rect, in its room: its own 8x8 blocks Emerald's); all of them elsewhere
+  local function trustedPieces(spec, pieces)
+    if type(pieces) ~= "table" or not copiesEmerald() then return pieces end
+    local L = roomLayout(spec.interior.layout)
+    local r = L and emeraldRecord(L)
+    if not r then return {} end
+    if r.same then return pieces end
+    local out = {}
+    for _, pc in ipairs(pieces) do
+      local rc, ok = pc.rect, true
+      if type(rc) == "table" then
+        for y = rc[2], rc[2] + rc[4] - 1 do
+          for x = rc[1], rc[1] + rc[3] - 1 do
+            if not r.ok(x, y) then ok = false; break end
+          end
+          if not ok then break end
+        end
+      end
+      if ok then out[#out + 1] = pc end
+    end
+    return out
+  end
   local function roomIo()
     local cache = {}
     return { layout = function(name)
       if cache[name] ~= nil then return cache[name] or nil end
       cache[name] = false
       -- (a room nobody modelled by its number: "#61")
-      local num = tonumber(tostring(name):match("^#(%d+)$"))
-      num = num or RoomSpecs.ids and RoomSpecs.ids[name]
-      local L = World and (num and World.layout(num) or World.layout(name))
+      local own = tonumber(tostring(name):match("^#(%d+)$"))
+      local L
+      if own then L = World and World.layout(own) else L = roomLayout(name) end
+      local num = own or roomNum(name)
       local blocks
       -- (a layout a script swaps into another's map: drawn with that map's tilesets)
       local over = RoomSpecs.swaps and RoomSpecs.swaps[name]
       if not L and over and num then
-        L = World.layout(RoomSpecs.ids[over] or over)
+        L = World.layout(roomNum(over) or over)
         blocks = L and swappedBlocks(num, L.w, L.h)
         if not blocks then return nil end
       end
@@ -1669,6 +1760,7 @@ return function(deps)
     local io, reg, out = roomIo(), Interiors.registry(), {}
     for _, spec in ipairs(RoomSpecs) do
       local ok, pieces, err = pcall(Interiors.room, spec, io, reg)
+      if ok then pieces = trustedPieces(spec, pieces) end
       out[#out + 1] = { name = spec.name, layout = spec.interior.layout, pieces = ok and pieces or nil,
                         error = (not ok) and tostring(pieces) or err }
       if spec.name == upto then break end
@@ -1926,8 +2018,7 @@ return function(deps)
     st.io = roomIo()
     for _, spec in ipairs(RoomSpecs) do
       local name = spec.interior.layout
-      local num = RoomSpecs.ids and RoomSpecs.ids[name]
-      local L = num and World.layout(num) or World.layout(name)
+      local L = roomLayout(name)
       if L and L.id and not st.byId[L.id] then st.byId[L.id] = name end
     end
     local okC, hit = false, false
@@ -1959,6 +2050,7 @@ return function(deps)
     st.co = coroutine.create(function()
       for _, spec in ipairs(RoomSpecs) do
         local ok, pieces, err = pcall(Interiors.room, spec, st.io, st.reg, tick)
+        if ok then pieces = trustedPieces(spec, pieces) end
         if ok and pieces then
           for _, pc in ipairs(pieces) do
             pc.room = spec.name
@@ -3067,6 +3159,41 @@ return function(deps)
     end
     return out
   end
+  -- (dev: tests/drivers/emerald_prints.lua) every layout's prints (src/scene/prints.lua), under
+  -- each of its names: { [LAYOUT_X] = "WxH:..." }, and the rooms' layouts pret names apart by the
+  -- names of the maps drawn with them: { [LAYOUT_POKEMON_CENTER_1F] = { "LAYOUT_..._1F", ... } }
+  function Scene._layoutPrints()
+    local Pr = deps.Prints
+    if not (Pr and World and World.layoutIds) then return nil end
+    local out = {}
+    local function put(name, L)
+      if out[name] or not (L and L.grid and L.w and L.h) then return end
+      local grid, w = L.grid, L.w
+      out[name] = Pr.chunks(L.w, L.h, function(x, y)
+        local i = (y * w + x) * 2
+        return grid:byte(i + 1) + grid:byte(i + 2) * 256
+      end)
+    end
+    for _, id in ipairs(World.layoutIds()) do
+      local L = World.layout(id)
+      if L and L.name then put(L.name, L) end
+    end
+    for name, L in pairs(World.names and World.names() or {}) do put(name, L) end
+    local aliases, namesOf = {}, {}
+    for name, L in pairs(World.names and World.names() or {}) do
+      namesOf[L] = namesOf[L] or {}
+      table.insert(namesOf[L], name)
+    end
+    for name, num in pairs(deps.RoomSpecs and deps.RoomSpecs.ids or {}) do
+      local L = World.layout(num)
+      local list = L and namesOf[L]
+      if list and not World.names()[name] then
+        table.sort(list)
+        aliases[name] = list
+      end
+    end
+    return out, aliases
+  end
   -- (dev: tests/drivers/flat_census.lua) the cells of a whole layout nothing stands: every model
   -- the scene places (buildings, rooms, props, bridges, components: placeBuildings) and the trees
   -- (a tree part, or a cell laid as other ground) taken off; of the rest, those that draw on their
@@ -3232,7 +3359,8 @@ return function(deps)
         if not NativeTileset then return nil end
         local was = Scene.cacheModels
         Scene.cacheModels, Scene.keepTex = false, keepTex == true
-        spec._model = nil
+        -- (its reference read again too: the prints recorder asks of every one)
+        spec._model, spec._ref = nil, nil
         local md = ready(spec, NativeTileset, layoutCtx())
         Scene.cacheModels, Scene.keepTex = was, false
         return md or nil

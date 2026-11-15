@@ -1110,19 +1110,51 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   - Behaviour enums come from `Constants.of(game)`, compared by name. FireRed's own names (`MB_FAST_WATER`, `MB_CYCLING_ROAD_WATER`, `MB_WARP_DOOR`, `MB_RUNNING_DISALLOWED`) sit in the same lists; a name the game lacks is skipped.
   - **FireRed's names are its own.** The engine names FireRed's primary "general", like Hoenn's. `pairNames` puts `fr:` before each FireRed tileset name (`fr:general`), so no table read off Hoenn's tilesets ever matches FireRed's tiles: trees, fences, curbs, props, mountain rock, the relief's tables.
   - It also resolves the pairs the engine names otherwise (`pallet_outdoor` → General + Pallet Town, the engine's `versions_frlg.TILESET_PAIRS`).
-  - **Maps:** World and the relief's input read the game's own maps by its prefixes (Emerald `EM_`; FireRed `FR_` and `SEVII_`).
+  - **Maps:** World and the relief's input read the game's own maps by its prefixes (Emerald `EM_`, Ruby `RU_`, Sapphire `SA_`: `Family.RUBY` / `Family.SAPPHIRE` are RSE with their own prefixes; FireRed `FR_` and `SEVII_`).
   - FireRed's cache has no `native/layout_files.lua`. A layout id is named after its maps' baked layouts, found by the engine's own name match (`Family.normal`: upper case, letters and digits). Maps sharing a layout keep the first name in sorted order, as World names them.
   - In the scratch engine this gives 303 layouts from 419 of FireRed's 425 maps.
-  - **Emerald-only data stays Emerald's:**
-    - the swaps and alternates;
-    - Emerald 3DS's hand marks and sea ramps (`relief_run` applies them only when the key's game is `emerald`);
+  - **Emerald's data stays Hoenn's** (Ruby and Sapphire take it where they draw Emerald's maps; see below):
+    - the script-swapped alternates (Emerald's own: Ruby and Sapphire swap none in);
+    - Emerald 3DS's hand marks and sea ramps (`relief_run` applies them for `Run.HOENN`);
     - the terrace groups (`T.chosenLayouts`). Emerald's `LAYOUT_SAFARI_ZONE_NORTH` is also a FireRed name;
     - the rooms (`ROOMS.ids` are Emerald's layout numbers; `roomJob` and `placeRooms` skip a game drawn with other tilesets);
-    - `World.roles`' alias reference (Route 116).
+    - `World.roles`' alias reference (Route 116) and the Shoal Cave tide swaps (`s.hoenn`).
   - **World root:** the relief's world starts at the player's home town (Littleroot, or Pallet in FireRed).
   - **Weather:** FireRed's weather is the engine's own FRLG field weather, not Emerald's state machine. `hazeFor` builds the state `light.lua` reads from it: rain as many drops as are falling (of 24), the others full once up.
   - **Relief key:** a game other than Emerald carries its relief rules' version (`Run.RULES`: `firered-r2-<fp>.bin`), so a relief built by older FireRed rules is rebuilt. Emerald's key is unchanged.
   - **Check:** Emerald's relief rebuilt after this was byte-identical (`emerald-0c3fad9f.bin`, same ticks).
+- **Ruby and Sapphire (`src/scene/prints.lua`, `src/scene/games/emerald_prints.lua`):** Emerald's 3D
+  - Emerald 3DS's specs, rooms and hand marks - where Ruby and Sapphire draw Emerald's maps. They do
+  not all: of Ruby's 331 layouts 187 are Emerald's byte for byte, 88 differ (most routes in a few
+  cells - Route 110 in 48 of 4000, the Safari Zone's new corners in 1200; every gym redrawn) and 56
+  are Ruby's own. The tilesets differ little (the General's metatiles in 1 of 512, its art in 66
+  tiles; the gyms' secondaries much more). Sapphire's maps are Ruby's (their reliefs are byte-identical).
+  - **Prints, not maps:** `emerald_prints.lua` keeps, for every Emerald layout under each of its
+    names, its size and one FNV-1a print per 8x8 block of metatile ids; for every reference
+    rectangle a model reads (`Buildings.reference`: specs, solids, Fortree, `layoutArt`), its print;
+    and for each room layout pret names apart (`LAYOUT_POKEMON_CENTER_1F`), the names of the maps
+    Emerald draws with it (`aliases`). `Prints.checker(T)` answers `rect(layout, rect, ids)` and
+    `layout(name, w, h, at)` -> `{ same, size, ok(x, y) }`; `Scene.prints()` is Ruby's and
+    Sapphire's checker over the table, any other game's passes everything.
+  - **Where it applies:** a reference rectangle holds where its metatiles print as Emerald's
+    (`ctx.trust`; else the spec has no reference: Slateport's Battle Tent and boats, the Space
+    Center, the Safari wings drop out). Rooms are found by name or alias (`roomLayout`) where the
+    layout is Emerald's size; a room's pieces over blocks Ruby draws otherwise are dropped
+    (`trustedPieces`). Hand marks (`Post.trustedFixes`, run by `WorldMaps.solve`'s `trustFixes` once
+    the maps are read): a layout of another size loses them; in one the same size each mark at a
+    cell whose block differs is dropped (4216 of 26295 in Ruby), the layout's own numbers kept.
+    The terrace groups, sea ramps and Emerald's rock tables run as for Emerald (`Run.HOENN`).
+  - **Regenerate** after any change to the specs' rectangles or the room specs' layouts: run
+    `tests/drivers/emerald_prints.lua` in Emerald (it builds every spec afresh with the checker
+    recording, then writes the table; `OUT=<file>` writes elsewhere).
+  - **Check (scratch engine, Ruby):** the 19 identical layouts with relief match Emerald's cell for
+    cell but 4 (1-7 cells each, by their seams with redrawn neighbours); the building proofs read as
+    Emerald's (29 specs without a reference, all of them where Ruby draws otherwise or Emerald-only);
+    rooms 80 of 193 pass (Emerald 145), the rest absent (Emerald-only or redrawn) or within a few
+    tenths of a percent of Emerald's own; Emerald's relief, rooms and models unchanged. Build: about
+    the same ticks as Emerald (`Run.TICKS.ruby`), `ruby-r1-<fp>.bin`.
+  - **Known:** Ruby's Mart draws a pot on its right-hand shelf; the reused shelf piece stands there
+    again under it (the pixel finder, not Emerald's data).
 - **FireRed's relief (`src/scene/games/firered.lua`):** Emerald 3DS's counted levels, run on our own
   reading of FireRed's General rock. No FireRed 3DS code is used (its FireRed files carry no
   licence); its screenshots were a visual reference only.

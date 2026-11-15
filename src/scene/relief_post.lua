@@ -348,6 +348,46 @@ local function edgeRows(world, name, spec, index)
   return rows
 end
 
+--- Emerald's hand marks (fixes, order: Post.json's) kept, in place, where another game draws a layout
+--- as Emerald does (Ruby, Sapphire: src/scene/prints.lua). rec(name) -> the layout's record
+--- (Prints' C.layout: same, size, ok(x, y)), or nil where the game has no such layout. A layout the
+--- game lacks or draws another size loses its marks; in one the same size, each mark at a cell
+--- (terraces, behind, cells) whose block the game draws otherwise is dropped, the layout's own
+--- numbers (base, belt, edges past its border, drawn) kept. Returns the marks dropped.
+function Post.trustedFixes(fixes, order, rec)
+  local layouts = fixes.layouts or {}
+  local kept, dropped = {}, 0
+  for _, name in ipairs(order[layouts] or {}) do
+    local r, spec = rec(name), layouts[name]
+    if not (r and r.size) then
+      layouts[name] = nil
+      dropped = dropped + 1
+    else
+      kept[#kept + 1] = name
+      for _, part in ipairs(r.same and {} or { "terraces", "behind", "cells" }) do
+        local t = spec[part]
+        if type(t) == "table" then
+          local gone = {}
+          for key in pairs(t) do
+            local x, y = tostring(key):match("^(%-?%d+),(%-?%d+)$")
+            if not (x and r.ok(tonumber(x), tonumber(y))) then gone[#gone + 1] = key end
+          end
+          for _, key in ipairs(gone) do t[key] = nil end
+          dropped = dropped + #gone
+          local o = order[t]
+          if o then
+            local o2 = {}
+            for _, key in ipairs(o) do if t[key] ~= nil then o2[#o2 + 1] = key end end
+            order[t] = o2
+          end
+        end
+      end
+    end
+  end
+  order[layouts] = kept
+  return dropped
+end
+
 --- The hand marks (relief_fixes.json, decoded by Post.json: fixes, order) over a model, in place.
 --- Returns a line per map changed.
 function Post.applyFixes(M, world, fixes, order, tick)

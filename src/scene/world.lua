@@ -112,7 +112,9 @@ return function(deps)
     local game = Family and Family.game() or "emerald"
     local F = Family and Family.of(game) or nil
     local s = { maps = maps, layouts = {}, byName = {}, byMap = {}, bySlot = {}, arts = {}, roles = {},
-                game = game, family = F, emerald = game == "emerald" }
+                game = game, family = F, emerald = game == "emerald",
+                -- (Hoenn's games: Emerald's maps, most of them drawn alike in Ruby and Sapphire)
+                hoenn = game == "emerald" or game == "ruby" or game == "sapphire" }
     if Roles.useFamily then Roles.useFamily(F) end
     -- (the prefix of one of the game's map ids: "EM_"; FireRed's "FR_", "SEVII_")
     local function prefixOf(id)
@@ -215,6 +217,12 @@ return function(deps)
   end
 
   --- Every layout's id, in order.
+  --- Every layout by each of its names (LAYOUT_X, one a map drawn with it): { [name] = L }.
+  function World.names()
+    local s = load()
+    return s and s.byName or {}
+  end
+
   function World.layoutIds()
     local s = load()
     local out = {}
@@ -280,7 +288,7 @@ return function(deps)
         if L.alternateOf == base then candidates[#candidates + 1] = L end
       end
       table.sort(candidates, function(p, q) return p.id < q.id end)
-      local other = s.emerald and World.MAP_SWAPS[base.name] and s.byName[World.MAP_SWAPS[base.name]]
+      local other = s.hoenn and World.MAP_SWAPS[base.name] and s.byName[World.MAP_SWAPS[base.name]]
       if other then candidates[#candidates + 1] = other end
       s.drawn[current] = World.swappedIn(base, candidates, liveMid)
     end
@@ -477,8 +485,8 @@ return function(deps)
     local A = World.adapter(L)
     if not A then return nil end
     local posts, drawings = World.posts()
-    -- (Emerald's alias reference: its rock drawn in the General tileset's own colours)
-    local ref = s.emerald and World.layout("LAYOUT_ROUTE116") or nil
+    -- (Hoenn's alias reference: its rock drawn in the General tileset's own colours)
+    local ref = s.hoenn and World.layout("LAYOUT_ROUTE116") or nil
     r = Roles.new(A, { behaviours = s.behaviours, posts = posts, postDrawings = drawings,
                        reference = ref and World.adapter(ref) or nil })
     s.roles[L.id] = r

@@ -1314,11 +1314,56 @@ do
   package.loaded["src.core.game3.cache_paths"], package.loaded["src.core.game3.dataset"] = savedP, savedD
 end
 
+-- Emerald's maps' prints (src/scene/prints.lua): Ruby and Sapphire hold Emerald's models, rooms and
+-- hand marks where they draw the same
+do
+  local Prints = dofile("src/scene/prints.lua")
+  check(Prints.fnv("") == 2166136261 and Prints.fnv("a") == 0xe40c292c, "FNV-1a, 32 bits")
+  -- a 10x9 layout of metatile 1, one cell (9, 8) changed: its 8x8 block (1, 1) differs, no other
+  local function at(changed) return function(x, y) return (changed and x == 9 and y == 8) and 2 or 1 end end
+  local em, ru = Prints.chunks(10, 9, at(false)), Prints.chunks(10, 9, at(true))
+  check(em:match("^10x9:") and #em == #"10x9:" + 4 * 8, "a layout's print: its size and one print per 8x8 block")
+  check(em:sub(1, 5 + 24) == ru:sub(1, 5 + 24) and em:sub(-8) ~= ru:sub(-8), "a changed cell changes its own block's print only")
+  local C = Prints.checker({ layouts = { LAYOUT_A = em, LAYOUT_B = "4x4:00000000" },
+                             rects = { [Prints.rectKey("LAYOUT_A", { 1, 1, 2, 1 })] = Prints.ids({ 1, 1 }, 2) } })
+  local r = C.layout("LAYOUT_A", 10, 9, at(true))
+  check(r.size and not r.same and r.ok(0, 0) and r.ok(9, 0) and not r.ok(8, 8) and r.ok(7, 8),
+    "a layout the same size: each cell holds where its block is Emerald's")
+  check(C.layout("LAYOUT_A2", 10, 9, at(false)).same == false and C.layout("LAYOUT_B", 5, 4, at(false)).size == false,
+    "a layout Emerald lacks, or draws another size, holds nowhere")
+  check(C.layout("LAYOUT_C", 10, 9, at(false)) ~= nil and C.layout("LAYOUT_A", 10, 9, at(false)) == r,
+    "a layout's record is kept by name")
+  check(C.rect("LAYOUT_A", { 1, 1, 2, 1 }, { 1, 1 }) and not C.rect("LAYOUT_A", { 1, 1, 2, 1 }, { 1, 3 })
+    and not C.rect("LAYOUT_A", { 0, 0, 2, 1 }, { 1, 1 }), "a reference rectangle holds where it draws Emerald's metatiles")
+  local all = Prints.checker(nil)
+  check(all.rect("X", { 0, 0, 1, 1 }, { 9 }) and all.layout("X", 3, 3, at(false)).same, "another game's checker holds everything")
+  all.record(true)
+  all.rect("LAYOUT_A", { 1, 1, 2, 1 }, { 1, 1 })
+  check(all.recorded[Prints.rectKey("LAYOUT_A", { 1, 1, 2, 1 })] == Prints.ids({ 1, 1 }, 2), "...and records the rectangles asked of it")
+  -- Emerald's hand marks kept where Ruby draws Emerald's (src/scene/relief_post.lua)
+  local Post = dofile("src/scene/relief_post.lua")
+  local fixes, order = Post.json('{"layouts":{"LAYOUT_A":{"base":16,"terraces":{"0,0":{"level":1},"9,8":{"level":2}},' ..
+    '"behind":{"8,8":1}},"LAYOUT_B":{"terraces":{"0,0":{"level":1}}},"LAYOUT_GONE":{"base":16}}}')
+  local recs = { LAYOUT_A = r, LAYOUT_B = C.layout("LAYOUT_B", 5, 4, at(false)) }
+  local dropped = Post.trustedFixes(fixes, order, function(name) return recs[name] end)
+  local A = fixes.layouts.LAYOUT_A
+  check(dropped == 4 and A and A.base == 16 and A.terraces["0,0"] and A.terraces["9,8"] == nil and next(A.behind) == nil,
+    "a mark is kept where its cell's block is Emerald's, the layout's own numbers kept")
+  check(fixes.layouts.LAYOUT_B == nil and fixes.layouts.LAYOUT_GONE == nil and #order[fixes.layouts] == 1
+    and #order[A.terraces] == 1, "a layout drawn another size or not there loses its marks; the orders follow")
+end
+
 -- the game's tileset family (src/scene/family.lua): Emerald's cuts and FireRed's
 do
   local Family = dofile("src/scene/family.lua")
   local R, K = Family.of("emerald"), Family.of("firered")
-  check(R == Family.RSE and Family.of("ruby") == R and Family.of("nope") == R, "Hoenn's games and anything unknown are RSE")
+  check(R == Family.RSE and Family.of("nope") == R, "Emerald and anything unknown are RSE")
+  local Ru, Sa = Family.of("ruby"), Family.of("sapphire")
+  check(Ru.primaryMetatiles == 512 and Ru.attrBytes == 2 and Sa.behaviour == R.behaviour and not Family.kanto("ruby"),
+    "Ruby and Sapphire cut their tilesets as Emerald does")
+  check(Family.prefixOf(Ru, "RU_ROUTE101") == "RU_" and Family.prefixOf(Sa, "SA_ROUTE101") == "SA_"
+    and Family.prefixOf(Ru, "EM_ROUTE101") == nil and Family.normal(Ru, "RU_LITTLEROOT_TOWN") == "LITTLEROOTTOWN",
+    "Ruby's and Sapphire's maps are named RU_ / SA_")
   check(K == Family.FRLG and Family.of("leafgreen") == K and Family.kanto("firered") and not Family.kanto("emerald"),
     "FireRed and LeafGreen are FRLG")
   check(R.primaryMetatiles == 512 and K.primaryMetatiles == 640 and R.primaryPals == 6 and K.primaryPals == 7,

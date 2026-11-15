@@ -222,6 +222,15 @@ return function(mod, hd, state)
     if not (hd.scene and hd.scene._layoutCover) then return nil, "no scene" end
     return hd.scene._layoutCover(name)
   end
+  -- (dev: tests/drivers/emerald_prints.lua) the game's prints checker (src/scene/prints.lua) and
+  -- every layout's prints
+  exports._scenePrints = function()
+    return hd.scene and hd.scene.prints and hd.scene.prints() or nil
+  end
+  exports._layoutPrints = function()
+    if not (hd.scene and hd.scene._layoutPrints) then return nil end
+    return hd.scene._layoutPrints()
+  end
   -- (dev: the rooms read afresh up to `upto`, and a piece's model)
   exports._rooms = function(upto)
     if not (hd.scene and hd.scene._rooms) then return nil end

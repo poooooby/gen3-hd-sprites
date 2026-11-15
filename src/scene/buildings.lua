@@ -47,7 +47,9 @@ function Buildings.owns(spec, i, j)
 end
 
 --- The spec's reference: { template = { mids, row major, 1-based }, pair, w, h } or false.
---- ctx.layout(layoutId) -> { mid = function(x, y), pair } or nil
+--- ctx.layout(layoutId) -> { mid = function(x, y), pair } or nil; ctx.trust(layout, rect, mids)
+--- (optional) -> whether the game draws the rectangle as the spec was read off it (Ruby and
+--- Sapphire: as Emerald does, src/scene/prints.lua), or false: no reference
 function Buildings.reference(spec, ctx)
   if spec._ref ~= nil then return spec._ref end
   spec._ref = false
@@ -62,6 +64,7 @@ function Buildings.reference(spec, ctx)
       t[j * w + i + 1] = m
     end
   end
+  if ctx.trust and not ctx.trust(spec.layout, spec.rect, t) then return false end
   spec._ref = { template = t, pair = L.pair, w = w, h = h }
   return spec._ref
 end

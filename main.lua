@@ -67,6 +67,9 @@ return function(mod)
     Cache = SceneCache,
     Family = SceneFamily,
     Games = SceneGames,
+    -- (Emerald's maps' prints: where Ruby and Sapphire draw Emerald's, its models and marks hold)
+    Prints = loadSibling(mod, "src/scene/prints.lua", true),
+    EmeraldPrints = loadSibling(mod, "src/scene/games/emerald_prints.lua", true),
     Camera = loadSibling(mod, "src/scene/camera.lua"),
     Cells = loadSibling(mod, "src/scene/cells.lua"),
     Stage = loadSibling(mod, "src/scene/stage.lua"),
@@ -225,6 +228,8 @@ return function(mod)
         readCache = function(rel) return SceneCache and SceneCache.read(rel) or nil end,
         onReady = function(bytes) Engine.Scene.setReliefBytes(bytes) end,
         models = function(name, tick) return Engine.Scene.modelCells(name, tick) end,
+        -- (Ruby's and Sapphire's check of their maps against Emerald's prints: src/scene/prints.lua)
+        prints = function() return Engine.Scene.prints and Engine.Scene.prints() or nil end,
         onFrame = function() Engine.Scene.warmStep() end,
         -- (built only while the battle scene is on: a player who keeps Classic never pays for it)
         wanted = function() return Engine.Scene.enabled == true end,
@@ -337,7 +342,7 @@ return function(mod)
       local game3d = okV and GV.get and Prompt.GAMES_3D and Prompt.GAMES_3D[GV.get()] == true
       if ev.key == "scene_build" then
         if not game3d then
-          Prompt.notify("The 3D cache is built in Emerald, FireRed and LeafGreen")
+          Prompt.notify("The 3D cache is built in Ruby, Sapphire, Emerald, FireRed and LeafGreen")
           Prompt.setOption("scene_build", "idle")
         elseif not Prompt.build() then
           Prompt.setOption("scene_build", "idle")

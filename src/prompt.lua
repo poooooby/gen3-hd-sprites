@@ -1,5 +1,5 @@
--- WoobleView's own prompts: the first-run question about 3D battles (Emerald, FireRed and
--- LeafGreen: the games the 3D world is built for), building the 3D
+-- WoobleView's own prompts: the first-run question about 3D battles (Ruby, Sapphire, Emerald,
+-- FireRed and LeafGreen: the games the 3D world is built for), building the 3D
 -- cache with a progress bar, and short notices. Drawn at the window's own resolution over
 -- everything (the engine's render.hud hook), WoobleView's name in the panel's corner so the
 -- player knows which mod is asking. While a prompt is up, an empty layer on the game's screen
@@ -89,9 +89,10 @@ return function(deps)
     pcall(function() mod.cache:write(P.FLAG, "asked") end)
   end
 
-  -- (the games whose world is built in 3D: Emerald's by Emerald 3DS's tables, FireRed's and
+  -- (the games whose world is built in 3D: Emerald's by Emerald 3DS's tables - Ruby's and
+  -- Sapphire's too, where they draw Emerald's maps, src/scene/prints.lua - FireRed's and
   -- LeafGreen's by our own, src/scene/games/)
-  P.GAMES_3D = { emerald = true, firered = true, leafgreen = true }
+  P.GAMES_3D = { emerald = true, ruby = true, sapphire = true, firered = true, leafgreen = true }
   local function has3D()
     local GV = engine("src.core.GameVersion")
     return GV ~= nil and GV.get ~= nil and P.GAMES_3D[GV.get()] == true

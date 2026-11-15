@@ -60,6 +60,10 @@ Input.ALTERNATES_FRLG = {
 --- A game's alternates and the prefix its maps' baked layouts take (native/layouts/<prefix><name>).
 function Input.alternatesFor(game)
   if game == "firered" or game == "leafgreen" then return Input.ALTERNATES_FRLG, "FR_" end
+  -- (Ruby's and Sapphire's scripts swap no layouts in: Mirage Tower, the Sky Pillar's crumbled top
+  -- and Sootopolis's legends are Emerald's)
+  if game == "ruby" then return {}, "RU_" end
+  if game == "sapphire" then return {}, "SA_" end
   return Input.ALTERNATES, "EM_"
 end
 

@@ -45,6 +45,9 @@ return function(deps)
     -- (FireRed's, measured the same way; LeafGreen draws the same maps)
     firered = { groups = 558, world = 5230, export = 45288, terraces = 13593, finish = 13401 },
     leafgreen = { groups = 558, world = 5230, export = 45288, terraces = 13593, finish = 13401 },
+    -- (Ruby's and Sapphire's: Emerald's rules over their maps, measured the same way)
+    ruby = { groups = 428, world = 6747, export = 65819, terraces = 20767, finish = 195 },
+    sapphire = { groups = 428, world = 6747, export = 65819, terraces = 20857, finish = 195 },
   }
   -- the version of a game's own relief rules (its piece tables: src/scene/games/), in its cache key
   -- beside the map data's fingerprint, so a relief built by older rules is built again. Emerald's
@@ -52,7 +55,11 @@ return function(deps)
   -- (r11: the cells new building models own - the harbors' gantries, Two Island's stall, Trainer
   -- Tower - take the level south of them; r12: a cave's rims join their floor before its walls;
   -- r15: FireRed 3DS's relief over ours where it gives one, Run.borrow)
-  Run.RULES = { firered = 15, leafgreen = 15 }
+  -- (Ruby's and Sapphire's: Emerald's rules over their maps, kept where they draw Emerald's -
+  -- src/scene/prints.lua - so their prints' version)
+  Run.RULES = { firered = 15, leafgreen = 15, ruby = 1, sapphire = 1 }
+  -- Hoenn's games: Emerald 3DS's rules (its terraces, sea ramps and hand marks) read their maps
+  Run.HOENN = { emerald = true, ruby = true, sapphire = true }
   -- the phase a finished one leads to (src/scene/world_maps.lua and the pipeline below name them)
   local function nextBucket(name)
     if name == "groups" then return "world" end
@@ -160,9 +167,30 @@ return function(deps)
       work.done = work.done + n * (Run.TICK_COST[b] or 1)
       work.bucket = nextBucket(name)
     end
-    -- (Emerald 3DS's hand marks are Emerald's layouts': no other game's, whatever its names)
-    local fixes, order = Post.json(keyId == "emerald" and deps.fixes or "{}", tick)
+    -- (Emerald 3DS's hand marks are Emerald's layouts': no other game's, whatever its names, but
+    -- Ruby's and Sapphire's where they draw Emerald's - each mark kept where its cell's block is
+    -- Emerald's, src/scene/prints.lua - once the maps are read)
+    local hoenn = Run.HOENN[keyId] == true
+    local fixes, order = Post.json(hoenn and deps.fixes or "{}", tick)
+    local trustFixes
+    if hoenn and keyId ~= "emerald" then
+      trustFixes = function(input)
+        local C = deps.prints and deps.prints()
+        if not C then
+          fixes, order = Post.json("{}", tick)
+          return fixes, order
+        end
+        local dropped = Post.trustedFixes(fixes, order, function(name)
+          local L = input.byName[name]
+          if not L then return nil end
+          return C.layout(name, L.w, L.h, function(x, y) return L.blocks[y * L.w + x] end)
+        end)
+        log("%s: Emerald's hand marks kept where its maps draw Emerald's (%d dropped)", keyId, dropped)
+        return fixes, order
+      end
+    end
     local model, S = WorldMaps.solve({
+      trustFixes = trustFixes,
       tick = tick, phase = phase,
       -- (the terraces: their three parts join the solve; the hand marks, the buildings' cells)
       parts = Terraces,
@@ -210,17 +238,17 @@ return function(deps)
         end
       end
     end
-    if keyId ~= "emerald" and deps.models then standBuildings(nil) end
+    if not hoenn and deps.models then standBuildings(nil) end
     -- (another game's caves, counted off their own tilesets' pieces: src/scene/relief_caves.lua)
     local G = S.Solve and S.Solve.game
-    if keyId ~= "emerald" and deps.Caves and G and G.caves then
+    if not hoenn and deps.Caves and G and G.caves then
       deps.Caves.apply(model, S.input, G.caves, tick, deps.Roles and deps.Roles.WATER_NAMES)
       phase("caves")
     end
     -- (FireRed 3DS's relief, where it gives a layout one: its levels, cut tiles and edges over
     -- ours, our own kept where it has none - Mt Ember's outside; our building models' cells then
     -- stand on the ground before their doors again. deps.borrowed(game): its relief.bin's bytes)
-    local lent = keyId ~= "emerald" and deps.borrowed and deps.borrowed(keyId)
+    local lent = not hoenn and deps.borrowed and deps.borrowed(keyId)
     local theirs = type(lent) == "string" and Relief.decode(lent, tick) or nil
     if theirs then
       local taken = Run.borrow(model, theirs)
@@ -255,11 +283,11 @@ return function(deps)
       end,
     }
     -- (Emerald's sea ramps and hand marks: its own maps')
-    if keyId == "emerald" then Post.seaRamps(model, world) end
+    if hoenn then Post.seaRamps(model, world) end
     tick()
     Post.cutFeet(model)
     tick()
-    if keyId == "emerald" then Post.applyFixes(model, world, fixes, order, tick) end
+    if hoenn then Post.applyFixes(model, world, fixes, order, tick) end
     phase("post")
     local bytes = Relief.encode(model, Post.seamEases(model, world), tick)
     phase("encode")
