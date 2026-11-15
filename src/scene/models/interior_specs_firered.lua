@@ -467,8 +467,9 @@ end
 -- Its offices are walled by bands two rows deep (beige over a purple trim, a white edge along the
 -- top: the wall's top), read off each floor's drawing: the blocked cells drawn at least half in the
 -- band's colours, in runs two rows deep (a plant's crown over a band leaves the wall whole behind
--- it). Each band { first column, last column, top row } stands 30 rows to its foot under its edge.
--- The partitions seen from above and the dark between the rooms stay as drawn. Its furniture is
+-- it). Each band { first column, last column, top row } stands 30 rows to its foot under its edge,
+-- on its own floor alone (every floor has its bands: another's, found by its pixels, stood on
+-- them, its texture's filled-in spots showing). The partitions seen from above and the dark between the rooms stay as drawn. Its furniture is
 -- modelled on 2F, and stands as it is on every floor (and in the Rocket Hideout's) that draws it.
 local SILPH_BANDS = {
   ["1F"] = { { 30, 33, 0 }, { 0, 29, 2 }, { 34, 35, 2 } },
@@ -489,16 +490,17 @@ local function silphFloor(f, more)
   local out = {}
   for i, b in ipairs(SILPH_BANDS[f]) do
     out[#out + 1] = piece("wall_" .. i, { { b[1] * 16, b[3] * 16, b[2] * 16 + 16, b[3] * 16 + 32 } }, 30,
-      { fill = 2, foot = b[3] * 16 + 32 })
+      { fill = 2, foot = b[3] * 16 + 32, alone = true })
   end
   for _, pc in ipairs(more or {}) do table.insert(out, 1, pc) end
   return out
 end
 -- the computer racks against the walls (5F's, and wherever else their pixels are drawn): a white
--- top rows 44-52 under its outline, 19 rows of front to the foot at 72 (Oak's Lab's machines draw
--- the same racks, but their tops behind the lab's wall are the wall's there)
+-- top rows 44-52 under its outline, its back at the wall's face (64: behind it, the wall hides the
+-- top's first row), 20 rows of front to the foot at 72 (Oak's Lab's machines draw the same racks,
+-- but their tops behind the lab's wall are the wall's there)
 local SILPH_5F = {
-  piece("rack", { { 32, 44, 48, 72 } }, 19, { back = 63, leave = SILPH_FLOOR }),
+  piece("rack", { { 32, 44, 48, 72 } }, 20, { back = 64, leave = SILPH_FLOOR }),
 }
 -- 2F's furniture: the potted plants against the walls (cards, two cells), the desks (a grey top
 -- 27 rows deep over 8 rows of front and legs), their stools, the computer tables
@@ -526,7 +528,7 @@ local function rocketFloor(f)
   local out = {}
   for i, b in ipairs(ROCKET_BANDS[f]) do
     out[#out + 1] = piece("wall_" .. i, { { b[1] * 16, b[3] * 16, b[2] * 16 + 16, b[3] * 16 + 32 } }, 28,
-      { fill = 4, foot = b[3] * 16 + 32 })
+      { fill = 4, foot = b[3] * 16 + 32, alone = true })
   end
   return out
 end

@@ -94,7 +94,8 @@ end
 --- meshes = { { tris, at(u, v) -> colour or nil (the piece's texture), ox, oy (where its art's
 --- top left stands in the room, pixels) } }, over a W x H room. -> colour, owner (by y * W + x;
 --- owner the mesh's index), each pixel's tag.
-function Check.render(meshes, W, H)
+--- probe (dev): { [y * W + x] = true, log = fn }: every face covering those pixels is logged.
+function Check.render(meshes, W, H, probe)
   local depth, color, owner, tags = {}, {}, {}, {}
   for k, m in ipairs(meshes) do
     for _, t in ipairs(m.tris) do
@@ -114,9 +115,16 @@ function Check.render(meshes, W, H)
               local a = ((x1 - cx) * (y2 - cy) - (x2 - cx) * (y1 - cy)) * inv
               local b = ((x2 - cx) * (y0 - cy) - (x0 - cx) * (y2 - cy)) * inv
               local c = 1.0 - a - b
-              if a >= -1e-7 and b >= -1e-7 and c >= -1e-7 then
+              -- (what lies under the ground - a face's skirt, run a unit below the floor so no seam
+              -- shows - is hidden by the ground in the game)
+              if a >= -1e-7 and b >= -1e-7 and c >= -1e-7 and a * v0[2] + b * v1[2] + c * v2[2] >= -1e-6 then
                 local d = a * d0 + b * d1 + c * d2
                 local idx = py * W + px
+                if probe and probe[idx] then
+                  probe.log(("probe %d,%d piece %s tag %s d %.2f a/b/c %.3f %.3f %.3f uv %.2f %.2f v %s | %s | %s"):format(px, py, m.piece and m.piece.name or "?", tostring(t.tag), d, a, b, c,
+                    a * v0[4] + b * v1[4] + c * v2[4], a * v0[5] + b * v1[5] + c * v2[5],
+                    table.concat(v0, ","), table.concat(v1, ","), table.concat(v2, ",")))
+                end
                 if d > (depth[idx] or -1e30) then
                   local tu = floor(a * v0[4] + b * v1[4] + c * v2[4])
                   local tv = floor(a * v0[5] + b * v1[5] + c * v2[5])
@@ -281,7 +289,7 @@ end
 
 --- A room's pieces (every piece standing in it: modelled there, reused there, or found by its
 --- pixels) against the room as drawn. rooms = hd._rooms(); r one of them.
-function Check.room(hd, rooms, r, log)
+function Check.room(hd, rooms, r, log, probe)
   local A = hd._roomLayout(r.layout)
   if not A then return nil, "no layout " .. tostring(r.layout) end
   local W, H = A.w * 16, A.h * 16
@@ -331,7 +339,7 @@ function Check.room(hd, rooms, r, log)
       end
     end
   end
-  local color, owner = Check.render(meshes, W, H)
+  local color, owner = Check.render(meshes, W, H, probe)
   local wrong, missing, over, covered, marks, byPiece = 0, 0, 0, 0, {}, {}
   local function note(k, what, x, y)
     local m = meshes[k]

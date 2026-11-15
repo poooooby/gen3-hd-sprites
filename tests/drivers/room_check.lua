@@ -10,6 +10,7 @@
 -- its floor, drawn flat as it is.
 --   ROOM_CHECK  room names (the specs' `name`), comma separated; default every room of the game
 --   SHOT_DIR    where each room_<name>.ppm sheet goes (drawing | the room at 45 degrees | marks)
+--   ROOM_PROBE  pixels "x,y;x,y": every face covering them is logged (piece, tag, depth, uv)
 -- Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=firered POKEPORT_VERSION=firered \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/room_check.lua love .
@@ -55,7 +56,13 @@ local function body(game, log)
           end
         end
       end
-      local res, why = Check.room(hd, rooms, r, log)
+      local probe
+      if env("ROOM_PROBE") then
+        local A = hd._roomLayout(r.layout)
+        probe = { log = log }
+        for x, y in env("ROOM_PROBE"):gmatch("(%d+),(%d+)") do probe[tonumber(y) * A.w * 16 + tonumber(x)] = true end
+      end
+      local res, why = Check.room(hd, rooms, r, log, probe)
       if not res then log(("%-24s %s"):format(r.name, why))
       else
         if res.ok then pass = pass + 1 end
