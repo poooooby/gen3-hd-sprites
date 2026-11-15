@@ -37,8 +37,8 @@ return function(K, H)
   -- z 16, their tops at y 36 (row 44 at the front); the roof's eave 2 px out, its fascia rows 40-43
   local function pallet_house(w)
     local front_z, back_z, overhang = 80, 16, 2
-    local wall_top = 36
     local zf, zb = front_z + overhang, back_z - overhang
+    local wall_top = zf - 44     -- (up to the eave: the overhang's gap left the roof floating)
     local cols = { 12, w - 13 }
     local roof = HipRoof("roof", 0, w - 1, zf, zb, zf - 44, {
       fascia = Strip({ 40, 44 }, { wrap = cols }),
@@ -165,14 +165,15 @@ return function(K, H)
     local ov = o.overhang or 2
     local zf, zb = front + ov, back - ov
     local zm = (front + back) / 2
-    local wall_top = front - o.facade
     local y0, ye = zf - o.eave[2], zf - o.eave[1]
+    -- (up to the eave where it overhangs above the facade's top: else the roof floated)
+    local wall_top = math.max(front - o.facade, y0)
     local n = o.slope[2] - o.slope[1]
     local yr = ye + n - (zf - zm)
     local side = o.side
     local walls = Prism("walls", 0, w,
       { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
-      { edges = { [0] = Proj(o.facade, front), [2] = side }, skip = { 1, 3 },
+      { edges = { [0] = Proj(front - wall_top, front), [2] = side }, skip = { 1, 3 },
         caps = { Band(0, wall_top, side, front, { z1 = back }) } })
     local slope = Strip(o.slope, { rep = o.rep, start = o.start, wrap = o.wrap })
     local back_slope = Strip(o.slope, { rep = o.rep, start = o.start, wrap = o.wrap, fromEnd = true })
@@ -222,11 +223,11 @@ return function(K, H)
       slope = Strip({ 5, 41 }, { rep = { 6, 8 }, start = 7, wrap = { 8, w - 8 } }),
       teeth = { 3, 5 }, cap = { 1, 3 }, pitch = 15.0, run = 6,
       ridge_u = { 6, w - 6 }, end_tile = Tile(8, 1, 10, 3) })
-    local wall_top = front - 47
+    local wall_top = zf - 47     -- (up to the eave: the overhang's gap left the roof floating)
     local side = Tile(8, 55, 24, 70, { top = wall_top })
     local walls = Prism("walls", 1, w - 1,
       { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
-      { edges = { [0] = Proj(47, front), [2] = side }, skip = { 1, 3 },
+      { edges = { [0] = Proj(front - wall_top, front), [2] = side }, skip = { 1, 3 },
         caps = { Band(0, wall_top, side, front, { z1 = back }) } })
     local px0, px1, pz = o.porch_x0 or 42, o.porch_x1 or 69, o.porch_z or 79
     local ph = pz - 51
@@ -476,11 +477,11 @@ return function(K, H)
       slope = Strip({ 1, 24 }, { wrap = { 12, 83 } }),
       teeth = { 0, 1 }, cap = { 0, 1 }, pitch = 17.4, run = 11,
       ridge_u = { 12, 83 }, end_tile = Tile(12, 0, 13, 1) })
-    local wall_top = front - 27
+    local wall_top = zf - 27     -- (up to the eave: the overhang's gap left the roof floating)
     local side = Tile(16, 32, 24, 41, { top = wall_top })
     local walls = Prism("walls", 1, 95,
       { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
-      { edges = { [0] = Proj(27, front), [2] = side }, skip = { 1, 3 },
+      { edges = { [0] = Proj(front - wall_top, front), [2] = side }, skip = { 1, 3 },
         caps = { Band(0, wall_top, side, front, { z1 = back }) } })
     return { walls, roof }
   end
@@ -501,11 +502,11 @@ return function(K, H)
       slope = Strip({ 14, 40 }, { rep = { 20, 28 }, start = 26, wrap = cols }),
       teeth = { 10, 14 }, cap = { 8, 10 }, pitch = 10.0, run = 12,
       ridge_u = { 12, w - 12 }, end_tile = Tile(12, 8, 14, 10) })
-    local wall_top = front - 48
+    local wall_top = zf - 48     -- (up to the eave: the overhang's gap left the roof floating)
     local side = Tile(2, 48, 8, 60, { top = wall_top })
     local walls = Prism("walls", 0, w,
       { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
-      { edges = { [0] = Proj(48, front), [2] = side }, skip = { 1, 3 },
+      { edges = { [0] = Proj(front - wall_top, front), [2] = side }, skip = { 1, 3 },
         caps = { Band(0, wall_top, side, front, { z1 = back }) } })
     return { walls, roof }
   end
@@ -681,11 +682,11 @@ return function(K, H)
       slope = Strip({ 16, 64 }, { rep = { 16, 20 }, wrap = { 7, 105 } }),
       teeth = { 11, 12 }, cap = { 10, 11 }, pitch = PITCH, run = 7,
       ridge_u = { 7, 105 }, end_tile = Tile(7, 10, 8, 11) })
-    local wall_top = front_z - 69
+    local wall_top = zf - 69     -- (up to the eave: the overhang's gap left the roof floating)
     local plaster = Tile(16, 84, 32, 88, { top = wall_top })
     local walls = Prism("walls", 2, 110,
       { { front_z, 0 }, { front_z, wall_top }, { back_z, wall_top }, { back_z, 0 } },
-      { edges = { [0] = Proj(69, 95), [2] = plaster }, skip = { 1, 3 },
+      { edges = { [0] = Proj(front_z - wall_top, 95), [2] = plaster }, skip = { 1, 3 },
         caps = { Band(0, wall_top, plaster, front_z, { z1 = back_z }) } })
     return { walls, roof }
   end
@@ -880,11 +881,11 @@ return function(K, H)
       slope = Strip({ 1, 34 }, { wrap = { 15, 57 } }),
       teeth = { 1, 2 }, cap = { 1, 2 }, pitch = 17.7, run = 15,
       ridge_u = { 15, 65 }, end_tile = Tile(20, 1, 21, 2) })
-    local wall_top = front_z - 46
+    local wall_top = zf - 46     -- (up to the eave: the overhang's gap left the roof floating)
     local side = Tile(2, 48, 8, 60, { top = wall_top })
     local walls = Prism("walls", 1, 79,
       { { front_z, 0 }, { front_z, wall_top }, { back_z, wall_top }, { back_z, 0 } },
-      { edges = { [0] = Proj(46, front_z), [2] = side }, skip = { 1, 3 },
+      { edges = { [0] = Proj(front_z - wall_top, front_z), [2] = side }, skip = { 1, 3 },
         caps = { Band(0, wall_top, side, front_z, { z1 = back_z }) } })
     -- (the slope at row 27: a fifth of the way up its 25 run and 8 rise from the fascia's top)
     local t = (34 - 27) / 33
