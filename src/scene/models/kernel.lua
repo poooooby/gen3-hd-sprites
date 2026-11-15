@@ -1038,8 +1038,10 @@ end
 --- ha and hb its heights there.
 function K.Facet(name, a, b, ha, hb)
   return { name = name, emit = function(_, mesh)
+    -- (a chamfer, drawn at 45 degrees, has no 1:1 reading: "~proj", as Prism's)
+    local diag = abs(b[1] - a[1]) > 1e-6 and abs(b[2] - a[2]) > 1e-6
     projPoly(mesh, { { a[1], -1, a[2] }, { b[1], -1, b[2] }, { b[1], hb, b[2] }, { a[1], ha, a[2] } },
-      K.SHADE_ART, name .. ".facet")
+      K.SHADE_ART, name .. ".facet" .. (diag and "~proj" or ""))
   end }
 end
 

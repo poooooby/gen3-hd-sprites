@@ -86,13 +86,15 @@ local CENTER_1F = {
   -- the lip and the grey plinth below it nine rows to the floor at 64
   piece("counter", { { 64, 24, 80, 64 }, { 162, 24, 178, 64 }, { 64, 44, 178, 64 } }, 9,
     { fill = "column", leave = CENTER_FLOOR, plan = counterPlan(64, 178, 16, 24, 44, 64) }),
-  -- behind it the healing machine: its glass dome over its base, the cross on its front
-  piece("healer", { { 80, 14, 113, 45 } }, 14, { leave = CENTER_WALL, foot = 54, against = 32 }),
+  -- behind it the healing machine: its glass dome over its base, the cross on its front (16 tall:
+  -- its top's first row, drawn at 16, at the wall's face - lower, the wall hid it)
+  piece("healer", { { 80, 14, 113, 45 } }, 16, { leave = CENTER_WALL, foot = 54, against = 32 }),
   -- on the counter's back, the keypad and the box with the cross
   piece("device", { { 144, 24, 162, 45 } }, 8, { leave = cat(CENTER_WALL, CENTER_COUNTER) }),
   -- the PC by the map, against the wall
   piece("pc", { { 174, 8, 192, 48 } }, 24, { leave = cat(CENTER_WALL, CENTER_FLOOR), back = 32 }),
-  piece("bookcase", { { 34, 10, 66, 48 } }, 20, { leave = cat(CENTER_WALL, CENTER_FLOOR), back = 32 }),
+  -- the bookcase, 21 tall: its top's first row (11) at the wall's face, as the PC's (8)
+  piece("bookcase", { { 34, 10, 66, 48 } }, 21, { leave = cat(CENTER_WALL, CENTER_FLOOR), back = 32 }),
   -- a card: the wall and the floor round its pot left
   piece("plant", { { 16, 10, 32, 42 } }, 26, { card = true, through = true, leave = cat(CENTER_WALL, CENTER_FLOOR) }),
   piece("stool_1", { { 176, 80, 192, 96 } }, 5, { leave = CENTER_FLOOR }),
@@ -220,12 +222,13 @@ local function pewterGym()
   local out = {
     -- (each boulder its drawn ellipse in its cell: rows 2-14, a row lower on the stone and the
     -- back row, whose edges cross the cell's top; turned as a dome fitted to its drawing, which a
-    -- box's top - its shape's bounds - overreached by a row)
+    -- box's top - its shape's bounds - overreached by a row. The back row's ellipse leaves out the
+    -- shadow under it: with it the dome grew a row past the drawing's foot)
     repeated("rock", { { 4, 5 }, { 8, 5 }, { 3, 7 }, { 9, 7 }, { 11, 8 }, { 11, 10 } }, 12,
       { shape = { { "ellipse", 72, 88.5, 7.5, 6.5 } }, round = "dome" }),
     repeated("rock_stone", { { 5, 7 }, { 7, 7 }, { 4, 9 }, { 8, 9 } }, 12, { shape = { { "ellipse", 88, 121, 7.5, 6.5 } }, round = "dome" }),
     repeated("rock_dirt", { { 1, 8 }, { 1, 10 } }, 12, { shape = { { "ellipse", 24, 136.5, 7.5, 6.5 } }, round = "dome" }),
-    repeated("rock_back", { { 5, 3 }, { 7, 3 } }, 12, { shape = { { "ellipse", 88, 57, 7.5, 6.5 } }, round = "dome" }),
+    repeated("rock_back", { { 5, 3 }, { 7, 3 } }, 12, { shape = { { "ellipse", 88, 56.5, 7.5, 6.5 } }, round = "dome" }),
     piece("boulder", { { "ellipse", 104, 92, 16, 12 } }, 18, {}),
     piece("wall", { { 16, 0, 192, 48 } }, 32, { fill = 16, foot = 48 }),
   }

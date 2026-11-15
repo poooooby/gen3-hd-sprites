@@ -1898,6 +1898,24 @@ function I.room(spec, io, reg, tick)
   end
   local owner = {}
   local variantPx = {}
+  -- (a piece's foot in the room's depth: its foot row, or below its lowest pixel, on its base)
+  local footOf
+  local function footZ(o)
+    if not footOf then
+      footOf = {}
+      for i, by in pairs(owner) do
+        local r = floor(i / W) + 1
+        if not footOf[by] or r > footOf[by] then footOf[by] = r end
+      end
+      for j, p in ipairs(pieces) do
+        if p.foot ~= nil and footOf[j] then footOf[j] = p.foot end
+      end
+      for j, p in ipairs(pieces) do
+        if footOf[j] then footOf[j] = footOf[j] + (p.base or 0) end
+      end
+    end
+    return footOf[o]
+  end
   -- the room's shell, where a piece's copies never take a pixel
   local wallsAt = {}
   for j, p in ipairs(pieces) do
@@ -1912,6 +1930,27 @@ function I.room(spec, io, reg, tick)
     for k = 0, 255 do floorHexes[img[k]] = true end
   end
 
+  -- (a piece's copies, `at`: the cells its shape's bounds start in at each - moved here to stand
+  -- by (bx, by), where the piece itself does: its rectangle's cell, a row or two below where the
+  -- shape drawn over the cells above starts)
+  local function atFrom(pc, bx, by)
+    local sx, sy = INF, INF
+    for _, sh in ipairs(pc.shape or {}) do
+      if sh[1] == "ellipse" then
+        sx, sy = min(sx, sh[2] - sh[4]), min(sy, sh[3] - sh[5])
+      elseif type(sh[1]) == "table" then
+        for _, p in ipairs(sh) do sx, sy = min(sx, p[1]), min(sy, p[2]) end
+      else
+        sx, sy = min(sx, sh[1]), min(sy, sh[2])
+      end
+    end
+    local dx, dy = 0, 0
+    if sx < INF then dx, dy = bx - floor(sx / 16), by - floor(sy / 16) end
+    local out = {}
+    for n, a in ipairs(pc.at or {}) do out[n] = { a[1] + dx, a[2] + dy } end
+    return out
+  end
+
   local function variantGroups(k, pc, x0, y0, w, h)
     local vp = variantPx[k]
     local aroundL, floorish = vp.around, vp.floorish
@@ -1922,7 +1961,7 @@ function I.room(spec, io, reg, tick)
     vp.rect = rect
     local groups, order = {}, {}
     local places = { { x0, y0 } }
-    for _, a in ipairs(pc.at or {}) do places[#places + 1] = a end
+    for _, a in ipairs(atFrom(pc, x0, y0)) do places[#places + 1] = a end
     for _, a in ipairs(places) do
       local dx, dy = (a[1] - x0) * 16, (a[2] - y0) * 16
       local key = {}
@@ -2126,7 +2165,7 @@ function I.room(spec, io, reg, tick)
           if owner[i] == nil and not ground[i] and not floorish[hexes[i]] then owner[i] = k end
         end
       end
-      for _, a in ipairs(pc.at) do
+      for _, a in ipairs(atFrom(pc, cx0, cy0)) do
         local dx, dy = (a[1] - cx0) * 16, (a[2] - cy0) * 16
         for i in pairs(aroundSet) do
           local X, Y = i % W + dx, floor(i / W) + dy
@@ -2291,7 +2330,7 @@ function I.room(spec, io, reg, tick)
   for k = 1, np do
     local r = rects[k]
     if r then
-      for _, a in ipairs(pieces[k].at or {}) do
+      for _, a in ipairs(atFrom(pieces[k], r[1], r[2])) do
         for j = 0, r[4] - r[2] - 1 do
           for i = 0, r[3] - r[1] - 1 do copied[(a[2] + j) * 4096 + a[1] + i] = true end
         end
@@ -2409,21 +2448,29 @@ function I.room(spec, io, reg, tick)
       local parts
       local back
       -- (pc.corners: each column's top reaches back only as far as the drawing shows a thing
-      -- there - not past the floor or a wall drawn where its back would be seen: a corner rounded
-      -- or cut, the top's first rows drawn as the floor's shade, the wall over a till's back, a
-      -- pedestal's corners beside the figure it carries)
+      -- there - not past the floor, a wall or a piece behind it drawn where its back would be
+      -- seen, above the piece's own pixels: a corner rounded or cut, the top's first rows drawn
+      -- as the floor's shade, the wall over a till's back, the barrel behind a barrel's round
+      -- top, a pedestal's corners beside the figure it carries)
       local function notchOf()
         if not (pc.corners and back ~= nil) then return nil end
         local out = {}
         local r0 = y0 * 16 + back - floor(pc.height)
+        local bottom = min(H, (y0 + h) * 16)
+        local backZ = y0 * 16 + back + (pc.base or 0)
         local function open(i)
           local o = owner[i]
-          local by = o ~= nil and pieces[o]
-          return o == nil or (o ~= k and by ~= nil and truthy(by.fill))
+          if o == nil then return true end
+          local by = pieces[o]
+          if by == nil or o == k then return false end
+          return truthy(by.fill) or (footZ(o) or INF) <= backZ
         end
         for u = 0, w * 16 - 1 do
-          local x, n = x0 * 16 + u, 0
-          while r0 + n >= 0 and r0 + n < H and open((r0 + n) * W + x) do n = n + 1 end
+          local x, r, n = x0 * 16 + u, max(0, r0), 0
+          while r < bottom and owner[r * W + x] ~= k do
+            if open(r * W + x) then n = r - r0 + 1 end
+            r = r + 1
+          end
           if n > 0 then out[u] = n end
         end
         return out
@@ -2616,7 +2663,7 @@ function I.room(spec, io, reg, tick)
       if pc.when or truthy(pc.at) or room.draw or (owned ~= nil and next(owned) == nil) then
         local g0 = room.ground[1]
         local places = { { x0, y0 } }
-        for _, a in ipairs(pc.at or {}) do places[#places + 1] = { a[1], a[2] } end
+        for _, a in ipairs(atFrom(pc, x0, y0)) do places[#places + 1] = a end
         model.placed = {}
         for n, a in ipairs(places) do model.placed[n] = { room.layout, a[1], a[2], g0 } end
         model.placed_patches = floorUnder(layout, pc, g0, places, w, h)
