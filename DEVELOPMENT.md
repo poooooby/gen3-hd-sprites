@@ -781,8 +781,10 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   rounds off where its side lowers it. Flats, sides and tops keep their place. It is computed
   where the mesh is laid (`B.depth` in `init.lua`, once a cell; a relief's own depths win), so
   the relief's bytes are unchanged (Emerald's still Emerald 3DS's). The user's call, both games,
-  after side shots of Route 112 and Mt Ember; half a tile a level was tried too. Ground a tile a
-  level in front of a cliff lies under its slope (Route 112's stair cliff reaches over its sign).
+  after side shots of Route 112 and Mt Ember; half a tile a level was tried too. A descent leans
+  out at most `Relief.LEAN_MAX` (16 px, a tile) in all: a taller one stands steeper, its whole fall
+  from top to foot leaning that tile (a five-level stair at 45 degrees buried Mt Ember's plateau,
+  its battle spot and boulders under five tiles of rock).
   **No cards in Kanto:** with Kanto's trees models (`Trees.kanto`), nothing stands as a picture
   card (`cells.lua` stood a column's whole run of blocked cells when one was leafy: rock, water,
   fences and wall corners beside trees stood up with them - Vermilion's sea, Viridian's cliffs).

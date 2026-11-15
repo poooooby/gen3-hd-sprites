@@ -673,8 +673,8 @@ do
                   grid(function(j) return 16 - 4 * j end), grid(function() return 0 end) }
     local function at(x, y) return x == 0 and col[y] or nil end
     local d1, d2 = Relief.lean(at, 0, 1, col[1]), Relief.lean(at, 0, 2, col[2])
-    check(d1 and d1[0] == 32 and d1[24] == 32 and d2 and d2[0] == 32 and d2[24] == 32,
-      "faces lean: a stack of faces stands as far south as its top, one slope a tile a level")
+    check(d1 and d1[0] == 32 and d1[24] == 24 and d2 and d2[0] == 24 and d2[24] == 16,
+      "faces lean: a stack of faces is one slope from its top, a tall one leaning a tile in all")
     check(Relief.lean(at, 0, 0, col[0]) == nil and Relief.lean(at, 0, 3, col[3]) == nil,
       "...the top and the floor keep their place")
   end

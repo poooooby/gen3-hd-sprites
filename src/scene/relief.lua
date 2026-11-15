@@ -1246,7 +1246,11 @@ end
 -- tile, 45 degrees), leaning out from the top over the ground in front, a stair of two rows over
 -- two tiles. Flats, sides and the tops keep their place; the heights are the relief's own.
 -- Relief.LEAN: the tiles a face leans out a level (1: 45 degrees; 0 or nil: upright).
+-- Relief.LEAN_MAX: the most a descent leans out in all, pixels (a tile: the user's call - a taller
+-- cliff stands steeper, its whole fall leaning that far, so the ground in front stays clear: Mt
+-- Ember's five-level summit stair once leant over the whole plateau below it).
 Relief.LEAN = 1
+Relief.LEAN_MAX = 16
 
 --- The depths of a cell (heights g at map cell x, y) leaning: nil where nothing in it falls south.
 --- cellAt(x, y): a cell's heights on the same map, or nil.
@@ -1271,9 +1275,24 @@ function Relief.lean(cellAt, x, y, g)
             G, r, cy = n, N, cy - 1
           end
         end
+        -- (down the descent to its foot: south through the cell and the cells south of it)
+        local foot, F, q, fy = h, g, j, y
+        for _ = 1, 4 * 64 do
+          if q < N then
+            local nh = F[(q + 1) * SIDE + a]
+            if nh < foot then foot, q = nh, q + 1 else break end
+          else
+            local n = cellAt(x, fy + 1)
+            if not n or n[a] ~= F[N * SIDE + a] then break end
+            F, q, fy = n, 0, fy + 1
+          end
+        end
         if top ~= h then
+          local f = Relief.LEAN or 0
+          local fall = top - foot
+          if Relief.LEAN_MAX and fall * f > Relief.LEAN_MAX then f = Relief.LEAN_MAX / fall end
           out = out or {}
-          out[k] = top - (top - h) * (1 - Relief.LEAN)
+          out[k] = h + (top - h) * f
         end
       end
     end
