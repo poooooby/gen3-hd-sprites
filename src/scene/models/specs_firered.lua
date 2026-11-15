@@ -308,24 +308,26 @@ return function(K, H)
   -- Cerulean City's houses, one kit at three widths (5, 6, 7 cells; 64 px tall): the roof's top in
   -- the cell row above its own (rows 8-15; above them whatever the map draws there - a fence, sand);
   -- its outline row 8, courses every 4 rows (lines at 11, 15 ... 39) down to the eave, the hips
-  -- drawn x 0-10 and the last 11 columns; the eave rows 40-47 with the porch's posts, the facade
-  -- rows 48-62, its foot row 63 (the front at z 64), on its three blocked rows. The slope's drawn
-  -- rows are about as many as it is deep: a low pitch.
+  -- drawn x 0-10 and the last 11 columns, running down to the porch's eave at row 47; the porch
+  -- band rows 40-47 (its posts on it), the facade rows 48-62, its foot row 63 (the front at z 64),
+  -- on its three blocked rows. The roof comes down over the porch to its eave, so the hips slope
+  -- down the front corners as drawn: its drawn rows (8-46) put it at about 27 degrees. (It once
+  -- ended at row 40 at 12 degrees, the hips' drawing painted on the wall's corners as steps.)
   local function cerulean_house(w)
     local front, back, overhang = 64, 16, 2
     local zf, zb = front + overhang, back - overhang
-    local roof = HipRoof("roof", 0, w, zf, zb, zf - 40, {
-      fascia = Strip({ 39, 40 }, { wrap = { 11, w - 11 } }),
-      slope = Strip({ 12, 39 }, { rep = { 11, 15 }, start = 11, wrap = { 11, w - 11 } }),
-      teeth = { 8, 9 }, cap = { 8, 9 }, pitch = 12.0, run = 11,
+    local roof = HipRoof("roof", 0, w, zf, zb, zf - 47, {
+      fascia = Strip({ 46, 47 }, { wrap = { 11, w - 11 } }),
+      slope = Strip({ 12, 46 }, { rep = { 11, 15 }, start = 11, wrap = { 11, w - 11 } }),
+      teeth = { 8, 9 }, cap = { 8, 9 }, pitch = 26.6, run = 11,
       ridge_u = { 11, w - 11 }, end_tile = Tile(11, 8, 12, 9) })
-    local wall_top = front - 40
+    local wall_top = front - 47
     -- (its sides and back: the beige siding left of the door, rows 49-56; the windows tiled there
     -- stood two rows high on a wall of one storey)
     local side = Tile(8, 49, 24, 57, { top = wall_top })
     local walls = Prism("walls", 1, w - 1,
       { { front, 0 }, { front, wall_top }, { back, wall_top }, { back, 0 } },
-      { edges = { [0] = Proj(40, front), [2] = side }, skip = { 1, 3 },
+      { edges = { [0] = Proj(47, front), [2] = side }, skip = { 1, 3 },
         caps = { Band(0, wall_top, side, front, { z1 = back }) } })
     return { walls, roof }
   end
@@ -333,7 +335,7 @@ return function(K, H)
     local w = cells * 16
     return { name = name, layout = "LAYOUT_CERULEAN_CITY", rect = { x, y, cells, 4 },
       ground = { 0x0E4, 0x0D3, 0x0D4, 0x0D5, 0x0DB, 0x0DC, 0x0DD, 0x001, 0x004, 0x008, 0x009, 0x010, 0x011 },
-      exact = { { 2, 40, w - 2, 63 }, { 11, 12, w - 11, 39 } },
+      exact = { { 2, 47, w - 2, 63 }, { 11, 12, w - 11, 46 } },
       parts = function() return cerulean_house(w) end }
   end
 
