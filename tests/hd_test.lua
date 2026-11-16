@@ -643,6 +643,94 @@ do
   check(near(hd.stats.zoom, 0.6), "the zoom never goes below zMin")
 end
 
+-- Battle Fit's species sizing: the taller species of the pair fills its room (its pic box grown by
+-- fitRoom: Gen 3's enemy 8 rows up to the screen's top, 16 columns each side), the other shrunk by
+-- (its height / the taller's) ^ sizeCurve, never below sizeFloor
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.45
+  local base = canvas("ui", 240, 160)
+  local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
+  local pic, page = canvas("pic", 64, 64), canvas("atlas", 4096, 4096)
+  local frame = { wall = wall, pad = pad, pic = pic }
+  local function drawn()
+    local d
+    for _, e in ipairs(G.log) do if e.image == page then d = e end end
+    return d
+  end
+  local function tall(extra)
+    local spec = { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
+                   top = 52, side = "enemy", height = 1.8, scale = 0.3 }
+    for k, v in pairs(extra or {}) do spec[k] = v end
+    return spec
+  end
+  -- alone (no player's yet): it fills its room, the 64 rows over its feet and the 8 above them
+  -- holding 72 / 148 of its art; the camera stays in
+  hd.tag(pic, tall())
+  fitFrame(G, hd, base, frame)
+  local d = drawn()
+  check(near(hd.stats.zoomTarget, 1) and d and near(d.args[5], 4 * 72 / 148) and near(d.args[3], 4 * 72),
+    "species: the taller fills its room, standing on its feet, the camera in (" .. tostring(d and d.args[5]) .. ")")
+  -- the player's 4x taller: this one at (1/4) ^ 0.5 = half of its fill
+  hd.pair.player = { height = 7.2 }
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.5), "species: the shorter at (its height / the taller's) ^ 0.5 of its fill ("
+    .. tostring(d and d.args[5]) .. ")")
+  -- ... never below sizeFloor
+  hd.pair.player = { height = 100 }
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.2), "species: never below sizeFloor")
+  -- the player's shorter: this one fills
+  hd.pair.player = { height = 0.4 }
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148), "species: the taller of the pair fills")
+  -- a battle starting afresh forgets the last one's pair
+  hd.pair.player = { height = 7.2 }
+  hd.fit.idle = 10
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148) and hd.pair.player == nil and hd.pair.enemy ~= nil,
+    "species: a new battle starts a new pair")
+  -- the art's own columns (spec.art, not the frame's) and the room's sides: 30 art px each side
+  -- of its feet, 32 + 16 canvas px beside them
+  hd.tag(pic, tall({ quad = quad(0, 0, 100, 40), pivot = { 50, 40 }, art = { 20, 0, 80, 40 }, top = 0 }))
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 48 / 30), "species: sized by the art's own columns and the room's sides ("
+    .. tostring(d and d.args[5]) .. ")")
+  -- a mirrored frame: its right side drawn on the left (feet at x 20 of the box: 20 + 16 / 40)
+  hd.tag(pic, tall({ quad = quad(0, 0, 50, 20), pivot = { 10, 20 }, lowPivot = { 20, 64 }, top = 0, flip = true }))
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], -4 * 36 / 40), "species: a mirrored frame fits by its drawn sides (" .. tostring(d and d.args[5]) .. ")")
+  -- the player's room: up to the enemy's HP box (16 rows here), its feet kept
+  hd.fit.fitRoom = { player = { up = 16 } }
+  hd.tag(pic, tall({ side = "player" }))
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 80 / 148) and near(d.args[3], 4 * 72),
+    "species: the player's room reaches up to the enemy's HP box (" .. tostring(d and d.args[5]) .. ")")
+  -- the tag's own size: no height, a trainer, a double battle, Battle Fit off
+  local function own(spec, msg)
+    hd.tag(pic, spec)
+    fitFrame(G, hd, base, frame)
+    d = drawn()
+    check(d and near(d.args[5], 4 * 0.3), msg .. " (" .. tostring(d and d.args[5]) .. ")")
+  end
+  own(tall({ height = false }), "species: a tag without a height keeps its own size")
+  own(tall({ trainer = true }), "species: a trainer keeps its own size")
+  hd.fit.double = true
+  own(tall(), "species: none in a double battle")
+  hd.fit.double = false
+  hd.fit.enabled = false
+  own(tall(), "species: none with Battle Fit off")
+end
+
 -- Battle Fit and the player's own Pokemon (a back sprite: side = "player", body)
 do
   local G = fakeGraphics()
@@ -730,10 +818,10 @@ do
   z = hd.fitSolve(-300, {})
   check(near(z, fit.zMin), "...as an enemy past the limit does")
 
-  -- a back whose headroom is out of reach (its body's top on row -40: even zoom 0.4 with its
-  -- side lowered leaves it above 52), with a small enemy: the limit, not 1.00 -- the looser
+  -- a back whose headroom is out of reach (its body's top on row -80: even zoom 0.4 with its
+  -- side lowered leaves it above 44), with a small enemy: the limit, not 1.00 -- the looser
   -- rules would be met at 1.00, but the limit is still the nearest to the headroom
-  local eternatus = { 10, -40, 130, 112 }
+  local eternatus = { 10, -80, 130, 112 }
   z, e = hd.fitSolve(math.huge, { eternatus })
   check(near(z, fit.zMin), "headroom out of reach clamps to zMin (" .. tostring(z) .. "), not 1")
 
@@ -1285,6 +1373,24 @@ local function stackedFrame(opts)
 end
 
 do
+  -- a 1920x1080 window: the UI at the Renderer's 4x, docked to the bottom (y 440); the enemy's
+  -- HP box (row 16) raised to topGap (2) UI px under the screen's top: 110 + 14 UI px, its band
+  -- blitted 496 px higher, and the fit sees it there
+  local view = { 0, 0, 1920, 1080 }
+  local hd, _, blits = stackedFrame({ view = view })
+  local top, low = 0, 0
+  for _, e in ipairs(blits) do
+    if e.box and near(e.by, 440 - 496) then top = top + 1 end
+    if e.box and near(e.by, 440) then low = low + 1 end
+  end
+  check(hd.stats.uiTopDy == -124 and near(hd.fit.uiTopDy, -124) and top > 0 and low > 0,
+    "a filled landscape battle: the enemy's HP box 2 UI px under the screen's top (" .. tostring(hd.stats.uiTopDy)
+    .. ", bands " .. top .. "/" .. low .. ")")
+  local hd2 = stackedFrame({ view = view, straddle = true })
+  check(hd2.stats.uiTopDy == 0, "...not on a frame whose UI crosses the split (drawn whole)")
+end
+
+do
   -- a 1080x2400 phone, touch controls from y 1500 down, a notch to y 40
   local view = { 0, 0, 1080, 2400, top = 40, bottom = 1500 }
   local hd, G, blits, _, wall, hpIcon = stackedFrame({ view = view })
@@ -1530,7 +1636,7 @@ do
   hd.fit.doubleArt = true
   check(near(hd.fitLift(1), 10), "doubles with tagged foes: the camera rises to clear the boxes")
   hd.setDouble(false)
-  check(hd.fit.ui == single and hd.fit.feetMax == 76 and hd.fit.backTopMin == 52 and hd.fit.split == 66
+  check(hd.fit.ui == single and hd.fit.feetMax == 76 and hd.fit.backTopMin == 44 and hd.fit.split == 66
     and hd.fitLift(1) == 0, "back to singles: the singles layout")
   hd.setDouble(true, nil, nil)
   check(hd.fit.double == false, "no box positions: the singles layout")

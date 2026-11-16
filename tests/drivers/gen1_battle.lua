@@ -5,8 +5,8 @@
 -- GEN1_MOVES=THUNDERBOLT,PSYCHIC plays those moves too (from the player's side), shooting
 -- GEN1_MOVE_SHOTS frames of each (default 10,30). GEN1_INTRO_SHOT=1 also shoots the intro once
 -- its party balls show; GEN1_COLORS sets the colour mode (PaletteFX); GEN1_NO_BATTLE_PASS=1 leaves
--- the battle to the game, for comparison; GEN1_FIGHT=1 picks FIGHT and the first move. Run from
--- the engine root:
+-- the battle to the game, for comparison; GEN1_FIT=on|off sets Battle Fit; GEN1_MON the lead; GEN1_FIGHT=1
+-- picks FIGHT and the first move. Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=red POKEPORT_VERSION=red \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen1_battle.lua love .
 
@@ -32,7 +32,8 @@ local function body(game, log)
   log(("WoobleView active %s"):format(tostring(hd.isActive())))
 
   game.save.party = {}
-  for _, slot in ipairs({ { "PIKACHU", 30 }, { "MEWTWO", 70 } }) do
+  -- GEN1_MON: the lead (default PIKACHU)
+  for _, slot in ipairs({ { env("GEN1_MON") or "PIKACHU", 30 }, { "MEWTWO", 70 } }) do
     table.insert(game.save.party, Pokemon.new(game.data, slot[1], slot[2]))
   end
   U.teleport(game, "ROUTE_1", 5, 5, "down")
@@ -51,6 +52,8 @@ local function body(game, log)
   end
   -- GEN1_NO_BATTLE_PASS=1: WoobleView leaves the battle to the game (for comparison)
   if env("GEN1_NO_BATTLE_PASS") and hd.setEnabled then hd.setEnabled("battle", false) end
+  -- GEN1_FIT=on|off: Battle Fit
+  if env("GEN1_FIT") and hd.setFit then hd.setFit(env("GEN1_FIT") ~= "off" and env("GEN1_FIT") or false) end
   local foe = env("GEN1_FOE") or "ONIX"
   local function stat(k) return tostring(hd.stats()[k]) end
   for layout in (env("GEN1_LAYOUTS") or "og,wide"):gmatch("[^,]+") do
@@ -89,6 +92,8 @@ local function body(game, log)
         log(("%s %s fill=%s: zoom %s fillScale %s composites %s splits %s arena %s failed %s"):format(layout, size,
           tostring(fill), stat("zoom"), stat("fill"), stat("composites"), stat("splits"), stat("gen1Arena"),
           stat("failed")))
+        log(("  fit: zoomTarget %s lift %s backTop %s raise %s drop %s"):format(stat("zoomTarget"), stat("lift"),
+          stat("backTop"), stat("raisePlayer"), stat("dropPlayer")))
       end
       hd.setFill(true)
     end

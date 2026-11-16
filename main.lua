@@ -44,6 +44,17 @@ return function(mod)
 
   -- the engine does not register a mod's options from its manifest: define them here
   local schema = loadSibling(mod, "options.lua")
+  -- (Battle Scene is Gen 3's alone: Red to Crystal never show its rows. The engine sets the game
+  -- before it loads mods, and loads them again for another game)
+  if type(schema) == "table" and Engine.generation() < 3 then
+    local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
+                       scene_cache = true }
+    local kept = {}
+    for _, row in ipairs(schema) do
+      if not (type(row) == "table" and gen3Only[row.key]) then kept[#kept + 1] = row end
+    end
+    schema = kept
+  end
   if type(schema) == "table" and mod.options and mod.options.define then
     pcall(mod.options.define, mod.options, schema)
   end

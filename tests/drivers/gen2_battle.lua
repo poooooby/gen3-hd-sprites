@@ -3,7 +3,9 @@
 -- screenshots it in each window size (HD_SIZES, default 1920x1080), with Fill Screen on and off,
 -- logging WoobleView's stats; GEN2_LAYOUTS=og,wide shoots each battle layout. GEN2_MENUS=1 also
 -- opens the menus over the battle (PKMN: the party, then a summary; PACK; a text box) and shoots each with
--- Fill Screen on and off. Run from the engine root:
+-- Fill Screen on and off. GEN2_FIT=on|off sets Battle Fit; GEN2_MON the
+-- player's Pokemon (default TYPHLOSION); GEN2_SLIDE_SHOTS=0,20,40 shoots those frames of the
+-- intro slide. Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_IDENTITY=gold-dev POKEPORT_GAME=gold POKEPORT_TOUCH=0 \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen2_battle.lua love .
 
@@ -31,8 +33,11 @@ local function body(game, log)
     hd = { stats = function() return {} end, setFill = function() end, isActive = function() return false end }
   end
   log(("WoobleView active %s"):format(tostring(hd.isActive())))
+  -- GEN2_FIT=on|off: Battle Fit
+  if env("GEN2_FIT") and hd.setFit then hd.setFit(env("GEN2_FIT") ~= "off" and env("GEN2_FIT") or false) end
 
-  game.save.party = { Mon.new(game.data, "TYPHLOSION", 40) }
+  -- GEN2_MON: the player's Pokemon (default TYPHLOSION)
+  game.save.party = { Mon.new(game.data, env("GEN2_MON") or "TYPHLOSION", 40) }
   game.save.inventory = { POKE_BALL = 5, POTION = 3 }
   if not world:setMap("ROUTE_29", 15, 11, "down") then log("FAIL setMap"); return end
   U.wait(8)
@@ -55,6 +60,20 @@ local function body(game, log)
     U.wait(1)
   end
   if not battle then log("FAIL no battle"); return end
+  -- GEN2_SLIDE_SHOTS=0,20,40: the intro slide shot at those of its frames (battle.slideFrame),
+  -- in the first of HD_SIZES
+  if env("GEN2_SLIDE_SHOTS") then
+    local w, h = (env("HD_SIZES") or "1920x1080"):match("(%d+)x(%d+)")
+    love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
+    for n in env("GEN2_SLIDE_SHOTS"):gmatch("%d+") do
+      local want = tonumber(n)
+      for _ = 1, 600 do
+        if type(battle.slideFrame) == "number" and battle.slideFrame >= want then break end
+        U.wait(1)
+      end
+      U.shot(game, ("%s/slide_%03d.png"):format(dir, want))
+    end
+  end
   for _ = 1, 300 do
     if battle.phase == "menu" then break end
     U.tap(game, "a")
@@ -77,6 +96,9 @@ local function body(game, log)
         U.shot(game, ("%s/%s_%s_%s.png"):format(dir, layout, size, fill and "fill" or "nofill"))
         log(("%s %s fill=%s: zoom %s fillScale %s uiScale %s composites %s failed %s"):format(layout, size,
           tostring(fill), stat("zoom"), stat("fill"), stat("uiScale"), stat("composites"), stat("failed")))
+        log(("  fit: zoomTarget %s lift %s extraLift %s backTop %s raise %s drop %s hidden own %s enemy %s"):format(
+          stat("zoomTarget"), stat("lift"), stat("extraLift"), stat("backTop"), stat("raisePlayer"),
+          stat("dropPlayer"), stat("hiddenOwnUI"), stat("hiddenEnemyUI")))
       end
       hd.setFill(true)
     end

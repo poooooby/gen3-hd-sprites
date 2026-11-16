@@ -57,12 +57,16 @@ Gen2.LAYOUTS = {
     split = 44, spanDefault = { 0, 160 },
     pads = { enemy = { 96, 152 }, player = { 16, 64 } }, inwardMax = 32,
     ui = { enemy = { 8, 0, 96, 32 }, player = { 72, 56, 160, 96 }, text = { -1e4, 96, 1e4, 1e4 } },
-    backTopMin = 48, extraMax = 40,
+    backTopMin = 32, extraMax = 40,
     -- no side shift: the move animations' objects are placed in the cart's coordinates
     enemyX = 124, playerX = 40, shiftMax = 0,
     ground = false,
     padTop = 96, padRows = 0, padTuck = 0,
     wholeBelow = 36, cutAbove = 56,
+    -- species sizing's room, clear of the UI: the enemy (its box at x 96-152, from the screen's
+    -- top, its HUD up to x 96) out to the screen's edge; the player's up to the enemy's HUD's
+    -- bottom (row 32; its box at 48), out to the screen's edge and its own HUD (x 16-64 to 0-72)
+    fitRoom = { enemy = { up = 0, left = 0, right = 8 }, player = { up = 16, left = 16, right = 8 } },
   },
   -- The WIDE battle screen (304x144): the ORIGINAL's scene moved right by FIELD_X (72): the
   -- enemy's pic box at x 168-224, the player's at 88-136; the enemy's HUD where the ORIGINAL
@@ -72,11 +76,13 @@ Gen2.LAYOUTS = {
     split = 44, spanDefault = { 0, 304 },
     pads = { enemy = { 168, 224 }, player = { 88, 136 } }, inwardMax = 32,
     ui = { enemy = { 8, 0, 96, 32 }, player = { 216, 56, 304, 96 }, text = { -1e4, 96, 1e4, 1e4 } },
-    backTopMin = 48, extraMax = 40,
+    backTopMin = 32, extraMax = 40,
     enemyX = 196, playerX = 112, shiftMax = 0,
     ground = false,
     padTop = 96, padRows = 0, padTuck = 0,
     wholeBelow = 36, cutAbove = 56,
+    -- (the enemy's box at x 168-224, its HUD up to x 96)
+    fitRoom = { enemy = { up = 0, left = 8, right = 8 }, player = { up = 16, left = 16, right = 8 } },
   },
 }
 
@@ -157,11 +163,87 @@ function Gen2.prepare(Engine, hd)
     if GbcPalette and battle.exitFadeBgp then GbcPalette.setBgp(prevBgp) end
   end
 
+  -- The intro slide on a filled screen. The game slides its two halves in the way the cart's
+  -- scroll does (BattleAnimView:presentSlide: the bands baked and blitted row by row, shifted;
+  -- the back pic drawn over them from the right), all inside its 160-px panel, so on a screen
+  -- wider than that both pics would appear cut at the panel's edges. Here, with Fill Screen, the
+  -- panel is drawn unshifted with the enemy's pic moved by the top band's own offset (in from
+  -- the left), the back pic by its own (in from the right), every pic drawn at window
+  -- resolution (a pic no sprite mod tagged, a trainer's, is tagged for the frame), so each is on
+  -- the screen from the slide's first frame. The intro's blackout palette is a dark tint there
+  -- (a shader would send a full-colour frame back to its stand-in, inside the panel). Only the
+  -- bands' own scroll of the paper is not kept.
+  local okAV, BattleAnimView = pcall(require, "src.ui.gen2.BattleAnimView")
+  local okPal, Palettes = pcall(require, "src.world.gen2.Palettes")
+  local slideFill = okAV and type(BattleAnimView) == "table" and type(BattleAnimView.slideOffsets) == "function"
+    and type(BattleAnimView.slideBackpicOffset) == "function" and tonumber(BattleAnimView.SLIDE_FRAMES)
+    and okPal and type(Palettes) == "table" and type(Palettes.BLACKOUT) == "table"
+    and GbcPalette and type(GbcPalette.with) == "function"
+    and type(BattleState.drawPic) == "function" and type(BattleState.pic) == "function"
+  local function sliding(battle)
+    return slideFill and hd.fit.enabled and hd.fit.fill and hd.capturing("battle") and battle.animView ~= nil
+      and type(battle.slideFrame) == "number" and battle.slideFrame < BattleAnimView.SLIDE_FRAMES
+  end
+  local function drawSliding(battle, draw, ...)
+    local G = love.graphics
+    local tagged = {}
+    local function tagFor(img, side)
+      if img ~= nil and type(img) ~= "number" and img.getWidth and not hd.tagOf(img) then
+        hd.tag(img, { side = side, trainer = true })
+        tagged[#tagged + 1] = img
+      end
+    end
+    tagFor(battle.playerBackImage, "player")
+    tagFor(battle.enemyTrainerImage, "enemy")
+    battle.pic = function(self, mon, back, ...)
+      local a, b, c, d = BattleState.pic(self, mon, back, ...)
+      tagFor(a, back and "player" or "enemy")
+      return a, b, c, d
+    end
+    local with = GbcPalette.with
+    GbcPalette.with = function(colors, body)
+      if colors ~= Palettes.BLACKOUT then return with(colors, body) end
+      local r, g, b, a = G.getColor()
+      local c = Palettes.BLACKOUT[3]
+      G.setColor(c[1] / 255, c[2] / 255, c[3] / 255, a)
+      local okB, errB = pcall(body)
+      G.setColor(r, g, b, a)
+      if not okB then error(errB, 0) end
+      return true
+    end
+    local view = battle.animView
+    view.presentSlide = function(_, frame, drawBg, drawBackpic)
+      -- (the top band's scroll: in from the left, 144 px to none, 2 a frame)
+      local dx = -(BattleAnimView.slideOffsets(frame))
+      battle.drawPic = function(self, mon, back, ...)
+        if back then return BattleState.drawPic(self, mon, back, ...) end
+        G.push()
+        G.translate(dx, 0)
+        local okD, errD = pcall(BattleState.drawPic, self, mon, back, ...)
+        G.pop()
+        if not okD then error(errD, 0) end
+      end
+      local okP, errP = pcall(drawBg)
+      battle.drawPic = nil
+      if not okP then error(errP, 0) end
+      if drawBackpic then drawBackpic(BattleAnimView.slideBackpicOffset(frame)) end
+    end
+    local ok, err = pcall(draw, battle, ...)
+    view.presentSlide, battle.pic, battle.drawPic = nil, nil, nil
+    GbcPalette.with = with
+    for _, img in ipairs(tagged) do hd.untag(img) end
+    if not ok then error(err, 0) end
+  end
+  local function drawScene(battle, ...)
+    if sliding(battle) then return drawSliding(battle, battle.drawScene, ...) end
+    return battle:drawScene(...)
+  end
+
   --- The WIDE battle's scene, then the UI seam, then its HUDs (under the exit fade's palette, as
   --- drawScene draws them), into the pass's canvas.
   local function drawWideSplit(battle)
     local sides = false
-    battle:drawScene(function() sides = WideBattle.drawField(battle) end)
+    drawScene(battle, function() sides = WideBattle.drawField(battle) end)
     if not sides then return end
     if hd.capturing("battle") then hd.seam("ui") end
     local prevBgp
@@ -176,7 +258,7 @@ function Gen2.prepare(Engine, hd)
   --- The scene, then the UI seam, then the UI, into `c` (a battle pass on it).
   local function drawSplit(battle)
     battle.drawEnemyHud, battle.drawPlayerHud, battle.drawBottom = noop, noop, noop
-    local ok, err = pcall(battle.drawScene, battle)
+    local ok, err = pcall(drawScene, battle)
     battle.drawEnemyHud, battle.drawPlayerHud, battle.drawBottom = nil, nil, nil
     if not ok then error(err, 0) end
     if hd.capturing("battle") then hd.seam("ui") end

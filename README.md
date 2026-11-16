@@ -22,11 +22,15 @@ and Crystal.
 
 ### Battle Fit 🎥
 
-- 📐 **Big Pokémon fit:** The camera pulls back just enough to show a giant like Lugia or
-  Koraidon in full, and eases back in when it leaves.
+- 📏 **True-to-size battles:** The bigger Pokémon of the two fills all the room it has, never
+  hidden under the HP boxes or the text box, and the other is shrunk by how much smaller it
+  really is. A Marill stands well under a Meganium, and two giants both fill the screen.
+- 📐 **Nothing cut off:** If a Pokémon still doesn't fit, the camera pulls back just enough to
+  show it in full, and eases back in when it leaves.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
   bag and the intro fill any screen shape without black bars. The text box and HP bars stay
-  sharp.
+  sharp. In Gen 3 the enemy's HP box moves up to the top of the screen, giving your Pokémon
+  more room. In Gold, Silver and Crystal both sides slide in from the screen's edges.
 - 📱 **Phone-friendly:** On a phone held upright, the text box runs full width above the touch
   controls and the battle grows into the space above it.
 
@@ -43,12 +47,13 @@ and Crystal.
 
 ## ⚙️ Options
 
-Open **OPTIONS → MODS → WoobleView**.
+Open **OPTIONS → MODS → WoobleView**. Battle Scene and the four options after it only show in
+FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | Pulls the camera back so tall Pokémon fit. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | The bigger Pokémon fills its space and the other is shrunk to its true size beside it; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
@@ -83,8 +88,8 @@ Open **OPTIONS → MODS → WoobleView**.
 - **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Places without a 3D
   model are drawn flat. A battle with no overworld around it, or no open ground nearby, keeps the
   game's own background.
-- The camera only pulls back for Pokémon from a supported sprite mod. With the game's own sprites,
-  Fill Screen still fits the battle to your screen.
+- True-to-size battles need Pokémon from a supported sprite mod. With the game's own
+  sprites, Fill Screen still fits the battle to your screen.
 - 🔴 **Red, Blue, Yellow, Gold, Silver and Crystal:** Fill Screen, sharp battle and Pokédex
   sprites, and sharp overworld Pokémon from supported mods. There's no Battle Scene in these games.
 - If your device can't draw battles this way, the mod steps aside and the game draws as usual.

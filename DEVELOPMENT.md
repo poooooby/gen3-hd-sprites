@@ -144,6 +144,31 @@ UI across the width, the enemy's HP box up at the top, the scene growing between
 
 ## Battle Fit
 
+**Species sizing** (`speciesSize` in `src/hd.lua`, singles, Battle Fit on): a battle
+Pokémon's tag with a `height` (metres; WoobleSpritePack's) is sized against the other side's,
+not by its `scale`:
+
+- **The pair** (`hd.pair`): each side's latest such tag, from its draws and from `hd.prefit`
+  (`cur.sides`, merged at `endPass`), kept from pass to pass so a side not drawn this frame
+  (fainted, before its send-out) still counts, and started afresh with a new battle (`fit.idle`).
+- **The taller fills its room** (`fillScale`): the stand-in's box (the picture box the game
+  draws) grown by the layout's `fitRoom[side]` (`up` rows above, `left` / `right` columns
+  beside), the art kept inside it above and beside its feet (`lowPivot`, which stays put). The
+  art is the tag's `art` box (its union over the animation), else the frame from its `top` down.
+  The player's room reaches up to the enemy's HP box's bottom wherever the UI puts it over the
+  scene (`uiTopDy`, `uiK`, `sceneUp`).
+  - **Gen 3:** the enemy's up to the screen's top (8 rows), the player's up to the enemy's HP box
+    (it stands on its pad, the UI over its lower rows as in the cart), each 16 columns wider.
+  - **Gen 1 / 2:** the enemy's out to its HUD and the screen's edge (its box already starts at
+    the top); the player's up to the enemy's HUD (row 32) and out to the screen's edge and its
+    own HUD.
+- **The other** is drawn at `max(sizeFloor, (h / hTaller) ^ sizeCurve)` (0.2, 0.5) of its own
+  fill: Marill (0.4 m) against Meganium (1.8 m) at 0.47.
+- **Else** the tag's own `scale`: Battle Fit off, a double battle, a trainer, a tag without a
+  height. With a pair in the battle the camera's top `margin` is 0 (`topLimit`): on the Game
+  Boy the enemy's room starts at the screen's top. The camera's code is unchanged: it still
+  pulls back for whatever does not fit.
+
 A battle pass is cut into the **scene** and the **UI** over it.
 
 - **The UI seam:** `hd.seam("ui")` is called right after `BallOpen.draw`, the last scene draw
@@ -179,10 +204,11 @@ The target zoom:
   to `fit.extraMax`, 48 px), that keeps:
   - **The whole animation on screen, always:** its art top over the whole animation (`top`)
     stays under the screen's top. A head Blacephalon throws only has to stay on the screen.
-  - **Headroom:** the resting body's top is no higher than `fit.backTopMin` = 52. That is
-    where the tallest cart back sprites start (Tyranitar, Steelix and Meganium: row 0 of the
-    64×64 back box, centred at y = 80 + 4). It is 8 px below the enemy's HP box (y 16–44), so
-    the head never sits behind it.
+  - **Headroom:** the resting body's top is no higher than `fit.backTopMin` = 44, the enemy's
+    HP box's bottom (y 16–44; the tallest cart back sprites, Tyranitar, Steelix and Meganium,
+    start 8 px lower, at row 0 of the 64×64 back box centred at y = 80 + 4), so the head never
+    sits behind it; with the box raised (`topGap`, Fill Screen) the headroom
+    rises with it. On Gen 1 / 2 it is the enemy's HUD's bottom (row 32).
   - **The player's own side:** at most `fit.maxHiddenOwn` (30%) of the body under the
     player's HP box plus the text box and everything below it (`fit.ui.player`, `fit.ui.text`).
 
@@ -348,6 +374,21 @@ already covers the view.
   safe area's top, a notch) and, on a tall screen with on-screen touch controls and no cutout,
   `view.bottom`: the top of the controls (the highest `TouchControls:layout()` zone except the
   corner hotbar button).
+- **The enemy's HP box raised** (Gen 3 singles, `fit.topGap` = 2 UI px): on a wide screen the
+  battle fills, the top band (the rows above `fit.split`) is blitted so the enemy's HP box's top
+  (`fit.ui.enemy[2]`) is `topGap` under the screen's top, the player's HP box's gap over the text
+  box, as the stacked arrangement moves it (`dyTop`, `banded`; `noteUi` records it for `uiMap`).
+  The fit sees it there (`fit.uiTopDy`), so the player's Pokémon has the rows it left. Not on a
+  frame whose UI crosses the split (the straddle guard), not in doubles, not with Fill Screen off
+  (the game's own frame).
+- **Gen 2's intro slide** (`drawSliding` in `src/gen2.lua`): the game slides its halves in the
+  way the cart's scroll does (`BattleAnimView:presentSlide`: bands blitted row by row, shifted,
+  the back pic over them from the right), inside its 160-px panel. With Fill Screen the panel is
+  drawn unshifted, the enemy's pic moved by the top band's offset (`slideOffsets`) and the back
+  pic by its own (`slideBackpicOffset`), every pic at window resolution (an untagged one, a
+  trainer's, tagged for the frame as `{ side, trainer = true }`), the intro's `BLACKOUT` palette
+  a dark tint (a shader would send a full-colour frame back to its stand-in). So both are on the
+  screen from the first frame. The bands' scroll of the paper is not kept.
 - **Wide** (that area no taller than the canvas's 3:2): the UI keeps the Renderer's
   whole-number scale, docked to the bottom, centred. The scene is scaled about the text box's
   line by the smaller of the height fit `(text box line - top) / (112 * scale)` and the width
@@ -1124,6 +1165,10 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
 - **Build 3D Cache / Clear 3D Cache:** `choice` rows (`idle` / `go`, `visible_if` Overworld) under
   Battle Scene. `main.lua`'s `mod.options_changed` handler runs a row set to `go` and sets it back
   (Build's when the panel closes). A `go` left from the launcher runs once the field is quiet.
+- **Gen 3 only rows:** `main.lua` defines `options.lua`'s rows with `mod.options:define`, and in
+  Gen 1/2 (`Engine.generation() < 3`) it leaves out Battle Scene's (`battle_scene`, `scene_build`,
+  `scene_clear`, `scene_blur`, `scene_cache`). The engine sets the game before it loads mods, and
+  loads them again for another game. Their stored values stay; reads fall back to the defaults.
 - **Build as I play:** the progress panel's one button, `Build as I play (B)`, is taken by B or a
   click, never by A, so mashing through text can't close it.
   - It closes the panel and keeps the job (`bgJob`). The build carries on as it would have in the
@@ -1555,13 +1600,15 @@ end
 | `top` | the first row of art in the frame (quad pixels), the highest over the animation: Battle Fit fits the art, not the frame's empty margin (default 0) |
 | `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
 | `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
+| `art` | `{x0, y0, x1, y1}`: the art's box over its whole animation (quad pixels). Battle Fit's species sizing fits it in the Pokémon's room; without it the frame is taken as the art, from `top` down |
+| `height` | the species' real height in metres. With it (and a `side`), Battle Fit sizes the two battlers against each other (the taller fills its room, the other by height) instead of by `scale`. Check `features.speciesSize` |
 | `flip` | `true`: the `texture`/`quad` frame is drawn mirrored about its `pivot` (a stand-in the mod drew mirrored; `lowPivot` is in the stand-in as drawn). Check `features.flip` |
 | `shades` | a shader: the stand-in is in the Game Boy's four shades, made by this shader from the frame's colours. The `texture`/`quad` frame is drawn through it and then coloured as the stand-in is: in Gen 1 into a canvas a whole number of times the pass's size, then through the Renderer's blit (its SGB zones); in Gen 2 (a direct pass) 1:1 into a canvas, then drawn under the palette shader in force. Without it a tagged frame under a shader falls back to the stand-in. Check `features.shades` |
 
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none), `sceneDecks(layout)` (a layout's deck table, for an overworld view: see Battle
@@ -1585,13 +1632,13 @@ image itself a real low-res picture: it is what shows whenever a frame falls bac
 `luajit tests/hd_test.lua` (a fake `love.graphics`; no game needed). Every test file is listed by
 exact path in `.modkitignore`. The drivers in `tests/drivers/` run in the game
 (`POKEPORT_DRIVER`, each file's header says how) and screenshot what they check; for the Game
-Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT` and `GEN1_COLORS`), `gen2_battle.lua`,
+Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT`, `GEN1_COLORS` and `GEN1_FIT` on / off, `GEN1_MON` the lead), `gen2_battle.lua` (`GEN2_FIT` on / off, `GEN2_MON`, `GEN2_SLIDE_SHOTS` for the intro slide),
 `field_gb.lua` (Field HD with Vivid Worlds: OG), `screens_gb.lua` (Red's whole screens) and
 `dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off). Battle Scene:
 `luajit tests/scene_test.lua` (camera, cells, stage search, vertices, trees, the building kernel,
 specs and placement, look-alike cells, solids, component runs, fences, kits, signs, relief and its
 last passes), `luajit tests/roles_test.lua` (the cell roles) and the drivers
-`scene_battle.lua` (`SCENE_SPOTS`, `SCENE_LOOK` for shots aimed elsewhere, each also saved as the
+`scene_battle.lua` (`SCENE_SPOTS`, `SCENE_FITS` for the settled battle with Battle Fit on and off, `SCENE_LOOK` for shots aimed elsewhere, each also saved as the
 scene alone through the test hooks `exports._sceneLook` / `_sceneShot`; it logs every placed
 model with its cell, every component run with its triangles, every sign (cell, metatile, head),
 the relief's lifted cells and layouts (`sceneRelief`) and the build time phase by phase

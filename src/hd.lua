@@ -104,6 +104,21 @@ function HD.new(G, opts)
     fit = {
       -- zMin: the farthest it may pull back (40% fits the very biggest, Lugia and Koraidon)
       enabled = false, available = false, zMin = 0.4, focus = { 120, 112 }, margin = 2, parallax = 0.35,
+      -- species sizing (singles, tags with a `height`): each battle Pokemon's room, in canvas px:
+      -- its picture box grown `up` rows above its top and `left` / `right` columns beside it, the
+      -- most it may fill without the UI covering it (fillScale). Gen 3: the enemy up to the
+      -- screen's top (its box at 144-208, from row 8), the player's up to the enemy's HP box's
+      -- bottom (44, or where the top band has moved it; its box at 40-104, from row 52: it
+      -- stands on its pad, the UI over its lower rows as in the cart), each 16 columns wider
+      fitRoom = { enemy = { up = 8, left = 16, right = 16 }, player = { up = 8, left = 16, right = 16 } },
+      -- ... the taller species of the two fills its room; the other is drawn at
+      -- max(sizeFloor, (its height / the taller's) ^ sizeCurve) of what would fill its own
+      sizeCurve = 0.5, sizeFloor = 0.2,
+      -- the enemy's HP box (rows 16-44) raised to this many UI px under the screen's top on a
+      -- wide screen the battle fills (singles): the player's HP box's gap over the text box (110
+      -- to 112). The top band (rows above `split`) is moved up, as on a stacked screen; the fit
+      -- sees it there (uiTopDy), so the player's Pokemon may rise into the rows it left
+      topGap = 2,
       -- the enemy's feet (its 64x64 pic box's bottom, ui.lua ENEMY_MON y 40 + 32) and the
       -- lowest they may sink to: the top of the player's HP box is just below
       feetY = 72, feetMax = 76,
@@ -147,10 +162,10 @@ function HD.new(G, opts)
       -- manage it, and at most maxHidden under the enemy's box when there is no headroom
       ui = { enemy = { 14, 16, 113, 44 }, player = { 134, 74, 236, 110 }, text = { -1e4, 112, 1e4, 1e4 } },
       maxHidden = 0.5, maxHiddenOwn = 0.3,
-      -- headroom: the player's Pokemon's body top stays no higher than the tallest cart back
-      -- sprite's (Tyranitar, Steelix, Meganium: row 0 of the 64x64 back box, centred at
-      -- y = 80 + 4, so y = 52), 8 px below the enemy's HP box
-      backTopMin = 52,
+      -- headroom: the player's Pokemon's body top stays no higher than the enemy's HP box's
+      -- bottom (44; the tallest cart back sprites, Tyranitar, Steelix, Meganium, start 8 px
+      -- lower, at row 0 of the 64x64 back box centred at y = 80 + 4)
+      backTopMin = 44,
       -- the camera may rise this far past what the enemy's feet need, to lift the player's
       -- Pokemon out from under the text box; zooms are tried in steps of zStep
       extraMax = 48, zStep = 0.005,
@@ -207,7 +222,7 @@ function HD.new(G, opts)
   -- battle pass; "gen3" is the table above.
   local LAYOUT_KEYS = { "focus", "feetY", "feetMax", "split", "spanDefault", "pads", "inwardMax",
     "ui", "backTopMin", "extraMax", "enemyX", "playerX", "shiftMax", "ground", "padTop", "padRows",
-    "padTuck", "wholeBelow", "cutAbove" }
+    "padTuck", "wholeBelow", "cutAbove", "fitRoom", "topGap" }
   self.layouts = { gen3 = {} }
   for _, key in ipairs(LAYOUT_KEYS) do self.layouts.gen3[key] = self.fit[key] end
   self.layout = "gen3"
@@ -605,6 +620,12 @@ function HD.new(G, opts)
     return self.fit.fill and cur.pass == "battle" and cur.segment == "ui" and not cur.uiCovers
   end
 
+  -- a tag sized by its species: a battle Pokemon's (a side, not a trainer's) with a height
+  local function speciesTag(spec)
+    return spec.side ~= nil and not spec.trainer and type(spec.height) == "number" and spec.height > 0
+      and spec.texture ~= nil
+  end
+
   local function record(image, spec, a, b, c, d, e, f, g, h, i)
     local quad, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
@@ -613,6 +634,9 @@ function HD.new(G, opts)
       x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
     end
     if type(x) ~= "number" then return nil end
+    local cur = self.cur
+    -- (a battler sized by its species: this pass's latest of its side, for the pair)
+    if cur and cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
     local t0x, t0y = real.transformPoint(0, 0)
     local t1x = real.transformPoint(1, 0)
     local _, t2y = real.transformPoint(0, 1)
@@ -683,6 +707,77 @@ function HD.new(G, opts)
     return shadeCanvas, shadeQuad
   end
 
+  -- Species sizing (Battle Fit, singles): the two battlers' tags (the latest of each side's
+  -- with a `height`, metres), kept from pass to pass (endPass) and cleared when a battle starts
+  -- afresh (fit.idle), so a side not drawn this frame (fainted, before its send-out) still counts
+  self.pair = {}
+
+  -- the size at which the art fills its room: the stand-in's box (the picture box the game
+  -- draws) grown by fit.fitRoom[side], above and beside the point it stands on (lpx, lpy; its
+  -- pivot hpx, hpy in the frame), which stays where it is. The art is spec.art ({x0, y0, x1,
+  -- y1}, frame px: its box over the whole animation) or the frame from its top row of art
+  -- (spec.top) down. sx, sy: the draw's own scale (the room is in canvas px). nil: unknown.
+  -- (no garbage: the dimensions, the viewport and the room's fields are numbers)
+  local function fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
+    if not (image and image.getWidth) then return nil end
+    local fit = self.fit
+    local up, roomL, roomR = 0, 0, 0
+    local room = fit.fitRoom and fit.fitRoom[spec.side == "player" and "player" or "enemy"]
+    if room then
+      local kx, ky = math.abs(sx or 1), math.abs(sy or 1)
+      if kx < 1e-6 then kx = 1 end
+      if ky < 1e-6 then ky = 1 end
+      local upPx = room.up or 0
+      -- (the player's: up to the enemy's HP box's bottom, `up` rows over its box, where the UI
+      -- puts it over the scene: the top band moved (uiTopDy), the UI at its own scale (uiK))
+      if spec.side == "player" and fit.ui and fit.ui.enemy then
+        local e, fy = fit.ui.enemy[4], fit.focus[2]
+        upPx = upPx + e - (fy + (e + (fit.uiTopDy or 0) + (fit.sceneUp or 0) - fy) * (fit.uiK or 1))
+      end
+      up = upPx / ky
+      roomL, roomR = (room.left or 0) / kx, (room.right or 0) / kx
+    end
+    local W = image:getWidth()
+    local ax0, atop, ax1
+    local art = spec.art
+    if type(art) == "table" and art[1] and art[2] and art[3] then
+      ax0, atop, ax1 = art[1], art[2], art[3]
+    else
+      ax0, atop = 0, spec.top or 0
+      if spec.quad then
+        local _, _, qw = spec.quad:getViewport()
+        ax1 = qw
+      else
+        ax1 = spec.texture:getWidth()
+      end
+    end
+    -- (a mirrored frame: its right side drawn on the left)
+    local left, right = hpx - ax0, ax1 - hpx
+    if spec.flip then left, right = right, left end
+    local above = hpy - atop
+    local s = math.huge
+    if above > 0 then s = math.min(s, (lpy + up) / above) end
+    if left > 0 then s = math.min(s, (lpx + roomL) / left) end
+    if right > 0 then s = math.min(s, (W - lpx + roomR) / right) end
+    if s > 0 and s < math.huge then return s end
+    return nil
+  end
+
+  -- Battle Fit's species sizing: the taller species of the two fills its room (fillScale); the
+  -- other is shrunk by how much shorter it is (sizeCurve, never below sizeFloor). Else k, the
+  -- tag's own size (Battle Fit off, a double battle, a tag without a height, a trainer).
+  local function speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
+    local fit = self.fit
+    if not (fit.enabled and not fit.double and speciesTag(spec)) then return k end
+    local f = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
+    if not f then return k end
+    local other = self.pair[spec.side == "player" and "enemy" or "player"]
+    if other and other.height > spec.height then
+      f = f * math.max(fit.sizeFloor, (spec.height / other.height) ^ fit.sizeCurve)
+    end
+    return f
+  end
+
   local function drawAtScale(shaded, image, spec, a, b, c, d, e, f, g, h)
     local quad, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
@@ -709,6 +804,7 @@ function HD.new(G, opts)
       hpx, hpy = hp and hp[1] or lpx, hp and hp[2] or lpy
     end
     local k = (qp and qp[3]) or spec.scale or 1
+    if not qp then k = speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy) end
     -- where the draw put the pivot, then the frame drawn k times larger about it
     local dx, dy = (lpx - ox) * sx, (lpy - oy) * sy
     local cs, sn = math.cos(r), math.sin(r)
@@ -1051,6 +1147,8 @@ function HD.new(G, opts)
       -- images usually are outside a pass (the screen still fills the screen)
       plain = pass == "screen" and not self.enabled.dex,
       prefit = {},
+      -- each side's battler sized by its species, this pass (self.pair at its end)
+      sides = pass == "battle" and {} or nil,
       -- the side shift this frame is drawn with (the engine's move coordinates use the same)
       shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player,
                 playerY = self.fit.shift.playerY, playerRaise = self.fit.shift.playerRaise },
@@ -1218,6 +1316,7 @@ function HD.new(G, opts)
       spec = spec, image = image, x = x, y = y, r = 0, sx = 1, sy = 1, ox = 32, oy = 32,
       tx = 0, ty = 0, tsx = 1, tsy = 1,
     }
+    if cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
   end
 
   --- Stop capturing. The pass waits for its canvas's blit (or flatten).
@@ -1225,6 +1324,12 @@ function HD.new(G, opts)
     local cur = self.cur
     if not cur then return nil end
     self.cur = nil
+    -- the battlers' pair: afresh when a battle starts (no battle fitted for a few frames), then
+    -- each side's latest
+    if cur.sides then
+      if self.fit.idle > 2 then self.pair = {} end
+      for side, spec in pairs(cur.sides) do self.pair[side] = spec end
+    end
     -- leave the drawing target where the engine expects it
     local c = real.getCanvas()
     if c ~= nil and (c == cur.base or cur.layerSet[c]) and c ~= cur.base then real.setCanvas(cur.base) end
@@ -1323,6 +1428,7 @@ function HD.new(G, opts)
       lpx, lpy, hpx, hpy = lp[1], lp[2], hp[1], hp[2]
     end
     local k = (qp and qp[3]) or spec.scale or 1
+    if not qp then k = speciesSize(spec, rec.image, k, lpx, lpy, hpx, hpy, rec.sx, rec.sy) end
     -- a part of the pic drawn on its own (its rows one by one, each shifted: Rapid Spin,
     -- Extrasensory, Dig): the pivot is the whole pic's, and the HD frame is cut to that part
     -- (cut: {x0, y0, x1, y1} in the HD texture's pixels)
@@ -1589,9 +1695,11 @@ function HD.new(G, opts)
     return enemyUI
   end
 
-  -- the highest canvas row art may reach: the screen's top, less the margin
+  -- the highest canvas row art may reach: the screen's top, less the margin (none when species
+  -- sizing fits the battlers in their rooms: on the Game Boy the enemy's starts at the top)
   local function topLimit()
-    return (self.fit.topY or 0) + self.fit.margin
+    local sized = not self.fit.double and (self.pair.enemy ~= nil or self.pair.player ~= nil)
+    return (self.fit.topY or 0) + (sized and 0 or self.fit.margin)
   end
 
   local function fitLift(z)
@@ -2449,6 +2557,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       sceneBox = { vx, vy, vw, vh }
       uiBox = clipRect(ubx, uby, cur.w * U, cur.h * Uy, sceneBox)
     end
+    -- the enemy's HP box raised to fit.topGap UI px under the screen's top on a wide screen the
+    -- battle fills (singles; a stacked one already moves the band up), so the player's Pokemon
+    -- has the rows under it. Fill Screen off keeps the game's own frame
+    local raised = filling and not stacked and not fit.double and type(fit.topGap) == "number"
+    if raised then
+      dyTop = math.min(dyTop, round2((top - uby) / Uy + fit.topGap - fit.ui.enemy[2]))
+    end
     -- the UI over the scene, in the scene's canvas pixels: shrunk about the line by the
     -- ratio of their scales; the enemy's HP box moved with the top band; the screen's top
     fit.uiK = U / S
@@ -2499,15 +2614,17 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     else
       fit.raise = 0
     end
-    local banded = stacked and dyDraw < 0 and not cur.uiStraddle
+    local banded = (stacked or raised) and dyDraw < 0 and not cur.uiStraddle
     local topBy = uby + dyDraw * Uy
     local topBox, lowBox
+    -- (unfilled: the Renderer's clip, else its letterbox)
+    local clipTo = sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
     if banded then
-      topBox = clipRect(ubx, topBy, cur.w * U, split * Uy, sceneBox)
-      lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, sceneBox)
+      topBox = clipRect(ubx, topBy, cur.w * U, split * Uy, clipTo)
+      lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, clipTo)
     end
     local k = filling and U ~= math.floor(U) and math.ceil(U) or 1
-    if filling then noteUi(cur, ubx, uby, U, Uy, uiBox, split, topBy, topBox, lowBox) end
+    if filling or banded then noteUi(cur, ubx, uby, U, Uy, uiBox or clipTo, split, topBy, topBox, lowBox) end
     self.stats.lift = lift
     self.stats.fill = S / bsx
     self.stats.uiScale = U
@@ -2631,7 +2748,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           self.stats.edgeDrawn = (self.stats.edgeDrawn or 0) + 1
         elseif inScene and not item.screen and moved then
           blit(item.canvas, sx0, sy0, ssx, ssy, sceneBox)
-        elseif not inScene and filling then
+        elseif not inScene and (filling or banded) then
           local c, kk = item.canvas, 1
           if k > 1 then c, kk = sharpen(item.canvas, cur.w, cur.h, k) end
           if banded then

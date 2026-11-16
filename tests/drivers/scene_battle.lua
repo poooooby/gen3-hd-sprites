@@ -3,8 +3,9 @@
 -- Littleroot Town by the houses) stands the player there, starts a wild battle and shoots the
 -- entrance glide (SCENE_FRAMES, default 2,20,40,60,80,100,130), the settled battle with Fill
 -- Screen on and off, and the same battle with the scene off (CLASSIC). SCENE_SIZE (default
--- 1920x1080) is the window; SCENE_FOE a species constant (default SPECIES_WURMPLE), SCENE_MON the
--- player's (default SPECIES_TORCHIC); SCENE_LOOK
+-- 1920x1080) is the window; SCENE_FOE a species constant (default SPECIES_WURMPLE; WoobleDex's too), SCENE_MON the
+-- player's (default SPECIES_TORCHIC); SCENE_FITS (on,off) the settled battle with
+-- Battle Fit on and off; SCENE_LOOK
 -- (dx:dz:pitch:dist, comma separated) more shots with the camera aimed that far from the player,
 -- pitched that many degrees, that many tiles away. Logs
 -- WoobleView's scene stats. Run from the engine root:
@@ -46,6 +47,16 @@ local function body(game, log)
   local loader = game.mods
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
   if not hd then log("FAIL gen3-hd-sprites exports missing"); return end
+  -- a species constant: the game's own, else WoobleDex's slot for it (SPECIES_JOLTIK)
+  local function speciesOf(name)
+    local ok, v = pcall(C.require, C, "species", name)
+    if ok and v then return v end
+    local dex = loader.exports and loader.exports["national_dex_gen3"]
+    local short = name:gsub("^SPECIES_", "")
+    local slot = dex and dex.slotOf and (dex.slotOf(short) or dex.slotOf(name))
+    if slot then return slot end
+    error("no species " .. name)
+  end
   for _, id in ipairs({ "play_nav", "ds_touch" }) do
     loader.modOptions[id] = loader.modOptions[id] or {}
     loader.modOptions[id].display = "off"
@@ -203,7 +214,7 @@ local function body(game, log)
     Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
     Player.targetX, Player.targetY, Player.facing = px, py, facing
     -- SCENE_MON: the player's Pokemon, a species constant (default SPECIES_TORCHIC)
-    if s and #(s.party or {}) == 0 then Party.giveMon(s, C:require("species", env("SCENE_MON") or "SPECIES_TORCHIC"), 12) end
+    if s and #(s.party or {}) == 0 then Party.giveMon(s, speciesOf(env("SCENE_MON") or "SPECIES_TORCHIC"), 12) end
     -- SCENE_WEATHER=id: that weather set as a script sets it (setweather, doweather), given time
     -- to come in
     if env("SCENE_WEATHER") then
@@ -248,7 +259,7 @@ local function body(game, log)
       log(("%s warmed %s models in %.0f ms"):format(mapId, tostring(n), (love.timer.getTime() - tw) * 1000))
     end
     local ok, err = BattleBridge.startWild(Runtime._mod, game,
-      { species = C:require("species", env("SCENE_FOE") or "SPECIES_WURMPLE"), level = 3 }, { fade = false })
+      { species = speciesOf(env("SCENE_FOE") or "SPECIES_WURMPLE"), level = 3 }, { fade = false })
     if not ok then log("FAIL startWild", tostring(err)); return end
     local fi = 1
     for f = 1, 200 do
@@ -353,6 +364,21 @@ local function body(game, log)
     log(("%s weather: %s"):format(mapId, stat("sceneWeather")))
     log(("%s trees: %s"):format(mapId, stat("sceneTrees")))
     log(("%s runs: %s (built in %s ms: %s)"):format(mapId, stat("sceneRuns"), stat("sceneMs"), stat("scenePhases")))
+    -- SCENE_FITS (e.g. on,off): the settled battle with Battle Fit on and off, the scene on and
+    -- off (CLASSIC); Battle Fit back on after
+    if env("SCENE_FITS") then
+      for m in env("SCENE_FITS"):gmatch("[^,]+") do
+        hd.setFit(m ~= "off" and m or false)
+        U.wait(120)
+        U.shot(game, ("%s/%s_fit_%s.png"):format(dir, mapId, m))
+        hd.setScene(false)
+        U.wait(120)
+        U.shot(game, ("%s/%s_fit_%s_classic.png"):format(dir, mapId, m))
+        hd.setScene(true)
+        U.wait(6)
+      end
+      hd.setFit(true)
+    end
     hd.setScene(false)
     U.wait(6)
     U.shot(game, ("%s/%s_classic.png"):format(dir, mapId))

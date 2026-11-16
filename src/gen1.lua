@@ -54,7 +54,7 @@ Gen1.LAYOUTS = {
     split = 44, spanDefault = { 0, 160 },
     pads = { enemy = { 96, 152 }, player = { 8, 64 } }, inwardMax = 32,
     ui = { enemy = { 8, 0, 88, 32 }, player = { 72, 56, 160, 96 }, text = { -1e4, 96, 1e4, 1e4 } },
-    backTopMin = 40, extraMax = 40,
+    backTopMin = 32, extraMax = 40,
     -- no side shift: the move animations' sprites are placed in the cart's coordinates
     enemyX = 124, playerX = 36, shiftMax = 0,
     ground = false,
@@ -62,6 +62,11 @@ Gen1.LAYOUTS = {
     -- the line
     padTop = 96, padRows = 0, padTuck = 0,
     wholeBelow = 36, cutAbove = 56,
+    -- species sizing's room, clear of the UI: the enemy (its box at x 96-152, from the screen's
+    -- top) out to its HUD (x 88) and the screen's edge; the player's up to the enemy's HUD's
+    -- bottom (row 32: its 64-row box, feet on row 96, is there) and out to the screen's edge (its
+    -- box at x 8-72, its own HUD from x 72)
+    fitRoom = { enemy = { up = 0, left = 8, right = 8 }, player = { up = 0, left = 8 } },
   },
   -- The WIDE battle screen (304x144, src/battle/WideBattle.lua): the field above row 104
   -- (FIELD_BOTTOM), the message and menu windows below it. Each side is the ORIGINAL's 160x144
@@ -74,12 +79,14 @@ Gen1.LAYOUTS = {
     split = 44, spanDefault = { 0, 304 },
     pads = { enemy = { 232, 288 }, player = { 28, 84 } }, inwardMax = 32,
     ui = { enemy = { 0, 0, 128, 32 }, player = { 184, 56, 304, 96 }, text = { -1e4, 104, 1e4, 1e4 } },
-    backTopMin = 48, extraMax = 40,
+    backTopMin = 32, extraMax = 40,
     -- no side shift: the move animations are moved as a group by WideBattle.animationOffset
     enemyX = 260, playerX = 56, shiftMax = 0,
     ground = false,
     padTop = 104, padRows = 0, padTuck = 0,
     wholeBelow = 36, cutAbove = 56,
+    -- (the player's 64-row box from row 40, its feet on the windows at 104)
+    fitRoom = { enemy = { up = 0, left = 8, right = 8 }, player = { up = 8, left = 8, right = 8 } },
   },
 }
 
