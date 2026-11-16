@@ -39,8 +39,11 @@
 --                          frame filled the screen with is not drawn again, and what follows is
 --                          moved to where its UI went (hd.uiMap); Game2:draw counts the frames.
 --
--- A battle with a black or world background is drawn the game's usual way (Game2 paints those
--- around the panel after it is drawn).
+--   Game2:paintBattleSurround   a black or world background, painted round the panel after the
+--                          battle is drawn (a world one over the overworld Game2 drew first): the
+--                          battle is ours on any background, its white paper laid under it (the
+--                          window when it fills it, else its panel), and the surround is not
+--                          painted in a frame the battle filled the window.
 
 local Gen2 = {}
 
@@ -180,9 +183,17 @@ function Gen2.prepare(Engine, hd)
     drawUI(battle)
   end
 
-  -- the battle draws over its own white paper; a black or world background is painted around
-  -- the panel afterwards (Game2:paintBattleSurround), which a filled screen would hide
-  local function whitePaper(battle)
+  -- the battle draws over its own white paper whatever the background; a black or world one is
+  -- painted round the panel afterwards (Game2:paintBattleSurround), a world one over the
+  -- overworld Game2 drew first (with Chrome.worldSurround set, so the letterbox paints nothing)
+  local filledFrame = -1    -- the frame (Game2:draw's count) the battle filled the window in
+  -- (optional: without the surround's seam and the frame count, only a white background's
+  -- battle is ours; a black or world one is drawn the game's way)
+  local paintSurround = okG and type(Game2) == "table" and type(Game2.paintBattleSurround) == "function"
+    and Game2.paintBattleSurround or nil
+  local surrounds = gameDraw and battleDraw and paintSurround and true or false
+  local function paperOk(battle)
+    if surrounds then return true end
     local ok, mode = pcall(battle.bgMode, battle)
     return not ok or mode == nil or mode == "white"
   end
@@ -198,7 +209,20 @@ function Gen2.prepare(Engine, hd)
       bx, by = Chrome.fitOrigin(winW, winH, scale)
     end
     local box = { bx, by, cw * scale, 144 * scale }
-    if Chrome.letterbox then Chrome.letterbox(winW, winH, 1, 1, 1) end
+    -- the battle's white paper: the window when the battle fills it, else under its panel (a
+    -- world background's overworld stays round it, the game's dimming painted after)
+    local fills = hd.fit.enabled and hd.fit.fill
+    if Chrome.letterbox then
+      local world = Chrome.worldSurround
+      if world and not fills then
+        G.push("all")
+        G.setScissor(box[1], box[2], box[3], box[4])
+      end
+      Chrome.worldSurround = false
+      Chrome.letterbox(winW, winH, 1, 1, 1)
+      Chrome.worldSurround = world
+      if world and not fills then G.pop() end
+    end
     local c = canvasFor(cw, 144)
     G.push("all")
     G.setCanvas(c)
@@ -245,6 +269,8 @@ function Gen2.prepare(Engine, hd)
     end
     local cur = hd.done[c]
     local okC, done = pcall(hd.composite, c, blit, bx, by, scale, scale, box, view)
+    -- (the game's black or dimmed surround is not painted over a battle that fills the window)
+    if okC and done and fills then filledFrame = frame end
     -- a filled screen: where its UI went (a state drawn over the battle goes there too: over a
     -- WIDE battle, where the game puts it, the 160-wide panel's place in the middle of its 304)
     if okC and done and cur and hd.uiMap.cur == cur and gameDraw and battleDraw then
@@ -294,9 +320,22 @@ function Gen2.prepare(Engine, hd)
       end
       ours[BattleState.draw] = true
     end
+    -- A black or world background: Gold paints it round the panel after the battle is drawn. A
+    -- battle that filled the window this frame has no panel's edge to paint round, so it is not
+    -- painted (it would cover the battle with bars).
+    if surrounds and not ours[paintSurround] then
+      Game2.paintBattleSurround = function(self, ...)
+        if filledFrame == frame then
+          hd.stats.surroundSkipped = (hd.stats.surroundSkipped or 0) + 1
+          return
+        end
+        return paintSurround(self, ...)
+      end
+      ours[Game2.paintBattleSurround] = true
+    end
     if not ours[drawWidescreen] then
       BattleState.drawWidescreen = function(self, winW, winH, ...)
-        if self:wideLayout() or not hd.enabled.battle or hd.failed or not whitePaper(self) then
+        if self:wideLayout() or not hd.enabled.battle or hd.failed or not paperOk(self) then
           return drawWidescreen(self, winW, winH, ...)
         end
         local ok, err = pcall(present, self, winW, winH)
@@ -310,7 +349,7 @@ function Gen2.prepare(Engine, hd)
     if wideDraw and not ours[wideDraw] then
       WideBattle.draw = function(battle, winW, winH, ...)
         local okD, docked = pcall(WideBattle.docked, battle)
-        if not hd.enabled.battle or hd.failed or not okD or docked or not whitePaper(battle) then
+        if not hd.enabled.battle or hd.failed or not okD or docked or not paperOk(battle) then
           return wideDraw(battle, winW, winH, ...)
         end
         local ok, err = pcall(present, battle, winW, winH, true)

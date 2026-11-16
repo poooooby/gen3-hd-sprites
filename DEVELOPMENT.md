@@ -108,7 +108,13 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   tile panel would stand): its field (`WideBattle.drawField`) in `drawScene`, the UI seam, then
   `drawTopHud` / `drawBottomHud` under the exit fade's palette; docked to the window
   (`WideBattle.docked`, the EXTENDED HUD) it is drawn the game's way. A black or world background
-  (`Game2:paintBattleSurround` paints those around the panel afterwards) is drawn the game's way.
+  is ours too. Gold paints it round the panel after `drawWidescreen` (`Game2:paintBattleSurround`;
+  for world, over the overworld it drew first, with `Chrome.worldSurround` set so
+  `Chrome.letterbox` paints nothing). `present` lays the battle's white paper itself: the whole
+  window when Fill Screen is on, else only the panel's box, so the world shows round it. A frame
+  the battle filled the window in (`filledFrame`, Game2:draw's count) skips the surround, which
+  would paint its bars over the battle (`stats.surroundSkipped`). Without that seam or the frame
+  count, only a white background's battle is taken (`paperOk`).
   A state over a battle (a script's message: the party, the PACK and the battle's other screens
   are opaque and cover it) makes Gold draw the stack again where the panel stands, the battle
   first (`BattleState:draw`). Once the adapter has filled the screen with the battle that frame

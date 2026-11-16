@@ -47,7 +47,9 @@ resolution, and the camera pulls back so even the biggest ones fit.
   with no black bars. On a widescreen monitor or a phone held sideways it reaches from the top
   of the screen out to both sides. The battle's opening fills it too: the black curtain opens
   across the whole screen, the grass, sand or waves sweep across its full width and run all the
-  way down to its bottom, and the sky stretches up to the top of the screen.
+  way down to its bottom, and the sky stretches up to the top of the screen. In Gold, Silver and
+  Crystal the battle fills it whichever battle background you pick; with Fill Screen off, a black
+  or overworld background frames the battle as the game draws it.
 - 🌊 **Moves reach the screen's edges:** Moves that sweep the whole battlefield carry on past
   the original screen's sides: Surf's and Muddy Water's wave rolls across your whole screen
   and its water runs down beside the text box, Fake Out's black curtains close in from the
@@ -256,8 +258,8 @@ Open **OPTIONS → MODS → WoobleView**.
   own palette just as the original pictures are. **Field HD** draws the overworld Pokémon of a mod
   that supports it sharp and at their own sizes (in Red, Blue and Yellow with the **ADVANCED**
   colours, where they keep their full colour). Battles with the EXTENDED HUD, Gold, Silver and
-  Crystal battles with a black or overworld background, Gold, Silver and Crystal's other screens
-  and the rest of the overworld look just as the game draws them, and a battle another mod draws
+  Crystal's other screens and the rest of the overworld look just as the game draws them, and a
+  battle another mod draws
   in an arena of its own is left to that mod.
 
 ## 🪪 Credits
