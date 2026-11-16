@@ -326,6 +326,13 @@ do
   local mod = {}
   api()(mod, hd, { active = true })
   check(mod.exports.features.shades == true, "features.shades is advertised")
+  -- uiMap(): the UI's placement only while the last UI canvas blit was WoobleView's
+  hd.uiLive = false
+  check(mod.exports.features.uiMap == true and mod.exports.uiMap() == nil,
+    "features.uiMap is advertised; nil while the Renderer blits the UI itself")
+  hd.uiLive = true
+  check(mod.exports.uiMap() == hd.uiMap, "...and the live map once WoobleView placed it")
+  hd.uiLive = false
 end
 
 -- ---------------------- a quad of its own stands on its own pivot (quadPivots)

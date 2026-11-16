@@ -205,6 +205,7 @@ function Engine.install(hd)
           end
           -- what the game draws over the UI canvas after blitting it, placed where the filled
           -- screen put the UI (Engine.overUi: the adapter's)
+          if ok and handled and canvas == self.canvas and hd.uiMap.cur == cur then hd.uiLive = true end
           if ok and handled and Engine.overUi and canvas == self.canvas and hd.uiMap.cur == cur then
             local okO, errO = pcall(Engine.overUi, self, hd.uiMap)
             if not okO then hd.fail("over the UI: " .. tostring(errO)) end
@@ -247,6 +248,7 @@ function Engine.install(hd)
       Renderer.beginFrame = function(self, transparent, ...)
         -- (the Renderer's beginFrame returns nothing: no results table each frame)
         beginFrame(self, transparent, ...)
+        if not transparent then hd.uiLive = false end            -- (exports.uiMap: this frame's)
         if not transparent and not Engine.presentingUi and hd.enabled.screen and Engine.fullScreen then
           local okS, full = pcall(Engine.fullScreen)
           if okS and full then

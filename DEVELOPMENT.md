@@ -1561,13 +1561,23 @@ end
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none), `sceneDecks(layout)` (a layout's deck table, for an overworld view: see Battle
 Scene) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,
-`failed`). The export `version` is 2. Tags are weak: an image that is freed drops its tag. Keep the tagged
+`failed`), `uiMap()` (below). The export `version` is 2.
+
+`uiMap()`: where this frame's UI canvas went when WoobleView placed it (Fill Screen, a card), or
+nil when the Renderer blitted it itself (its `blitCanvas` arguments say where). It is for a mod
+drawing over the UI at window resolution (WoobleDex's Stat Hints, from `render.hud`): valid from
+the UI canvas's blit until the next frame begins (`hd.uiLive`: set by the engine wrap's blit when
+WoobleView placed the UI canvas, cleared by its `beginFrame` wrap). It is the live `hd.uiMap`: read it, never write or keep it. UI canvas pixel
+(x, y) lands at window (`x + x * sx`, `Y + y * sy`), `Y` = `topY` when `banded` and y < `split` (an
+upright battle's top band, moved up), else `y`; clip to `box` (or `topBox` / `lowBox` by band),
+each `{x, y, w, h}`. The Renderer may blit the UI canvas again in the same frame (a docked text
+box apart): the first is the one placed, the rest are taken as done. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
 
 ## Tests

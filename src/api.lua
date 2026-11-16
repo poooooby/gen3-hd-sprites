@@ -55,12 +55,22 @@
 --                         (needs Battle Fit)
 --   fillEnabled() / setFill(on)   Fill Screen: the battle scene fills the screen, its UI
 --                         docked to the bottom at its own scale (needs Battle Fit)
+--   uiMap()               where this frame's UI canvas went when WoobleView placed it (Fill
+--                         Screen, a card), else nil (the Renderer's own blit: its arguments say).
+--                         For a mod drawing over the UI at window resolution: valid from the UI
+--                         canvas's blit until the next frame begins (render.hud included). The
+--                         live table: read it, never write it or keep it. UI canvas pixel (x, y) is at
+--                         window (map.x + x * map.sx, Y + y * map.sy), Y = map.topY when
+--                         map.banded and y < map.split (an upright battle's top band, moved up),
+--                         else map.y; clip to map.box (or topBox / lowBox by band), {x, y, w, h}.
+--                         The Renderer may blit the UI canvas again in the same frame: the
+--                         first is the one placed, the rest are taken as done.
 
 return function(mod, hd, state)
   local exports = {}
   exports.version = 2
   exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true,
-                       shades = true }
+                       shades = true, uiMap = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end
@@ -269,6 +279,7 @@ return function(mod, hd, state)
   exports._sceneShot = function(w, h)
     return hd.scene and hd.scene.snapshot and hd.scene.snapshot(w, h) or nil
   end
+  exports.uiMap = function() return hd.uiLive == true and hd.uiMap or nil end
   exports.sceneZoom = function()
     if not exports.fitEnabled() then return 1 end
     return hd.fit.z

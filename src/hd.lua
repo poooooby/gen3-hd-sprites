@@ -93,6 +93,10 @@ function HD.new(G, opts)
     -- rest to lowBox
     uiMap = { cur = nil, x = 0, y = 0, sx = 1, sy = 1, box = { 0, 0, 0, 0 },
               banded = false, split = 0, topY = 0, topBox = { 0, 0, 0, 0 }, lowBox = { 0, 0, 0, 0 } },
+    -- this frame's UI canvas went where uiMap says (a filled screen or a card placed it): set
+    -- by the engine wrap's blit, cleared as a frame begins; false when the Renderer blitted it
+    -- itself (exports.uiMap, read until the next frame begins: render.hud too)
+    uiLive = false,
     pool = {},          -- layer canvases by "w x h" -> list
     stats = { splits = 0, composites = 0, flattened = 0, overCap = 0, zoom = 1, zoomTarget = 1, lift = 0 },
     -- Battle Fit (see the header). z eases toward target: out fast, back in only after the
