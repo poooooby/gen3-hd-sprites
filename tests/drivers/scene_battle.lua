@@ -78,6 +78,17 @@ local function body(game, log)
     end
   end
   hd.setScene(true)
+  -- SCENE_STAGE_OLD=1: the stage chosen by its score alone, without the strict check (before-and-
+  -- after shots of src/scene/stage.lua's Stage.tier)
+  if env("SCENE_STAGE_OLD") then
+    local ws = hd._workshop and hd._workshop()
+    if ws and ws.Stage then ws.Stage.tier = function() return 0 end end
+  end
+  -- SCENE_STAGE_FAR=n: the stage's rings searched that far out (Stage.FAR)
+  if env("SCENE_STAGE_FAR") then
+    local ws = hd._workshop and hd._workshop()
+    if ws and ws.Stage then ws.Stage.FAR = tonumber(env("SCENE_STAGE_FAR")) end
+  end
   -- (dev: Emerald 3DS's relief.bin, read locally, to check the relief renderer)
   local reliefPath = os.getenv("WOOBLE_RELIEF_BIN")
   if reliefPath and hd._sceneRelief then
@@ -183,6 +194,8 @@ local function body(game, log)
     local mapId, sx, sy, facing = spot:match("([^:]+):(%d+):(%d+):?(%a*)")
     local px, py = tonumber(sx), tonumber(sy)
     facing = facing ~= "" and facing or "down"
+    -- SCENE_SHOT_XY=1: the field and settled shots named by the spot (several spots on one map)
+    local tag = env("SCENE_SHOT_XY") and ("%s_%d_%d"):format(mapId, px, py) or mapId
     pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = facing })
     local s = Runtime.getSession()
     if s then s.x, s.y = px, py end
@@ -198,7 +211,7 @@ local function body(game, log)
       U.wait(200)
     end
     U.wait(40)
-    U.shot(game, ("%s/%s_field.png"):format(dir, mapId))
+    U.shot(game, ("%s/%s_field.png"):format(dir, tag))
     -- SCENE_DUMP=1: the collision codes and behaviours around the player (to read what stands up)
     if env("SCENE_DUMP") then
       local def = Map.currentDef()
@@ -251,7 +264,13 @@ local function body(game, log)
     for _, fill in ipairs({ true, false }) do
       hd.setFill(fill)
       U.wait(6)
-      U.shot(game, ("%s/%s_scene_%s.png"):format(dir, mapId, fill and "fill" or "nofill"))
+      U.shot(game, ("%s/%s_scene_%s.png"):format(dir, tag, fill and "fill" or "nofill"))
+    end
+    -- SCENE_BARE=1: the settled scene alone too (no sprites, no boxes)
+    if env("SCENE_BARE") and hd._sceneShot then
+      local data = hd._sceneShot(1440, 960)
+      local f = data and io.open(("%s/%s_bare.png"):format(dir, tag), "wb")
+      if f then f:write(data:encode("png"):getString()); f:close() end
     end
     -- SCENE_TIME=n: n frames of the settled battle (Fill on) timed: their mean and their worst
     -- (vsync off while they run: the frame's own cost)
@@ -320,6 +339,7 @@ local function body(game, log)
     log(("%s (%d,%d): scene %s score %s cards %s progress %s world %s error %s composites %s failed %s"):format(
       mapId, px, py, stat("scene"), stat("sceneScore"), stat("sceneCards"), stat("sceneProgress"), stat("world"),
       stat("sceneError"), stat("composites"), stat("failed")))
+    log(("%s stage: %s"):format(mapId, stat("sceneStage")))
     log(("%s buildings: %s (error %s)"):format(mapId, stat("sceneBuildings"), stat("sceneBuildingError")))
     log(("%s signs: %s (error %s)"):format(mapId, stat("sceneSigns"), stat("sceneSignError")))
     log(("%s relief: %s (error %s; build %s); models %s"):format(mapId, stat("sceneRelief"), stat("sceneReliefError"),

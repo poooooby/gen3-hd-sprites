@@ -85,6 +85,10 @@ resolution, and the camera pulls back so even the biggest ones fit.
 - 🗺️ **Battle where you stand:** With **Battle Scene** set to **Overworld**, a battle takes
   place in the world around you instead of on a painted backdrop: the paths, grass, water,
   trees and houses of the spot where it started, laid out in 2.5D and fading into the distance.
+- 🎯 **A fair place to fight:** The battle is set on the nearest spot where both Pokémon stand on
+  level, open ground of the battle's kind (dry land, or water when you're surfing or fishing),
+  with nothing standing between them and nothing blocking the view. No Pokémon stuck on a wall,
+  hovering over a drop or hidden behind a building.
 - 🏠 **Real buildings:** In Ruby, Sapphire and Emerald, houses, Pokémon Centers, Marts, gyms and
   the big buildings of Hoenn's towns stand in 3D, rebuilt from their own overworld art: walls,
   roofs, porches and all, down to Emerald's round battle tents, the Space Center's domes, the boats in Slateport's harbour,

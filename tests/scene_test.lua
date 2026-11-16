@@ -174,6 +174,106 @@ do
   check(best4 and best4.score < Stage.FLOOR, "all void: below the floor (the wallpaper is kept)")
 end
 
+-- the strict check (Stage.tier): both feet on level ground they could stand on, nothing between
+do
+  local function flat(w, h)
+    local g = { w = w, h = h, rows = {} }
+    for j = 0, h - 1 do
+      g.rows[j] = {}
+      for i = 0, w - 1 do g.rows[j][i] = { cx = i, cy = j, kind = "floor", liftT = 0 } end
+    end
+    g.at = function(x, y) local r = g.rows[y]; return r and r[x] end
+    return g
+  end
+  local opts = { player = { cx = 20, cy = 20 }, feet = FEET, sprites = SPRITES, want = {} }
+  local g = flat(40, 40)
+  local open = Stage.search(Camera, g, opts)
+  check(open.tier == 3 and open.moved == 0, "open ground: fair where it starts")
+  local pf = { math.floor(open.feet.player[1]), math.floor(open.feet.player[2]) }
+  local ef = { math.floor(open.feet.enemy[1]), math.floor(open.feet.enemy[2]) }
+  local function onFair(b)
+    local a, e = g.at(math.floor(b.feet.player[1]), math.floor(b.feet.player[2])),
+      g.at(math.floor(b.feet.enemy[1]), math.floor(b.feet.enemy[2]))
+    return b.tier == 3 and a.kind == "floor" and e.kind == "floor" and (a.liftT or 0) == b.ty and (e.liftT or 0) == b.ty
+  end
+  -- the foe's cell a rock wall a level up (it would sink into it), every cell round it as well
+  for y = ef[2] - 1, ef[2] + 1 do
+    for x = ef[1] - 1, ef[1] + 1 do g.at(x, y).liftT = 1; g.at(x, y).slope = true end
+  end
+  local function offs(b) return { b.feet.player[1] - b.tx, b.feet.player[2] - b.tz, b.feet.enemy[1] - b.tx,
+    b.feet.enemy[2] - b.tz } end
+  local off = Stage.tier(Camera, g, open.tx, open.tz, 0, offs(open), {}, SPRITES)
+  check(off == 0, "the foe on a rise: not fair there")
+  local moved = Stage.search(Camera, g, opts)
+  check(onFair(moved) and moved.moved > 0, "...the stage moves to where both stand on the ground (" ..
+    tostring(moved.moved) .. " tiles)")
+  -- the player's Pokemon over a drop (it would float): a pit under its feet
+  local g2 = flat(40, 40)
+  for y = pf[2] - 1, pf[2] + 1 do
+    for x = pf[1] - 1, pf[1] + 1 do g2.at(x, y).liftT = -1 end
+  end
+  g = g2
+  local drop = Stage.search(Camera, g2, opts)
+  check(onFair(drop) and drop.moved > 0, "a drop under the player's Pokemon: the stage moves off it")
+  -- a fence between the two (a blocked line one cell wide, east to west): tier 1 there, moved
+  local g3 = flat(40, 40)
+  local midY = math.floor((open.feet.player[2] + open.feet.enemy[2]) / 2)
+  for x = 0, 39 do g3.at(x, midY).kind = "blocked" end
+  g = g3
+  local t3 = Stage.tier(Camera, g3, open.tx, open.tz, 0, offs(open), {}, SPRITES)
+  check(t3 == 2, "a fence between the two: tier 2 (both stand fair, seen)")
+  local over = Stage.search(Camera, g3, opts)
+  check(onFair(over), "...the stage moves so nothing stands between them")
+  -- a water battle: both on water
+  local g4 = flat(40, 40)
+  for j = 0, 39 do for i = 0, 39 do g4.rows[j][i].kind = j < 22 and "water" or "floor" end end
+  local wet = Stage.search(Camera, g4, { player = { cx = 20, cy = 20 }, feet = FEET, sprites = SPRITES,
+    want = { player = "water", enemy = "water" } })
+  local wp = g4.at(math.floor(wet.feet.player[1]), math.floor(wet.feet.player[2]))
+  check(wet.tier == 3 and wp.kind == "water", "a water battle: both sides on the water")
+  -- nowhere fair: the old choice, below tier 2
+  local g5 = flat(40, 40)
+  for j = 0, 39 do for i = 0, 39 do if (i + j) % 2 == 0 then g5.rows[j][i].kind = "blocked" end end end
+  local none = Stage.search(Camera, g5, opts)
+  check(none and none.tier < 3, "nowhere fair: the best score of a lower tier")
+  -- a building between the camera and the battle (the camera would stand in it): the view blocked
+  local g6 = flat(40, 40)
+  for j = pf[2] + 2, pf[2] + 8 do
+    for i = 0, 39 do g6.rows[j][i].model, g6.rows[j][i].top = true, 3 end
+  end
+  g = g6
+  check(select(1, Stage.tier(Camera, g6, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 1,
+    "a building south of the battle, the camera in it: tier 1 (the view blocked)")
+  local clear = Stage.search(Camera, g6, opts)
+  check(onFair(clear) and clear.moved > 0, "...the stage moves until the camera sees both sides (" ..
+    tostring(clear.moved) .. " tiles)")
+  -- ground three levels up between the camera and the player's Pokemon (it stands as far south as
+  -- it is high: its front halfway from the feet to the eye), west of the foe's feet
+  local g7 = flat(40, 40)
+  local ex7, _, ez7 = Camera.basis(Camera.pose(open.tx, open.tz, nil, nil, 0))
+  local cy7 = math.floor((open.feet.player[2] + ez7) / 2) - 1 - 3
+  for i = 0, pf[1] + 1 do g7.rows[cy7][i].liftT = 3 end
+  g = g7
+  check(select(1, Stage.tier(Camera, g7, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 1,
+    "ground three levels up between the camera and the battle: the view blocked")
+  -- a row of trees between the camera and the foe: its foot row stands (built off its drawing, a
+  -- tree stands on its trunk row's southern edge, its crown over it); the same cells as a crown
+  -- row stand nothing in the view
+  local g9 = flat(40, 40)
+  local fy = math.floor(open.feet.enemy[2]) + 1
+  local fx = math.floor(open.feet.enemy[1])
+  for i = fx - 1, fx + 1 do g9.rows[fy][i].top, g9.rows[fy][i].treeFoot = 2.4, true end
+  check(select(1, Stage.tier(Camera, g9, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 1,
+    "trees standing just in front of the foe: the view blocked")
+  for i = fx - 1, fx + 1 do g9.rows[fy][i].treeFoot = nil end
+  check(select(1, Stage.tier(Camera, g9, open.tx, open.tz, 0, offs(open), {}, SPRITES)) ~= 1,
+    "...as a crown row (no foot) they stand nothing in the view")
+  local g8 = flat(40, 40)
+  for i = 0, 39 do g8.rows[pf[2] + 1][i].model, g8.rows[pf[2] + 1][i].top = true, 0.3 end
+  check(select(1, Stage.tier(Camera, g8, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 3,
+    "a low fence in front of the player's Pokemon: still seen")
+end
+
 -- ------------------------------------------------------------------- render
 do
   local map = { "...", ".T.", "..." }

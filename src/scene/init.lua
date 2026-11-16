@@ -31,7 +31,7 @@ return function(deps)
   if Render and deps.ScreenFx then Render.ScreenFx = deps.ScreenFx end
   local hd = deps.hd
 
-  local Scene = { enabled = false, Camera = Camera, Tune = deps.Tune, Trees = deps.Trees, Relief = deps.Relief }
+  local Scene = { enabled = false, Camera = Camera, Stage = Stage, Tune = deps.Tune, Trees = deps.Trees, Relief = deps.Relief }
 
   -- love.graphics as it really is (the functions WoobleView wraps, unwrapped)
   local G = setmetatable({}, { __index = function(_, k) return hd.real[k] or love.graphics[k] end })
@@ -4454,7 +4454,11 @@ return function(deps)
               if top and top > (c.top or 0) then c.top = top end
               if part then
                 local rock = againstRock(c.cx, c.cy, part)
-                local pcol, prow, pw = Trees.partCell(part)
+                local pcol, prow, pw, kind = Trees.partCell(part)
+                -- (for the stage search: the tree's foot row, where it stands - built off its
+                -- drawing, a tree stands on its trunk row's southern edge, its crown over it)
+                local S = kind and kind > 0 and Trees.species and Trees.species[kind]
+                c.treeFoot = part == Trees.SMALL or (prow ~= nil and prow == ((S and S.rows) or 2) - 1)
                 if not rock and prow == 1 then
                   -- (the trunk row's next cell of the same tree)
                   local ox = pcol + 1 < pw and c.cx + 1 or c.cx - 1
@@ -4524,7 +4528,8 @@ return function(deps)
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
       void = env.walled,
     })
-    if not stage or stage.score < Stage.FLOOR then return nil, "no stage" end
+    -- (a fair stage always fits: Stage.tier; else the old floor)
+    if not stage or (stage.tier < 3 and stage.score < Stage.FLOOR) then return nil, "no stage" end
     local cards = 0
     for j = 0, grid.h - 1 do
       for i = 0, grid.w - 1 do
@@ -4666,6 +4671,9 @@ return function(deps)
       hd.stats.scene = made and "built" or tostring(why or "failed")
       if made then
         hd.stats.sceneScore = math.floor(made.stage.score * 10 + 0.5) / 10
+        local sg = made.stage
+        hd.stats.sceneStage = ("tier %d%s, moved %.1f"):format(sg.tier, sg.why and (" (" .. sg.why .. ")") or "",
+          sg.moved or 0)
         hd.stats.sceneCards = made.cards
       end
     end
