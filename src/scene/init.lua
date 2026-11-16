@@ -4477,6 +4477,24 @@ return function(deps)
                   local lx, ly, id = placeOf(c.cx, c.cy)
                   c.treeMark = id and deps.Tune.markAt(famGame, id, lx, ly) or nil
                 end
+                -- (for the stage search, the crown's cards as render.lua stands them: leant back,
+                -- a small tree's crown over the row north of its trunk; Kanto's trees stand on
+                -- their foot rows' cards, c.treeFoot)
+                if not Trees.kanto and part ~= Trees.GRASS then
+                  local cards, dy = {}, c.dy or 0
+                  Trees.emit(function(a, _, cc, _, _, _, _, _, what)
+                    -- (corners: a the top west, cc the foot east; lifted and shifted with the cell)
+                    if what == "card" then
+                      cards[#cards + 1] = { a[1], cc[1], cc[3] + dy, cc[2] + dy, a[3] + dy, a[2] + dy }
+                    end
+                  end, sec, c.mid, c.cx, c.cy, part, function(x, y)
+                    local o = grid.at(x, y)
+                    if not o then return false, true end
+                    if o.pair ~= c.pair then return false end
+                    return Trees.part(sec, o.mid)
+                  end, { rock = rock, noGround = true, mark = c.treeMark })
+                  c.treeCards = #cards > 0 and cards or false
+                end
                 treeTally.cells = treeTally.cells + 1
                 if rock then treeTally.steep = treeTally.steep + 1 end
                 if c.treeGround then

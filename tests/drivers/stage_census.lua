@@ -137,6 +137,48 @@ local function body(game, log)
         log(("%s: old score %.1f moved %.1f (strict tier %s %s%s); new tier %d %s score %.1f moved %.1f"):format(spot, old.score,
           old.moved, tostring(ot), tostring(owhy), oc and (" at " .. oc.cx .. "," .. oc.cy .. ": " .. flags(oc)) or "",
           new.tier, tostring(new.why), new.score, new.moved))
+        -- CENSUS_RAYS=1: the strict choice's sprite boxes, ray by ray (# blocked, . clear), and
+        -- the cells blocking or standing in front of the player's Pokemon
+        if env("CENSUS_RAYS") then
+          local rayClear
+          for i = 1, 60 do
+            local n, f = debug.getupvalue(Stage.tier, i)
+            if not n then break end
+            if n == "seen" then
+              for k = 1, 60 do
+                local n2, f2 = debug.getupvalue(f, k)
+                if not n2 then break end
+                if n2 == "rayClear" then rayClear = f2 end
+              end
+            end
+          end
+          local pose = Camera.pose(new.tx, new.tz + new.ty, nil, nil, new.ty)
+          for _, side in ipairs({ "player", "enemy" }) do
+            local r, ft = ws.SPRITES[side], new.feet[side]
+            local _, _, depth = Camera.view(pose, ft[1], new.ty, ft[2] + new.ty)
+            log(("%s box %d,%d-%d,%d feet %.2f,%.2f depth %.2f"):format(side, r[1], r[2], r[3], r[4], ft[1], ft[2], depth or -1))
+            local hits = {}
+            for v = r[2], r[4], 4 do
+              local row = {}
+              for u = r[1], r[3], 4 do
+                local ok, c = rayClear(Camera, grid, pose, u, v, depth, new.ty)
+                row[#row + 1] = ok and "." or "#"
+                if c then hits[c.cx .. "," .. c.cy] = c end
+              end
+              log(("  v%3d %s"):format(v, table.concat(row)))
+            end
+            for k, c in pairs(hits) do log("  hit", k, flags(c), "treeFoot", tostring(c.treeFoot)) end
+          end
+          local pf = new.feet.player
+          for cy = math.floor(pf[2]), math.floor(pf[2]) + 4 do
+            local a = {}
+            for cx = math.floor(pf[1]) - 3, math.floor(pf[1]) + 3 do
+              local c = grid.at(cx, cy)
+              a[#a + 1] = c and ("%s%s%.1f"):format(c.treeFoot and "F" or "-", c.model and "m" or "-", c.top or 0) or "nil"
+            end
+            log(("  row %d: %s"):format(cy, table.concat(a, " ")))
+          end
+        end
         local G = { floor = ".", grass = '"', sand = ":", water = "~", blocked = "#", void = " " }
         for cy = y - 14, y + 9 do
           local a, h = {}, {}

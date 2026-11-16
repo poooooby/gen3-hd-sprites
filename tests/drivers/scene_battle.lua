@@ -3,7 +3,8 @@
 -- Littleroot Town by the houses) stands the player there, starts a wild battle and shoots the
 -- entrance glide (SCENE_FRAMES, default 2,20,40,60,80,100,130), the settled battle with Fill
 -- Screen on and off, and the same battle with the scene off (CLASSIC). SCENE_SIZE (default
--- 1920x1080) is the window; SCENE_FOE a species constant (default SPECIES_WURMPLE); SCENE_LOOK
+-- 1920x1080) is the window; SCENE_FOE a species constant (default SPECIES_WURMPLE), SCENE_MON the
+-- player's (default SPECIES_TORCHIC); SCENE_LOOK
 -- (dx:dz:pitch:dist, comma separated) more shots with the camera aimed that far from the player,
 -- pitched that many degrees, that many tiles away. Logs
 -- WoobleView's scene stats. Run from the engine root:
@@ -201,7 +202,8 @@ local function body(game, log)
     if s then s.x, s.y = px, py end
     Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
     Player.targetX, Player.targetY, Player.facing = px, py, facing
-    if s and #(s.party or {}) == 0 then Party.giveMon(s, C:require("species", "SPECIES_TORCHIC"), 12) end
+    -- SCENE_MON: the player's Pokemon, a species constant (default SPECIES_TORCHIC)
+    if s and #(s.party or {}) == 0 then Party.giveMon(s, C:require("species", env("SCENE_MON") or "SPECIES_TORCHIC"), 12) end
     -- SCENE_WEATHER=id: that weather set as a script sets it (setweather, doweather), given time
     -- to come in
     if env("SCENE_WEATHER") then

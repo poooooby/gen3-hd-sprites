@@ -123,8 +123,9 @@ end
 -- what stands on cell c as the view meets it, as the occlusion score reads it: a card on the
 -- cell's southern edge (or its run's), lifted with the cell - y0, y1, z - or nil. A model, a sign
 -- or a border as tall as it stands; a card of an upright run; a tree at its foot row (a tree built
--- off its drawing stands there, its crown over its trunk); rock stood taller than the ground
--- `footT`, at its depths, and other ground a level up at its front
+-- off its drawing stands there, its crown over its trunk: Kanto's; Hoenn's lean, c.treeCards);
+-- rock stood taller than the ground `footT`, at its depths, and other ground a level up at its
+-- front
 local function cardOf(c, footT)
   local dy = c.dy or 0
   local top = c.top or 0
@@ -156,6 +157,11 @@ local function liftRange(grid)
         if z > hi then hi = z end
         z = min(c.dy or 0, c.liftT or 0)
         if z < lo then lo = z end
+        -- (a tree's leant cards: the foot as far south of the row as it stands, the top north)
+        for _, k in ipairs(c.treeCards or {}) do
+          hi = max(hi, k[3] - c.cy - 1)
+          lo = min(lo, k[5] - c.cy)
+        end
       end
     end
   end
@@ -182,7 +188,24 @@ local function rayClear(Camera, grid, pose, u, v, depth, footT)
   for cy = floor(zFar - ty - hi) - 1, floor(zNear - ty - lo) + 1 do
     for cx = floor(min(xNear, xFar)) - 1, floor(max(xNear, xFar)) + 1 do
       local c = grid.at(cx, cy)
-      if c and c.kind ~= "void" then
+      local cards = c and c.treeCards
+      if cards then
+        -- (a tree's crown cards, leant as render.lua stands them: { x0, x1, foot z, foot y, top z,
+        -- top y }; the ray meets the card's slant at view depth t, s of the way from its foot)
+        for _, k in ipairs(cards) do
+          local lz, ly = k[5] - k[3], k[6] - k[4]
+          local det = lz * dy - dz * ly
+          if det > 1e-9 or det < -1e-9 then
+            local bz, by = k[3] - ez, k[4] - ey
+            local t = (lz * by - ly * bz) / det
+            local s = (dz * by - dy * bz) / det
+            if s >= 0 and s <= 1 and t > Camera.NEAR and t < tFar then
+              local x = ex + dx * t
+              if x >= k[1] and x <= k[2] then return false, c end
+            end
+          end
+        end
+      elseif c and c.kind ~= "void" and cards == nil then
         local y0, y1, zc = cardOf(c, footT)
         if zc then
           local t = (zc - ez) / dz

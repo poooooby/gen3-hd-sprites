@@ -510,10 +510,12 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
     `Stage.LEVEL` of the target's height, so no sprite floats or sinks). The camera also sees
     both sprites: rays through each sprite's middle and lower quarter cross no card. A card is
     what the occlusion score stands (`cardOf`): a model, sign or border as tall as it stands, an
-    upright run's card, a tree at its foot row (`c.treeFoot`: built off its drawing, a tree
-    stands on its trunk row's southern edge, so its crown row stands nothing), or ground a level
-    up at its front, lifted with its cell. Nothing standing, and no rise, on the line between the
-    two feet either.
+    upright run's card, a tree, or ground a level up at its front, lifted with its cell. Hoenn's
+    trees are their crown cards as `render.lua` stands them (`c.treeCards`, from `Trees.emit`):
+    leant back 50 degrees, so a small tree's crown leans over the row north of its trunk and the
+    ray meets the slant. Kanto's stand at their foot row (`c.treeFoot`: built off its drawing, a
+    tree stands on its trunk row's southern edge, so its crown row stands nothing). Nothing
+    standing, and no rise, on the line between the two feet either.
   - **2:** seen, something between them. **1:** feet fair, the view blocked. **0:** the feet
     are not fair.
 
@@ -527,9 +529,10 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   could start on, by score alone and with the strict check. It logs how often each is fair,
   why not, how far it moved, spots that show the window's edge, and sample spots for
   `SCENE_SPOTS`. `CENSUS_FAR` sets the rings, `CENSUS_RELIEF=1` builds the relief first, and
-  `CENSUS_DUMP=MAP:x:y` maps the cells round a spot with both choices instead.
-  - Emerald, 34 land maps (24,676 spots): 86.0% fair by score alone, 99.7% with the check,
-    2.9 tiles moved on average.
+  `CENSUS_DUMP=MAP:x:y` maps the cells round a spot with both choices instead (`CENSUS_RAYS=1`
+  adds each sprite box's rays, blocked or clear, and what blocks them).
+  - Emerald, 34 land maps with the relief (30,444 spots, trees' leant crowns): 84.8% fair by
+    score alone, 99.4% with the check, 3.2 tiles moved on average.
   - Emerald's sea routes, surfing included: 95.4% to 98.6%.
   - FireRed, 22 maps: 91.0% to 99.6%.
 
@@ -548,7 +551,8 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   stand no card. `init.lua`'s trees pass (before the stage search, after the relief is placed)
   marks each tree cell: `c.top` for the stage search (their `ReadCell`: a small trunk 1.8, a 2x2
   tree's cells and a crown-top cell 2.4, long grass none); `c.treeFoot` on a tree's foot row
-  (where the stage's view check stands it); `c.treeRock` (their `AgainstRock`: a
+  and, in Hoenn, `c.treeCards` (its crown cards, `emit`'s, for the stage's view check);
+  `c.treeRock` (their `AgainstRock`: a
   cliff or shelf role two rows north, one for a 2x2 tree, or the same map's cell north a quarter
   tile higher by `Relief.centre`, two rows for a 2x2 tree; a 2x2 tree's columns alike), passed
   to `emit` as `o.rock` (small crown and tuft run 0.8, a tileset's own large crown 0.4);

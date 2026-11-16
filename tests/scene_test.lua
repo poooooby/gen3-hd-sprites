@@ -272,6 +272,36 @@ do
   for i = 0, 39 do g8.rows[pf[2] + 1][i].model, g8.rows[pf[2] + 1][i].top = true, 0.3 end
   check(select(1, Stage.tier(Camera, g8, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 3,
     "a low fence in front of the player's Pokemon: still seen")
+  -- Route 103: small trees two rows south of the player's Pokemon, their crowns leant back over the
+  -- row between (render.lua's cards, c.treeCards): the view to its feet crosses them, though an
+  -- upright card on the trunk row's edge as tall (1.8) would stand under it
+  local TreesS = dofile("src/scene/trees.lua")
+  local g10 = flat(40, 40)
+  local ty10 = pf[2] + 2
+  for i = pf[1] - 1, pf[1] + 1 do
+    local c, cards = g10.rows[ty10][i], {}
+    TreesS.emit(function(a, _, cc, _, _, _, _, _, what)
+      if what == "card" then cards[#cards + 1] = { a[1], cc[1], cc[3], cc[2], a[3], a[2] } end
+    end, "petalburg", 0x0C6, i, ty10, TreesS.SMALL, function() return nil end, { noGround = true })
+    c.top, c.treeFoot = 1.8, true
+  end
+  check(select(1, Stage.tier(Camera, g10, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 3,
+    "small trees two rows south of the player's Pokemon, stood upright on their edge: under the view")
+  for i = pf[1] - 1, pf[1] + 1 do
+    local c, cards = g10.rows[ty10][i], {}
+    TreesS.emit(function(a, _, cc, _, _, _, _, _, what)
+      if what == "card" then cards[#cards + 1] = { a[1], cc[1], cc[3], cc[2], a[3], a[2] } end
+    end, "petalburg", 0x0C6, i, ty10, TreesS.SMALL, function() return nil end, { noGround = true })
+    c.treeCards = cards
+  end
+  check(select(1, Stage.tier(Camera, g10, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 1,
+    "...their crowns leant back as drawn: the view to its feet blocked")
+  local g10m = Stage.search(Camera, g10, opts)
+  check(g10m.tier == 3 and g10m.moved > 0, "...the stage moves off them (" .. tostring(g10m.moved) .. " tiles)")
+  g10.stageLift = nil
+  for i = pf[1] - 1, pf[1] + 1 do g10.rows[ty10][i].treeCards = false end
+  check(select(1, Stage.tier(Camera, g10, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 3,
+    "...a tree cell with no card (hidden by its mark): nothing stands")
 end
 
 -- ------------------------------------------------------------------- render
