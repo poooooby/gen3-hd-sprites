@@ -38,6 +38,14 @@ local function body(game, log)
   -- GEN2_FIT=on|off: Battle Fit
   if env("GEN2_FIT") and hd.setFit then hd.setFit(env("GEN2_FIT") ~= "off" and env("GEN2_FIT") or false) end
 
+  -- GEN2_FACETS=set[:borders]: Facets' battle scene set (its BATTLE BG, e.g. scenery) and its
+  -- BORDERS (blur, fill, off)
+  if env("GEN2_FACETS") then
+    local set, borders = env("GEN2_FACETS"):match("^([^:]+):?(%a*)$")
+    loader.modOptions.facets = loader.modOptions.facets or {}
+    loader.modOptions.facets.classicBattleBg = set
+    if borders and borders ~= "" then loader.modOptions.facets.sceneBorders = borders end
+  end
   -- GEN2_MON: the player's Pokemon (default TYPHLOSION)
   -- GEN2_MOVESET=BODY_SLAM,TACKLE: its moves (default its level-up ones)
   local moveset

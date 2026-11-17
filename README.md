@@ -118,6 +118,9 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
   sprites, and sharp overworld Pokémon from supported mods. There's no Battle Scene in these games.
 - If your device can't draw battles this way, the mod steps aside and the game draws as usual.
 
+- 🖼️ **Facets on Gold, Silver and Crystal:** a battle that fills your screen keeps the game's
+  plain white background, since Facets' battle scenes are drawn for the game's own screen size.
+  Turn Fill Screen off to battle in front of Facets' scenes.
 ## 🪪 Credits
 
 - **Battle Scene** is adapted from the 3D battles of

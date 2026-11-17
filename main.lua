@@ -42,6 +42,9 @@ return function(mod)
   -- optional: without it the player's pad is the game's own (cut at the text box)
   Engine.Pads = loadSibling(mod, "src/pads.lua")
   Engine.Bar = loadSibling(mod, "src/bar.lua")
+  -- every mod's options as the player set them (the adapters read another mod's: Gen 2 sets
+  -- Facets' battle scene aside on a filled battle)
+  Engine.modOptions = function() return mod.game.mods.modOptions end
   local makeClock = loadSibling(mod, "src/clock.lua")
   local Clock = type(makeClock) == "function" and makeClock(mod) or nil
 
