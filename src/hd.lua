@@ -382,7 +382,11 @@ function HD.new(G, opts)
   ---         flip = true|nil (texture's frame mirrored about its pivot),
   ---         shades = shader|nil (the stand-in is in the Game Boy's shades, made by this shader
   ---           from the frame's colours: the frame is drawn through it, then coloured by the
-  ---           game as the stand-in would be) }  (read at draw time)
+  ---           game as the stand-in would be),
+  ---         shadow = { texture = img, quad = q|nil, w = px, dx = px, dy = px }|nil (a contact
+  ---           shadow under the frame, which the stand-in has baked in: w wide, its bottom
+  ---           middle at (dx, dy) from the pivot, all in the frame's pixels; drawn first, at
+  ---           the frame's final size and with its flip) }  (read at draw time)
   function self.tag(image, spec)
     if image == nil then return end
     spec = spec or {}
@@ -834,6 +838,31 @@ function HD.new(G, opts)
   end
   self._fillPx, self._fillOf = fillPx, fillOf
 
+  -- a tag's contact shadow (spec.shadow), under a frame whose pivot is drawn at (px, py) turned
+  -- by r and scaled by (fsx, fsy) (the frame's final scale, flip included): its offsets and
+  -- width are in the frame's pixels, so it follows the frame's size and mirroring
+  local function drawShadow(spec, px, py, r, fsx, fsy)
+    local s = spec.shadow
+    if type(s) ~= "table" or not (s.texture and s.texture.getWidth) then return end
+    local qw, qh
+    if s.quad then
+      local _
+      _, _, qw, qh = s.quad:getViewport()
+    else
+      qw, qh = s.texture:getWidth(), s.texture:getHeight()
+    end
+    if not (qw and qh) or qw <= 0 or qh <= 0 then return end
+    local ks = (tonumber(s.w) or qw) / qw
+    local dx, dy = (tonumber(s.dx) or 0) * fsx, (tonumber(s.dy) or 0) * fsy
+    local cs, sn = math.cos(r or 0), math.sin(r or 0)
+    local X, Y = px + dx * cs - dy * sn, py + dx * sn + dy * cs
+    if s.quad then
+      real.draw(s.texture, s.quad, X, Y, r or 0, fsx * ks, fsy * ks, qw / 2, qh)
+    else
+      real.draw(s.texture, X, Y, r or 0, fsx * ks, fsy * ks, qw / 2, qh)
+    end
+  end
+
   local function drawAtScale(shaded, image, spec, a, b, c, d, e, f, g, h)
     local quad, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
@@ -873,6 +902,7 @@ function HD.new(G, opts)
         tex, tq = shadedFrame(spec)
         if not tex then return false end
       end
+      drawShadow(spec, px, py, r, fsx, sy * k)
       if tq then
         real.draw(tex, tq, px, py, r, fsx, sy * k, hpx, hpy)
       else
@@ -1603,6 +1633,13 @@ function HD.new(G, opts)
     local ssx, ssy = rec.sx * k * rec.tsx * bsx, rec.sy * k * rec.tsy * bsy
     -- flip: the full-resolution frame mirrored about its pivot (a stand-in drawn mirrored)
     if flip then ssx = -ssx end
+    -- the contact shadow first, under the whole pic (not a part of it: each part would add one),
+    -- and not through a shader mapped to the frame's texture (a move's mask or mosaic)
+    if rec.spec.shadow and not cut then
+      if m then real.setShader() end
+      drawShadow(rec.spec, SX, SY, rec.r, ssx, ssy)
+      if m then useShader(rec, m) end
+    end
     if quad then
       real.draw(tex, quad, SX, SY, rec.r, ssx, ssy, hpx, hpy)
     else

@@ -1634,11 +1634,12 @@ end
 | `height` | the species' real height in metres. With it (and a `side`), Battle Fit sizes the two battlers against each other (the taller fills its room, the other by height) instead of by `scale`. Check `features.speciesSize` |
 | `flip` | `true`: the `texture`/`quad` frame is drawn mirrored about its `pivot` (a stand-in the mod drew mirrored; `lowPivot` is in the stand-in as drawn). Check `features.flip` |
 | `shades` | a shader: the stand-in is in the Game Boy's four shades, made by this shader from the frame's colours. The `texture`/`quad` frame is drawn through it and then coloured as the stand-in is: in Gen 1 into a canvas a whole number of times the pass's size, then through the Renderer's blit (its SGB zones); in Gen 2 (a direct pass) 1:1 into a canvas, then drawn under the palette shader in force. Without it a tagged frame under a shader falls back to the stand-in. Check `features.shades` |
+| `shadow` | `{ texture, quad?, w, dx, dy }`: a contact shadow the stand-in has baked in under the Pokémon, drawn first: `w` wide, its bottom middle at (`dx`, `dy`) from the `pivot`, all in the frame's pixels, so it takes the frame's final size and `flip`. Not under a part of the pic drawn on its own (a row-by-row move), nor through a shader mapped to the frame. Check `features.shadow` |
 
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none), `sceneDecks(layout)` (a layout's deck table, for an overworld view: see Battle
