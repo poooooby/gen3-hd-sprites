@@ -32,7 +32,12 @@ local function body(game, log)
   if s then s.x, s.y = 14, 12 end
   Player.cellX, Player.cellY, Player.px, Player.py = 14, 12, 14 * 16, 12 * 16
   Player.targetX, Player.targetY = 14, 12
-  if s and #(s.party or {}) == 0 then Party.giveMon(s, C:require("species", "SPECIES_TORCHIC"), 12) end
+  -- HD_PLAYER / HD_ENEMY=SPECIES_X:level: the two battlers (Torchic 12 against Wailord 20)
+  local function mon(name, sp, lv)
+    local a, b = (os.getenv(name) or ""):match("^(SPECIES_[%w_]+):?(%d*)$")
+    return C:require("species", a or sp), tonumber(b) or lv
+  end
+  if s and #(s.party or {}) == 0 then Party.giveMon(s, mon("HD_PLAYER", "SPECIES_TORCHIC", 12)) end
   U.wait(60)
   local loader = game.mods
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
@@ -52,7 +57,8 @@ local function body(game, log)
   local function battleShot(name)
     local okB, errB = pcall(function()
       local BattleBridge = require("src.core.game3.battle_bridge")
-      local enc = { species = C:require("species", "SPECIES_WAILORD"), level = 20 }
+      local sp, lv = mon("HD_ENEMY", "SPECIES_WAILORD", 20)
+      local enc = { species = sp, level = lv }
       local ok, err = BattleBridge.startWild(Runtime._mod, game, enc, {})
       if not ok then error(tostring(err)) end
     end)

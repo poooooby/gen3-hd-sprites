@@ -114,8 +114,9 @@ function HD.new(G, opts)
       -- ... the two drawn at one scale, pixels per metre: the one whose room is tighter for its
       -- height fills it, the other true to size against it (never below sizeFloor of its own
       -- fill), the player's nearScale times larger (nearer the camera: the same species stands
-      -- taller on the player's side)
-      sizeFloor = 0.2, nearScale = 1.15,
+      -- taller on the player's side). Heights count as height ^ sizeCurve, narrowing the gap
+      -- between big and small species (Oddish against Swampert at 0.52, not 0.33)
+      sizeFloor = 0.2, nearScale = 1.15, sizeCurve = 0.6,
       -- the enemy's HP box (rows 16-44) raised to this many UI px under the screen's top on a
       -- wide screen the battle fills (singles): the player's HP box's gap over the text box (110
       -- to 112). The top band (rows above `split`) is moved up, as on a stacked screen; the fit
@@ -803,7 +804,7 @@ function HD.new(G, opts)
   local fillPx, fillOf = {}, {}
 
   -- Battle Fit's species sizing: both battlers at one scale, canvas px per metre of their
-  -- species' height, the player's nearScale times the enemy's. Each would fill its room
+  -- species' height (^ sizeCurve), the player's nearScale times the enemy's. Each would fill its room
   -- (fillScale) at its own scale; the smaller of the two (the tighter room for its height) is
   -- taken, so that one fills and the other stands true to size against it, never below
   -- sizeFloor of its fill. Until the other side has been measured, the shorter species at
@@ -825,14 +826,15 @@ function HD.new(G, opts)
     local other = self.pair[otherSide]
     if not other then return f end
     local oh = fillPx[otherSide]
-    local near = fit.nearScale or 1
+    local near, c = fit.nearScale or 1, fit.sizeCurve or 1
+    local myH, theirH = spec.height ^ c, other.height ^ c
     if h and oh and fillOf[otherSide] == other then
       -- (px per metre at its fill, in the enemy's terms)
-      local mine = h / spec.height / (side == "player" and near or 1)
-      local theirs = oh / other.height / (otherSide == "player" and near or 1)
+      local mine = h / myH / (side == "player" and near or 1)
+      local theirs = oh / theirH / (otherSide == "player" and near or 1)
       if theirs < mine then f = f * math.max(fit.sizeFloor, theirs / mine) end
-    elseif other.height > spec.height then
-      f = f * math.max(fit.sizeFloor, spec.height / other.height)
+    elseif theirH > myH then
+      f = f * math.max(fit.sizeFloor, myH / theirH)
     end
     return f
   end

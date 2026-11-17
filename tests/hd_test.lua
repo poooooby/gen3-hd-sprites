@@ -726,7 +726,7 @@ do
   hd.pair.player = { height = 7.2 }
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.25), "species: the shorter at its height / the taller's of its fill ("
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ 0.6), "species: the shorter at (its height / the taller's) ^ sizeCurve of its fill ("
     .. tostring(d and d.args[5]) .. ")")
   -- ... never below sizeFloor
   hd.pair.player = { height = 100 }
@@ -739,7 +739,7 @@ do
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148), "species: the taller of the pair fills")
   -- the player's side measured (its art's height at its fill, canvas px): one scale, px per
-  -- metre, the player's nearScale (1.15) larger. This one's fill: 72 px for 1.8 m, 40 px/m.
+  -- metre (^ sizeCurve, 0.6), the player's nearScale (1.15) larger. This one's fill: 72 px for 1.8 m.
   local mon = { height = 0.7 }
   hd.pair.player, hd._fillOf.player, hd._fillPx.player = mon, mon, 100
   fitFrame(G, hd, base, frame)
@@ -752,18 +752,18 @@ do
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148 / 1.15), "species: the same species smaller on the enemy's side ("
     .. tostring(d and d.args[5]) .. ")")
-  -- the player's room tight for its height (14 px for 0.7 m): this one sized to it, 20 / 1.15 px/m
+  -- the player's room tight for its height (14 px for 0.7 m): this one sized to it
   mon.height, hd._fillPx.player = 0.7, 14
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * (20 / 1.15) / 40), "species: sized against the tighter side ("
+  check(d and near(d.args[5], 4 * 72 / 148 * (14 / 0.7 ^ 0.6 / 1.15) / (72 / 1.8 ^ 0.6)), "species: sized against the tighter side ("
     .. tostring(d and d.args[5]) .. ")")
   -- (measured for another tag: the heights' ratio until it is measured again)
   hd._fillOf.player = nil
   mon.height = 7.2
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.25), "species: a stale measure falls back to the heights")
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ 0.6), "species: a stale measure falls back to the heights")
   -- a battle starting afresh forgets the last one's pair
   hd.pair.player = { height = 7.2 }
   hd.fit.idle = 10

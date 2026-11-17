@@ -24,7 +24,8 @@ and Crystal.
 
 - 📏 **True-to-size battles:** Both Pokémon are drawn to one scale by their real heights. The
   bigger one fills all the room it has, never hidden under the HP boxes or the text box, and the
-  other stands at its true size beside it: a Bulbasaur comes up to about a third of a Meganium.
+  other stands at its size beside it, small ones nudged up a little so they stay easy to see:
+  a Bulbasaur comes up to about half a Meganium.
   Your own Pokémon is a touch bigger than the same one on the far side, being nearer to you, and
   two giants both fill the screen. The opponent slides in at its normal size and settles to its
   true size when your Pokémon comes out.
@@ -56,7 +57,7 @@ FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its true size beside it, yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |

@@ -169,15 +169,18 @@ not by its `scale`:
   - **Gen 1 / 2:** the enemy's out to its HUD and the screen's edge (its box already starts at
     the top); the player's up to the enemy's HUD (row 32) and out to the screen's edge and its
     own HUD.
-- **One scale for both:** canvas px per metre of species height. Each side's fill gives its
+- **One scale for both:** canvas px per metre of species height, the height taken as
+  height ^ `sizeCurve` (0.6: narrows the gap between big and small species, so small ones
+  stay easy to see; Oddish against Swampert at 0.52 of its height, not 0.33). Each side's fill gives its
   art's height at that size (`fillPx[side]`, kept with the tag it was measured for, `fillOf`);
   divided by its species' height (and the player's by `nearScale`, 1.15: nearer the camera, the
   same species stands that much taller on the player's side) that is the scale at which it
   would fill. The smaller of the two is used: that side fills its room, the other is drawn true
   to size against it, never below `sizeFloor` (0.2) of its own fill. Crystal: Bulbasaur (0.7 m)
-  against a player's Meganium (1.8 m) at 0.34 of its height, a player's Bulbasaur at 0.45 of
-  an enemy Meganium's, a Meganium mirror match the enemy's at 1 / 1.15. (Until the other side
-  has been measured, the shorter species at its height / the taller's of its own fill. Each
+  against a player's Meganium (1.8 m) at about 0.50 of its height, a player's Bulbasaur at about
+  0.66 of an enemy Meganium's, a Meganium mirror match the enemy's at 1 / 1.15 (the curve leaves
+  the same species alone). (Until the other side has been measured, the shorter species at
+  (its height / the taller's) ^ `sizeCurve` of its own fill. Each
   side filling its own room and the shorter shrunk by the heights' ratio, the old rule, drew
   the same species the same size on both sides and Bulbasaur near Meganium's height.)
 - **Sliding in:** until the player's Pokemon has been drawn this battle (`hd.playerIn`, set by a
