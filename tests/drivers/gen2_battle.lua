@@ -35,6 +35,8 @@ local function body(game, log)
     hd = { stats = function() return {} end, setFill = function() end, isActive = function() return false end }
   end
   log(("WoobleView active %s"):format(tostring(hd.isActive())))
+  -- GEN2_HD=off: Battle HD off (the game's own battle drawing, other mods' as they are)
+  if env("GEN2_HD") == "off" and hd.setEnabled then hd.setEnabled("battle", false) end
   -- GEN2_FIT=on|off: Battle Fit
   if env("GEN2_FIT") and hd.setFit then hd.setFit(env("GEN2_FIT") ~= "off" and env("GEN2_FIT") or false) end
 

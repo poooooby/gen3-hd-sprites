@@ -122,13 +122,12 @@ by `GameVersion.generation()` (`Engine.adapters`, filled in `main.lua`):
   the battle filled the window in (`filledFrame`, Game2:draw's count) skips the surround, which
   would paint its bars over the battle (`stats.surroundSkipped`). Without that seam or the frame
   count, only a white background's battle is taken (`paperOk`).
-  Facets' battle scenes (its BATTLE BG, option `classicBattleBg`) are painted into the panel
-  (its `drawPanel` / `WideBattle.drawField` wrappers swap `Chrome.clear` for the scene) and into
-  the window round it (`render.letterbox`, only on a frame its scene was painted). A filled
-  battle is the panel grown about its line, so the two met in a seam at two sizes: `present` sets
-  that option to `"game"` (none) round the frame's battle draw when it fills the window
-  (`facetsAside`, through `Engine.modOptions`, main.lua) and puts it back straight after. Both
-  wrappers run inside `present`, so this reaches them; unfilled battles keep Facets' scenes.
+  **No Fill Screen in Gold, Silver and Crystal** (`fit.fillAllowed` false, set in main.lua; the
+  option row is dropped from their schema and `exports.setFill` cannot turn it on). Facets paints
+  its battle scenes (BATTLE BG) into the panel and into the window round it
+  (`render.letterbox`); a filled battle is the panel grown about its line, so the two met in a
+  seam at two sizes, and other mods' Gen 2 art is drawn for the game's own screen. The adapter's
+  fill paths (`view`, the stacked layout, `drawSliding`, the surround skip) stay but never run.
   A state over a battle (a script's message: the party, the PACK and the battle's other screens
   are opaque and cover it) makes Gold draw the stack again where the panel stands, the battle
   first (`BattleState:draw`). Once the adapter has filled the screen with the battle that frame

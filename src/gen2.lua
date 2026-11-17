@@ -291,23 +291,6 @@ function Gen2.prepare(Engine, hd)
     return not ok or mode == nil or mode == "white"
   end
 
-  -- Facets' battle scenes (its BATTLE BG) are painted into the 160-px panel and, around it, into
-  -- the window's borders where the letterbox would be. A battle that fills the window is the
-  -- panel grown about its text box's line, so the panel's scene and the borders' would meet in a
-  -- seam, at two sizes: such a battle is drawn on its own white paper, Facets' scene set to its
-  -- GAME (none) for the frame's battle draw and put back straight after. Its scene stays on every
-  -- battle that is not filled.
-  Gen2.FACETS, Gen2.FACETS_KEY, Gen2.FACETS_NONE = "facets", "classicBattleBg", "game"
-  local function facetsAside()
-    local ok, all = pcall(Engine.modOptions)
-    local o = ok and type(all) == "table" and all[Gen2.FACETS] or nil
-    if type(o) ~= "table" then return nil end
-    local was = o[Gen2.FACETS_KEY]
-    if was == nil or was == Gen2.FACETS_NONE then return nil end
-    o[Gen2.FACETS_KEY] = Gen2.FACETS_NONE
-    return o, was
-  end
-
   local function present(battle, winW, winH, wide)
     local G = love.graphics
     local scale = battle:battlePanelScale(winW, winH)
@@ -349,8 +332,6 @@ function Gen2.prepare(Engine, hd)
     end
     local okP, errP = pcall(hd.beginPass, "battle", c)
     if not okP then hd.fail("battle pass: " .. tostring(errP)) end
-    local facets, facetsWas
-    if fills and Engine.modOptions then facets, facetsWas = facetsAside() end
     local ok, err
     if wide then
       if hd.capturing("battle") and hd.fit.enabled then
@@ -363,7 +344,6 @@ function Gen2.prepare(Engine, hd)
     else
       ok, err = pcall(battle.drawScene, battle)
     end
-    if facets then facets[Gen2.FACETS_KEY] = facetsWas end
     if hd.capturing() then hd.endPass() end
     G.pop()
     if not ok then error(err, 0) end

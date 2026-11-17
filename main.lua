@@ -42,9 +42,6 @@ return function(mod)
   -- optional: without it the player's pad is the game's own (cut at the text box)
   Engine.Pads = loadSibling(mod, "src/pads.lua")
   Engine.Bar = loadSibling(mod, "src/bar.lua")
-  -- every mod's options as the player set them (the adapters read another mod's: Gen 2 sets
-  -- Facets' battle scene aside on a filled battle)
-  Engine.modOptions = function() return mod.game.mods.modOptions end
   local makeClock = loadSibling(mod, "src/clock.lua")
   local Clock = type(makeClock) == "function" and makeClock(mod) or nil
 
@@ -52,9 +49,11 @@ return function(mod)
   local schema = loadSibling(mod, "options.lua")
   -- (Battle Scene is Gen 3's alone: Red to Crystal never show its rows. The engine sets the game
   -- before it loads mods, and loads them again for another game)
+  -- (Fill Screen is not Gold, Silver and Crystal's: their battles stay in the game's own frame)
   if type(schema) == "table" and Engine.generation() < 3 then
     local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
                        scene_cache = true, battle_textbox = true, scene_daytime = true }
+    if Engine.generation() == 2 then gen3Only.fill_screen = true end
     local kept = {}
     for _, row in ipairs(schema) do
       if not (type(row) == "table" and gen3Only[row.key]) then kept[#kept + 1] = row end
@@ -350,7 +349,10 @@ return function(mod)
     -- (a value saved by the old Off / Fit Sprites / Fit Tall Too choice reads as off or on)
     local fit = option("battle_fit", true)
     hd.fit.enabled = hd.fit.available and fit ~= "off" and fit ~= false
-    hd.fit.fill = option("fill_screen", true) ~= false
+    -- (never in Gold, Silver and Crystal, fit.fillAllowed: their filled battle stretched what
+    -- other mods draw for the game's own screen, Facets' battle scenes, at another size)
+    hd.fit.fillAllowed = Engine.generation() ~= 2
+    hd.fit.fill = hd.fit.fillAllowed and option("fill_screen", true) ~= false
     hd.barEnabled = option("battle_textbox", true) ~= false
     -- (the screens before the game starts, and the whole screens opened over the field, are
     -- only captured to fill the screen)

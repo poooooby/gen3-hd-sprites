@@ -36,7 +36,7 @@ and Crystal.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
   bag and the intro fill any screen shape without black bars. The text box and HP bars stay
   sharp. In Gen 3 the enemy's HP box moves up to the top of the screen, giving your Pokémon
-  more room. In Gold, Silver and Crystal both sides slide in from the screen's edges.
+  more room. Gold, Silver and Crystal keep the game's own framed screen.
 - 📱 **Phone-friendly:** On a phone held upright, the text box runs full width above the touch
   controls, the battle grows into the space above it, and the opponent's HP box stays put just
   inside the battle's top edge, whatever the Pokémon do.
@@ -78,7 +78,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
 | **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little, never under about a third of the bigger one), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
-| **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. |
+| **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
@@ -116,11 +116,10 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
   game's own background.
 - True-to-size battles need Pokémon from a supported sprite mod. With the game's own
   sprites, Fill Screen still fits the battle to your screen.
-- 🔴 **Red, Blue, Yellow, Gold, Silver and Crystal:** Fill Screen, sharp battle and Pokédex
-  sprites, and sharp overworld Pokémon from supported mods. There's no Battle Scene in these games.
-- 🖼️ **Facets on Gold, Silver and Crystal:** a battle that fills your screen keeps the game's
-  plain white background, since Facets' battle scenes are drawn for the game's own screen size.
-  Turn Fill Screen off to battle in front of Facets' scenes.
+- 🔴 **Red, Blue, Yellow, Gold, Silver and Crystal:** sharp battle and Pokédex sprites, and sharp
+  overworld Pokémon from supported mods. Fill Screen in Red, Blue and Yellow; Gold, Silver and
+  Crystal keep the game's own framed battle screen, so their battles look as other mods (Facets'
+  battle scenes) draw them. There's no Battle Scene in these games.
 - If your device can't draw battles this way, the mod steps aside and the game draws as usual.
 
 ## 🪪 Credits

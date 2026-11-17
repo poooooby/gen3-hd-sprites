@@ -95,7 +95,7 @@ return function(mod, hd, state)
   exports.fillEnabled = function()
     return exports.fitEnabled() and hd.fit.fill == true
   end
-  exports.setFill = function(on) hd.fit.fill = on and true or false end
+  exports.setFill = function(on) hd.fit.fill = on and hd.fit.fillAllowed ~= false and true or false end
   -- Battle Scene (Gen 3): the battle over the overworld in 2.5D
   exports.sceneEnabled = function()
     return exports.fitEnabled() and hd.scene ~= nil and hd.scene.enabled == true
