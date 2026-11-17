@@ -22,9 +22,11 @@ and Crystal.
 
 ### Battle Fit 🎥
 
-- 📏 **True-to-size battles:** The bigger Pokémon of the two fills all the room it has, never
-  hidden under the HP boxes or the text box, and the other is shrunk by how much smaller it
-  really is. A Marill stands well under a Meganium, and two giants both fill the screen.
+- 📏 **True-to-size battles:** Both Pokémon are drawn to one scale by their real heights. The
+  bigger one fills all the room it has, never hidden under the HP boxes or the text box, and the
+  other stands at its true size beside it: a Bulbasaur comes up to about a third of a Meganium.
+  Your own Pokémon is a touch bigger than the same one on the far side, being nearer to you, and
+  two giants both fill the screen.
 - 📐 **Nothing cut off:** If a Pokémon still doesn't fit, the camera pulls back just enough to
   show it in full, and eases back in when it leaves.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
@@ -53,7 +55,7 @@ FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | The bigger Pokémon fills its space and the other is shrunk to its true size beside it; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its true size beside it, yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |

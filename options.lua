@@ -12,7 +12,7 @@ return {
     label = "Battle Fit",
     type = "toggle",
     default = true,
-    description = "Battle Pokemon sized by their species: the taller of the two fills the space it has, without the HP boxes or text box covering it, and the other is shrunk by how much smaller it really is, so a Marill stands well under a Meganium. If one is still too tall for the screen, the camera pulls back so the whole Pokemon fits. The text box and HP bars never change. Off: the sprite mod's own sizes. Needs Battle HD.",
+    description = "Battle Pokemon sized by their species: the taller of the two fills the space it has, without the HP boxes or text box covering it, and the other is drawn to the same scale, so a Bulbasaur comes up to about a third of a Meganium. Your own Pokemon is a touch bigger, being nearer. If one is still too tall for the screen, the camera pulls back so the whole Pokemon fits. The text box and HP bars never change. Off: the sprite mod's own sizes. Needs Battle HD.",
   },
   {
     key = "fill_screen",

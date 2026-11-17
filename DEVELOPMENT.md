@@ -151,7 +151,7 @@ not by its `scale`:
 - **The pair** (`hd.pair`): each side's latest such tag, from its draws and from `hd.prefit`
   (`cur.sides`, merged at `endPass`), kept from pass to pass so a side not drawn this frame
   (fainted, before its send-out) still counts, and started afresh with a new battle (`fit.idle`).
-- **The taller fills its room** (`fillScale`): the stand-in's box (the picture box the game
+- **Each side's fill** (`fillScale`): the stand-in's box (the picture box the game
   draws) grown by the layout's `fitRoom[side]` (`up` rows above, `left` / `right` columns
   beside), the art kept inside it above and beside its feet (`lowPivot`, which stays put). The
   art is the tag's `art` box (its union over the animation), else the frame from its `top` down.
@@ -162,8 +162,17 @@ not by its `scale`:
   - **Gen 1 / 2:** the enemy's out to its HUD and the screen's edge (its box already starts at
     the top); the player's up to the enemy's HUD (row 32) and out to the screen's edge and its
     own HUD.
-- **The other** is drawn at `max(sizeFloor, (h / hTaller) ^ sizeCurve)` (0.2, 0.5) of its own
-  fill: Marill (0.4 m) against Meganium (1.8 m) at 0.47.
+- **One scale for both:** canvas px per metre of species height. Each side's fill gives its
+  art's height at that size (`fillPx[side]`, kept with the tag it was measured for, `fillOf`);
+  divided by its species' height (and the player's by `nearScale`, 1.15: nearer the camera, the
+  same species stands that much taller on the player's side) that is the scale at which it
+  would fill. The smaller of the two is used: that side fills its room, the other is drawn true
+  to size against it, never below `sizeFloor` (0.2) of its own fill. Crystal: Bulbasaur (0.7 m)
+  against a player's Meganium (1.8 m) at 0.34 of its height, a player's Bulbasaur at 0.45 of
+  an enemy Meganium's, a Meganium mirror match the enemy's at 1 / 1.15. (Until the other side
+  has been measured, the shorter species at its height / the taller's of its own fill. Each
+  side filling its own room and the shorter shrunk by the heights' ratio, the old rule, drew
+  the same species the same size on both sides and Bulbasaur near Meganium's height.)
 - **Else** the tag's own `scale`: Battle Fit off, a double battle, a trainer, a tag without a
   height. With a pair in the battle the camera's top `margin` is 0 (`topLimit`): on the Game
   Boy the enemy's room starts at the screen's top. The camera's code is unchanged: it still

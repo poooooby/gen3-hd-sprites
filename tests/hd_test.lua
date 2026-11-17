@@ -643,9 +643,9 @@ do
   check(near(hd.stats.zoom, 0.6), "the zoom never goes below zMin")
 end
 
--- Battle Fit's species sizing: the taller species of the pair fills its room (its pic box grown by
--- fitRoom: Gen 3's enemy 8 rows up to the screen's top, 16 columns each side), the other shrunk by
--- (its height / the taller's) ^ sizeCurve, never below sizeFloor
+-- Battle Fit's species sizing: both at one scale, px per metre (the player's nearScale larger);
+-- the tighter fills its room (its pic box grown by fitRoom: Gen 3's enemy 8 rows up to the
+-- screen's top, 16 columns each side), the other true to size, never below sizeFloor
 do
   local G = fakeGraphics()
   local hd = HD.new(G)
@@ -673,11 +673,11 @@ do
   local d = drawn()
   check(near(hd.stats.zoomTarget, 1) and d and near(d.args[5], 4 * 72 / 148) and near(d.args[3], 4 * 72),
     "species: the taller fills its room, standing on its feet, the camera in (" .. tostring(d and d.args[5]) .. ")")
-  -- the player's 4x taller: this one at (1/4) ^ 0.5 = half of its fill
+  -- the player's 4x taller: this one at a quarter of its fill
   hd.pair.player = { height = 7.2 }
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.5), "species: the shorter at (its height / the taller's) ^ 0.5 of its fill ("
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.25), "species: the shorter at its height / the taller's of its fill ("
     .. tostring(d and d.args[5]) .. ")")
   -- ... never below sizeFloor
   hd.pair.player = { height = 100 }
@@ -689,6 +689,32 @@ do
   fitFrame(G, hd, base, frame)
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148), "species: the taller of the pair fills")
+  -- the player's side measured (its art's height at its fill, canvas px): one scale, px per
+  -- metre, the player's nearScale (1.15) larger. This one's fill: 72 px for 1.8 m, 40 px/m.
+  local mon = { height = 0.7 }
+  hd.pair.player, hd._fillOf.player, hd._fillPx.player = mon, mon, 100
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148), "species: roomier for its height than the other: it fills ("
+    .. tostring(d and d.args[5]) .. ")")
+  -- the same species on the player's side, the same room: this one 1 / 1.15 of its fill
+  mon.height, hd._fillPx.player = 1.8, 72
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 / 1.15), "species: the same species smaller on the enemy's side ("
+    .. tostring(d and d.args[5]) .. ")")
+  -- the player's room tight for its height (14 px for 0.7 m): this one sized to it, 20 / 1.15 px/m
+  mon.height, hd._fillPx.player = 0.7, 14
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * (20 / 1.15) / 40), "species: sized against the tighter side ("
+    .. tostring(d and d.args[5]) .. ")")
+  -- (measured for another tag: the heights' ratio until it is measured again)
+  hd._fillOf.player = nil
+  mon.height = 7.2
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.25), "species: a stale measure falls back to the heights")
   -- a battle starting afresh forgets the last one's pair
   hd.pair.player = { height = 7.2 }
   hd.fit.idle = 10
@@ -710,6 +736,7 @@ do
   check(d and near(d.args[5], -4 * 36 / 40), "species: a mirrored frame fits by its drawn sides (" .. tostring(d and d.args[5]) .. ")")
   -- the player's room: up to the enemy's HP box (16 rows here), its feet kept
   hd.fit.fitRoom = { player = { up = 16 } }
+  hd.pair.enemy = nil
   hd.tag(pic, tall({ side = "player" }))
   fitFrame(G, hd, base, frame)
   d = drawn()

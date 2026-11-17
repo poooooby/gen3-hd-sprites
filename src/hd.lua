@@ -111,9 +111,11 @@ function HD.new(G, opts)
       -- bottom (44, or where the top band has moved it; its box at 40-104, from row 52: it
       -- stands on its pad, the UI over its lower rows as in the cart), each 16 columns wider
       fitRoom = { enemy = { up = 8, left = 16, right = 16 }, player = { up = 8, left = 16, right = 16 } },
-      -- ... the taller species of the two fills its room; the other is drawn at
-      -- max(sizeFloor, (its height / the taller's) ^ sizeCurve) of what would fill its own
-      sizeCurve = 0.5, sizeFloor = 0.2,
+      -- ... the two drawn at one scale, pixels per metre: the one whose room is tighter for its
+      -- height fills it, the other true to size against it (never below sizeFloor of its own
+      -- fill), the player's nearScale times larger (nearer the camera: the same species stands
+      -- taller on the player's side)
+      sizeFloor = 0.2, nearScale = 1.15,
       -- the enemy's HP box (rows 16-44) raised to this many UI px under the screen's top on a
       -- wide screen the battle fills (singles): the player's HP box's gap over the text box (110
       -- to 112). The top band (rows above `split`) is moved up, as on a stacked screen; the fit
@@ -759,24 +761,46 @@ function HD.new(G, opts)
     if above > 0 then s = math.min(s, (lpy + up) / above) end
     if left > 0 then s = math.min(s, (lpx + roomL) / left) end
     if right > 0 then s = math.min(s, (W - lpx + roomR) / right) end
-    if s > 0 and s < math.huge then return s end
+    if s > 0 and s < math.huge then
+      -- (and the art's height at that size, canvas px)
+      return s, above > 0 and s * above * math.abs(sy or 1) or nil
+    end
     return nil
   end
 
-  -- Battle Fit's species sizing: the taller species of the two fills its room (fillScale); the
-  -- other is shrunk by how much shorter it is (sizeCurve, never below sizeFloor). Else k, the
-  -- tag's own size (Battle Fit off, a double battle, a tag without a height, a trainer).
+  -- each side's art height at its fill (canvas px) and the tag it was measured for
+  local fillPx, fillOf = {}, {}
+
+  -- Battle Fit's species sizing: both battlers at one scale, canvas px per metre of their
+  -- species' height, the player's nearScale times the enemy's. Each would fill its room
+  -- (fillScale) at its own scale; the smaller of the two (the tighter room for its height) is
+  -- taken, so that one fills and the other stands true to size against it, never below
+  -- sizeFloor of its fill. Until the other side has been measured, the shorter species at
+  -- (its height / the taller's) of its fill. Else k, the tag's own size (Battle Fit off, a
+  -- double battle, a tag without a height, a trainer).
   local function speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
     local fit = self.fit
     if not (fit.enabled and not fit.double and speciesTag(spec)) then return k end
-    local f = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
+    local f, h = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
     if not f then return k end
-    local other = self.pair[spec.side == "player" and "enemy" or "player"]
-    if other and other.height > spec.height then
-      f = f * math.max(fit.sizeFloor, (spec.height / other.height) ^ fit.sizeCurve)
+    local side = spec.side == "player" and "player" or "enemy"
+    local otherSide = side == "player" and "enemy" or "player"
+    fillPx[side], fillOf[side] = h, spec
+    local other = self.pair[otherSide]
+    if not other then return f end
+    local oh = fillPx[otherSide]
+    local near = fit.nearScale or 1
+    if h and oh and fillOf[otherSide] == other then
+      -- (px per metre at its fill, in the enemy's terms)
+      local mine = h / spec.height / (side == "player" and near or 1)
+      local theirs = oh / other.height / (otherSide == "player" and near or 1)
+      if theirs < mine then f = f * math.max(fit.sizeFloor, theirs / mine) end
+    elseif other.height > spec.height then
+      f = f * math.max(fit.sizeFloor, spec.height / other.height)
     end
     return f
   end
+  self._fillPx, self._fillOf = fillPx, fillOf
 
   local function drawAtScale(shaded, image, spec, a, b, c, d, e, f, g, h)
     local quad, x, y, r, sx, sy, ox, oy
@@ -1327,7 +1351,10 @@ function HD.new(G, opts)
     -- the battlers' pair: afresh when a battle starts (no battle fitted for a few frames), then
     -- each side's latest
     if cur.sides then
-      if self.fit.idle > 2 then self.pair = {} end
+      if self.fit.idle > 2 then
+        self.pair = {}
+        fillPx.enemy, fillPx.player, fillOf.enemy, fillOf.player = nil, nil, nil, nil
+      end
       for side, spec in pairs(cur.sides) do self.pair[side] = spec end
     end
     -- leave the drawing target where the engine expects it
