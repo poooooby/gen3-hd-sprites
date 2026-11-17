@@ -25,7 +25,9 @@ and Crystal.
 - 📏 **True-to-size battles:** Both Pokémon are drawn to one scale by their real heights. The
   bigger one fills all the room it has, never hidden under the HP boxes or the text box, and the
   other stands at its size beside it, small ones nudged up a little so they stay easy to see:
-  a Bulbasaur comes up to about half a Meganium.
+  a Bulbasaur comes up to a little over half a Meganium. However far apart they are, the smaller
+  one's body is never under about a third of the bigger one's, so even a Cutiefly beside a
+  Haunter is easy to spot.
   Your own Pokémon is a touch bigger than the same one on the far side, being nearer to you, and
   two giants both fill the screen. The opponent slides in at its normal size and settles to its
   true size when your Pokémon comes out.
@@ -75,7 +77,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little, never under about a third of the bigger one), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
@@ -116,11 +118,11 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
   sprites, Fill Screen still fits the battle to your screen.
 - 🔴 **Red, Blue, Yellow, Gold, Silver and Crystal:** Fill Screen, sharp battle and Pokédex
   sprites, and sharp overworld Pokémon from supported mods. There's no Battle Scene in these games.
-- If your device can't draw battles this way, the mod steps aside and the game draws as usual.
-
 - 🖼️ **Facets on Gold, Silver and Crystal:** a battle that fills your screen keeps the game's
   plain white background, since Facets' battle scenes are drawn for the game's own screen size.
   Turn Fill Screen off to battle in front of Facets' scenes.
+- If your device can't draw battles this way, the mod steps aside and the game draws as usual.
+
 ## 🪪 Credits
 
 - **Battle Scene** is adapted from the 3D battles of

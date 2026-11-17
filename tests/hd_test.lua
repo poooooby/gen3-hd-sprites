@@ -726,7 +726,8 @@ do
   hd.pair.player = { height = 7.2 }
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ 0.6), "species: the shorter at (its height / the taller's) ^ sizeCurve of its fill ("
+  local C = hd.fit.sizeCurve
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ C), "species: the shorter at (its height / the taller's) ^ sizeCurve of its fill ("
     .. tostring(d and d.args[5]) .. ")")
   -- ... never below sizeFloor
   hd.pair.player = { height = 100 }
@@ -739,9 +740,10 @@ do
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148), "species: the taller of the pair fills")
   -- the player's side measured (its art's height at its fill, canvas px): one scale, px per
-  -- metre (^ sizeCurve, 0.6), the player's nearScale (1.15) larger. This one's fill: 72 px for 1.8 m.
+  -- metre (^ sizeCurve, 0.5), the player's nearScale (1.15) larger. This one's fill: 72 px for 1.8 m.
   local mon = { height = 0.7 }
   hd.pair.player, hd._fillOf.player, hd._fillPx.player = mon, mon, 100
+  hd._fillBody.player = nil   -- (no body measured: no minimum until the checks below set one)
   fitFrame(G, hd, base, frame)
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148), "species: roomier for its height than the other: it fills ("
@@ -756,14 +758,44 @@ do
   mon.height, hd._fillPx.player = 0.7, 14
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * (14 / 0.7 ^ 0.6 / 1.15) / (72 / 1.8 ^ 0.6)), "species: sized against the tighter side ("
+  check(d and near(d.args[5], 4 * 72 / 148 * (14 / 0.7 ^ C / 1.15) / (72 / 1.8 ^ C)), "species: sized against the tighter side ("
     .. tostring(d and d.args[5]) .. ")")
+  -- ... and still when the measured side's Pokemon is tagged afresh (a sprite mod's new frame,
+  -- a rebuilt picture: a new table, the same species and art): no jump for that frame
+  hd.pair.player = { height = 0.7 }
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * (14 / 0.7 ^ C / 1.15) / (72 / 1.8 ^ C)),
+    "species: the other side's new tag for the same Pokemon keeps its measure (" .. tostring(d and d.args[5]) .. ")")
+  hd.pair.player = mon
+  -- the minimum: the smaller's body at least minShare (0.3) of the other's, which fills its
+  -- room. This one has no body: its art (72 px at its fill) stands in. The other's body 100 px:
+  -- this one at 30 / 72 of its fill, more than the heights give (0.27)
+  hd._fillBody.player = 100
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 100 / 72),
+    "species: the smaller kept at minShare of the other's body (" .. tostring(d and d.args[5]) .. ")")
+  -- ... by its own body when it has one (50 of its 148 rows: 24.3 px at its fill)
+  hd.tag(pic, tall({ body = { 40, 150, 60, 200 } }))
+  hd._fillBody.player = 40
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 40 / (72 * 50 / 148)),
+    "species: the minimum measures the smaller's body (" .. tostring(d and d.args[5]) .. ")")
+  -- ... never past its own fill
+  hd._fillBody.player = 400
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148), "species: the minimum stops at its fill (" .. tostring(d and d.args[5]) .. ")")
+  hd.tag(pic, tall())
+  hd._fillBody.player = nil
   -- (measured for another tag: the heights' ratio until it is measured again)
   hd._fillOf.player = nil
   mon.height = 7.2
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ 0.6), "species: a stale measure falls back to the heights")
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ C), "species: a stale measure falls back to the heights")
   -- a battle starting afresh forgets the last one's pair
   hd.pair.player = { height = 7.2 }
   hd.fit.idle = 10

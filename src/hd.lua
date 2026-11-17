@@ -116,7 +116,11 @@ function HD.new(G, opts)
       -- fill), the player's nearScale times larger (nearer the camera: the same species stands
       -- taller on the player's side). Heights count as height ^ sizeCurve, narrowing the gap
       -- between big and small species (Oddish against Swampert at 0.52, not 0.33)
-      sizeFloor = 0.2, nearScale = 1.15, sizeCurve = 0.6,
+      sizeFloor = 0.2, nearScale = 1.15, sizeCurve = 0.5,
+      -- ... and the smaller's body (spec.body, else its art) drawn at least minShare of the
+      -- other's, however far apart their heights are (0: no such minimum): a Cutiefly whose
+      -- fluttering art spans a box far bigger than itself still reads beside a Haunter
+      minShare = 0.3,
       -- the enemy's HP box (rows 16-44) raised to this many UI px under the screen's top on a
       -- wide screen the battle fills (singles; Gen 3): the player's HP box's gap over the text
       -- box (110 to 112). stackGap: the same under the scene's top on a tall (stacked) one, in
@@ -750,6 +754,7 @@ function HD.new(G, opts)
   -- pivot hpx, hpy in the frame), which stays where it is. The art is spec.art ({x0, y0, x1,
   -- y1}, frame px: its box over the whole animation) or the frame from its top row of art
   -- (spec.top) down. sx, sy: the draw's own scale (the room is in canvas px). nil: unknown.
+  -- Also the art's height at that size and its body's (spec.body; else the art's), canvas px.
   -- (no garbage: the dimensions, the viewport and the room's fields are numbers)
   local function fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
     if not (image and image.getWidth) then return nil end
@@ -793,14 +798,32 @@ function HD.new(G, opts)
     if left > 0 then s = math.min(s, (lpx + roomL) / left) end
     if right > 0 then s = math.min(s, (W - lpx + roomR) / right) end
     if s > 0 and s < math.huge then
-      -- (and the art's height at that size, canvas px)
-      return s, above > 0 and s * above * math.abs(sy or 1) or nil
+      -- (and the art's height at that size, canvas px, and its body's)
+      local ky = s * math.abs(sy or 1)
+      local h = above > 0 and ky * above or nil
+      local b = spec.body
+      local bh = h
+      if type(b) == "table" and tonumber(b[2]) and tonumber(b[4]) and b[4] > b[2] then bh = ky * (b[4] - b[2]) end
+      return s, h, bh
     end
     return nil
   end
 
-  -- each side's art height at its fill (canvas px) and the tag it was measured for
-  local fillPx, fillOf = {}, {}
+  -- each side's art height at its fill (canvas px), its body's, and the tag it was measured for
+  local fillPx, fillBody, fillOf = {}, {}, {}
+
+  -- the same Pokemon's tag: the same table, or one with the same species' height and art. A
+  -- sprite mod tags each frame it builds afresh (an animation frame, a rebuilt picture), so the
+  -- side measured a frame ago may carry a new tag for the same Pokemon; matched only by the
+  -- table, the other side fell back to the heights' ratio for that frame and jumped in size
+  local function sameMon(a, b)
+    if a == b then return true end
+    if not (a and b) or a.height ~= b.height or a.top ~= b.top then return false end
+    local x, y = a.art, b.art
+    if x == y then return true end
+    return type(x) == "table" and type(y) == "table"
+      and x[1] == y[1] and x[2] == y[2] and x[3] == y[3] and x[4] == y[4]
+  end
 
   -- Battle Fit's species sizing: both battlers at one scale, canvas px per metre of their
   -- species' height (^ sizeCurve), the player's nearScale times the enemy's. Each would fill its room
@@ -814,30 +837,37 @@ function HD.new(G, opts)
   local function speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
     local fit = self.fit
     if not (fit.enabled and not fit.double and speciesTag(spec)) then return k end
-    local f, h = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
+    local f, h, bh = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
     if not f then return k end
     -- (sliding in: its own size, but no larger than its room, so the camera need not pull back
     -- for it and then ease in again at the send-out)
     if spec.side ~= "player" and not self.playerIn then return math.min(k, f) end
     local side = spec.side == "player" and "player" or "enemy"
     local otherSide = side == "player" and "enemy" or "player"
-    fillPx[side], fillOf[side] = h, spec
+    fillPx[side], fillBody[side], fillOf[side] = h, bh, spec
     local other = self.pair[otherSide]
     if not other then return f end
     local oh = fillPx[otherSide]
     local near, c = fit.nearScale or 1, fit.sizeCurve or 1
     local myH, theirH = spec.height ^ c, other.height ^ c
-    if h and oh and fillOf[otherSide] == other then
+    if h and oh and sameMon(fillOf[otherSide], other) then
       -- (px per metre at its fill, in the enemy's terms)
       local mine = h / myH / (side == "player" and near or 1)
       local theirs = oh / theirH / (otherSide == "player" and near or 1)
-      if theirs < mine then f = f * math.max(fit.sizeFloor, theirs / mine) end
+      if theirs < mine then
+        local k = math.max(fit.sizeFloor, theirs / mine)
+        -- (its body at least minShare of the other's, which fills its room: never past its own
+        -- fill)
+        local least, mb, ob = fit.minShare or 0, bh, fillBody[otherSide]
+        if least > 0 and mb and ob and mb > 0 then k = math.min(1, math.max(k, least * ob / mb)) end
+        f = f * k
+      end
     elseif theirH > myH then
       f = f * math.max(fit.sizeFloor, myH / theirH)
     end
     return f
   end
-  self._fillPx, self._fillOf = fillPx, fillOf
+  self._fillPx, self._fillOf, self._fillBody = fillPx, fillOf, fillBody
 
   -- a tag's contact shadow (spec.shadow), under a frame whose pivot is drawn at (px, py) turned
   -- by r and scaled by (fsx, fsy) (the frame's final scale, flip included): its offsets and
@@ -1448,6 +1478,7 @@ function HD.new(G, opts)
         self.pair = {}
         self.playerIn = false
         fillPx.enemy, fillPx.player, fillOf.enemy, fillOf.player = nil, nil, nil, nil
+        fillBody.enemy, fillBody.player = nil, nil
       end
       for side, spec in pairs(cur.sides) do self.pair[side] = spec end
       if cur.playerIn then self.playerIn = true end
