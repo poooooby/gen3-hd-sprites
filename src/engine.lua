@@ -193,7 +193,7 @@ function Engine.install(hd)
             if ok and handled then
               hd.drawMapped(cm, mapped, out)
               local bm, am = love.graphics.getBlendMode()
-              love.graphics.setScissor(boxX, boxY, boxW, boxH)
+              hd.scissorOver(boxX, boxY, boxW, boxH)
               love.graphics.setBlendMode("alpha", "premultiplied")
               love.graphics.draw(out, bx, by)
               love.graphics.setScissor()

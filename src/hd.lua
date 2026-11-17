@@ -254,6 +254,27 @@ function HD.new(G, opts)
   local real = {}
   self.real = real
 
+  -- A scissor over every pixel of a box (x, y, w, h in units). LÖVE takes a scissor in whole
+  -- units, dropping each number's fraction, then turns it into pixels by the target's DPI
+  -- scale, dropping each fraction again: on a fractional DPI (Android's 2.625) a box's own
+  -- numbers lose up to four pixels at its right and bottom, where whatever was under the
+  -- screen showed through (a white line beside a battle panel). So: out to whole units, and one
+  -- more on a fractional DPI. (no garbage)
+  local function scissorOver(x, y, w, h)
+    local c = real.getCanvas and real.getCanvas()
+    local d = 1
+    if c and type(c.getDPIScale) == "function" then
+      d = c:getDPIScale()
+    elseif love and love.graphics and love.graphics.getDPIScale then
+      d = love.graphics.getDPIScale()
+    end
+    local x0, y0 = math.floor(x + 1e-6), math.floor(y + 1e-6)
+    local extra = (d % 1 ~= 0) and 1 or 0
+    real.setScissor(x0, y0, math.max(0, math.ceil(x + w - 1e-6) - x0 + extra),
+      math.max(0, math.ceil(y + h - 1e-6) - y0 + extra))
+  end
+  self.scissorOver = scissorOver
+
   -- ---------------------------------------------------------------- shaders
 
   -- what each shader was last sent: sent[shader][name] = { fn = the send used, n, values... }
@@ -638,7 +659,11 @@ function HD.new(G, opts)
     if type(x) ~= "number" then return nil end
     local cur = self.cur
     -- (a battler sized by its species: this pass's latest of its side, for the pair)
-    if cur and cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
+    if cur and cur.sides and speciesTag(spec) then
+      cur.sides[spec.side] = spec
+      -- (the player's Pokemon drawn: it has come in, so the enemy's sized against it)
+      if spec.side == "player" then cur.playerIn = true end
+    end
     local t0x, t0y = real.transformPoint(0, 0)
     local t1x = real.transformPoint(1, 0)
     local _, t2y = real.transformPoint(0, 1)
@@ -713,6 +738,8 @@ function HD.new(G, opts)
   -- with a `height`, metres), kept from pass to pass (endPass) and cleared when a battle starts
   -- afresh (fit.idle), so a side not drawn this frame (fainted, before its send-out) still counts
   self.pair = {}
+  -- (the player's Pokemon drawn this battle: the enemy's sized from then on)
+  self.playerIn = false
 
   -- the size at which the art fills its room: the stand-in's box (the picture box the game
   -- draws) grown by fit.fitRoom[side], above and beside the point it stands on (lpx, lpy; its
@@ -777,12 +804,17 @@ function HD.new(G, opts)
   -- taken, so that one fills and the other stands true to size against it, never below
   -- sizeFloor of its fill. Until the other side has been measured, the shorter species at
   -- (its height / the taller's) of its fill. Else k, the tag's own size (Battle Fit off, a
-  -- double battle, a tag without a height, a trainer).
+  -- double battle, a tag without a height, a trainer; the enemy's until the player's Pokemon
+  -- has been drawn this battle, self.playerIn: it slides in at its own size, never above its
+  -- fill, its fitting size from the player's send-out on, not from the player's prefit).
   local function speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
     local fit = self.fit
     if not (fit.enabled and not fit.double and speciesTag(spec)) then return k end
     local f, h = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
     if not f then return k end
+    -- (sliding in: its own size, but no larger than its room, so the camera need not pull back
+    -- for it and then ease in again at the send-out)
+    if spec.side ~= "player" and not self.playerIn then return math.min(k, f) end
     local side = spec.side == "player" and "player" or "enemy"
     local otherSide = side == "player" and "enemy" or "player"
     fillPx[side], fillOf[side] = h, spec
@@ -1234,7 +1266,7 @@ function HD.new(G, opts)
       return false
     end
     local rec = item.rec
-    real.setScissor(box[1], box[2], box[3], box[4])
+    scissorOver(box[1], box[2], box[3], box[4])
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
     useShader(rec)
     real.setBlendMode(rec.blend[1], rec.blend[2])
@@ -1353,9 +1385,11 @@ function HD.new(G, opts)
     if cur.sides then
       if self.fit.idle > 2 then
         self.pair = {}
+        self.playerIn = false
         fillPx.enemy, fillPx.player, fillOf.enemy, fillOf.player = nil, nil, nil, nil
       end
       for side, spec in pairs(cur.sides) do self.pair[side] = spec end
+      if cur.playerIn then self.playerIn = true end
     end
     -- leave the drawing target where the engine expects it
     local c = real.getCanvas()
@@ -2158,7 +2192,7 @@ function HD.new(G, opts)
 
   -- a canvas drawn as it is (the backdrop, already as the blit shows it), clipped to a box
   local function drawPlain(c, x, y, sx, sy, box)
-    real.setScissor(box[1], box[2], box[3], box[4])
+    scissorOver(box[1], box[2], box[3], box[4])
     real.draw(c, x, y, 0, sx, sy)
     real.setScissor()
   end
@@ -2252,7 +2286,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       edgeQuad = real.newQuad(u0, v0, uw, vh, cw, ch)
     end
     c:setWrap("clamp", "clamp")
-    real.setScissor(box[1], box[2], box[3], box[4])
+    scissorOver(box[1], box[2], box[3], box[4])
     real.draw(c, edgeQuad, box[1], box[2], 0, sx, sy)
     real.setScissor()
     return true
@@ -2275,7 +2309,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       runQuad = real.newQuad(u0, line - 1, uw, 1, cw, ch)
     end
     c:setWrap("clamp", "clamp")
-    real.setScissor(box[1], box[2], box[3], box[4])
+    scissorOver(box[1], box[2], box[3], box[4])
     real.draw(c, runQuad, box[1], top, 0, sx, bottom - top)
     real.setScissor()
   end
@@ -2309,7 +2343,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
     useShader(rec)
     real.setBlendMode(rec.blend[1], rec.blend[2])
-    real.setScissor(box[1], box[2], box[3], box[4])
+    scissorOver(box[1], box[2], box[3], box[4])
     real.draw(img, wideQuad, box[1], top, 0, sx * kx, sy * ky)
     real.setScissor()
     real.setShader()
@@ -2417,12 +2451,12 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       if item.kind == "seam" then
         if item.name == "ui" then inScene = false end
       elseif not (inScene and hidden) then
-        real.setScissor(box[1], box[2], box[3], box[4])
+        scissorOver(box[1], box[2], box[3], box[4])
         if item.kind == "hd" then
           tagDraw(item.rec, cur, blit, ubx, uby, U, Uy, box)
         elseif item.kind == "world" then
           if not worldDraw(item, ubx, uby, U, Uy, box) then
-            real.setScissor(box[1], box[2], box[3], box[4])
+            scissorOver(box[1], box[2], box[3], box[4])
             drawBackdrop(item.rec, cur.w, cur.h, ubx, uby, U, Uy, ubx, uby, U, Uy)
           end
         elseif item.kind == "stage" then
@@ -2657,7 +2691,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     self.stats.uiScale = U
     self.stats.uiTopDy = banded and dyDraw or 0
     local function scissor(b)
-      if b then real.setScissor(b[1], b[2], b[3], b[4]) else real.setScissor() end
+      if b then scissorOver(b[1], b[2], b[3], b[4]) else real.setScissor() end
     end
     local inScene = true
     local worldShown
@@ -2794,7 +2828,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- entrance's cinema bars)
     if worldShown and self.sceneOverlay then
       local v = sceneBox or cover
-      real.setScissor(v[1], v[2], v[3], v[4])
+      scissorOver(v[1], v[2], v[3], v[4])
       local ok, err = pcall(self.sceneOverlay, worldShown, v)
       if not ok then self.stats.sceneError = tostring(err) end
       real.setBlendMode("alpha", "alphamultiply")

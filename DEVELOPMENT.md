@@ -48,6 +48,13 @@ Pokédex, 12 in the field; `cap(pass)` / `setCap(pass, n)`). Tagged draws with n
 between them share one layer. A layer is one window-sized canvas, so a high cap costs memory
 only in scenes that use it.
 
+Every clip to the game screen's box goes through `hd.scissorOver(x, y, w, h)`, never a bare
+`setScissor`. LÖVE drops a scissor's fractions in units and again in pixels after the DPI scale,
+so on Android's 2.625 DPI a box lost up to four pixels at its right and bottom and whatever was
+under the screen showed there (a white line beside Gen 2's panel with Battle Fit off).
+`scissorOver` goes out to whole units, and one more on a fractional DPI. A sprite's own clip
+(Gen 1's UI sprites) stays a plain scissor.
+
 ## Generations
 
 `src/engine.lua` wraps the Renderer's seams, which the generations that draw through the
@@ -173,6 +180,11 @@ not by its `scale`:
   has been measured, the shorter species at its height / the taller's of its own fill. Each
   side filling its own room and the shorter shrunk by the heights' ratio, the old rule, drew
   the same species the same size on both sides and Bulbasaur near Meganium's height.)
+- **Sliding in:** until the player's Pokemon has been drawn this battle (`hd.playerIn`, set by a
+  recorded draw of a player-side species tag, not by `prefit`, which knows it before its
+  send-out; cleared with the pair), the enemy is drawn at its tag's own `scale`, capped at its
+  fill so the camera need not pull back for the slide and ease in again. From the send-out on,
+  the one scale above.
 - **Else** the tag's own `scale`: Battle Fit off, a double battle, a trainer, a tag without a
   height. With a pair in the battle the camera's top `margin` is 0 (`topLimit`): on the Game
   Boy the enemy's room starts at the screen's top. The camera's code is unchanged: it still

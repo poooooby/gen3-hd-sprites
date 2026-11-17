@@ -26,7 +26,8 @@ and Crystal.
   bigger one fills all the room it has, never hidden under the HP boxes or the text box, and the
   other stands at its true size beside it: a Bulbasaur comes up to about a third of a Meganium.
   Your own Pokémon is a touch bigger than the same one on the far side, being nearer to you, and
-  two giants both fill the screen.
+  two giants both fill the screen. The opponent slides in at its normal size and settles to its
+  true size when your Pokémon comes out.
 - 📐 **Nothing cut off:** If a Pokémon still doesn't fit, the camera pulls back just enough to
   show it in full, and eases back in when it leaves.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the

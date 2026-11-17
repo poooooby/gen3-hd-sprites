@@ -513,6 +513,7 @@ local function fitFrame(G, hd, base, opts)
   hd.backdrop(opts.wall, 0, 0)
   hd.drawStage(opts.pad, 0, 0)                        -- screen-sized, but part of the stage
   G.draw(opts.pic, 176, 40, 0, 1, 1, 32, 32)
+  if opts.mine then G.draw(opts.mine, 64, 80, 0, 1, 1, 32, 32) end  -- the player's Pokemon
   if opts.flash then G.rectangle("fill", 0, 0, 240, 160) end
   G.rectangle("fill", 170, 30, 4, 4)                  -- a particle
   if opts.seam ~= false then hd.seam("ui") end
@@ -643,6 +644,35 @@ do
   check(near(hd.stats.zoom, 0.6), "the zoom never goes below zMin")
 end
 
+-- scissorOver: a screen box's scissor over its every pixel. LÖVE drops each number's fraction,
+-- in units and again in pixels: on Android's 2.625 DPI a battle panel's box lost up to four
+-- pixels at its right and bottom (a white line beside the panel)
+do
+  local G = fakeGraphics()
+  local got
+  G.setScissor = function(x, y, w, h) got = { x, y, w, h } end
+  local hd = HD.new(G)
+  hd.install()
+  local function onDpi(d)
+    local c = canvas("screen", 900, 400)
+    c.getDPIScale = function() return d end
+    G.setCanvas(c)
+  end
+  onDpi(2.625)
+  hd.scissorOver(232.38, 12.19, 426.67, 384)
+  -- the pixels LÖVE keeps: each number truncated, times the DPI, truncated
+  local function px(v) return math.floor(math.floor(v) * 2.625) end
+  local right, bottom = px(got[1]) + px(got[3]), px(got[2]) + px(got[4])
+  check(px(got[1]) <= math.floor(232.38 * 2.625) and right >= math.ceil((232.38 + 426.67) * 2.625)
+    and px(got[2]) <= math.floor(12.19 * 2.625) and bottom >= math.ceil((12.19 + 384) * 2.625),
+    "scissorOver: covers the box's every pixel on a fractional DPI (" .. table.concat(got, ",") .. ")")
+  -- a whole DPI: whole units out to the box's edges, nothing more
+  onDpi(1)
+  hd.scissorOver(610.5, 30, 1120, 1008)
+  check(got[1] == 610 and got[2] == 30 and got[3] == 1121 and got[4] == 1008,
+    "scissorOver: on a whole DPI, the box out to whole pixels (" .. table.concat(got, ",") .. ")")
+end
+
 -- Battle Fit's species sizing: both at one scale, px per metre (the player's nearScale larger);
 -- the tighter fills its room (its pic box grown by fitRoom: Gen 3's enemy 8 rows up to the
 -- screen's top, 16 columns each side), the other true to size, never below sizeFloor
@@ -666,11 +696,30 @@ do
     for k, v in pairs(extra or {}) do spec[k] = v end
     return spec
   end
-  -- alone (no player's yet): it fills its room, the 64 rows over its feet and the 8 above them
-  -- holding 72 / 148 of its art; the camera stays in
+  -- before the player's Pokemon has been drawn (sliding in, the player's only prefitted): its
+  -- own size
   hd.tag(pic, tall())
   fitFrame(G, hd, base, frame)
   local d = drawn()
+  check(d and near(d.args[5], 4 * 0.3) and not hd.playerIn, "species: the enemy at its own size until the player's comes in ("
+    .. tostring(d and d.args[5]) .. ")")
+  -- ... but no larger than its room (the camera need not pull back for the slide-in)
+  hd.tag(pic, tall({ scale = 1 }))
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148) and near(hd.stats.zoomTarget, 1),
+    "species: sliding in, its own size capped at its room (" .. tostring(d and d.args[5]) .. ")")
+  hd.tag(pic, tall())
+  -- the player's drawn (its send-out): from then on the enemy's sized; alone (no player's
+  -- measure yet) it fills its room, the 64 rows over its feet and the 8 above them holding
+  -- 72 / 148 of its art; the camera stays in
+  local mine = canvas("mine", 64, 64)
+  hd.tag(mine, tall({ side = "player" }))
+  fitFrame(G, hd, base, { wall = wall, pad = pad, pic = pic, mine = mine })
+  check(hd.playerIn == true, "species: the player's drawn: it has come in")
+  hd.pair.player = nil
+  fitFrame(G, hd, base, frame)
+  d = drawn()
   check(near(hd.stats.zoomTarget, 1) and d and near(d.args[5], 4 * 72 / 148) and near(d.args[3], 4 * 72),
     "species: the taller fills its room, standing on its feet, the camera in (" .. tostring(d and d.args[5]) .. ")")
   -- the player's 4x taller: this one at a quarter of its fill
@@ -720,8 +769,9 @@ do
   hd.fit.idle = 10
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148) and hd.pair.player == nil and hd.pair.enemy ~= nil,
-    "species: a new battle starts a new pair")
+  check(d and near(d.args[5], 4 * 0.3) and hd.pair.player == nil and hd.pair.enemy ~= nil and not hd.playerIn,
+    "species: a new battle starts a new pair, the enemy at its own size again (" .. tostring(d and d.args[5]) .. ")")
+  hd.playerIn = true
   -- the art's own columns (spec.art, not the frame's) and the room's sides: 30 art px each side
   -- of its feet, 32 + 16 canvas px beside them
   hd.tag(pic, tall({ quad = quad(0, 0, 100, 40), pivot = { 50, 40 }, art = { 20, 0, 80, 40 }, top = 0 }))

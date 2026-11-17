@@ -298,7 +298,7 @@ function Gen2.prepare(Engine, hd)
       local world = Chrome.worldSurround
       if world and not fills then
         G.push("all")
-        G.setScissor(box[1], box[2], box[3], box[4])
+        hd.scissorOver(box[1], box[2], box[3], box[4])
       end
       Chrome.worldSurround = false
       Chrome.letterbox(winW, winH, 1, 1, 1)
@@ -345,7 +345,7 @@ function Gen2.prepare(Engine, hd)
     -- the Renderer's blit, for ours: the canvas at its origin and scale, clipped to a box
     local function blit(cv, obx, oby, osx, osy, obox)
       local b = obox or box
-      real.setScissor(b[1], b[2], b[3], b[4])
+      hd.scissorOver(b[1], b[2], b[3], b[4])
       real.draw(cv, obx or bx, oby or by, 0, osx or scale, osy or scale)
       real.setScissor()
     end

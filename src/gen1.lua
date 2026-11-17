@@ -151,7 +151,8 @@ function Gen1.prepare(Engine, hd)
           x2, y2 = math.min(x2, X + (c[1] + c[3]) * U), math.min(y2, Y + (c[2] + c[4]) * Uy)
         end
         if x2 > x1 and y2 > y1 then
-          G.setScissor(x1, y1, x2 - x1, y2 - y1)
+          -- (the screen's box over its every pixel; a sprite's own clip as it is)
+          if c then G.setScissor(x1, y1, x2 - x1, y2 - y1) else hd.scissorOver(x1, y1, x2 - x1, y2 - y1) end
           local col = r.color
           G.setColor(col and col[1] or 1, col and col[2] or 1, col and col[3] or 1, col and col[4] or 1)
           local sx, sy = U * (r.sx or 1), Uy * (r.sy or 1)
