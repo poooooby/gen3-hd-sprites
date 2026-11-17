@@ -5,7 +5,8 @@
 -- opens the menus over the battle (PKMN: the party, then a summary; PACK; a text box) and shoots each with
 -- Fill Screen on and off. GEN2_FIT=on|off sets Battle Fit; GEN2_MAP=MAP:x:y the place; GEN2_STAGES the stat stages
 -- (player:attack=2,defense=-1;enemy:speed=1); GEN2_MON the
--- player's Pokemon (default TYPHLOSION); GEN2_SLIDE_SHOTS=0,20,40 shoots those frames of the
+-- player's Pokemon (default TYPHLOSION), GEN2_MOVESET its moves; GEN2_FIGHT=n a real turn shot
+-- every 3 frames (GEN2_FILL_ONLY=1: no Fill Screen off shots before it); GEN2_SLIDE_SHOTS=0,20,40 shoots those frames of the
 -- intro slide; GEN2_INTRO_EVERY=n a shot every n steps from there to the menu. Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_IDENTITY=gold-dev POKEPORT_GAME=gold POKEPORT_TOUCH=0 \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen2_battle.lua love .
@@ -38,7 +39,16 @@ local function body(game, log)
   if env("GEN2_FIT") and hd.setFit then hd.setFit(env("GEN2_FIT") ~= "off" and env("GEN2_FIT") or false) end
 
   -- GEN2_MON: the player's Pokemon (default TYPHLOSION)
-  game.save.party = { Mon.new(game.data, env("GEN2_MON") or "TYPHLOSION", 40) }
+  -- GEN2_MOVESET=BODY_SLAM,TACKLE: its moves (default its level-up ones)
+  local moveset
+  if env("GEN2_MOVESET") then
+    moveset = {}
+    for id in env("GEN2_MOVESET"):gmatch("[^,]+") do
+      local def = game.data.moves and game.data.moves[id]
+      moveset[#moveset + 1] = { id = id, pp = def and def.pp or 10, maxPp = def and def.pp or 10 }
+    end
+  end
+  game.save.party = { Mon.new(game.data, env("GEN2_MON") or "TYPHLOSION", 40, { moves = moveset }) }
   game.save.inventory = { POKE_BALL = 5, POTION = 3 }
   -- the battle starts in GEN2_LAYOUTS's first layout (its intro too)
   if (env("GEN2_LAYOUTS") or "og"):match("^[^,]+") == "wide" then game.options.battleLayout = "wide" end
@@ -88,6 +98,7 @@ local function body(game, log)
     U.wait(2)
     if every and i % every == 0 then
       U.shot(game, ("%s/intro_%03d.png"):format(dir, i))
+      log(("  intro %d: uiTopDy %s grow %s"):format(i, tostring(hd.stats().uiTopDy), tostring(hd.stats().grow)))
     end
   end
   if battle.phase ~= "menu" then log("FAIL battle never reached its menu (phase " .. tostring(battle.phase) .. ")"); return end
@@ -113,7 +124,7 @@ local function body(game, log)
       local w, h = size:match("(%d+)x(%d+)")
       love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
       U.wait(10)
-      for _, fill in ipairs({ true, false }) do
+      for _, fill in ipairs(env("GEN2_FILL_ONLY") and { true } or { true, false }) do
         hd.setFill(fill)
         U.wait(6)
         U.shot(game, ("%s/%s_%s_%s.png"):format(dir, layout, size, fill and "fill" or "nofill"))
@@ -183,6 +194,20 @@ local function body(game, log)
       end
     end
   end
+  -- GEN2_FIGHT=n: a real turn, the first move from FIGHT, shot every 3 frames for n frames
+  -- (fight_NNN.png), logging where the enemy's HP box stands (uiTopDy)
+  if env("GEN2_FIGHT") then
+    U.tap(game, "a"); U.wait(10)
+    U.tap(game, "a")
+    for f = 1, tonumber(env("GEN2_FIGHT")) do
+      U.wait(1)
+      if f % 3 == 0 then
+        U.shot(game, ("%s/fight_%03d.png"):format(dir, f))
+        log(("  fight %d: phase %s uiTopDy %s zoom %s"):format(f, tostring(battle.phase), stat("uiTopDy"), stat("zoom")))
+      end
+      if f % 20 == 0 and battle.phase ~= "menu" then U.tap(game, "a") end
+    end
+  end
   -- GEN2_MOVES=PSYCHIC,EARTHQUAKE: those moves' animations (the player's turn), shot at
   -- GEN2_MOVE_SHOTS frames (default 10,30)
   local moves = env("GEN2_MOVES")
@@ -196,7 +221,11 @@ local function body(game, log)
       else
         for f = 1, 600 do
           U.wait(1)
-          if shots[f] then U.shot(game, ("%s/og_move_%s_%03d.png"):format(dir, move:lower(), f)) end
+          if shots[f] then
+            U.shot(game, ("%s/og_move_%s_%03d.png"):format(dir, move:lower(), f))
+            log(("  %s %d: zoom %s zoomTarget %s uiTopDy %s lift %s"):format(move, f, stat("zoom"),
+              stat("zoomTarget"), stat("uiTopDy"), stat("lift")))
+          end
           if not battle.anim and f > 40 then break end
         end
         log("move", move, "done, composites", stat("composites"), "failed", stat("failed"))

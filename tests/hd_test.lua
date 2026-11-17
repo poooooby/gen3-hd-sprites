@@ -512,7 +512,7 @@ local function fitFrame(G, hd, base, opts)
   hd.beginPass("battle", base)
   hd.backdrop(opts.wall, 0, 0)
   hd.drawStage(opts.pad, 0, 0)                        -- screen-sized, but part of the stage
-  G.draw(opts.pic, 176, 40, 0, 1, 1, 32, 32)
+  G.draw(opts.pic, 176, opts.picY or 40, 0, 1, 1, 32, 32)
   if opts.mine then G.draw(opts.mine, 64, 80, 0, 1, 1, 32, 32) end  -- the player's Pokemon
   if opts.flash then G.rectangle("fill", 0, 0, 240, 160) end
   G.rectangle("fill", 170, 30, 4, 4)                  -- a particle
@@ -524,7 +524,7 @@ local function fitFrame(G, hd, base, opts)
   hd.composite(base, function(c, bx, by, sx, sy)
     blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy }
     G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4)
-  end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+  end, 0, 0, 4, 4, { 0, 0, 960, 640 }, opts.view)
   hd.endFrame()
   return blits
 end
@@ -1047,17 +1047,17 @@ do
     hd.endPass()
     hd.composite(base, function() end, 0, 0, 4, 4, { 0, 0, 960, 640 })
     hd.endFrame()
-    return hd.fit.target, hd.fit.artTop
+    return hd.fit.target
   end
   local both = { { tall, 200, 1 }, { small, 152, 3 } }
-  local z1, top1 = frame(both, true)
-  local z2, top2 = frame(both, false)
-  local z3, top3 = frame(both, true)
+  local z1 = frame(both, true)
+  local z2 = frame(both, false)
+  local z3 = frame(both, true)
   local zSmall = frame({ { small, 152, 3 } }, false)
   check(z1 < zSmall, "both foes count: the tall one frames the camera though the small one was "
     .. "reported after it (" .. string.format("%.3f vs %.3f", z1, zSmall) .. ")")
-  check(near(z1, z2) and near(z2, z3) and near(top1, top2) and near(top2, top3),
-    "the target cursor hiding a reported foe moves neither the camera nor the HP box's hug ("
+  check(near(z1, z2) and near(z2, z3),
+    "the target cursor hiding a reported foe does not move the camera ("
     .. string.format("%.3f %.3f %.3f", z1, z2, z3) .. ")")
 end
 
@@ -1497,14 +1497,17 @@ do
   -- non-whole: each UI layer is drawn at 5x into a canvas of its own, blitted at 4.5/5
   local ui = {}
   for _, e in ipairs(blits) do if e.zk then ui[#ui + 1] = e end end
-  -- (two UI layers: the tagged draw splits them; no Pokemon tagged, so no art to hug: each
-  -- blitted whole, the enemy's HP box in its cart spot over the scene)
-  check(#ui == 2 and ui[1].zk == 5 and near(ui[1].sx, U / 5) and ui[1].canvas:getWidth() == 1200,
+  -- (two UI layers: the tagged draw splits them; each in two bands, the HP box's moved up)
+  check(#ui == 4 and ui[1].zk == 5 and near(ui[1].sx, U / 5) and ui[1].canvas:getWidth() == 1200,
     "...sharp: drawn at the next whole scale and scaled down")
   local low = ui[2]
   check(low and near(low.by, 1500 - 160 * U) and near(low.bx, 0), "...docked above the controls")
-  check(hd.stats.uiTopDy == 0, "no tagged art: the HP box keeps its cart spot over the scene")
-  check(approx(hd.fit.uiTopDy, (40 - (1500 - 160 * U)) / U), "the fit sees the HP box moved up by " .. tostring(hd.fit.uiTopDy))
+  -- (its top, row 16, stackGap (2) UI px under the scene's top: the scene at the UI's scale,
+  -- its row 0 the UI's, far below the notch)
+  local dy = 2 - 16
+  check(approx(hd.stats.uiTopDy, dy) and approx(ui[1].by + 16 * U, 1500 - 160 * U + 2 * U),
+    "the HP box stackGap under the scene's top (" .. tostring(hd.stats.uiTopDy) .. ")")
+  check(approx(hd.fit.uiTopDy, dy), "the fit sees the HP box moved up by " .. tostring(hd.fit.uiTopDy))
   -- nothing seen yet: the platforms (x 0 to 240) already span the width, so the scene stays
   -- at the UI's scale, its line on the text box
   check(near(hd.stats.grow, 1) and approx(hd.stats.fill, U / 4), "the scene keeps both platforms whole (" .. tostring(hd.stats.fill) .. ")")
@@ -1516,11 +1519,38 @@ do
   local icon
   for _, e in ipairs(G.log) do if e.image == hpIcon then icon = e end end
   -- (placed about its default 32, 32 pivot)
-  check(icon and approx(icon.args[2], 1500 - 160 * U + (20 + 32) * U), "a tagged UI draw in the top band stays with it")
+  check(icon and approx(icon.args[2], 1500 - 160 * U + (2 - 16 + 20 + 32) * U), "a tagged UI draw in the top band goes up with it ("
+    .. tostring(icon and icon.args[2]) .. ")")
   local w
   for _, e in ipairs(G.log) do if e.image == wall then w = w or e end end
   check(w and w.args[3] <= 1e-6, "the wallpaper's sky covers the top of the screen")
   check(w and w.vp[2] >= -1e-6, "...scaled up so its own top row reaches it (none stretched) (" .. tostring(w and w.vp[2]) .. ")")
+end
+
+do
+  -- stacked, the enemy's HP box stays under the scene's top, wherever the art is drawn
+  -- (it hugged the highest art, and Body Slam drawing the Pokemon lower bounced it on a phone)
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local pic, page = canvas("pic", 64, 64), canvas("atlas", 4096, 4096)
+  hd.tag(pic, { texture = page, quad = quad(0, 0, 64, 64), pivot = { 32, 64 }, lowPivot = { 32, 64 },
+                side = "enemy", scale = 1 })
+  local opts = { wall = canvas("wall", 256, 160), pad = canvas("pad", 256, 160), pic = pic, picY = 40,
+                 view = { 0, 0, 1080, 2400, bottom = 1500 } }
+  local function run(n) for _ = 1, n do fitFrame(G, hd, base, opts) end return hd.stats.uiTopDy end
+  local top = 2 - 16
+  local rest = run(30)
+  check(approx(rest, top), "stacked: the HP box stackGap under the scene's top (" .. tostring(rest) .. ")")
+  hd.setTurn(true)
+  opts.picY = 70
+  check(run(60) == rest, "...a move drawing the Pokemon lower leaves it there")
+  hd.setTurn(false)
+  check(run(120) == rest, "...and so after the turn")
+  opts.picY = 20
+  check(run(30) == rest, "...and with the art higher")
 end
 
 do

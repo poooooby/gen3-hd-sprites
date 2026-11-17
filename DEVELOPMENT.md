@@ -347,8 +347,7 @@ The target zoom:
   (`hd.prefit(side, image, x, y, id)`); a side with any report is fitted by its reports alone.
   Without this, the target cursor (which hides the picked foe every other beat:
   `Ui.targetHidden`) moved the camera with each blink. Portrait was worst: Fill Screen's
-  growth and the foes' HP box (which hugs the highest art, `fit.artTop`) jumped every few
-  frames. Drawn pics are used where nothing was reported (Red to Crystal).
+  growth jumped every few frames. Drawn pics are used where nothing was reported (Red to Crystal).
 - The zoom snaps to the target at a battle's first frame and eases out about 20% per frame.
   The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
@@ -427,9 +426,15 @@ already covers the view.
     blitted, clipped, `dyTop` UI px higher.
     - The fit sees that band at the top of the screen (`fit.uiTopDy`): its HP-box rect and the
       back headroom (`backTopMin`) move up with it.
-    - It is drawn lower when the scene stops short of the top, `fit.hugGap` above the highest
-      art (`fit.artTop`, from `fitStep`). With no tagged art (no sprite mod) its top is not
-      known, so the box keeps its cart spot over the scene, and the block centres as one.
+    - Singles: the HP box's top is `fit.stackGap` (2) UI px under the scene's top in every game:
+      its canvas row 0 at the scene's scale, or the screen's top when the scene reaches it (as
+      `topGap` on a wide screen). Gen 1 / 2 have it on the cart's top row. It never moves with
+      the art; the fit sees it there, the upper limit for the player's Pokemon. The spot
+      (`fit.anchor`, UI px) is held while a turn plays (Gen 2 fits drawn pics, so a lunge may
+      pull the scene out a little) and eased (`inRate`) to the scene's top between turns; set
+      afresh each battle. (It used to hug the highest art, `fit.artTop`, and bounced on a
+      phone with every move that drew a Pokemon lower, Gen 2's Body Slam, and with sprites
+      animating at the menu.)
     - **The straddle guard:** a visible UI draw that crosses the split but does not cover the
       whole canvas (the level-up window, the intro's closing wipe) sets `cur.uiStraddle`. That
       frame's UI is drawn in one piece.

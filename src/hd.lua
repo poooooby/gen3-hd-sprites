@@ -118,10 +118,11 @@ function HD.new(G, opts)
       -- between big and small species (Oddish against Swampert at 0.52, not 0.33)
       sizeFloor = 0.2, nearScale = 1.15, sizeCurve = 0.6,
       -- the enemy's HP box (rows 16-44) raised to this many UI px under the screen's top on a
-      -- wide screen the battle fills (singles): the player's HP box's gap over the text box (110
-      -- to 112). The top band (rows above `split`) is moved up, as on a stacked screen; the fit
-      -- sees it there (uiTopDy), so the player's Pokemon may rise into the rows it left
-      topGap = 2,
+      -- wide screen the battle fills (singles; Gen 3): the player's HP box's gap over the text
+      -- box (110 to 112). stackGap: the same under the scene's top on a tall (stacked) one, in
+      -- every game. It stays there whatever the art does; the fit sees it there (uiTopDy), the
+      -- most the player's Pokemon may rise to
+      topGap = 2, stackGap = 2,
       -- the enemy's feet (its 64x64 pic box's bottom, ui.lua ENEMY_MON y 40 + 32) and the
       -- lowest they may sink to: the top of the player's HP box is just below
       feetY = 72, feetMax = 76,
@@ -152,12 +153,9 @@ function HD.new(G, opts)
       -- rest: the enemy's centred on 176, the player's rebuilt 112 px left of it), and the
       -- slide is at most inwardMax canvas px in all, so neither side leaves its spot far
       pads = { enemy = { 112, 240 }, player = { 0, 128 } }, inwardMax = 48,
-      -- ... and when the scene still stops short of the top, the enemy's HP box comes down to
-      -- sit hugGap canvas px above the highest art (artTop: zoomed canvas y, from the fit)
-      hugGap = 4, artTop = nil,
       -- ... and with nothing below to dock to (no touch controls), the whole block is raised
       -- (raise, screen px, settling from frame to frame) to sit centred: sky above, ground below
-      raise = 0,
+      raise = 0, anchor = nil,
       -- the battle UI over the scene, in canvas pixels (singles, both cart layouts): the
       -- enemy's HP box, the player's HP box, the text box (and everything below it, off the
       -- screen too). The player's own Pokemon (a tag with side = "player" and its body box)
@@ -2126,16 +2124,6 @@ function HD.new(G, opts)
       fit.span = { fx + (L - fx) * z, fx + (R - fx) * z }
     end
     self.stats.inward = inward
-    -- the highest art as the camera shows it (zoomed, raised), for the HP box to sit above
-    local lift = fitLift(fit.z) + fit.extra
-    local at = math.huge
-    if top < math.huge then at = fit.focus[2] + (top - fit.focus[2]) * fit.z - lift end
-    for _, r in ipairs(backs) do
-      local v = fit.shift.playerY - fit.shift.playerRaise
-      local y = (r.top or r[2]) + v
-      at = math.min(at, fit.focus[2] + (y - fit.focus[2]) * fit.z - lift)
-    end
-    fit.artTop = at < math.huge and at or nil
     fit.idle = 0
     self.stats.zoom, self.stats.zoomTarget, self.stats.extraLift = fit.z, zt, fit.extra
     self.stats.shiftEnemy, self.stats.shiftPlayer = fit.shift.enemy, fit.shift.player
@@ -2645,6 +2633,24 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           cx = cx - (r - vx - vw)
         end
         cx = round2(cx)
+        -- the enemy's HP box (singles): its top stackGap UI px under the scene's top (its canvas
+        -- row 0 at the scene's scale; the screen's top when the scene reaches it), as a wide
+        -- screen has it. Never the art's: the fit sees it there, the most the player's Pokemon
+        -- may rise to. Held while a turn plays (a lunge may pull the scene out a little) and
+        -- eased to the scene's top between turns (fit.anchor, UI px); set afresh each battle
+        if not fit.double then
+          local sceneTop = math.max(top, cy - fy * Sy)
+          local want = math.min(0, (sceneTop - uby) / Uy + fit.stackGap - fit.ui.enemy[2])
+          local a = fit.anchor
+          if not a or fit.idle > 2 then
+            a = want
+          elseif not fit.turn and a ~= want then
+            local step = math.max(math.abs(want - a) * fit.inRate, 0.1)
+            a = want > a and math.min(want, a + step) or math.max(want, a - step)
+          end
+          fit.anchor = a
+          dyTop = math.min(0, round2(math.max(a, (top - uby) / Uy - fit.ui.enemy[2])))
+        end
       else
         -- wider: the UI keeps the Renderer's scale, docked to the bottom; the scene grows about
         -- the text box's line up to the top, or out to the sides, whichever it reaches first
@@ -2659,9 +2665,9 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       sceneBox = { vx, vy, vw, vh }
       uiBox = clipRect(ubx, uby, cur.w * U, cur.h * Uy, sceneBox)
     end
-    -- the enemy's HP box raised to fit.topGap UI px under the screen's top on a wide screen the
-    -- battle fills (singles; a stacked one already moves the band up), so the player's Pokemon
-    -- has the rows under it. Fill Screen off keeps the game's own frame
+    -- the enemy's HP box raised to fit.topGap UI px under the screen's top when the battle fills
+    -- a wide screen (singles), so the player's Pokemon has the rows under it. Fill Screen off
+    -- keeps the game's own frame
     local raised = filling and not stacked and not fit.double and type(fit.topGap) == "number"
     if raised then
       dyTop = math.min(dyTop, round2((top - uby) / Uy + fit.topGap - fit.ui.enemy[2]))
@@ -2697,21 +2703,10 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     local cover = filling and sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
     -- the stacked UI in two bands (one when a draw crosses the split this frame)
     local split = fit.split
-    -- the HP box drawn just above the highest art when the scene stops short of the top (the
-    -- fit still sees it at the top: nothing it places comes up under it)
-    -- With no tagged art (no sprite mod) its top is not known: the box keeps its cart spot over
-    -- the scene, as if the art began just below it
-    local dyDraw = dyTop
-    if stacked then
-      local boxBottom = fit.ui.enemy[4] + 4
-      local artY = cy + ((fit.artTop or (boxBottom + fit.hugGap)) - fy) * Sy
-      local want = (artY - (fit.hugGap * Sy) - boxBottom * Uy - uby) / Uy
-      dyDraw = math.max(dyTop, math.min(0, round2(want)))
-    end
     -- centred when nothing is below: the sky over the HP box and the ground under the text
     -- box made equal (halving the difference each frame)
     if stacked and view.bottom == nil then
-      local gapTop = uby + dyDraw * Uy - top
+      local gapTop = uby + dyTop * Uy - top
       fit.raise = round2(math.max(0, (gapTop + (fit.raise or 0)) / 2))
     else
       fit.raise = 0
@@ -2727,8 +2722,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         break
       end
     end
-    local banded = (stacked or raised) and dyDraw < 0 and (topLayer or not cur.uiStraddle)
-    local topBy = uby + dyDraw * Uy
+    local banded = (stacked or raised) and dyTop < 0 and (topLayer or not cur.uiStraddle)
+    local topBy = uby + dyTop * Uy
     local topBox, lowBox
     -- (unfilled: the Renderer's clip, else its letterbox)
     local clipTo = sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
@@ -2744,7 +2739,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     self.stats.lift = lift
     self.stats.fill = S / bsx
     self.stats.uiScale = U
-    self.stats.uiTopDy = banded and dyDraw or 0
+    self.stats.uiTopDy = banded and dyTop or 0
     local function scissor(b)
       if b then scissorOver(b[1], b[2], b[3], b[4]) else real.setScissor() end
     end

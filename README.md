@@ -36,7 +36,8 @@ and Crystal.
   sharp. In Gen 3 the enemy's HP box moves up to the top of the screen, giving your Pokémon
   more room. In Gold, Silver and Crystal both sides slide in from the screen's edges.
 - 📱 **Phone-friendly:** On a phone held upright, the text box runs full width above the touch
-  controls and the battle grows into the space above it.
+  controls, the battle grows into the space above it, and the opponent's HP box stays put just
+  inside the battle's top edge, whatever the Pokémon do.
 
 ### Battle Scene 🏞️
 
