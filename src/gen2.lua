@@ -150,13 +150,24 @@ function Gen2.prepare(Engine, hd)
 
   --- The panel's UI, drawn after the UI seam: the HP boxes (with the battle's font extras, as
   --- drawHud draws them) and the text box, under the battle's exit fade like the rest.
+  -- the enemy's HUD as a layer of its own (hd.seam "uiTop"): a filled screen's top band, moved
+  -- whole, with whatever mods draw inside it (Facets' boxes, National Dex's chips); what is drawn
+  -- by the player's box (its chips, rising past the split row) stays with the rest
+  local function enemyHud(battle, draw)
+    local capturing = hd.capturing("battle")
+    if capturing then hd.seam("uiTop") end
+    local ok, err = pcall(draw, battle)
+    if capturing then hd.seam("uiTopEnd") end
+    if not ok then error(err, 0) end
+  end
+
   local function drawUI(battle)
     local prevBgp
     if GbcPalette and battle.exitFadeBgp then
       prevBgp = GbcPalette.setBgp(battle:exitFadeBgp() or GbcPalette.bgp)
     end
     local was = Font and Font.useBattleExtra(true)
-    battle:drawEnemyHud()
+    enemyHud(battle, battle.drawEnemyHud)
     battle:drawPlayerHud()
     if Font then Font.useBattleExtra(was) end
     battle:drawBottom(0)
@@ -250,7 +261,7 @@ function Gen2.prepare(Engine, hd)
     if GbcPalette and battle.exitFadeBgp then
       prevBgp = GbcPalette.setBgp(battle:exitFadeBgp() or GbcPalette.bgp)
     end
-    WideBattle.drawTopHud(battle)
+    enemyHud(battle, WideBattle.drawTopHud)
     WideBattle.drawBottomHud(battle)
     if GbcPalette and battle.exitFadeBgp then GbcPalette.setBgp(prevBgp) end
   end

@@ -1436,8 +1436,10 @@ local function stackedFrame(opts)
   hd.backdrop(wall, 0, 0)
   hd.drawStage(pad, 0, 0)
   hd.seam("ui")
+  if opts.topSeam then hd.seam("uiTop") end           -- the enemy's HUD as a layer of its own
   G.rectangle("fill", 14, 16, 99, 28)                -- the enemy's HP box
   G.draw(hpIcon, 20, 20)                              -- a tagged draw in the top band
+  if opts.topSeam then hd.seam("uiTopEnd") end
   G.rectangle("fill", 0, 112, 240, 48)                -- the text box
   if opts.straddle then G.rectangle("fill", 150, 8, 90, 96) end   -- a level-up window
   hd.endPass()
@@ -1465,6 +1467,25 @@ do
     .. ", bands " .. top .. "/" .. low .. ")")
   local hd2 = stackedFrame({ view = view, straddle = true })
   check(hd2.stats.uiTopDy == 0, "...not on a frame whose UI crosses the split (drawn whole)")
+  -- the enemy's HUD drawn as a layer of its own (hd.seam "uiTop"): that layer moves up whole and
+  -- the rest stays, so a draw across the split row (stat chips rising from the player's box)
+  -- moves nothing back (it had dropped the enemy's box over the player's Pokemon)
+  local hd3, G3, blits3, _, _, icon3 = stackedFrame({ view = view, straddle = true, topSeam = true })
+  local moved, kept, split = 0, 0, 0
+  for _, e in ipairs(blits3) do
+    if e.zk or e.box then
+      if near(e.by, 440 - 496) then moved = moved + 1 end
+      if near(e.by, 440) then kept = kept + 1 end
+      if e.box and e.box[4] < 160 * 4 - 1 and near(e.by, 440) then split = split + 1 end
+    end
+  end
+  check(hd3.stats.uiTopDy == -124 and moved == 1 and kept >= 2 and split == 0,
+    "the enemy's HUD as its own layer: moved up whole, the rest (a draw across the split) kept, none cut by rows ("
+    .. moved .. "/" .. kept .. "/" .. split .. ")")
+  local icon
+  for _, e in ipairs(G3.log) do if e.image == icon3 then icon = e end end
+  check(icon and approx(icon.args[2], 440 - 496 + (20 + 32) * 4),
+    "...a tagged draw in that layer goes up with it (" .. tostring(icon and icon.args[2]) .. ")")
 end
 
 do

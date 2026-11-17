@@ -1212,7 +1212,9 @@ function HD.new(G, opts)
     return true
   end
 
-  --- The scene of a battle ends here: what the pass draws next is the UI (Battle Fit).
+  --- The scene of a battle ends here: what the pass draws next is the UI (Battle Fit). Also
+  --- "uiTop" / "uiTopEnd" round the enemy's HUD (its HP box and what mods draw with it): on a
+  --- screen whose top band is moved up, that layer goes with it whole.
   function self.seam(name)
     local cur = self.cur
     if not cur then return end
@@ -2675,15 +2677,29 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     else
       fit.raise = 0
     end
-    local banded = (stacked or raised) and dyDraw < 0 and not cur.uiStraddle
+    -- the enemy's HUD drawn as a layer of its own this frame (hd.seam("uiTop") ... "uiTopEnd"):
+    -- that layer is the top band, moved whole, and the rest of the UI stays where it is, so a
+    -- draw across the split row (a chip by the player's box, a window) tears nothing; else the
+    -- rows above `split` are the top band, and a draw across them keeps the UI in one piece
+    local topLayer = false
+    for _, item in ipairs(cur.items) do
+      if item.kind == "seam" and item.name == "uiTop" then
+        topLayer = true
+        break
+      end
+    end
+    local banded = (stacked or raised) and dyDraw < 0 and (topLayer or not cur.uiStraddle)
     local topBy = uby + dyDraw * Uy
     local topBox, lowBox
     -- (unfilled: the Renderer's clip, else its letterbox)
     local clipTo = sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
+    local topAll
     if banded then
       topBox = clipRect(ubx, topBy, cur.w * U, split * Uy, clipTo)
       lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, clipTo)
+      if topLayer then topAll = clipRect(ubx, topBy, cur.w * U, cur.h * Uy, clipTo) end
     end
+    local byLayer = banded and topLayer
     local k = filling and U ~= math.floor(U) and math.ceil(U) or 1
     if filling or banded then noteUi(cur, ubx, uby, U, Uy, uiBox or clipTo, split, topBy, topBox, lowBox) end
     self.stats.lift = lift
@@ -2694,12 +2710,19 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       if b then scissorOver(b[1], b[2], b[3], b[4]) else real.setScissor() end
     end
     local inScene = true
+    local inTop = false
     local worldShown
     if not moved then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy, sceneBox) end
     real.push("all")
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" then
-        if item.name == "ui" then inScene = false end
+        if item.name == "ui" then
+          inScene = false
+        elseif item.name == "uiTop" then
+          inTop = true
+        elseif item.name == "uiTopEnd" then
+          inTop = false
+        end
       elseif item.kind == "win0" then
         real.setShader()
         real.setBlendMode("alpha", "alphamultiply")
@@ -2782,6 +2805,15 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
           local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy + fit.sceneUp * Uy) or nil
           tagDraw(item.rec, cur, blit, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, sceneBox, pin)
+        elseif byLayer then
+          -- (the enemy's HUD's layer moved whole; the rest where it is)
+          if inTop then
+            scissor(topAll)
+            tagDraw(item.rec, cur, blit, ubx, topBy, U, Uy, topAll)
+          else
+            scissor(uiBox)
+            tagDraw(item.rec, cur, blit, ubx, uby, U, Uy, uiBox)
+          end
         elseif banded and item.rec.ty + item.rec.y * item.rec.tsy < split then
           scissor(topBox)
           tagDraw(item.rec, cur, blit, ubx, topBy, U, Uy, topBox)
@@ -2812,7 +2844,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         elseif not inScene and (filling or banded) then
           local c, kk = item.canvas, 1
           if k > 1 then c, kk = sharpen(item.canvas, cur.w, cur.h, k) end
-          if banded then
+          if byLayer then
+            if inTop then
+              blit(c, ubx, topBy, U / kk, Uy / kk, topAll, kk)
+            else
+              blit(c, ubx, uby, U / kk, Uy / kk, uiBox, kk)
+            end
+          elseif banded then
             blit(c, ubx, topBy, U / kk, Uy / kk, topBox, kk)
             blit(c, ubx, uby, U / kk, Uy / kk, lowBox, kk)
           else

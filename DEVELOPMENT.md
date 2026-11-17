@@ -430,6 +430,15 @@ already covers the view.
     - **The straddle guard:** a visible UI draw that crosses the split but does not cover the
       whole canvas (the level-up window, the intro's closing wipe) sets `cur.uiStraddle`. That
       frame's UI is drawn in one piece.
+    - **The enemy's HUD as its own layer:** a game that draws the enemy's HUD through a call of
+      its own puts `hd.seam("uiTop")` / `hd.seam("uiTopEnd")` round it (Gen 2's
+      `drawEnemyHud`, WIDE's `drawTopHud`). That layer is then the top band, moved whole, and
+      the rest of the UI stays put, so the straddle guard is not needed: what mods draw inside
+      the call goes with the box (Facets' BATTLE UI boxes, National Dex's chips under it), and
+      what they draw by the player's box stays there. National Dex's Stat Hints stack the
+      player's chips up from its box past the split row; on the rows' banding that was a
+      straddle every frame, and the enemy's box dropped to its cart spot over the player's
+      Pokemon. Gen 1 and Gen 3 keep the rows.
   - **The scene** grows by `fit.grow` about the line into the space above, up to the top, its
     sides cropped. It grows only as far as both sides' art (`fit.span`: each side's frame
     across, zoomed, shifted) stays `cropMargin` clear of the edges. It is centred and moved

@@ -3,9 +3,10 @@
 -- screenshots it in each window size (HD_SIZES, default 1920x1080), with Fill Screen on and off,
 -- logging WoobleView's stats; GEN2_LAYOUTS=og,wide shoots each battle layout. GEN2_MENUS=1 also
 -- opens the menus over the battle (PKMN: the party, then a summary; PACK; a text box) and shoots each with
--- Fill Screen on and off. GEN2_FIT=on|off sets Battle Fit; GEN2_MON the
+-- Fill Screen on and off. GEN2_FIT=on|off sets Battle Fit; GEN2_MAP=MAP:x:y the place; GEN2_STAGES the stat stages
+-- (player:attack=2,defense=-1;enemy:speed=1); GEN2_MON the
 -- player's Pokemon (default TYPHLOSION); GEN2_SLIDE_SHOTS=0,20,40 shoots those frames of the
--- intro slide. Run from the engine root:
+-- intro slide; GEN2_INTRO_EVERY=n a shot every n steps from there to the menu. Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_IDENTITY=gold-dev POKEPORT_GAME=gold POKEPORT_TOUCH=0 \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/gen2_battle.lua love .
 
@@ -39,11 +40,16 @@ local function body(game, log)
   -- GEN2_MON: the player's Pokemon (default TYPHLOSION)
   game.save.party = { Mon.new(game.data, env("GEN2_MON") or "TYPHLOSION", 40) }
   game.save.inventory = { POKE_BALL = 5, POTION = 3 }
-  if not world:setMap("ROUTE_29", 15, 11, "down") then log("FAIL setMap"); return end
+  -- the battle starts in GEN2_LAYOUTS's first layout (its intro too)
+  if (env("GEN2_LAYOUTS") or "og"):match("^[^,]+") == "wide" then game.options.battleLayout = "wide" end
+  -- GEN2_MAP=MAP:x:y: where the battle is (default ROUTE_29:15:11; a town gives a town scene)
+  local mapId, mx, my = (env("GEN2_MAP") or "ROUTE_29:15:11"):match("^([%w_]+):(%d+):(%d+)$")
+  mx, my = tonumber(mx), tonumber(my)
+  if not world:setMap(mapId, mx, my, "down") then log("FAIL setMap"); return end
   U.wait(8)
   if not Permissions.isWalkable(world:playerCollision()) then
     for _, step in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 }, { 2, 0 }, { -2, 0 } }) do
-      if world:setMap("ROUTE_29", 15 + step[1], 11 + step[2], "down")
+      if world:setMap(mapId, mx + step[1], my + step[2], "down")
           and Permissions.isWalkable(world:playerCollision()) then
         break
       end
@@ -74,18 +80,35 @@ local function body(game, log)
       U.shot(game, ("%s/slide_%03d.png"):format(dir, want))
     end
   end
-  for _ = 1, 300 do
+  -- GEN2_INTRO_EVERY=n: a shot every n of these steps (2 frames each) until the menu
+  local every = tonumber(env("GEN2_INTRO_EVERY") or "")
+  for i = 1, 300 do
     if battle.phase == "menu" then break end
     U.tap(game, "a")
     U.wait(2)
+    if every and i % every == 0 then
+      U.shot(game, ("%s/intro_%03d.png"):format(dir, i))
+    end
   end
   if battle.phase ~= "menu" then log("FAIL battle never reached its menu (phase " .. tostring(battle.phase) .. ")"); return end
+  -- GEN2_STAGES=player:attack=2,defense=-1;enemy:speed=1: stat stages set (battle.stages[side],
+  -- the keys the engine's: attack, defense, speed, specialAttack, specialDefense, accuracy,
+  -- evasion), as moves would leave them (National Dex's Stat Hints show them by the HP boxes)
+  if env("GEN2_STAGES") and type(battle.battle) == "table" then
+    battle.battle.stages = battle.battle.stages or {}
+    for side, list in env("GEN2_STAGES"):gmatch("(%a+):([^;]+)") do
+      local st = battle.battle.stages[side] or {}
+      battle.battle.stages[side] = st
+      for key, v in list:gmatch("(%a+)=(%-?%d+)") do st[key] = tonumber(v) end
+    end
+    log("stages set:", env("GEN2_STAGES"))
+  end
   U.wait(20)
   local function stat(k) return tostring(hd.stats()[k]) end
   -- GEN2_LAYOUTS=og,wide: each battle layout in turn (the game reads it every frame)
   local before = game.options.battleLayout
   for layout in (env("GEN2_LAYOUTS") or "og"):gmatch("[^,]+") do
-    game.options.battleLayout = layout == "wide" and "wide" or before
+    game.options.battleLayout = layout == "wide" and "wide" or "og"
     for size in (env("HD_SIZES") or "1920x1080"):gmatch("[^,]+") do
       local w, h = size:match("(%d+)x(%d+)")
       love.window.setMode(tonumber(w), tonumber(h), { resizable = true, highdpi = true })
