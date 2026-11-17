@@ -22,6 +22,13 @@ return {
     description = "With Battle Fit, the battle scene fills your whole screen, top to bottom and out to the sides, while the text box, HP bars and menus keep their sharp size, docked to the bottom. The summary, party, bag, Pokedex page, evolution and nickname screens fill it too, as do the intro movie, title screen, main menu, the professor's speech, the naming screens and every full screen opened on your journey (the Pokedex, party, bag, options, mods). Off: the usual framed battle screen.",
   },
   {
+    key = "battle_textbox",
+    label = "Battle Textbox",
+    type = "toggle",
+    default = true,
+    description = "Ruby, Sapphire and Emerald: the battle's text box and its FIGHT / BAG and move menus redrawn as one sharp bar across the bottom of the screen, a quarter shorter than the game's, so more of the battle shows. The game's colours, its red and teal message box and white menus, smoothed and joined. Off: the game's own boxes. Needs Battle HD.",
+  },
+  {
     key = "battle_scene",
     label = "Battle Scene",
     type = "choice",

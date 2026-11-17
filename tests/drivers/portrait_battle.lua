@@ -43,6 +43,13 @@ local function body(game, log)
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
   if not hd then log("FAIL gen3-hd-sprites exports missing"); return end
   log("hd active:", hd.isActive(), "fit:", hd.fitEnabled(), "fill:", hd.fillEnabled())
+  -- HD_FILLOFF=1: Fill Screen off; HD_HIDEBOTTOM=1: the battle's bottom UI hidden, as Kanto
+  -- Gear's GEAR screens hide it (battle.bottom_ui_visible)
+  if os.getenv("HD_FILLOFF") == "1" and hd.setFill then hd.setFill(false) end
+  if os.getenv("HD_HIDEBOTTOM") == "1" then
+    local BUi = require("src.core.game3.battle.ui")
+    BUi.bottomUIVisible = function() return false end
+  end
   -- keep the touch surface mod out of the way: no cutout, no split
   for _, id in ipairs({ "play_nav", "ds_touch" }) do   -- PlayNav, ds_touch before 0.3.0
     loader.modOptions[id] = loader.modOptions[id] or {}
@@ -64,10 +71,18 @@ local function body(game, log)
     end)
     if not okB then log("startWild failed:", tostring(errB)); return end
     local reached = false
+    -- HD_BAR=1: the battle's text box shot too, with its first message and its move menu
+    local bar, msgShot = os.getenv("HD_BAR") == "1", false
     for _ = 1, 1500 do
       U.wait(1)
       local p, sn = prompt()
-      if p == "advance" then U.tap(game, "a"); U.wait(4)
+      if p == "advance" then
+        if bar and not msgShot then
+          msgShot = true
+          U.wait(20)
+          U.shot(game, dir .. "/" .. name .. "_message.png")
+        end
+        U.tap(game, "a"); U.wait(4)
       elseif p == "menu" then reached = true; break end
     end
     U.wait(30)
@@ -87,6 +102,11 @@ local function body(game, log)
       st.uiTopDy or 0, st.zoom or -1, st.composites or 0, st.flattened or 0, tostring(st.failed))
       .. "  grow " .. tostring(st.grow) .. " inward " .. tostring(st.inward) .. " shiftE " .. tostring(st.shiftEnemy) .. " shiftP " .. tostring(st.shiftPlayer))
     U.shot(game, dir .. "/" .. name .. ".png")
+    if bar then
+      U.tap(game, "a"); U.wait(20)
+      U.shot(game, dir .. "/" .. name .. "_moves.png")
+      U.tap(game, "b"); U.wait(20)
+    end
     -- run away
     local ran = false
     for _ = 1, 1500 do

@@ -39,6 +39,19 @@ and Crystal.
   controls, the battle grows into the space above it, and the opponent's HP box stays put just
   inside the battle's top edge, whatever the Pokémon do.
 
+### Battle Text Box 💬
+
+- ✨ **A sharp, modern text box:** In Ruby, Sapphire and Emerald the battle's text box and its
+  FIGHT / BAG and move menus are redrawn as one smooth bar across the bottom of the screen,
+  in the game's own colours: the red-framed teal message box and the white menus, joined
+  side by side.
+- 🖥️ **Fills the bottom:** The bar spans the whole width of any screen, the menu on the right,
+  your text on the left.
+- 📏 **More battle on screen:** The bar is a quarter shorter than the game's box, so more of the
+  battle shows above it.
+- 🎮 **Plays nicely with KantoGear:** When KantoGear's GEAR screens take over the battle's
+  menus, the bar and the battle's text step aside.
+
 ### Battle Scene 🏞️
 
 - 🗺️ **Battle where you stand:** With **Battle Scene** on **Overworld**, battles take place in
@@ -52,14 +65,15 @@ and Crystal.
 
 ## ⚙️ Options
 
-Open **OPTIONS → MODS → WoobleView**. Battle Scene and the four options after it only show in
-FireRed, LeafGreen, Ruby, Sapphire and Emerald.
+Open **OPTIONS → MODS → WoobleView**. Battle Textbox, Battle Scene and the four options after
+it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
 | **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. |
+| **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
@@ -103,7 +117,8 @@ FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 - **Battle Scene** is adapted from the 3D battles of
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its camera,
-  entrance, battle placement, trees, buildings, rooms, land shapes, lighting and weather.
+  entrance, battle placement, trees, buildings, rooms, land shapes, lighting and weather. The
+  battle text box's modern look follows its HD text box.
 - **Kanto's land** in FireRed and LeafGreen comes from
   [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS) by
   NachoGonzalez2001, and a few of WoobleView's Kanto buildings are modelled after its own.

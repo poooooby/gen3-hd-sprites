@@ -41,6 +41,7 @@ return function(mod)
   Engine.adapters[3] = loadSibling(mod, "src/gen3.lua")
   -- optional: without it the player's pad is the game's own (cut at the text box)
   Engine.Pads = loadSibling(mod, "src/pads.lua")
+  Engine.Bar = loadSibling(mod, "src/bar.lua")
 
   -- the engine does not register a mod's options from its manifest: define them here
   local schema = loadSibling(mod, "options.lua")
@@ -48,7 +49,7 @@ return function(mod)
   -- before it loads mods, and loads them again for another game)
   if type(schema) == "table" and Engine.generation() < 3 then
     local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
-                       scene_cache = true }
+                       scene_cache = true, battle_textbox = true }
     local kept = {}
     for _, row in ipairs(schema) do
       if not (type(row) == "table" and gen3Only[row.key]) then kept[#kept + 1] = row end
@@ -345,6 +346,7 @@ return function(mod)
     local fit = option("battle_fit", true)
     hd.fit.enabled = hd.fit.available and fit ~= "off" and fit ~= false
     hd.fit.fill = option("fill_screen", true) ~= false
+    hd.barEnabled = option("battle_textbox", true) ~= false
     -- (the screens before the game starts, and the whole screens opened over the field, are
     -- only captured to fill the screen)
     hd.enabled.boot = hd.enabled.battle and hd.fit.enabled and hd.fit.fill

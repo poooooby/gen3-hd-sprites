@@ -1553,6 +1553,116 @@ do
   check(run(30) == rest, "...and with the art higher")
 end
 
+-- the battle bar (Gen 3's text box redrawn, src/bar.lua): hd.paint paints at the screen's
+-- resolution in the pass's order, cutting off the UI drawn before it at its row (what the cart's
+-- taller text box hid); hd.bar's layers move down into the bar, the part left of the split to
+-- the screen's left, the rest to its right
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.fill = true, true
+  local base = canvas("ui", 240, 160)
+  local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.backdrop(wall, 0, 0)
+  hd.drawStage(pad, 0, 0)
+  check(hd.paint(function() end, nil, 112) == false, "bar: no paint in the scene")
+  hd.seam("ui")
+  G.rectangle("fill", 134, 74, 100, 46)               -- the player's HP box, past row 112
+  local told
+  check(hd.paint(function(a, ctx)
+    told = { a = a, x = ctx.x, y = ctx.y, sx = ctx.sx, l = ctx.l, r = ctx.r, extraL = ctx.extraL, extraR = ctx.extraR }
+  end, "menu", 112), "bar: painted in the UI")
+  check(hd.bar({ top = 124, bottom = 160, dy = 4, split = 120 }), "bar: its text window opens")
+  G.rectangle("fill", 10, 122, 50, 12)                -- the prompt
+  G.rectangle("fill", 130, 122, 50, 12)               -- FIGHT
+  hd.bar(nil)
+  G.rectangle("fill", 20, 20, 30, 10)                 -- drawn after it: a layer of its own
+  hd.endPass()
+  local blits = {}
+  hd.composite(base, function(c, bx, by, sx, sy, box, zk)
+    blits[#blits + 1] = { canvas = c, bx = bx, by = by, sx = sx, sy = sy,
+                          box = box and { box[1], box[2], box[3], box[4] }, zk = zk }
+  end, 480, 220, 4, 4, { 480, 220, 960, 640 }, { 0, 0, 1920, 1080 })
+  -- the UI at 4x, centred (x 480) and docked (y 440): 480 px each side of it
+  check(told and told.a == "menu" and told.x == 480 and told.y == 440 and told.sx == 4 and told.l == 0
+    and told.r == 1920 and told.extraL == 480 and told.extraR == 480,
+    "bar: the paint is told where the UI is and the view's sides")
+  -- (the HP box raised to the screen's top: each UI layer in two bands, the lower one last)
+  local byCanvas, order = {}, {}
+  for _, e in ipairs(blits) do
+    if e.zk then
+      if not byCanvas[e.canvas] then byCanvas[e.canvas] = {}; order[#order + 1] = e.canvas end
+      local t = byCanvas[e.canvas]
+      t[#t + 1] = e
+    end
+  end
+  local hpB, barB, afterB = byCanvas[order[1]], byCanvas[order[2]], byCanvas[order[3]]
+  local hp, left, right, after = hpB and hpB[#hpB], barB and barB[1], barB and barB[2], afterB and afterB[#afterB]
+  check(hp and near(hp.box[2] + hp.box[4], 440 + 112 * 4), "bar: the UI drawn before it cut off at row 112 ("
+    .. tostring(hp and hp.box[2] + hp.box[4]) .. ")")
+  check(left and near(left.bx, 0) and near(left.by, 440 + 16) and near(left.box[1], 0)
+    and near(left.box[2], 440 + 124 * 4) and near(left.box[3], 120 * 4) and near(left.box[4], 36 * 4),
+    "bar: its text left of the split moved to the screen's left and 4 rows down, cut at the split")
+  check(right and right.canvas == left.canvas and near(right.bx, 960) and near(right.box[1], 1440)
+    and near(right.box[3], 480), "bar: the rest moved to the screen's right")
+  check(after and after.canvas ~= left.canvas and near(after.by, 440) and near(after.box[2] + after.box[4], 1080),
+    "bar: what is drawn after it is the UI's as usual, uncut")
+  -- put back the low-res way: painted at the canvas's own scale, the text moved down
+  told = nil
+  G.setCanvas(base)
+  hd.beginPass("battle", base)
+  hd.seam("ui")
+  hd.paint(function(_, ctx) told = { sx = ctx.sx, r = ctx.r } end, nil, 112)
+  hd.bar({ top = 124, bottom = 160, dy = 4 })
+  G.rectangle("fill", 10, 122, 50, 12)
+  hd.bar(nil)
+  local cur = hd.cur
+  hd.endPass()
+  G.log = {}
+  hd.flatten(cur)
+  local moved
+  for _, e in ipairs(G.log) do if e.op == "draw" and e.args[2] == 4 then moved = true end end
+  check(told and told.sx == 1 and told.r == 240 and moved, "bar: a flattened pass paints at 1x and draws its text 4 rows down")
+end
+
+-- the bar's art and layout (src/bar.lua)
+do
+  local Bar = dofile("src/bar.lua")
+  check(Bar.TOP == 124 and Bar.BOTTOM - Bar.TOP == 36, "bar: three quarters of the cart's 48 rows")
+  check(Bar.layout("emerald") and Bar.layout("rs") and not Bar.layout("frlg"), "bar: Ruby, Sapphire and Emerald only")
+  local P = Bar.panels(Bar.LAYOUT.emerald, "menu", 0, 1920, 480, 4, 480)
+  check(#P == 2 and P[1][1] == "message" and P[1][3] == 1440 and P[2][1] == "menu" and P[2][2] == 1440
+    and P[2][3] == 1920 and P[1][4] and not P[1][5] and not P[2][4] and P[2][5],
+    "bar: the prompt's panel to the menu's, which keeps its width on the screen's right, joined square")
+  P = Bar.panels(Bar.LAYOUT.emerald, "moves", 0, 1920, 480, 4, 480)
+  check(P[1][1] == "menu" and P[1][3] == 480 + 160 * 4 + 480, "bar: the move names' panel white, to the PP's")
+  P = Bar.panels(Bar.LAYOUT.rs, "none", 0, 960, 0, 4, 0)
+  check(#P == 1 and P[1][1] == "message" and P[1][2] == 0 and P[1][3] == 960, "bar: a message across the whole bar")
+  -- the colours: teal inside the message panel, red on its frame, white in a menu's, the
+  -- purple-grey frame round it, a soft shadow above, clear beyond
+  local function px(kind, x, y, round)
+    local r, g, b, a = Bar.pixel(kind, x, y, 1e4, round ~= false, 0.1)
+    return r, g, b, a
+  end
+  local r, g, b, a = px("message", 20, 18)
+  check(a > 0.99 and g > r + 0.15 and b > r + 0.15, "bar: the message panel teal")
+  r, g, b = px("message", 1.5, 18)
+  check(r > g + 0.3 and r > b + 0.3, "bar: its frame red")
+  r, g, b = px("menu", 20, 18)
+  check(r > 0.95 and g > 0.95 and b > 0.95, "bar: a menu's panel white")
+  r, g, b = px("menu", 1, 18)
+  check(b > g and r < 0.6, "bar: its frame purple-grey")
+  local _, _, _, sa = px("message", 20, -1)
+  local _, _, _, ca = px("message", 20, -3.5)
+  local _, _, _, ka = px("message", 0.2, 0.2)
+  check(sa > 0.05 and sa < 0.4 and ca == 0 and ka < 0.5, "bar: a soft shadow above, a rounded corner on the edge")
+  local _, _, _, sq = px("message", 0.2, 0.2, false)
+  check(sq > 0.9, "bar: a square end where panels join")
+end
+
 do
   -- a draw across the split: that frame's UI stays in one piece, docked
   local hd, _, blits = stackedFrame({ view = { 0, 0, 1080, 2400, bottom = 1500 }, straddle = true })

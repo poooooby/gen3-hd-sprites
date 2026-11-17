@@ -41,6 +41,10 @@
 
 local Gen3 = {}
 
+-- the player's trainer's tag: cut by the text box, so pinned to its line (the bar's top when
+-- the bar is drawn: Gen3.wrapBar)
+local BACK_SPEC = { side = "player", trainer = true, pinBottom = 112 }
+
 -- the Pokedex screens and the summary screen, by module name; each is wrapped when it is first
 -- seen loaded, and draws in a dex pass
 local DEX_MODULES = { "src.ui.game3.rse.pokedex", "src.ui.game3.pokedex", "src.ui.game3.summary_menu",
@@ -398,7 +402,7 @@ function Gen3.wrapFit(Engine, hd)
         ours[TrainerPic[name]] = true
       end
       tagging("front", { side = "enemy", trainer = true })
-      tagging("back", { side = "player", trainer = true, pinBottom = 112 })
+      tagging("back", BACK_SPEC)
     end
   end
   return true
@@ -472,6 +476,7 @@ function Gen3.prepare(Engine, hd)
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not ok then hd.fail("battle pass: " .. tostring(err)) end
+        if Gen3.barFrame then pcall(Gen3.barFrame) end
         if Engine.introWindow then pcall(Engine.introWindow) end
         if Engine.doublesY then Engine.doublesY(false) end
         return drawn(battleDraw(...))
@@ -502,7 +507,145 @@ function Gen3.prepare(Engine, hd)
     end
     local okFit, fitOk = pcall(Gen3.wrapFit, Engine, hd)
     hd.fit.available = okFit and fitOk == true
+    local okBar, barErr = pcall(Gen3.wrapBar, Engine, hd)
+    if not okBar then hd.fail("battle bar: " .. tostring(barErr)) end
   end
+end
+
+--- The battle bar (src/bar.lua; Ruby, Sapphire, Emerald, Battle Text Box on: hd.barEnabled):
+--- the cart's text box and menu frames replaced by the bar, painted at the screen's resolution
+--- (hd.paint) where the battle draws its panel, and what the battle draws on it (the prompt,
+--- the menus, the cursors, its message) moved into it (hd.bar). Nothing is drawn when the
+--- battle hides its bottom UI (Ui.bottomUIVisible: Kanto Gear's GEAR screens take it), or
+--- without a battle pass (Battle HD off): the game's own boxes then.
+--
+--   BattleChrome.drawPanel        the text box's art (src/ui/game3/battle_chrome.lua): the
+--                                 bar painted instead, and its text window opened
+--   BattleChrome.drawMenuFrames   the menus' frames (the player's FRAME): not drawn under it
+--   rs.menu_cursor.draw           Ruby / Sapphire's red cursor: widened left in the bar
+--   Ui.voiceoverDim               called just after the menus (src/core/game3/battle/ui.lua
+--                                 Ui.draw): the text window closes
+--   Message.draw                  the battle's message (src/ui/game3/message.lua), after the
+--                                 battle's draw: in a text window of its own; not drawn at
+--                                 all while the battle hides its bottom UI (every Gen 3 game)
+function Gen3.wrapBar(Engine, hd)
+  local ours, Bar = Engine.ours, Engine.Bar
+  if type(Bar) ~= "table" then return false end
+  local okC, Chrome = pcall(require, "src.ui.game3.battle_chrome")
+  local okU, Ui = pcall(require, "src.core.game3.battle.ui")
+  if not (okC and type(Chrome) == "table" and type(Chrome.drawPanel) == "function"
+          and type(Chrome.layout) == "function" and okU and type(Ui) == "table") then
+    return false
+  end
+  local okM, Message = pcall(require, "src.ui.game3.message")
+  -- each layout's text windows, by panel mode, and the paint's argument (made once)
+  local specs, args = {}, {}
+  for name, L in pairs(Bar.LAYOUT) do
+    specs[name], args[name] = {}, {}
+    for _, mode in ipairs({ "none", "menu", "moves" }) do
+      specs[name][mode] = { top = Bar.TOP, bottom = Bar.BOTTOM, dy = L.dy, split = L.split[mode] }
+      args[name][mode] = { layout = L, mode = mode }
+    end
+  end
+  local function layoutName()
+    local ok, name = pcall(Chrome.layout)
+    return ok and name or nil
+  end
+  local function shown()
+    if type(Ui.bottomUIVisible) ~= "function" then return true end
+    local ok, v = pcall(Ui.bottomUIVisible)
+    return not ok or v ~= false
+  end
+  -- the bar for this game, wanted (Battle Text Box on, Battle HD on, a battle pass)
+  local function wanted()
+    return hd.barEnabled ~= false and hd.enabled.battle and hd.capturing("battle")
+      and Bar.LAYOUT[layoutName() or ""] ~= nil
+  end
+  Gen3.barWanted = wanted
+  -- the pass the bar was painted in (its text windows belong to it), the window open
+  local barPass, windowOpen = nil, false
+
+  local drawPanel = Chrome.drawPanel
+  if not ours[drawPanel] then
+    Chrome.drawPanel = function(mode, ...)
+      local name = layoutName()
+      if wanted() and shown() then
+        mode = specs[name][mode] and mode or "none"
+        if hd.paint(Bar.paint, args[name][mode], 112) then
+          barPass = hd.cur
+          windowOpen = hd.bar(specs[name][mode])
+          return
+        end
+      end
+      return drawPanel(mode, ...)
+    end
+    ours[Chrome.drawPanel] = true
+  end
+  local drawMenuFrames = Chrome.drawMenuFrames
+  if type(drawMenuFrames) == "function" and not ours[drawMenuFrames] then
+    Chrome.drawMenuFrames = function(...)
+      if barPass ~= nil and barPass == hd.cur then return end
+      return drawMenuFrames(...)
+    end
+    ours[Chrome.drawMenuFrames] = true
+  end
+  local voiceoverDim = Ui.voiceoverDim
+  if type(voiceoverDim) == "function" and not ours[voiceoverDim] then
+    Ui.voiceoverDim = function(...)
+      if windowOpen then
+        windowOpen = false
+        hd.bar(nil)
+      end
+      return voiceoverDim(...)
+    end
+    ours[Ui.voiceoverDim] = true
+  end
+  -- Ruby / Sapphire's red menu cursor hugs its text's left edge: in the bar, widened 2 px left
+  local okR, RsCursor = pcall(require, "src.ui.game3.rs.menu_cursor")
+  if okR and type(RsCursor) == "table" and type(RsCursor.draw) == "function" and not ours[RsCursor.draw] then
+    local cursorDraw = RsCursor.draw
+    RsCursor.draw = function(x, y, width, ...)
+      if windowOpen and type(x) == "number" and type(width) == "number" then
+        return cursorDraw(x - Bar.CURSOR_PAD, y, width + Bar.CURSOR_PAD, ...)
+      end
+      return cursorDraw(x, y, width, ...)
+    end
+    ours[RsCursor.draw] = true
+  end
+  if okM and type(Message) == "table" and type(Message.draw) == "function" and not ours[Message.draw] then
+    local draw = Message.draw
+    local function closed(...)
+      hd.bar(nil)
+      return ...
+    end
+    Message.draw = function(...)
+      -- a battle hiding its bottom UI (Kanto Gear's GEAR screens show its text instead): its
+      -- message is not drawn either (Oak's voiceover is not the battle's)
+      if Message._frame ~= "voiceover" and (Message._frame == "battle" or hd.capturing("battle"))
+          and not shown() then
+        return
+      end
+      local cur = hd.cur
+      if cur ~= nil and barPass == cur then
+        local name = layoutName()
+        if name and specs[name] and hd.bar(specs[name].none) then return closed(draw(...)) end
+      end
+      return draw(...)
+    end
+    ours[Message.draw] = true
+  end
+
+  -- each battle frame: the trainer pinned to the bar's top and the fit seeing the text box
+  -- there, while the bar is drawn (else the cart's line)
+  Gen3.barFrame = function()
+    if windowOpen then windowOpen = false end
+    local on = wanted() and shown()
+    local line = on and Bar.TOP or 112
+    BACK_SPEC.pinBottom = line
+    local text = hd.fit.ui and hd.fit.ui.text
+    if text and hd.layout == "gen3" then text[2] = line end
+  end
+  return true
 end
 
 return Gen3

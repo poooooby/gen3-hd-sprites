@@ -542,6 +542,50 @@ captured pass would never be composited there.
 If `BattleChrome.drawTerrain`, `BattleChrome.terrain` or `BallOpen.draw` is missing,
 `fit.available` is false and the option does nothing. The HD sprites are unaffected.
 
+## Battle text box (Gen 3: `src/bar.lua`)
+
+Ruby, Sapphire and Emerald, option `battle_textbox` (`hd.barEnabled`, default on), with a
+battle pass (Battle HD on). FireRed / LeafGreen keep the cart's boxes (`Bar.LAYOUT` has no
+`frlg`).
+
+- **The bar:** canvas rows 124 to 160 (`Bar.TOP`, `Bar.BOTTOM`: 36 rows, three quarters of
+  the cart's 48 from row 112), across the view's whole width. Panels by panel mode: `none`
+  one message panel; `menu` the message panel to the action menu's; `moves` two menu panels.
+  The menus' panel starts at the cart's frame column (`Bar.LAYOUT[...].split`: Emerald 120 /
+  160, Ruby and Sapphire 136 / 176) moved right with the UI's right margin, so it keeps its
+  width and ends on the screen's right edge (`Bar.splitX`).
+- **The look:** `Bar.pixel` (signed distances, straight alpha): a frame (gradient, a light
+  rim at its top), a line inside it, the panel (gradient, an inner shadow under its top), a
+  soft shadow cast up onto the scene. Message: red frame, grey line, teal panel; menus:
+  purple-grey frame, light line, white panel (the cart's colours, Emerald 3DS's HD text box's
+  layering). Ends on the screen's edge are rounded, ends where two panels join square and
+  thinner. Each panel is drawn from three cached pieces per scale: its left end, one middle
+  column stretched, its right end (the left one mirrored); `Bar.reset` drops them.
+- **`hd.paint(fn, a, hide)`:** an item the composite runs at the screen's resolution in the
+  pass's order (over the UI drawn before it, under what comes after), told where the UI is
+  (`x, y, sx, sy`), the view's sides (`l, r`) and the UI's margins (`extraL, extraR`). `hide`
+  (row 112): the UI's layers before it are cut off there, as the cart's text box hid them (the
+  bottom of the player's HP box art). A flattened pass calls it at 1x.
+- **`hd.bar(spec)`:** what the pass draws until `hd.bar(nil)` goes into layers marked with
+  `spec` (`top, bottom, dy, split`). The composite blits such a layer `dy` rows down (Emerald
+  4, Ruby and Sapphire 6: the two lines centred in the bar), clipped to the bar's rows; left
+  of `split` moved left with the UI's left margin, the rest right with its right one. So the
+  game's own text and cursors land in the bar whichever font or printer drew them.
+- **The seams (`Gen3.wrapBar`):** `BattleChrome.drawPanel` paints the bar instead and opens
+  the text window; `BattleChrome.drawMenuFrames` is skipped under it; `Ui.voiceoverDim` (called
+  right after the menus in `Ui.draw`) closes the window; `Message.draw` (the battle's message,
+  drawn after the battle) gets a window of its own; Ruby / Sapphire's red cursor
+  (`rs.menu_cursor.draw`) is widened `Bar.CURSOR_PAD` px left, off its text. Each battle frame
+  (`Gen3.barFrame`) the trainer's back is pinned to the bar's top and the fit's text-box rect
+  (`fit.ui.text`) starts there, else at 112.
+- **Standing down:** nothing is painted while `Ui.bottomUIVisible()` is false (Kanto Gear's
+  GEAR / FULL GEAR take the battle's menus to their own screen; its hook hides them), and the
+  battle's message is then not drawn either (every Gen 3 game, Oak's voiceover excepted), so
+  no text is left floating over the scene. Without a battle pass the game's own boxes draw.
+- **Driver:** `tests/drivers/portrait_battle.lua` with `HD_BAR=1` shoots the first message, the
+  menu and the move menu; `HD_PLAYER` / `HD_ENEMY=SPECIES_X:level` the battlers; `HD_FILLOFF=1`
+  Fill Screen off; `HD_HIDEBOTTOM=1` the bottom UI hidden as Kanto Gear hides it.
+
 ## Battle Scene (Gen 3)
 
 **Battle Scene: OVERWORLD** (`battle_scene`, `Engine.Scene`, `hd.scene`) replaces the battle's

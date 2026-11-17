@@ -444,7 +444,8 @@ function HD.new(G, opts)
     local layer = getLayer(cur.w, cur.h, cur.layerCount)
     cur.layerSet[layer] = true
     cur.current = layer
-    local item = { kind = "layer", canvas = layer, screen = open == "screen", edge = open == "edge" }
+    local item = { kind = "layer", canvas = layer, screen = open == "screen", edge = open == "edge",
+                   bar = cur.barSpec }
     cur.items[#cur.items + 1] = item
     cur.openItem = item
     if open == "edge" then self.stats.edge = (self.stats.edge or 0) + 1 end
@@ -1254,6 +1255,34 @@ function HD.new(G, opts)
       cur.hasUI = true
     end
     openLayer(false)
+  end
+
+  --- Paint at the screen's resolution, here in the pass's order (over what the UI drew so far,
+  --- under what it draws next): fn(a, ctx) is called when the pass is composited, ctx telling
+  --- where the UI is on the screen (x, y: its canvas's origin; sx, sy: screen px per canvas
+  --- px), the view's left and right (l, r) and the UI's margins beside it (extraL, extraR); a
+  --- pass put back the low-res way calls it at the canvas's own scale. hide (canvas row): what
+  --- the UI drew before it is cut off there (the rows a panel drawn in its place covered).
+  --- Returns false (nothing recorded) outside a pass's UI.
+  function self.paint(fn, a, hide)
+    local cur = self.cur
+    if not (cur and cur.segment == "ui" and onPass()) then return false end
+    cur.items[#cur.items + 1] = { kind = "paint", fn = fn, a = a, hide = hide }
+    cur.pending = true
+    return true
+  end
+
+  --- What the pass draws from here goes into layers moved into a bar across the screen's bottom
+  --- (spec: { top, bottom: the bar's canvas rows; dy: rows the drawing moves down; split: the
+  --- canvas column from which it is moved right with the UI's right margin, the rest left with
+  --- its left one (nil: all of it left) }); nil ends it. Returns false outside a pass's UI.
+  function self.bar(spec)
+    local cur = self.cur
+    if not (cur and cur.segment == "ui") then return false end
+    if cur.barSpec == spec then return true end
+    cur.barSpec = spec
+    cur.pending = true
+    return true
   end
 
   --- Draw the battle's wallpaper: recorded, then drawn at window resolution, wrapped so the
@@ -2155,6 +2184,9 @@ function HD.new(G, opts)
   -- at the next whole scale k into a canvas of its own, which is then scaled down smoothly
   -- (every UI pixel the same width, its edges at most one screen pixel soft)
   local sharp, sharpW, sharpH = nil, 0, 0
+  -- what hd.paint's functions are told (one table, refilled for each); a clip box refilled for
+  -- each blit that needs one of its own
+  local paintCtx, cutScratch = {}, {}
   local function sharpen(c, w, h, k)
     if not (real.newCanvas and real.setCanvas) then return c, 1 end
     if not sharp or sharpW ~= w * k or sharpH ~= h * k then
@@ -2747,9 +2779,38 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     local inTop = false
     local worldShown
     if not moved then blit(cur.base) else blit(cur.base, sx0, sy0, ssx, ssy, sceneBox) end
+    -- (a bar across the screen's bottom, hd.paint / hd.bar: the view's sides, the UI's margins)
+    local barView = sceneBox or clipTo
+    local extraL = math.max(0, ubx - barView[1])
+    local extraR = math.max(0, barView[1] + barView[3] - (ubx + cur.w * U))
+    -- the UI's layers before a paint that hides rows are cut off at its row
+    local hideAt, hideRow
+    for i, item in ipairs(cur.items) do
+      if item.kind == "paint" and item.hide then hideAt, hideRow = i, item.hide break end
+    end
+    local function cutBox(b, i)
+      if not (hideAt and i < hideAt and b) then return b end
+      local y1 = math.min(b[2] + b[4], uby + hideRow * Uy)
+      local o = cutScratch
+      o[1], o[2], o[3], o[4] = b[1], b[2], b[3], math.max(0, y1 - b[2])
+      return o
+    end
     real.push("all")
-    for _, item in ipairs(cur.items) do
-      if item.kind == "seam" then
+    for i, item in ipairs(cur.items) do
+      if item.kind == "paint" then
+        if not inScene then
+          real.setShader()
+          real.setColor(1, 1, 1, 1)
+          real.setBlendMode("alpha", "alphamultiply")
+          scissorOver(barView[1], barView[2], barView[3], barView[4])
+          local c = paintCtx
+          c.x, c.y, c.sx, c.sy = ubx, uby, U, Uy
+          c.l, c.r, c.extraL, c.extraR = barView[1], barView[1] + barView[3], extraL, extraR
+          local ok, err = pcall(item.fn, item.a, c)
+          if not ok then self.stats.paintError = tostring(err) end
+          real.setScissor()
+        end
+      elseif item.kind == "seam" then
         if item.name == "ui" then
           inScene = false
         elseif item.name == "uiTop" then
@@ -2860,7 +2921,28 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        if item.screen and filling then
+        if item.bar and not inScene then
+          -- drawn for the bar (hd.bar): moved down into it, the part left of its split to the
+          -- screen's left (the UI's left margin), the rest to its right
+          local b = item.bar
+          local c, kk = item.canvas, 1
+          if k > 1 then c, kk = sharpen(item.canvas, cur.w, cur.h, k) end
+          local v = barView
+          local y0 = math.max(uby + b.top * Uy, v[2])
+          local y1 = math.min(uby + b.bottom * Uy, v[2] + v[4])
+          local oy = uby + b.dy * Uy
+          if y1 > y0 then
+            local cut = b.split and (ubx - extraL + b.split * U) or (v[1] + v[3])
+            local o = cutScratch
+            o[1], o[2], o[3], o[4] = v[1], y0, cut - v[1], y1 - y0
+            blit(c, ubx - extraL, oy, U / kk, Uy / kk, o, kk)
+            if b.split then
+              local d = ubx + b.split * U + extraR
+              o[1], o[2], o[3], o[4] = d, y0, v[1] + v[3] - d, y1 - y0
+              blit(c, ubx + extraR, oy, U / kk, Uy / kk, o, kk)
+            end
+          end
+        elseif item.screen and filling then
           -- a whole-scene draw (a move's background, a flash) or a whole-UI one (a fade) covers
           -- the whole screen
           local v = sceneBox
@@ -2882,14 +2964,16 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
             if inTop then
               blit(c, ubx, topBy, U / kk, Uy / kk, topAll, kk)
             else
-              blit(c, ubx, uby, U / kk, Uy / kk, uiBox, kk)
+              blit(c, ubx, uby, U / kk, Uy / kk, cutBox(uiBox, i), kk)
             end
           elseif banded then
             blit(c, ubx, topBy, U / kk, Uy / kk, topBox, kk)
-            blit(c, ubx, uby, U / kk, Uy / kk, lowBox, kk)
+            blit(c, ubx, uby, U / kk, Uy / kk, cutBox(lowBox, i), kk)
           else
-            blit(c, ubx, uby, U / kk, Uy / kk, uiBox, kk)
+            blit(c, ubx, uby, U / kk, Uy / kk, cutBox(uiBox, i), kk)
           end
+        elseif hideAt and i < hideAt and not inScene then
+          blit(item.canvas, nil, nil, nil, nil, cutBox(clipTo, i))
         else
           blit(item.canvas)
         end
@@ -2928,7 +3012,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     real.setCanvas(cur.base)
     real.origin()
     real.setScissor()
-    for _, item in ipairs(cur.items) do
+    local hideAt, hideRow
+    for i, item in ipairs(cur.items) do
+      if item.kind == "paint" and item.hide then hideAt, hideRow = i, item.hide break end
+    end
+    local inUi = false
+    for i, item in ipairs(cur.items) do
+      if item.kind == "seam" and item.name == "ui" then inUi = true end
       -- (the battle scene's world goes back as the wallpaper it stands in for)
       if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band"
           or item.kind == "wide" or item.kind == "world" then
@@ -2974,8 +3064,28 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        real.draw(item.canvas, 0, 0)
+        if item.bar then
+          -- (moved down into the bar, inside the canvas)
+          local b = item.bar
+          real.setScissor(0, b.top, cur.w, b.bottom - b.top)
+          real.draw(item.canvas, 0, b.dy)
+          real.setScissor()
+        elseif inUi and hideAt and i < hideAt then
+          real.setScissor(0, 0, cur.w, hideRow)
+          real.draw(item.canvas, 0, 0)
+          real.setScissor()
+        else
+          real.draw(item.canvas, 0, 0)
+        end
         real.setBlendMode("alpha", "alphamultiply")
+      elseif item.kind == "paint" then
+        real.setShader()
+        real.setColor(1, 1, 1, 1)
+        real.setBlendMode("alpha", "alphamultiply")
+        local c = paintCtx
+        c.x, c.y, c.sx, c.sy, c.l, c.r, c.extraL, c.extraR = 0, 0, 1, 1, 0, cur.w, 0, 0
+        local ok, err = pcall(item.fn, item.a, c)
+        if not ok then self.stats.paintError = tostring(err) end
       elseif item.kind == "win0" and real.rectangle then
         -- the intro's black bars, the cart's way
         real.setShader()

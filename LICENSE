@@ -26,6 +26,12 @@ battle canvas's own pixels, for both the search and the drawing; flat ground; no
 zoom in the glide; the world drawn by WoobleView's battle composite under the game's own
 sprites and UI.
 
+The battle text box (src/bar.lua) follows Emerald 3DS's HD battle text box (3ds_port/scripts/
+gen_battle_hud.py): its layering of a gradient frame with a light rim, a thin edge, a gradient
+panel with an inner shadow and a soft drop shadow. Changes: drawn in Lua for LOVE at the
+screen's resolution; a bar across the screen's whole width, joining the message panel to the
+action and move menus (redrawn the same way in the cart's white and purple-grey); 36 rows tall.
+
 The battle scene's trees (src/scene/trees.lua, assets/scene/trees.png) adapt Emerald 3DS's
 voxel trees (3ds_port/src/voxel/voxel_tree.c) and use its tree artwork
 (3ds_port/assets/voxel/trees/, packed by tools/pack_trees.py at the places its own packer puts
