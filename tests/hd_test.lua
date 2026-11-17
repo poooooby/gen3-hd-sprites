@@ -1907,6 +1907,16 @@ do
   hd.composite(base, function() end, 0, 900, 4.5, 4.5, nil, { 0, 0, 1080, 2400, bottom = 1500 })
   hd.endFrame()
   check(near(hd.stats.sceneUp, 54) and near(hd.stats.uiScale, 4.5), "doubles upright: the scene stands above the player's boxes")
+  -- ... and the foes' boxes stackGap (2) UI px under the scene's top, not pinned to the screen's
+  -- (the UI docked at 1500 - 160 x 4.5 = 780; the scene's line sceneUp rows above the text box's)
+  do
+    local cy = 780 + (112 - hd.stats.sceneUp) * 4.5
+    local sceneTop = math.max(0, cy - 112 * 4.5 * hd.stats.grow)
+    local boxTop = 780 + (enemy[2] + hd.fit.uiTopDy) * 4.5
+    check(sceneTop > 2 * 4.5 and math.abs(boxTop - (sceneTop + 2 * 4.5)) < 1,
+      "doubles upright: the foes' boxes just under the scene's top (" .. tostring(boxTop) .. ", scene "
+      .. tostring(sceneTop) .. ")")
+  end
   G.setCanvas(base)
   hd.beginPass("battle", base)
   hd.seam("ui")

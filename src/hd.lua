@@ -2665,12 +2665,12 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           cx = cx - (r - vx - vw)
         end
         cx = round2(cx)
-        -- the enemy's HP box (singles): its top stackGap UI px under the scene's top (its canvas
+        -- the enemy's HP box (the foes' two in a double battle): its top stackGap UI px under the scene's top (its canvas
         -- row 0 at the scene's scale; the screen's top when the scene reaches it), as a wide
         -- screen has it. Never the art's: the fit sees it there, the most the player's Pokemon
         -- may rise to. Held while a turn plays (a lunge may pull the scene out a little) and
         -- eased to the scene's top between turns (fit.anchor, UI px); set afresh each battle
-        if not fit.double then
+        do
           local sceneTop = math.max(top, cy - fy * Sy)
           local want = math.min(0, (sceneTop - uby) / Uy + fit.stackGap - fit.ui.enemy[2])
           local a = fit.anchor
