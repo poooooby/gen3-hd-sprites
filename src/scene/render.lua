@@ -17,6 +17,8 @@
 -- colour is saturated, and distance fades into the haze colour.
 
 local Render = {}
+-- (no moonlight: the shader's uMoon by day, indoors)
+local ZERO3 = { 0, 0, 0 }
 
 Render.CARD_SHADE = 0.82
 Render.SHADE_LOW = 0.62     -- Emerald 3DS's VOXEL_GRADE_SHADE_LOW (src/scene/light.lua)
@@ -81,6 +83,7 @@ uniform float uSaturation;
 uniform Image uDapple;
 uniform vec3 uDappleRange;
 uniform vec3 uSky;
+uniform vec3 uMoon;
 vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
   // (a standing cell's own ground copy, marked by its alpha: gone once the cards stand)
   if (color.a < 0.75 && uHideFlat > 0.5) discard;
@@ -95,6 +98,8 @@ vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
   }
   vec3 lit = rgb * vTint;
   if (uDappleRange.z > 0.5) lit *= mix(uDappleRange.x, uDappleRange.y, Texel(uDapple, vDapple).r);
+  // (the night's moonlight, added to everything lit: Emerald 3DS's multiply-add, ctr_voxel.c)
+  lit += uMoon;
   float f = clamp((vDepth - uFog.x) / (uFog.y - uFog.x), 0.0, 1.0) * uFog.z;
   return vec4(mix(mix(lit, uHaze, f), uSky, vFade), 1.0);
 }
@@ -860,6 +865,7 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   sh:send("uHideFlat", (rise or 1) > Render.HIDE_AT and 1 or 0)
   sh:send("uSunTint", light and light.sun or { 1, 1, 1 })
   sh:send("uShadeTint", light and light.shade or { 1, 1, 1 })
+  sh:send("uMoon", light and light.moon or ZERO3)
   local low = Render.SHADE_LOW
   sh:send("uGrade", { 1 / (1 - low), -low / (1 - low) })
   -- the sun dapples (src/scene/light.lua: off where their light has none to speak of)

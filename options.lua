@@ -62,6 +62,14 @@ return {
     description = "With Battle Scene on OVERWORLD: a soft tilt-shift blur on the far distance at the top of the battle and the nearest ground at the bottom, so the world looks like a miniature. Off: the whole world sharp.",
   },
   {
+    key = "scene_daytime",
+    label = "Time of Day",
+    type = "toggle",
+    default = true,
+    visible_if = { key = "battle_scene", equals = "overworld" },
+    description = "With Battle Scene on OVERWORLD: outdoor battles lit by the time of day, a warm morning (4-10), the plain day, an orange evening (5-8 PM) and a blue moonlit night (8 PM-4 AM), easing between them. Ruby, Sapphire and Emerald follow the game's clock, FireRed and LeafGreen your device's; with WoobleDex installed, its Clock Source, and no time of day while its Day & Night is off. Rooms and caves keep their own light. Off: always day.",
+  },
+  {
     key = "scene_cache",
     label = "Scene Cache",
     type = "toggle",

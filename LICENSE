@@ -151,8 +151,9 @@ with the layout its script swaps in. Changes: the engine keeps no layout id for 
 so the layout swapped into it is the one whose cells the map draws.
 
 The scene's light: src/scene/light.lua adapts Emerald 3DS's src/voxel/ctr_voxel.c (the
-VoxelLight struct, BaseLightFor, LightMix, FogLight, SetGrade, MakeDapple, DappleFrame,
-DappleUniforms, BrightenCrowns), src/voxel/voxel_grade.c (the texture grade) and
+VoxelLight struct, BaseLightFor, LightFor, LightMix, FogLight, SetGrade, MakeDapple, DappleFrame,
+DappleUniforms, BrightenCrowns), src/3ds_daynight.c (the day-night cycle: CtrDayNight_At,
+CtrDayNight_Moonlight), src/voxel/voxel_grade.c (the texture grade) and
 src/voxel/voxel_world.c (VoxelWorld_Weather, _WeatherAmount, _FogDensity, _Lightning);
 src/scene/lighting.lua adapts src/voxel/voxel_lighting.c whole (the face term, the cast shadows,
 contact darkening, LightFace, the relief lattice, ModelShade) and voxel_relief.c's BuildSurface,

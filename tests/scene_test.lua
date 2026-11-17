@@ -2076,5 +2076,51 @@ do
   check(want == line, "cache guard: the 3D cache's inputs match their recorded versions (tests/cache_guard.txt)")
 end
 
+-- the time of day (src/scene/light.lua: Emerald 3DS's CtrDayNight_At / _Moonlight / LightFor)
+do
+  local L = dofile("src/scene/light.lua")
+  local noon, night, morning, evening = L.cycle(720), L.cycle(23 * 60), L.cycle(6 * 60), L.cycle(1050)
+  check(near(noon.rgb[1], 1) and near(noon.daylight, 1) and near(noon.glow, 0), "time of day: noon is the plain day")
+  check(near(night.rgb[1], 0.66) and near(night.rgb[3], 0.92) and near(night.daylight, 0) and near(night.glow, 1),
+    "time of day: night the cool tint, no daylight, full glow")
+  check(near(morning.rgb[2], 0.94) and near(morning.daylight, 0.75), "time of day: the morning's warm tint")
+  check(near(evening.rgb[3], 0.65) and near(evening.daylight, 0.35), "time of day: the evening's orange")
+  local half = L.cycle(540)   -- halfway from morning (480) to day (600): smoothstep 0.5
+  check(near(half.daylight, 0.875), "time of day: eased between keys")
+  check(near(L.cycle(1440 + 720).daylight, 1), "time of day: minutes wrap at midnight")
+  check(near(L.moon(night), 0.06) and near(L.moon(noon), 0), "time of day: moonlight only at night")
+  local lit = L.dayNight(L.light({ weather = 0 }), night)
+  local day = L.light({ weather = 0 })
+  check(near(lit.sun[1], day.sun[1] * 0.66 * 0.94) and near(lit.rays, 0) and near(lit.dappleLow, 1)
+    and near(lit.moon[3], 136 / 255 * 0.06), "time of day: night dims the sun, stops the rays and dapples, adds the moon")
+  local same = L.dayNight(L.light({ weather = 0 }), noon)
+  check(near(same.sun[1], day.sun[1]) and near(same.rays, day.rays) and near(same.moon[1], 0),
+    "time of day: the day leaves the light as it was")
+  local sky = L.sky({ 0.8, 0.9, 1.0 }, night)
+  check(sky[3] < 1.0 and sky[1] < 0.8 * 0.7, "time of day: the sky darkened at night")
+end
+
+-- the clock (src/clock.lua): WoobleDex's Clock Source and Day & Night when it is installed, else
+-- the game's
+do
+  local makeClock = dofile("src/clock.lua")
+  local dex, stored = nil, {}
+  local mod = { game = { mods = { modOptions = { national_dex_gen3 = stored } } } }
+  function mod:find(id) return id == "national_dex_gen3" and dex or nil end
+  local C = makeClock(mod)
+  check(C.source() == "game" and C.allowed(), "clock: no WoobleDex, the game's clock")
+  dex = { exports = { clockSource = function() return "device" end } }
+  check(C.source() == "device", "clock: WoobleDex's Clock Source (its export)")
+  dex = { exports = {} }
+  stored.clock_source = "device"
+  check(C.source() == "device", "clock: ... or its stored option")
+  stored.day_night = false
+  check(not C.allowed(), "clock: WoobleDex's Day & Night off, no time of day")
+  stored.day_night = true
+  check(C.allowed(), "clock: ... on, the time of day")
+  local m = C.read("device")
+  check(type(m) == "number" and m >= 0 and m < 1440, "clock: a minute of the day (" .. tostring(m) .. ")")
+end
+
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
 if failed > 0 then os.exit(1) end

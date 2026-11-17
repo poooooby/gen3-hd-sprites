@@ -61,11 +61,15 @@ and Crystal.
 - 🎯 **A fair place to fight:** Each battle is set on the nearest spot where both Pokémon stand
   on level, open ground, with nothing between them and nothing blocking the view.
 - ☀️ **Light and weather:** Sunlight, shadows, rain, sand, ash and fog fill the scene.
+- 🌙 **Time of day:** Outdoor battles are lit by the clock: a warm morning, the plain day, an
+  orange evening and a blue, moonlit night, easing from one to the next. Ruby, Sapphire and
+  Emerald follow the game's clock, FireRed and LeafGreen your device's. With WoobleDex, battles
+  follow its Clock Source and its Day & Night setting, so they match the overworld around you.
 - 🎥 **Cinematic entrance:** The camera swoops down from the overworld into the battle.
 
 ## ⚙️ Options
 
-Open **OPTIONS → MODS → WoobleView**. Battle Textbox, Battle Scene and the four options after
+Open **OPTIONS → MODS → WoobleView**. Battle Textbox, Battle Scene and the five options after
 it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 | Option | Choices | Default | What it does |
@@ -78,6 +82,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
 | **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |
+| **Time of Day** | On / Off | On | Outdoor battle scenes lit by the time of day (morning, day, evening, night), by the game's clock or WoobleDex's. Off: always day. |
 | **Scene Cache** | On / Off | On | Keeps built towns and rooms on disk so battles load straight away. |
 | **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn off on a slow device. |
 | **Pokedex & Summary HD** | On / Off | On | Pokédex and summary Pokémon at full resolution. |
@@ -117,7 +122,8 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 - **Battle Scene** is adapted from the 3D battles of
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its camera,
-  entrance, battle placement, trees, buildings, rooms, land shapes, lighting and weather. The
+  entrance, battle placement, trees, buildings, rooms, land shapes, lighting, day-night cycle and
+  weather. The
   battle text box's modern look follows its HD text box.
 - **Kanto's land** in FireRed and LeafGreen comes from
   [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS) by

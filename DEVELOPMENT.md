@@ -426,7 +426,8 @@ already covers the view.
     blitted, clipped, `dyTop` UI px higher.
     - The fit sees that band at the top of the screen (`fit.uiTopDy`): its HP-box rect and the
       back headroom (`backTopMin`) move up with it.
-    - Singles: the HP box's top is `fit.stackGap` (2) UI px under the scene's top in every game:
+    - The enemy's HP box (a double battle's two foes' boxes too) has its top `fit.stackGap` (2) UI
+      px under the scene's top in every game:
       its canvas row 0 at the scene's scale, or the screen's top when the scene reaches it (as
       `topGap` on a wide screen). Gen 1 / 2 have it on the cart's top row. It never moves with
       the art; the fit sees it there, the upper limit for the player's Pokemon. The spot
@@ -1143,8 +1144,25 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   meshes left ungraded by the shader. The sun dapples (MakeDapple, DappleFrame, DappleUniforms): a
   128x128 pattern of three octaves of tileable value noise (their 32-bit hash, exactly), laid from
   above along the sun (a point slid along it by its height), 24 tiles a period, drifting 0.25 tiles
-  a second, scaling the lit texel from `dappleLow` to `dappleHigh`. Not ported: their day/night
-  cycle (its tint, moonlight and clock sun; their "day_night" setting, off by default).
+  a second, scaling the lit texel from `dappleLow` to `dappleHigh`.
+  - **Time of day** (option `scene_daytime`, `Scene.timeOfDay` -> the minute of the day, or nil):
+    their day-night cycle (3ds_daynight.c `CtrDayNight_At` / `_Moonlight`, ctr_voxel.c
+    `LightFor`). `Light.cycle(minute)`: keys at 0/120 night (0.66, 0.74, 0.92), 240/480 morning
+    (0.96, 0.94, 0.88, daylight 0.75), 600/900 day (white), 1020/1080 evening (1.00, 0.80, 0.65,
+    daylight 0.35, glow 0.25), 1200/1440 night (daylight 0, glow 1), smoothstepped between.
+    `Light.dayNight(light, cycle)`: sun and shade x the tint x (1 - moon), the haze tinted and
+    turned towards the moon's colour (70, 92, 136) by moon = 0.06 x glow^2, rays, motes and
+    the dapples' spread x daylight; `light.moon` (that colour x moon) is added to every lit texel
+    in the shader (`uMoon`: their multiply-add). `Light.sky` tints the backdrop's colour the
+    haze's way. Outdoors only: never `s.walled` or `s.cave` (WoobleDex never tints caves
+    either). Not ported: the windows' and lamps' glow at night, the sun's path through the day.
+    The battlers, trainers and UI are not tinted. `hd.stats.sceneTime` shows the time used.
+  - **The clock** (`src/clock.lua`, `Clock.minute`, read at most once a second): WoobleDex's
+    (`national_dex_gen3`) when it is installed: its Clock Source (`exports.clockSource()`, else
+    its stored `clock_source`), and nil while its `day_night` is off, so a battle matches the
+    overworld its Day & Night look tints. Else the game's: `Rtc.calcLocalTime` where `Rtc.enabled`
+    (Ruby, Sapphire, Emerald), the device's (`Rtc.hostInfo`) on FireRed and LeafGreen. Both
+    honour `POKEPORT_RTC` (the drivers fix the hour with it).
   `hd.stats.sceneHaze` (the driver logs it). Without light.lua, the old haze: 14 to 48 tiles, 0.9
   at most, the sky's colour, and no grade.
 - `lighting.lua`: Emerald 3DS's sun (voxel_lighting.c), baked into each vertex's shade as the

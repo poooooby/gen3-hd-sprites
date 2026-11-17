@@ -4787,6 +4787,18 @@ return function(deps)
       end
     end
     local light = Light.light({ indoor = s.walled, weather = weather, state = state, cave = s.cave })
+    -- (the time of day outdoors, Emerald 3DS's cycle: by the game's clock, or WoobleDex's,
+    -- Scene.timeOfDay -> the minute of the day, nil for none; never indoors or in a cave)
+    local sky = s.haze
+    if Scene.timeOfDay and not s.walled and not s.cave then
+      local okT, minute = pcall(Scene.timeOfDay)
+      if okT and type(minute) == "number" then
+        local cycle = Light.cycle(minute)
+        Light.dayNight(light, cycle)
+        if sky then sky = Light.sky(sky, cycle) end
+        hd.stats.sceneTime = ("%02d:%02d"):format(math.floor(minute / 60) % 24, math.floor(minute % 60))
+      end
+    end
     -- (the sun's light in the air: src/scene/sunfx.lua; the landing's burst of bloom)
     light.seconds = love.timer.getTime()
     light.sunDir = Lighting and Lighting.SUN or nil
@@ -4822,7 +4834,7 @@ return function(deps)
         love.timer.getTime(), s.ox, H, s.oz + H)
     end
     hd.stats.sceneHaze = ("%s %.2f from %.2f over %.2f"):format(Light.class(weather), light.haze, light.start, light.ramp)
-    return light.rgb, Light.range(light, pose.dist), s.haze, light
+    return light.rgb, Light.range(light, pose.dist), sky, light
   end
 
   --- (dev: the Scene Workshop) The last scene from any pose, w x h screen pixels at k screen

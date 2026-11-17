@@ -4,9 +4,10 @@
 -- Ported from Emerald 3DS's src/voxel/ctr_voxel.c (the VoxelLight struct, BaseLightFor,
 -- LightMix, FogLight, SetGrade) and src/voxel/voxel_world.c (VoxelWorld_Weather,
 -- _WeatherAmount, _FogDensity, _Lightning), by Zallax and contributors, CC BY-NC-SA 4.0,
--- https://github.com/ZallaxDev/emerald-3ds (see LICENSE). Every number is theirs. Not ported:
--- their day/night cycle's tint and moonlight (LightFor; their "day_night" setting, off unless
--- the player turns it on), so the light is BaseLightFor's.
+-- https://github.com/ZallaxDev/emerald-3ds (see LICENSE). Every number is theirs. Their day-night
+-- cycle (3ds_daynight.c CtrDayNight_At / _Moonlight, ctr_voxel.c LightFor) is ported too
+-- (Light.cycle, Light.dayNight), by the game's clock or WoobleDex's (src/clock.lua); not its
+-- windows' and lamps' glow, nor the sun's path through the day.
 --
 -- The grade (their voxel.v.pica): a vertex's shade picks how sunlit it is,
 -- t = clamp((shade - 0.62) / 0.38, 0, 1), and its colour is shade * lerp(shade tint, sun tint, t):
@@ -184,6 +185,82 @@ function Light.light(o)
     light.rays, light.bloom, light.motes = 0, 0.12, 0.40
   end
   return light
+end
+
+-- Emerald 3DS's day-night cycle (3ds_port/src/3ds_daynight.c CtrDayNight_At): by the minute of
+-- the day, the light's tint, how much daylight there is (the sun's dapples, rays and motes) and
+-- how much glow (night: the moonlight). Between two keys the smoothstep of the way across.
+Light.CYCLE = {
+  { 0, { 0.66, 0.74, 0.92 }, 0.00, 1.00 },
+  { 120, { 0.66, 0.74, 0.92 }, 0.00, 1.00 },
+  { 240, { 0.96, 0.94, 0.88 }, 0.75, 0.00 },
+  { 480, { 0.96, 0.94, 0.88 }, 0.75, 0.00 },
+  { 600, { 1.00, 1.00, 1.00 }, 1.00, 0.00 },
+  { 900, { 1.00, 1.00, 1.00 }, 1.00, 0.00 },
+  { 1020, { 1.00, 0.80, 0.65 }, 0.35, 0.25 },
+  { 1080, { 1.00, 0.80, 0.65 }, 0.35, 0.25 },
+  { 1200, { 0.66, 0.74, 0.92 }, 0.00, 1.00 },
+  { 1440, { 0.66, 0.74, 0.92 }, 0.00, 1.00 },
+}
+-- CtrDayNight_Moonlight: its colour, and its amount (MOON x glow^2)
+Light.MOON_RGB = { 70 / 255, 92 / 255, 136 / 255 }
+Light.MOON = 0.06
+
+--- CtrDayNight_At: the cycle at a minute of the day (0-1440): { rgb, daylight, glow }.
+function Light.cycle(minute)
+  local K = Light.CYCLE
+  local m = (tonumber(minute) or 720) % 1440
+  for i = 2, #K do
+    if m < K[i][1] then
+      local a, b = K[i - 1], K[i]
+      local t = (m - a[1]) / (b[1] - a[1])
+      t = t * t * (3 - 2 * t)
+      return { rgb = { a[2][1] + (b[2][1] - a[2][1]) * t, a[2][2] + (b[2][2] - a[2][2]) * t,
+                       a[2][3] + (b[2][3] - a[2][3]) * t },
+               daylight = a[3] + (b[3] - a[3]) * t, glow = a[4] + (b[4] - a[4]) * t }
+    end
+  end
+  return { rgb = { K[1][2][1], K[1][2][2], K[1][2][3] }, daylight = K[1][3], glow = K[1][4] }
+end
+
+--- CtrDayNight_Moonlight (no fade): how much moonlight the cycle has, 0..0.06.
+function Light.moon(cycle)
+  local g = cycle and cycle.glow or 0
+  return Light.MOON * g * g
+end
+
+--- LightFor: the light (Light.light's, outdoors) at that time of day: its sun and shade tinted by
+--- the cycle and dimmed by the moonlight's share, the haze tinted and turned towards the
+--- moonlight, the sun's rays, motes and dapples by the daylight. Sets light.moon { r, g, b }:
+--- the moonlight added to everything lit (their texture environment's multiply-add). Returns
+--- the light.
+function Light.dayNight(light, cycle)
+  local moon = Light.moon(cycle)
+  local rgb = cycle.rgb
+  for c = 1, 3 do
+    light.sun[c] = light.sun[c] * rgb[c] * (1 - moon)
+    light.shade[c] = light.shade[c] * rgb[c] * (1 - moon)
+    local h = light.rgb[c] * rgb[c]
+    light.rgb[c] = h + (Light.MOON_RGB[c] - h) * moon
+  end
+  light.rays = light.rays * cycle.daylight
+  light.motes = light.motes * cycle.daylight
+  light.dappleLow = 1 + (light.dappleLow - 1) * cycle.daylight
+  light.dappleHigh = 1 + (light.dappleHigh - 1) * cycle.daylight
+  light.moon = { Light.MOON_RGB[1] * moon, Light.MOON_RGB[2] * moon, Light.MOON_RGB[3] * moon }
+  light.cycle = cycle
+  return light
+end
+
+--- The sky behind the world at that time of day: the backdrop's colour as the haze is tinted.
+function Light.sky(sky, cycle)
+  local moon = Light.moon(cycle)
+  local out = {}
+  for c = 1, 3 do
+    local h = sky[c] * cycle.rgb[c]
+    out[c] = h + (Light.MOON_RGB[c] - h) * moon
+  end
+  return out
 end
 
 --- SetGrade's fog for an eye that far from its target (tiles, along the line of sight): the

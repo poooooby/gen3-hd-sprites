@@ -42,6 +42,8 @@ return function(mod)
   -- optional: without it the player's pad is the game's own (cut at the text box)
   Engine.Pads = loadSibling(mod, "src/pads.lua")
   Engine.Bar = loadSibling(mod, "src/bar.lua")
+  local makeClock = loadSibling(mod, "src/clock.lua")
+  local Clock = type(makeClock) == "function" and makeClock(mod) or nil
 
   -- the engine does not register a mod's options from its manifest: define them here
   local schema = loadSibling(mod, "options.lua")
@@ -49,7 +51,7 @@ return function(mod)
   -- before it loads mods, and loads them again for another game)
   if type(schema) == "table" and Engine.generation() < 3 then
     local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
-                       scene_cache = true, battle_textbox = true }
+                       scene_cache = true, battle_textbox = true, scene_daytime = true }
     local kept = {}
     for _, row in ipairs(schema) do
       if not (type(row) == "table" and gen3Only[row.key]) then kept[#kept + 1] = row end
@@ -356,6 +358,8 @@ return function(mod)
       Engine.Scene.cacheModels = option("scene_cache", true) ~= false
       -- (Emerald 3DS's diorama blur, its strength 0..1: their default is the full blur)
       Engine.Scene.blur = option("scene_blur", true) ~= false and 1 or 0
+      -- (the time of day the scene is lit by: src/clock.lua, the game's clock or WoobleDex's)
+      Engine.Scene.timeOfDay = Clock and option("scene_daytime", true) ~= false and Clock.minute or nil
     end
   end
 
