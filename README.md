@@ -31,6 +31,9 @@ and Crystal.
   Your own Pokémon is a touch bigger than the same one on the far side, being nearer to you, and
   two giants both fill the screen. The opponent slides in at its normal size and settles to its
   true size when your Pokémon comes out.
+- 👯 **Double battles too:** All four Pokémon share one scale, so a Rayquaza towers over its
+  Dragonite partner and over your team. The one that needs the most room fills it, and the
+  others stand at their true size beside it.
 - 📐 **Nothing cut off:** If a Pokémon still doesn't fit, the camera pulls back just enough to
   show it in full, and eases back in when it leaves.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the

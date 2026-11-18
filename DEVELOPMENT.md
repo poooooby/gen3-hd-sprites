@@ -200,8 +200,17 @@ not by its `scale`:
   send-out; cleared with the pair), the enemy is drawn at its tag's own `scale`, capped at its
   fill so the camera need not pull back for the slide and ease in again. From the send-out on,
   the one scale above.
-- **Else** the tag's own `scale`: Battle Fit off, a double battle, a trainer, a tag without a
-  height. With a pair in the battle the camera's top `margin` is 0 (`topLimit`): on the Game
+- **Double battles (`doubleSize`, `quads`):** up to two battlers a side, each kept with its
+  latest tag (matched by `sameMon`), its art's height and body at its fill, its px per metre
+  (^ `sizeCurve`, the player's / `nearScale`) and the pass it was last drawn in. All four at
+  one scale: the least px per metre fills its room, the others at `ref.m / m`, never under
+  `sizeFloor`, their body never under `minShare` of the one filling's (up to their own fill). A
+  new Pokemon on a full side takes the place of the one drawn longest ago (a switch-in); a
+  fainted one with no replacement still counts. Measured only while drawn at scale 1: coming
+  out of its ball the game draws it grown, and its room in those pixels would make the other
+  three dip for a frame or two. Cleared with the pair when a battle starts. Sliding in as in
+  singles. `quads` is `hd._quads` for tests.
+- **Else** the tag's own `scale`: Battle Fit off, a trainer, a tag without a height. With a pair in the battle the camera's top `margin` is 0 (`topLimit`): on the Game
   Boy the enemy's room starts at the screen's top. The camera's code is unchanged: it still
   pulls back for whatever does not fit.
 

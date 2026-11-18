@@ -842,8 +842,47 @@ do
   end
   own(tall({ height = false }), "species: a tag without a height keeps its own size")
   own(tall({ trainer = true }), "species: a trainer keeps its own size")
+  -- a double battle: up to two a side, all at one scale (the one tightest for its height fills).
+  -- (this room: 64 px over its feet, the player's room above having no `up` for the enemy)
   hd.fit.double = true
-  own(tall(), "species: none in a double battle")
+  hd.pair.player, hd.playerIn = nil, true
+  local Q = hd._quads
+  hd.tag(pic, tall())
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 64 / 148), "doubles: alone, it fills (" .. tostring(d and d.args[5]) .. ")")
+  check(#Q.enemy == 1 and Q.enemy[1].h and near(Q.enemy[1].h, 64), "doubles: measured at its fill")
+  -- a player's Pokemon tighter for its height (14 px for 0.7 m, nearScale 1.15): this one true
+  -- to size against it
+  Q.player[1] = { of = { height = 0.7 }, h = 14, bh = 14, m = 14 / 0.7 ^ C / 1.15, at = 0 }
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 64 / 148 * (14 / 0.7 ^ C / 1.15) / (64 / 1.8 ^ C)),
+    "doubles: sized against the tightest of the four (" .. tostring(d and d.args[5]) .. ")")
+  -- ... its body (no body: its art, 64 px) at least minShare of the one filling's
+  Q.player[1].bh = 100
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 64 / 148 * 0.3 * 100 / 64),
+    "doubles: the minimum against the one filling (" .. tostring(d and d.args[5]) .. ")")
+  -- roomier than the others for its height: it fills
+  Q.player[1].m, Q.player[1].bh = 1000, 14
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 64 / 148), "doubles: the tightest fills (" .. tostring(d and d.args[5]) .. ")")
+  -- a new Pokemon on a full side takes the place of the one drawn longest ago (switched out)
+  local gone, kept = { of = { height = 9 }, m = 1, at = -5 }, { of = { height = 8 }, m = 1, at = -1 }
+  Q.enemy[1], Q.enemy[2] = gone, kept
+  hd.tag(pic, tall({ height = 1.2 }))
+  fitFrame(G, hd, base, frame)
+  check(#Q.enemy == 2 and Q.enemy[2] == kept and Q.enemy[1] == gone and gone.of.height == 1.2,
+    "doubles: a switch-in replaces the side's longest-undrawn")
+  -- a new battle starts afresh
+  hd.fit.idle = 3
+  hd.beginPass("battle", base)
+  hd.endPass()
+  check(#Q.enemy == 0 and #Q.player == 0, "doubles: cleared when a battle starts")
+  hd.fit.idle = 0
   hd.fit.double = false
   hd.fit.enabled = false
   own(tall(), "species: none with Battle Fit off")

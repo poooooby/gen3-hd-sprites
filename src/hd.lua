@@ -840,15 +840,63 @@ function HD.new(G, opts)
   -- double battle, a tag without a height, a trainer; the enemy's until the player's Pokemon
   -- has been drawn this battle, self.playerIn: it slides in at its own size, never above its
   -- fill, its fitting size from the player's send-out on, not from the player's prefit).
+  -- Double battles: up to two battlers a side, each measured at its fill (the latest tag of
+  -- that Pokemon, its art's height and body there, its px per metre ^ sizeCurve in the enemy's
+  -- terms, and the pass it was last drawn in). All four at one scale: the one tightest for its
+  -- height fills its room, the others true to size against it (sizeFloor, minShare as in
+  -- singles). A new Pokemon on a side takes the place of the one drawn longest ago (switched
+  -- out); a fainted one with none to replace it still counts, as a single's side does.
+  local quads = { enemy = {}, player = {} }
+  local passNo = 0
+
+  local function doubleSize(spec, side, f, h, bh, sx, sy)
+    local fit = self.fit
+    local list, e = quads[side], nil
+    for i = 1, #list do
+      if sameMon(list[i].of, spec) then e = list[i] break end
+    end
+    if not e then
+      if #list < 2 then
+        e = {}
+        list[#list + 1] = e
+      else
+        e = list[1].at <= list[2].at and list[1] or list[2]
+      end
+    end
+    local near, c = fit.nearScale or 1, fit.sizeCurve or 1
+    e.of, e.at = spec, passNo
+    -- (measured as it rests: drawn grown or shrunk by the game (coming out of its ball), its
+    -- room in its own pixels is not its room, and the others would dip in size with it)
+    if not e.m or (math.abs(sx or 1) == 1 and math.abs(sy or 1) == 1) then
+      e.h, e.bh = h, bh
+      e.m = h and h / spec.height ^ c / (side == "player" and near or 1) or nil
+    end
+    if not e.m then return f end
+    -- (the one filling: the least px per metre at its fill)
+    local ref
+    for _, l in pairs(quads) do
+      for i = 1, #l do
+        local o = l[i]
+        if o.m and (not ref or o.m < ref.m) then ref = o end
+      end
+    end
+    if ref == e or ref.m >= e.m then return f end
+    local k = math.max(fit.sizeFloor, ref.m / e.m)
+    local least, rb = fit.minShare or 0, ref.bh
+    if least > 0 and bh and rb and bh > 0 then k = math.min(1, math.max(k, least * rb / bh)) end
+    return f * k
+  end
+
   local function speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
     local fit = self.fit
-    if not (fit.enabled and not fit.double and speciesTag(spec)) then return k end
+    if not (fit.enabled and speciesTag(spec)) then return k end
     local f, h, bh = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
     if not f then return k end
     -- (sliding in: its own size, but no larger than its room, so the camera need not pull back
     -- for it and then ease in again at the send-out)
     if spec.side ~= "player" and not self.playerIn then return math.min(k, f) end
     local side = spec.side == "player" and "player" or "enemy"
+    if fit.double then return doubleSize(spec, side, f, h, bh, sx, sy) end
     local otherSide = side == "player" and "enemy" or "player"
     fillPx[side], fillBody[side], fillOf[side] = h, bh, spec
     local other = self.pair[otherSide]
@@ -873,7 +921,7 @@ function HD.new(G, opts)
     end
     return f
   end
-  self._fillPx, self._fillOf, self._fillBody = fillPx, fillOf, fillBody
+  self._fillPx, self._fillOf, self._fillBody, self._quads = fillPx, fillOf, fillBody, quads
 
   -- a tag's contact shadow (spec.shadow), under a frame whose pivot is drawn at (px, py) turned
   -- by r and scaled by (fsx, fsy) (the frame's final scale, flip included): its offsets and
@@ -1519,7 +1567,11 @@ function HD.new(G, opts)
         self.playerIn = false
         fillPx.enemy, fillPx.player, fillOf.enemy, fillOf.player = nil, nil, nil, nil
         fillBody.enemy, fillBody.player = nil, nil
+        for _, l in pairs(quads) do
+          for i = #l, 1, -1 do l[i] = nil end
+        end
       end
+      passNo = passNo + 1
       for side, spec in pairs(cur.sides) do self.pair[side] = spec end
       if cur.playerIn then self.playerIn = true end
     end
