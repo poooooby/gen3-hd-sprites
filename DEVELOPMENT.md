@@ -660,7 +660,9 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   - **3, fair:** both feet on a cell they could stand on (in the map, not blocked, nothing
     standing, no slope, the battle's kind: water for a water battle, dry ground else, within
     `Stage.LEVEL` of the target's height, so no sprite floats or sinks). The camera also sees
-    both sprites: rays through each sprite's middle and lower quarter cross no card. A card is
+    both sprites: rays through each sprite's middle, lower quarter and feet (`Scene.FEET`) cross
+    no card, so no tree crown or wall in front reaches up to a side's feet (it would seem to stand
+    on top of it: Route 111 by the Winstrates' door). A card is
     what the occlusion score stands (`cardOf`): a model, sign or border as tall as it stands, an
     upright run's card, a tree, or ground a level up at its front, lifted with its cell. Hoenn's
     trees are their crown cards as `render.lua` stands them (`c.treeCards`, from `Trees.emit`):

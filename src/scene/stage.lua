@@ -23,7 +23,7 @@
 -- not a wall, nothing standing there, level and at the target's own height (else the sprite would
 -- float over a drop or sink into a rise) and the battle's kind of ground (water for a water
 -- battle, dry ground else) - when the camera sees both sides (no model, card, tree or rock, as the
--- occlusion score stands them, across its line to either sprite's middle or lower quarter: so it
+-- occlusion score stands them, across its line to either sprite's middle, lower quarter or feet: so it
 -- never stands in a building either) and when nothing stands, and no ground rises, on
 -- the line between the two. Tier 2: both feet fair and seen, something between them; tier 1: both
 -- feet fair, the view blocked; tier 0: not. The best-scoring target of the highest tier wins, so
@@ -220,16 +220,19 @@ local function rayClear(Camera, grid, pose, u, v, depth, footT)
   return true
 end
 
--- whether the camera sees a side's sprite (canvas rect r) standing at foot (x, z): its middle
--- and a quarter up from its bottom
-local function seen(Camera, grid, pose, r, x, z)
+-- whether the camera sees a side's sprite (canvas rect r, its feet at canvas point f) standing at
+-- foot (x, z): its middle, a quarter up from its bottom, and its feet (a tree's crown or a wall
+-- risen in front up to them, under the lower quarter, would have it stand on top of it)
+local function seen(Camera, grid, pose, r, x, z, f)
   local ty = pose.ty or 0
   local _, _, depth = Camera.view(pose, x, ty, z + ty)
   if not depth or depth <= Camera.NEAR then return false end
   local u = (r[1] + r[3]) / 2
   local ok, c = rayClear(Camera, grid, pose, u, (r[2] + r[4]) / 2, depth, ty)
   if not ok then return false, c end
-  return rayClear(Camera, grid, pose, u, r[4] - (r[4] - r[2]) / 4, depth, ty)
+  ok, c = rayClear(Camera, grid, pose, u, r[4] - (r[4] - r[2]) / 4, depth, ty)
+  if not ok or not f then return ok, c end
+  return rayClear(Camera, grid, pose, f[1], f[2], depth, ty)
 end
 
 -- whether what the camera at `pose` shows lies inside the window of cells, as far as `reach`
@@ -253,11 +256,13 @@ end
 
 --- How fair target (tx, tz) is, its ground at groundT, the feet `off` = { px, pz, ex, ez } from
 --- it, the sprites' canvas rects `sprites` ({ player = {u0, v0, u1, v1}, enemy = ... }; without
---- them the view is not checked): 3 both sides stand on fair ground, seen, nothing between them;
+--- them the view is not checked; `feet` their canvas feet points, { player = {u, v}, enemy = ... },
+--- checked as well when given): 3 both sides stand on fair ground, seen, nothing between them;
 --- 2 seen, something between them; 1 stand fair; 0 not. And why not (for the stats): "player",
 --- "enemy" (that side's feet), "view" (and the cell in the way) or "between".
-function Stage.tier(Camera, grid, tx, tz, groundT, off, want, sprites)
+function Stage.tier(Camera, grid, tx, tz, groundT, off, want, sprites, feet)
   want = want or {}
+  feet = feet or {}
   local px, pz, ex, ez = off[1], off[2], off[3], off[4]
   local a = grid.at(floor(tx + px), floor(tz + pz))
   if not footFair(a, want.player, groundT) then return 0, "player" end
@@ -265,9 +270,9 @@ function Stage.tier(Camera, grid, tx, tz, groundT, off, want, sprites)
   if not footFair(b, want.enemy, groundT) then return 0, "enemy" end
   if sprites then
     local pose = Camera.pose(tx, tz + groundT, nil, nil, groundT)
-    local okP, cp = seen(Camera, grid, pose, sprites.player, tx + px, tz + pz)
+    local okP, cp = seen(Camera, grid, pose, sprites.player, tx + px, tz + pz, feet.player)
     if not okP then return 1, "view", cp end
-    local okE, ce = seen(Camera, grid, pose, sprites.enemy, tx + ex, tz + ez)
+    local okE, ce = seen(Camera, grid, pose, sprites.enemy, tx + ex, tz + ez, feet.enemy)
     if not okE then return 1, "view", ce end
   end
   if not lineClear(grid, tx + px, tz + pz, tx + ex, tz + ez, groundT, a, b) then return 2, "between" end
@@ -381,7 +386,7 @@ function Stage.search(Camera, grid, opts)
     local tx, tz = t0x + dx, t0z + dz
     local tc = grid.at(floor(tx), floor(tz))
     local groundT = tc and tc.liftT or 0
-    local tier, why = Stage.tier(Camera, grid, tx, tz, groundT, off, want, opts.sprites)
+    local tier, why = Stage.tier(Camera, grid, tx, tz, groundT, off, want, opts.sprites, opts.feet)
     if fair and tier < 3 then return end
     -- (that far out, the view may reach past the window of cells: only a target it does not)
     if fair and not inWindow(Camera, grid, Camera.pose(tx, tz + groundT, nil, nil, groundT), Stage.VIEW) then return end

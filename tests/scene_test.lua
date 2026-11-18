@@ -302,6 +302,23 @@ do
   for i = pf[1] - 1, pf[1] + 1 do g10.rows[ty10][i].treeCards = false end
   check(select(1, Stage.tier(Camera, g10, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 3,
     "...a tree cell with no card (hidden by its mark): nothing stands")
+  -- Route 111 by the Winstrates' door: small trees three rows south of the foe, their crowns up to
+  -- its feet but under its lower quarter; it would stand on top of them
+  local g11 = flat(40, 40)
+  local ty11 = ef[2] + 3
+  for i = ef[1] - 1, ef[1] + 1 do
+    local c, cards = g11.rows[ty11][i], {}
+    TreesS.emit(function(a, _, cc, _, _, _, _, _, what)
+      if what == "card" then cards[#cards + 1] = { a[1], cc[1], cc[3], cc[2], a[3], a[2] } end
+    end, "petalburg", 0x0C6, i, ty11, TreesS.SMALL, function() return nil end, { noGround = true })
+    c.treeCards, c.top, c.treeFoot = cards, 1.8, true
+  end
+  check(select(1, Stage.tier(Camera, g11, open.tx, open.tz, 0, offs(open), {}, SPRITES)) == 3,
+    "trees up to the foe's feet: its middle and lower quarter seen")
+  check(select(1, Stage.tier(Camera, g11, open.tx, open.tz, 0, offs(open), {}, SPRITES, FEET)) == 1,
+    "...its feet hidden: the view blocked")
+  local g11m = Stage.search(Camera, g11, opts)
+  check(g11m.tier == 3 and g11m.moved > 0, "...the stage moves off them (" .. tostring(g11m.moved) .. " tiles)")
 end
 
 -- ------------------------------------------------------------------- render
