@@ -78,7 +78,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little, never under about a third of the bigger one), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little, never under about a third of the bigger one's size), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |

@@ -783,6 +783,15 @@ do
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 40 / (72 * 50 / 148)),
     "species: the minimum measures the smaller's body (" .. tostring(d and d.args[5]) .. ")")
+  -- ... by its body's longest side: a long, flat body (100 wide, 50 tall: 48.6 px wide at its
+  -- fill) held by its width, not lifted until its height is minShare of the other's
+  hd.tag(pic, tall({ body = { 0, 150, 100, 200 } }))
+  hd._fillBody.player = 60
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 60 / (72 * 100 / 148)),
+    "species: the minimum measures a wide body by its width (" .. tostring(d and d.args[5]) .. ")")
+  hd.tag(pic, tall({ body = { 40, 150, 60, 200 } }))
   -- ... never past its own fill
   hd._fillBody.player = 400
   fitFrame(G, hd, base, frame)

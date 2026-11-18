@@ -183,8 +183,10 @@ not by its `scale`:
   same species stands that much taller on the player's side) that is the scale at which it
   would fill. The smaller of the two is used: that side fills its room, the other is drawn true
   to size against it, never below `sizeFloor` (0.2) of its own fill, and its body (`spec.body`,
-  else its art: `fillBody[side]`, its height at the fill) never below `minShare` (0.3) of the
-  other's, up to its own fill. A front's body is its first frame's box (the pack's `cx0`…`cy1`):
+  else its art: `fillBody[side]`, its longest side, height or width, at the fill) never below
+  `minShare` (0.3) of the other's, up to its own fill. By the longest side, so a long, flat
+  Pokemon is not lifted until its height is 0.3 of the other's (Wishiwashi beside Raging Bolt
+  stood half as wide as it). A front's body is its first frame's box (the pack's `cx0`…`cy1`):
   a flier's animation spans far more than itself, so Cutiefly's art box against Haunter's kept
   the bug a speck. Crystal: Bulbasaur (0.7 m)
   against a player's Meganium (1.8 m) at about 0.55 of its height, a player's Bulbasaur at about

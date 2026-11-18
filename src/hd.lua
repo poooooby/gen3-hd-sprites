@@ -118,8 +118,10 @@ function HD.new(G, opts)
       -- between big and small species (Oddish against Swampert at 0.52, not 0.33)
       sizeFloor = 0.2, nearScale = 1.15, sizeCurve = 0.5,
       -- ... and the smaller's body (spec.body, else its art) drawn at least minShare of the
-      -- other's, however far apart their heights are (0: no such minimum): a Cutiefly whose
-      -- fluttering art spans a box far bigger than itself still reads beside a Haunter
+      -- other's, by each one's longest side (height or width), however far apart their heights
+      -- are (0: no such minimum): a Cutiefly whose fluttering art spans a box far bigger than
+      -- itself still reads beside a Haunter, and a flat Wishiwashi is not lifted to half a
+      -- Raging Bolt's width
       minShare = 0.3,
       -- the enemy's HP box (rows 16-44) raised to this many UI px under the screen's top on a
       -- wide screen the battle fills (singles; Gen 3): the player's HP box's gap over the text
@@ -798,12 +800,16 @@ function HD.new(G, opts)
     if left > 0 then s = math.min(s, (lpx + roomL) / left) end
     if right > 0 then s = math.min(s, (W - lpx + roomR) / right) end
     if s > 0 and s < math.huge then
-      -- (and the art's height at that size, canvas px, and its body's)
-      local ky = s * math.abs(sy or 1)
+      -- (and the art's height at that size, canvas px, and its body's longest side: a long, flat
+      -- Pokemon held to minShare of the other's height would stand as wide as half of it)
+      local kx, ky = s * math.abs(sx or 1), s * math.abs(sy or 1)
       local h = above > 0 and ky * above or nil
       local b = spec.body
-      local bh = h
-      if type(b) == "table" and tonumber(b[2]) and tonumber(b[4]) and b[4] > b[2] then bh = ky * (b[4] - b[2]) end
+      local bh = h and math.max(h, kx * (ax1 - ax0))
+      if type(b) == "table" and tonumber(b[1]) and tonumber(b[2]) and tonumber(b[3]) and tonumber(b[4])
+          and b[4] > b[2] then
+        bh = math.max(ky * (b[4] - b[2]), kx * (b[3] - b[1]))
+      end
       return s, h, bh
     end
     return nil
@@ -856,7 +862,7 @@ function HD.new(G, opts)
       local theirs = oh / theirH / (otherSide == "player" and near or 1)
       if theirs < mine then
         local k = math.max(fit.sizeFloor, theirs / mine)
-        -- (its body at least minShare of the other's, which fills its room: never past its own
+        -- (its body's longest side at least minShare of the other's, which fills its room: never past its own
         -- fill)
         local least, mb, ob = fit.minShare or 0, bh, fillBody[otherSide]
         if least > 0 and mb and ob and mb > 0 then k = math.min(1, math.max(k, least * ob / mb)) end
