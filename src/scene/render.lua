@@ -655,7 +655,8 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
   for j = 0, grid.h - 1 do
     for i = 0, grid.w - 1 do
       local cell = grid.rows[j][i]
-      local t = not cell.border and cell.kind ~= "void" and cell.pair and tiles(cell.pair) or nil
+      -- (a room's blank filler, cell.blank: left out, the room's fill shows there)
+      local t = not cell.border and not cell.blank and cell.kind ~= "void" and cell.pair and tiles(cell.pair) or nil
       if t then
         local mid = cell.mid
         if Trees and timg and trees.outdoor then
@@ -671,7 +672,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
     local row = grid.rows[j]
     for i = 0, grid.w - 1 do
       local cell = row[i]
-      local t = cell.kind ~= "void" and cell.pair and not cell.model and tiles(cell.pair) or nil
+      local t = cell.kind ~= "void" and not cell.blank and cell.pair and not cell.model and tiles(cell.pair) or nil
       if t then
         local mid = cell.mid
         local sec, general, part
@@ -832,6 +833,39 @@ local target, targetW, targetH
 ---   haze { r, g, b } (what the distance fades to), fog { start, end, max } (view depth, tiles),
 ---   sky { r, g, b } (behind the world; the haze when not given), light (src/scene/light.lua:
 ---   its sun and shade tints and the texture grade; nil: neither, the shade alone)
+-- a sky with a `top` colour ({ r, g, b, top = { r, g, b } }: a room's fill or the outdoor sky,
+-- src/scene/init.lua): a vertical gradient behind the world, the sky's own colour from the
+-- horizon's row `hy` (screen px; nil: the canvas's foot) down, deepening to `top` over
+-- SKY_SPAN of the canvas's height up from it (one strip, recoloured only when it changes)
+Render.SKY_SPAN = 0.55
+local gradient, gradKey
+local function drawGradient(G, w, h, sky, hy)
+  local t = sky.top
+  hy = hy and math.max(0, math.min(h, hy)) or h
+  local span = (hy < h and Render.SKY_SPAN or 1) * h
+  local f = math.min(1, hy / math.max(1, span))
+  local c0 = { sky[1] + (t[1] - sky[1]) * f, sky[2] + (t[2] - sky[2]) * f, sky[3] + (t[3] - sky[3]) * f }
+  local key = ("%d|%d|%d|%.3f|%.3f|%.3f|%.3f|%.3f|%.3f"):format(w, h, math.floor(hy + 0.5), c0[1], c0[2], c0[3],
+    sky[1], sky[2], sky[3])
+  if not gradient then
+    local ok, m = pcall(G.newMesh, 6, "strip", "dynamic")
+    if not ok or not m then return end
+    gradient = m
+  end
+  if key ~= gradKey then
+    gradient:setVertices({
+      { 0, 0, 0, 0, c0[1], c0[2], c0[3], 1 }, { w, 0, 1, 0, c0[1], c0[2], c0[3], 1 },
+      { 0, hy, 0, 0.5, sky[1], sky[2], sky[3], 1 }, { w, hy, 1, 0.5, sky[1], sky[2], sky[3], 1 },
+      { 0, h, 0, 1, sky[1], sky[2], sky[3], 1 }, { w, h, 1, 1, sky[1], sky[2], sky[3], 1 },
+    })
+    gradKey = key
+  end
+  G.setShader()
+  G.setDepthMode("always", false)
+  G.setColor(1, 1, 1, 1)
+  G.draw(gradient)
+end
+
 function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h, sky, light)
   local sh = Render.shader(G)
   if not (sh and scene.meshes) then return nil end
@@ -849,6 +883,12 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   G.setScissor()
   sky = sky or haze
   G.clear(sky[1], sky[2], sky[3], 1, false, 1)
+  -- (outdoors the gradient meets the horizon where the camera sees it: canvas row
+  -- CY - F tan(pitch) on screen, proj's rows; a room's fill runs the whole canvas)
+  if type(sky.top) == "table" then
+    local hy = sky.horizon and proj[4] - proj[3] * math.tan(p.pitch or Camera.STAGE_PITCH) or nil
+    drawGradient(G, w, h, sky, hy)
+  end
   G.setDepthMode("lequal", true)
   -- (cards face the camera, the ground faces up: neither may be culled)
   if G.setMeshCullMode then G.setMeshCullMode("none") end

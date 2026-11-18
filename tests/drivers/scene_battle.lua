@@ -90,6 +90,11 @@ local function body(game, log)
     end
   end
   hd.setScene(true)
+  -- SCENE_MINUTE=n: the scene lit at that minute of the day (0-1439), whatever the clock says
+  if env("SCENE_MINUTE") then
+    local ws = hd._workshop and hd._workshop()
+    if ws and ws.setMinute then ws.setMinute(tonumber(env("SCENE_MINUTE"))) end
+  end
   -- SCENE_STAGE_OLD=1: the stage chosen by its score alone, without the strict check (before-and-
   -- after shots of src/scene/stage.lua's Stage.tier)
   if env("SCENE_STAGE_OLD") then
@@ -352,7 +357,7 @@ local function body(game, log)
     log(("%s (%d,%d): scene %s score %s cards %s progress %s world %s error %s composites %s failed %s"):format(
       mapId, px, py, stat("scene"), stat("sceneScore"), stat("sceneCards"), stat("sceneProgress"), stat("world"),
       stat("sceneError"), stat("composites"), stat("failed")))
-    log(("%s stage: %s"):format(mapId, stat("sceneStage")))
+    log(("%s stage: %s (blank cells %s)"):format(mapId, stat("sceneStage"), stat("sceneBlank")))
     log(("%s buildings: %s (error %s)"):format(mapId, stat("sceneBuildings"), stat("sceneBuildingError")))
     log(("%s signs: %s (error %s)"):format(mapId, stat("sceneSigns"), stat("sceneSignError")))
     log(("%s relief: %s (error %s; build %s); models %s"):format(mapId, stat("sceneRelief"), stat("sceneReliefError"),

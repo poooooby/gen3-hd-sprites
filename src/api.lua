@@ -276,7 +276,8 @@ return function(mod, hd, state)
     local s = hd.scene
     if not s then return nil end
     return { Tune = s.Tune, Camera = s.Camera, Trees = s.Trees, Relief = s.Relief, last = function() return s.last end, rebuild = s._rebuild,
-             view = s._view, path = mod.path, game = s._game, forBattle = s.forBattle, Stage = s.Stage, FEET = s.FEET, SPRITES = s.SPRITES }
+             view = s._view, path = mod.path, game = s._game, forBattle = s.forBattle, Stage = s.Stage, FEET = s.FEET, SPRITES = s.SPRITES,
+             setMinute = function(m) s.timeOverride = m end }
   end
   -- (tests: the current battle scene alone, as image data w x h)
   exports._sceneShot = function(w, h)

@@ -33,6 +33,12 @@
 local Stage = {}
 
 Stage.REACH = 6
+-- (tiles: indoors, where the camera pulled back for a big Pokemon would show the void past the
+-- walls, the search looks this far for an open spot)
+Stage.REACH_INDOOR = 6
+-- indoors the void is also counted as a camera pulled back to this zoom (about the battle's
+-- focus, canvas (120, 112)) would show it, each cell at `weight` of the plain view's
+Stage.WIDE = { z = 0.6, fx = 120, fy = 112, weight = 0.5 }
 -- (tiles: how far out the rings go when no target within REACH is fair, and how far from the
 -- camera a ring's target must show only the window's cells)
 Stage.FAR = 12
@@ -45,6 +51,9 @@ local W = {
   kind = 4, slope = -4, lift = -3,
   nVoid = -3, nTall = -1, nKind = 0.5, nWater = -0.8, nSlope = -0.4,
   occlude = -24, voidLow = -1.2, voidHigh = -0.5, sight = -6,
+  -- (indoors: the share of the screen's lower half that walls, furniture and models between the
+  -- camera and the battle cover, foreground)
+  fore = -40,
   distance = -0.5,
 }
 Stage.WEIGHTS = W
@@ -321,6 +330,39 @@ local function occlusion(Camera, grid, pose, foot, rect)
   return share
 end
 
+-- indoors, how much of the screen's lower half (canvas rows 80-160) the cards standing between
+-- the camera and the target cover (cardOf: walls, furniture, models, as the view meets them),
+-- 0..1: a spot by a room's entrance, framed by its walls, is not open
+local LOWER = { 0, 80, 240, 160 }
+local function foreground(Camera, grid, pose, tx, tz, footT)
+  local _, _, ez = Camera.basis(pose)
+  local ty = pose.ty or 0
+  local share = 0
+  local area = (LOWER[3] - LOWER[1]) * (LOWER[4] - LOWER[2])
+  for cy = floor(tz - ty), floor(ez - ty) + 1 do
+    for cx = floor(tx) - 12, floor(tx) + 12 do
+      local c = grid.at(cx, cy)
+      if c and c.kind ~= "void" and not c.treeCards then
+        local y0, y1, zc = cardOf(c, footT)
+        if zc and y1 > y0 then
+          local u0, v0 = Camera.project(pose, cx, y1, zc)
+          local u1, v1 = Camera.project(pose, cx + 1, y0, zc)
+          if u0 and u1 then
+            local w = min(max(u0, u1), LOWER[3]) - max(min(u0, u1), LOWER[1])
+            local h = min(max(v0, v1), LOWER[4]) - max(min(v0, v1), LOWER[2])
+            if w > 0 and h > 0 then
+              share = share + w * h / area
+              if share >= 1 then return 1 end
+            end
+          end
+        end
+      end
+    end
+  end
+  return share
+end
+Stage.foreground = foreground
+
 -- how many cells of rock stood taller than drawn (a cave's: cell.s, its drawing at its depths)
 -- rise over the camera's line of sight to the target, between the two: the rock would fill the view
 local function sightBlocked(Camera, grid, pose)
@@ -342,22 +384,36 @@ local function sightBlocked(Camera, grid, pose)
   return n
 end
 
--- the void on the screen around a target
-local function voidOnScreen(Camera, grid, pose, tx, tz)
-  local s = 0
+-- the void on the screen around a target; indoors (`wide`) also as the camera pulled back to
+-- Stage.WIDE's zoom would show it, at its weight (the canvas it shows, about its focus).
+-- Returns the plain view's and the extra the pulled-back view sees
+local function voidOnScreen(Camera, grid, pose, tx, tz, wide)
+  local s, extra = 0, 0
   local bx, bz = floor(tx), floor(tz)
-  for cy = bz - 10, bz + 4 do
-    for cx = bx - 10, bx + 10 do
+  local z = wide and Stage.WIDE.z or 1
+  local fx, fy = Stage.WIDE.fx, Stage.WIDE.fy
+  local u0, u1 = fx - fx / z, fx + (Camera.W - fx) / z
+  local v0, v1 = fy - fy / z, fy + (Camera.H - fy) / z
+  -- (the pulled-back view reaches further every way, south too: the screen's foot past the feet)
+  local reachX, reachN, reachS = math.ceil(10 / z), math.ceil(10 / z), math.ceil(4 / z) + 2
+  if not wide then reachS = 4 end
+  for cy = bz - reachN, bz + reachS do
+    for cx = bx - reachX, bx + reachX do
       local c = grid.at(cx, cy)
       if not c or c.kind == "void" then
         local u, v = Camera.project(pose, cx + 0.5, 0, cy + 0.5)
-        if u and u >= 0 and u <= Camera.W and v >= 0 and v <= Camera.H then
-          s = s + (v > Camera.CY and W.voidLow or W.voidHigh)
+        if u and u >= u0 and u <= u1 and v >= v0 and v <= v1 then
+          local w = (v > Camera.CY and W.voidLow or W.voidHigh)
+          if u >= 0 and u <= Camera.W and v >= 0 and v <= Camera.H then
+            s = s + w
+          else
+            extra = extra + w * Stage.WIDE.weight
+          end
         end
       end
     end
   end
-  return s
+  return s, extra
 end
 
 --- Search. opts:
@@ -396,27 +452,39 @@ function Stage.search(Camera, grid, opts)
     s = s + footScore(grid.at(pf.cx, pf.cy), want.player, groundT)
       + footScore(grid.at(ef.cx, ef.cy), want.enemy, groundT)
     s = s + neighbourScore(grid, pf.cx, pf.cy, want.player) + neighbourScore(grid, ef.cx, ef.cy, want.enemy)
-    -- (what is left only takes away: a target already behind the best is not looked at closely)
-    if not best or tier > best.tier or (tier == best.tier and s > best.score) then
+    -- (what is left only takes away: a target already behind the best is not looked at closely;
+    -- the best is ranked with the pulled-back view's void, `rank`, but `score` leaves it out: a
+    -- small room still fits, Stage.FLOOR)
+    if not best or tier > best.tier or (tier == best.tier and s > best.rank) then
       local pose = Camera.pose(tx, tz + groundT, nil, nil, groundT)
       if opts.sprites then
         s = s + W.occlude * occlusion(Camera, grid, pose, pf, opts.sprites.player)
         s = s + W.occlude * occlusion(Camera, grid, pose, ef, opts.sprites.enemy)
       end
-      if opts.void then s = s + voidOnScreen(Camera, grid, pose, tx, tz) end
+      local wideVoid = 0
+      if opts.void then
+        local plain
+        plain, wideVoid = voidOnScreen(Camera, grid, pose, tx, tz, true)
+        s = s + plain
+        -- (walls framing the view in front, as by an entrance: ranked, as the pulled-back void is)
+        wideVoid = wideVoid + W.fore * foreground(Camera, grid, pose, tx, tz, groundT)
+      end
       s = s + W.sight * sightBlocked(Camera, grid, pose)
-      if not best or tier > best.tier or (tier == best.tier and s > best.score) then
-        best = { tx = tx, tz = tz, ty = groundT, score = s, tier = tier, why = why,
+      local rank = s + wideVoid
+      if not best or tier > best.tier or (tier == best.tier and rank > best.rank) then
+        best = { tx = tx, tz = tz, ty = groundT, score = s, rank = rank, tier = tier, why = why,
                  moved = sqrt(dx * dx + dz * dz),
                  feet = { player = { tx + px, tz + pz }, enemy = { tx + ex, tz + ez } } }
       end
     end
   end
-  for dz = -Stage.REACH, Stage.REACH do
-    for dx = -Stage.REACH, Stage.REACH do consider(dx, dz) end
+  -- (indoors, further: an open spot whose pulled-back view stays in the room)
+  local reach = opts.void and Stage.REACH_INDOOR or Stage.REACH
+  for dz = -reach, reach do
+    for dx = -reach, reach do consider(dx, dz) end
   end
   -- nothing fair that near: ring by ring further out, the nearest ring with a fair target
-  local r = Stage.REACH
+  local r = reach
   while best and best.tier < 3 and r < Stage.FAR do
     r = r + 1
     for d = -r, r do

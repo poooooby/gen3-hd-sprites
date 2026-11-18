@@ -50,7 +50,70 @@ return function(deps)
   -- the sky behind the world (Emerald 3DS clears to the battle's backdrop colour: the wallpaper's
   -- top row here), and the haze's colour without light.lua
   Scene.HAZE = { outdoor = { 0.80, 0.87, 0.93 }, indoor = { 0, 0, 0 } }
+  -- indoors, the emptiness past a room's walls (the camera pulled back for a big Pokemon) is not
+  -- black but a soft dark gradient in the room's own colour (roomFill: the average of what the
+  -- first frame shows, its dark pixels left out): this share of it at the canvas's foot, FILL_TOP
+  -- at its top
+  Scene.FILL, Scene.FILL_TOP = 0.42, 0.16
+  -- outdoors the sky is a gradient too: the battle's sky colour at the horizon (the canvas's
+  -- foot), deepening toward SKY_DEEP at the top by SKY_DEPTH; both tinted by the time of day, the
+  -- top darker still at night (SKY_NIGHT of the moonlight), flatter under rain, sand, ash or fog
+  -- (SKY_DULL of the way back to the horizon's colour)
+  Scene.SKY_DEEP, Scene.SKY_DEPTH = { 0.30, 0.52, 0.88 }, 0.55
+  Scene.SKY_NIGHT, Scene.SKY_DULL = 0.45, 0.75
+  -- a sunset's glow: the horizon warmed toward SUNSET by SUNSET_GLOW and the sky above toward
+  -- DUSK by DUSK_GLOW, as far as the hour is a sunset's (Scene.sunset: full 17:00-18:00, easing in
+  -- from 15:00 and out by 20:00; a dawn DAWN as much, about 5:00-7:00)
+  Scene.SUNSET, Scene.SUNSET_GLOW = { 1.00, 0.60, 0.34 }, 0.65
+  Scene.DUSK, Scene.DUSK_GLOW = { 0.46, 0.36, 0.62 }, 0.35
+  Scene.DAWN = 0.35
+
+  --- How much of a sunset's glow the minute of the day has, 0..1 (a dawn's at most Scene.DAWN).
+  function Scene.sunset(minute)
+    local m = (tonumber(minute) or 720) % 1440
+    local function ease(a, b, x) local t = math.max(0, math.min(1, (x - a) / (b - a))) return t * t * (3 - 2 * t) end
+    local dusk = ease(900, 1020, m) * (1 - ease(1080, 1200, m))
+    local dawn = Scene.DAWN * ease(240, 300, m) * (1 - ease(420, 480, m))
+    return math.max(dusk, dawn)
+  end
   Scene.GLIDE_FRAMES = 100
+  -- the world's scale: a tile (one world unit) is this many metres. The battlers stand in the
+  -- world at it (hd.lua's worldSize: the tag's `height`, its art's real height, over the tile's
+  -- canvas pixels where its feet stand), the camera zooming out for a giant
+  Scene.METRES_PER_TILE = 1
+
+  -- maps whose battles are shown on another map: by name, the game's prefix left off (EM_). The
+  -- Abandoned Ship's cabins and corridors are battled on its deck, outdoors (its maps are caves
+  -- by type, the deck too: its battles are outdoors as well); `x, y, facing` where the battle
+  -- stands there (none: where the player stands, on the deck itself)
+  Scene.STAND_IN = {
+    ABANDONED_SHIP_DECK = { map = "ABANDONED_SHIP_DECK", outdoor = true },
+    ABANDONED_SHIP_CORRIDORS_1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_CORRIDORS_B1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_ROOMS_1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_ROOMS_B1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_ROOMS2_1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_ROOMS2_B1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_ROOM_B1F = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_CAPTAINS_OFFICE = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_HIDDEN_FLOOR_CORRIDORS = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+    ABANDONED_SHIP_HIDDEN_FLOOR_ROOMS = { map = "ABANDONED_SHIP_DECK", x = 11, y = 12, facing = "up", outdoor = true },
+  }
+
+
+  --- Canvas pixels per tile on the ground under canvas point (u, v) as the battle's settled
+  --- camera (s.to) sees it: F over the ground point's depth (the stage's ground height). Nil
+  --- when the ray from that point meets no ground (at or above the horizon).
+  function Scene.groundScale(s, u, v)
+    local pose = s and s.to
+    if not (pose and type(u) == "number" and type(v) == "number") then return nil end
+    local ty = pose.ty or 0
+    local x, z = Camera.ground(pose, u, v, ty)
+    if not x then return nil end
+    local _, _, depth = Camera.view(pose, x, ty, z)
+    if not depth or depth <= Camera.NEAR then return nil end
+    return Camera.F / depth
+  end
 
   local INDOOR_KINDS = { indoor = true, building = true, cave = true, underground = true, secret_base = true }
 
@@ -60,7 +123,28 @@ return function(deps)
   end
 
   -- the engine's map, read through what cells.lua asks of it
-  local function engineEnv()
+  -- the stand-in for the map the player is on (Scene.STAND_IN), as engineEnv takes it, and where
+  -- the battle stands there; nil for none
+  local function standIn()
+    local Runtime, Map = req("src.core.game3.runtime"), req("src.core.game3.map")
+    local sess = Runtime and Runtime.getSession and Runtime.getSession()
+    local id = sess and sess.map
+    if type(id) ~= "string" then return nil end
+    local prefix, bare = id:match("^(%u+_)(.+)$")
+    local to = bare and Scene.STAND_IN[bare]
+    if not to then return nil end
+    local game = Runtime and Runtime._game
+    local mapId = prefix .. to.map
+    local def = game and game.data and game.data.maps and game.data.maps[mapId]
+    if not (def and Map and type(Map.ensureMidLayout) == "function") then return nil end
+    local ok, L = pcall(Map.ensureMidLayout, game, mapId, def)
+    if not (ok and L and def.midLayout) then return nil end
+    return { def = def, mapId = mapId, outdoor = to.outdoor }, to.x, to.y, to.facing
+  end
+
+  -- `alt` (a stand-in map, Scene.STAND_IN): { def, mapId, outdoor } - the window read off that
+  -- map alone (no neighbours, its border past its edges), not the one the player is on
+  local function engineEnv(alt)
     local Map, Collision = req("src.core.game3.map"), req("src.core.game3.collision")
     -- the collision classes (Gen 3's cells carry the same codes as Gold's): the core module, which
     -- a mod may require in any game
@@ -69,22 +153,31 @@ return function(deps)
       return nil
     end
     local okD, def = pcall(Map.currentDef)
+    if alt then okD, def = true, alt.def end
     local layout = okD and type(def) == "table" and def.midLayout
     if not layout then return nil end
+    -- (the maps round it, as the engine placed them; a stand-in has none)
+    local neighbors = alt and {} or (Map.neighborList or {})
+    local worldList = alt and {} or (Map.world or {})
     local function inside(L, x, y) return x >= 0 and y >= 0 and x < (L.width or 0) and y < (L.height or 0) end
     local env = { def = def, indoor = INDOOR_KINDS[tostring(def.kind)] == true }
     -- a room (Emerald 3DS's `indoor`: MAP_TYPE_INDOOR or MAP_TYPE_SECRET_BASE), ending in black
     -- past its edges; a cave ends in its border as a route does
     local mapType = tonumber(def.mapType)
     if mapType then env.walled = mapType == 8 or mapType == 9 else env.walled = env.indoor end
+    -- (a stand-in shown as outdoors: the Abandoned Ship's deck, a cave by its map type)
+    if alt and alt.outdoor then env.indoor, env.walled, env.outdoor = false, false, true end
     function env.mid(cx, cy) return Map.worldMidAt(cx, cy, def) end
+    if alt then
+      function env.mid(cx, cy) return layout:midAt(cx, cy), layout.pair or def.pair end
+    end
     local W, H = layout.width or 0, layout.height or 0
     -- a connected map's cell, found as the engine finds its art (Map.worldMidAt's fromDir: the
     -- side the cell is off, the connection's offset along it)
     local function neighbour(cx, cy)
       local dir = cy < 0 and "north" or cy >= H and "south" or cx < 0 and "west" or cx >= W and "east" or nil
       if not dir then return nil end
-      for _, n in ipairs(Map.neighborList or {}) do
+      for _, n in ipairs(neighbors) do
         local L = n.dir == dir and n.def and n.def.midLayout
         if L then
           local off = tonumber(n.offset) or 0
@@ -101,7 +194,7 @@ return function(deps)
       if inside(layout, cx, cy) then return layout:collAt(cx, cy), Collision.behaviorOn(def, cx, cy) end
       local c, b = neighbour(cx, cy)
       if c then return c, b end
-      for _, e in ipairs(Map.world or {}) do
+      for _, e in ipairs(worldList) do
         local L = e.def ~= def and e.def and e.def.midLayout
         if L then
           local nx, ny = cx - (e.ox or 0), cy - (e.oy or 0)
@@ -118,7 +211,7 @@ return function(deps)
     -- no map, as on the GBA, where its border is drawn there)
     local Runtime = req("src.core.game3.runtime")
     local sess = Runtime and Runtime.getSession and Runtime.getSession()
-    env.mapId = sess and sess.map
+    env.mapId = alt and alt.mapId or (sess and sess.map)
     local whereAny
     function env.where(cx, cy)
       local d, lx, ly, id, ox, oy = whereAny(cx, cy)
@@ -129,7 +222,7 @@ return function(deps)
     function whereAny(cx, cy)
       if inside(layout, cx, cy) then return def, cx, cy, env.mapId, 0, 0 end
       local dir = cy < 0 and "north" or cy >= H and "south" or cx < 0 and "west" or cx >= W and "east" or nil
-      for _, n in ipairs(Map.neighborList or {}) do
+      for _, n in ipairs(neighbors) do
         local L = n.dir == dir and n.def and n.def.midLayout
         if L then
           local off = tonumber(n.offset) or 0
@@ -141,7 +234,7 @@ return function(deps)
           if inside(L, cx - ox, cy - oy) then return n.def, cx - ox, cy - oy, n.mapId or n.map, ox, oy end
         end
       end
-      for _, e in ipairs(Map.world or {}) do
+      for _, e in ipairs(worldList) do
         local L = e.def ~= def and e.def and e.def.midLayout
         if L then
           local ox, oy = e.ox or 0, e.oy or 0
@@ -217,7 +310,7 @@ return function(deps)
       end
     end
     addEvents(def, nil, 0, 0)
-    for _, n in ipairs(Map.neighborList or {}) do
+    for _, n in ipairs(neighbors) do
       local L = n.def and n.def.midLayout
       if L then
         local off = tonumber(n.offset) or 0
@@ -229,7 +322,7 @@ return function(deps)
         if ox then addEvents(n.def, n.mapId or n.map, ox, oy) end
       end
     end
-    for _, e in ipairs(Map.world or {}) do addEvents(e.def, e.id, e.ox or 0, e.oy or 0) end
+    for _, e in ipairs(worldList) do addEvents(e.def, e.id, e.ox or 0, e.oy or 0) end
     function env.signAt(cx, cy) return signsAt[cx .. "," .. cy] == true end
     -- the border block's metatile at any cell, tiled as the engine tiles it past the map's edges,
     -- and whether a metatile of the battle map's tilesets is water (Emerald 3DS's water shapes)
@@ -281,6 +374,33 @@ return function(deps)
         quad = function(slot) return NativeTileset.quad(ts, slot) end,
         overQuad = function(slot) return ts.overImage and NativeTileset.overQuad(ts, slot) or nil end,
       }
+      -- (whether a metatile's art is blank: every texel of its lower layer near black, its upper
+      -- layer adding nothing but black or clear; a room's black filler past its walls)
+      local blanks = {}
+      function t.blank(mid)
+        local hit = blanks[mid]
+        if hit ~= nil then return hit end
+        blanks[mid] = false
+        local data = ts.imageData
+        local okS, slot = pcall(NativeTileset.slotFor, ts, mid)
+        local okQ, q = pcall(NativeTileset.quad, ts, okS and slot or nil)
+        if not (data and okS and slot and okQ and q) then return false end
+        local function dark(d, quad, clearOk)
+          if not (d and quad) then return true end
+          local x0, y0, w, h = quad:getViewport()
+          local dw, dh = d:getDimensions()
+          for y = math.max(0, y0), math.min(dh, y0 + h) - 1 do
+            for x = math.max(0, x0), math.min(dw, x0 + w) - 1 do
+              local r, g, b, a = d:getPixel(x, y)
+              if not (clearOk and a < 0.1) and r + g + b > 0.09 then return false end
+            end
+          end
+          return true
+        end
+        local okO, oq = pcall(NativeTileset.overQuad, ts, slot)
+        blanks[mid] = dark(data, q, false) and dark(ts.overImageData, okO and oq or nil, true)
+        return blanks[mid]
+      end
       tileCache[pair] = t
       return t
     end
@@ -289,6 +409,38 @@ return function(deps)
   -- the kind a side's Pokemon wants to stand on (nil: any open ground)
   local STAND = { grass = true, sand = true, water = true, floor = true }
   local AHEAD = { up = { 0, -1 }, down = { 0, 1 }, left = { -1, 0 }, right = { 1, 0 } }
+
+  -- a room's fill (Scene.FILL): the average colour of a rendered frame `c`, its near-black
+  -- pixels (the void) left out, read back from a 32x18 copy; nil when nothing is lit
+  local function roomFill(c)
+    local ok, small = pcall(G.newCanvas, 32, 18, { dpiscale = 1 })
+    if not (ok and small and small.newImageData) then return nil end
+    G.push("all")
+    G.setCanvas(small)
+    G.origin()
+    G.setScissor()
+    G.setShader()
+    G.setDepthMode()
+    G.setColor(1, 1, 1, 1)
+    G.setBlendMode("replace", "alphamultiply")
+    G.draw(c, 0, 0, 0, 32 / c:getWidth(), 18 / c:getHeight())
+    G.pop()
+    local okD, data = pcall(small.newImageData, small)
+    if small.release then pcall(small.release, small) end
+    if not (okD and data) then return nil end
+    local r, g, b, n = 0, 0, 0, 0
+    for y = 0, 17 do
+      for x = 0, 31 do
+        local pr, pg, pb = data:getPixel(x, y)
+        if pr + pg + pb > 0.24 then r, g, b, n = r + pr, g + pg, b + pb, n + 1 end
+      end
+    end
+    if data.release then pcall(data.release, data) end
+    if n == 0 then return nil end
+    r, g, b = r / n, g / n, b / n
+    local k, t = Scene.FILL, Scene.FILL_TOP
+    return { r * k, g * k, b * k, top = { r * t, g * t, b * t } }
+  end
 
   -- the wallpaper's top colour (the sky of each terrain), read back once per image
   local tops = setmetatable({}, { __mode = "k" })
@@ -3232,7 +3384,9 @@ return function(deps)
   -- (dev: tests/drivers/flat_census.lua) the cells of a whole layout nothing stands: every model
   -- the scene places (buildings, rooms, props, bridges, components: placeBuildings) and the trees
   -- (a tree part, or a cell laid as other ground) taken off; of the rest, those that draw on their
-  -- upper layer or block the player: { { x, y, mid, upper (opaque upper-layer pixels), blocked } }
+  -- upper layer or block the player: { { x, y, mid, upper (opaque upper-layer pixels), blocked,
+  -- raised (the relief lifts or slopes it) } }, and a tally: { cells (that draw on their upper
+  -- layer or block), modelled, trees, raised (of those nothing models), relief (the layout has one) }
   function Scene._layoutCover(name)
     useFamily()
     local NativeTileset = req("src.core.game3.tileset_native")
@@ -3261,28 +3415,45 @@ return function(deps)
     local sec = Tr and Tr.tilesets and Tr.tilesets(L.pair)
     local uppers = {}
     local out = {}
+    local function upperOf(mid)
+      local n = uppers[mid]
+      if n == nil then
+        n = 0
+        for yy = 0, 15 do
+          for xx = 0, 15 do
+            local _, _, _, a = src.over(mid, xx, yy)
+            if a and a > 0.5 then n = n + 1 end
+          end
+        end
+        uppers[mid] = n
+      end
+      return n
+    end
+    -- (the layout's relief, when built: a cell it lifts off the ground or slopes stands)
+    local R = reliefData
+    local RL = R and R.layouts and L.id and R.layouts[L.id]
+    if RL and (RL.w ~= L.w or RL.h ~= L.h) then RL = nil end
+    local tally = { cells = 0, modelled = 0, trees = 0, raised = 0, relief = RL ~= nil }
     for y = 0, L.h - 1 do
       for x = 0, L.w - 1 do
         local c = rows[y][x]
         local tree = Tr and sec and (Tr.part(sec, c.mid) ~= nil or Tr.groundMetatile(sec, c.mid) ~= c.mid)
-        if not c.model and not tree then
-          local n = uppers[c.mid]
-          if n == nil then
-            n = 0
-            for yy = 0, 15 do
-              for xx = 0, 15 do
-                local _, _, _, a = src.over(c.mid, xx, yy)
-                if a and a > 0.5 then n = n + 1 end
-              end
-            end
-            uppers[c.mid] = n
+        local n = upperOf(c.mid)
+        local blocked = coll[y * L.w + x] ~= 0
+        if n > 0 or blocked then
+          tally.cells = tally.cells + 1
+          if c.model then tally.modelled = tally.modelled + 1
+          elseif tree then tally.trees = tally.trees + 1
+          else
+            local g = RL and RL.cells and RL.cells[y * RL.w + x]
+            local raised = g ~= nil and (Relief.centre(g) ~= 0 or Relief.isSlope(g))
+            if raised then tally.raised = tally.raised + 1 end
+            out[#out + 1] = { x, y, c.mid, n, blocked, raised }
           end
-          local blocked = coll[y * L.w + x] ~= 0
-          if n > 0 or blocked then out[#out + 1] = { x, y, c.mid, n, blocked } end
         end
       end
     end
-    return out
+    return out, nil, tally
   end
   -- (dev) why a spec does or does not stand at (x, y) of a layout: each core cell's metatile, the
   -- template's, whether it is a sign's, and the pixels it owns that the cell draws otherwise
@@ -4140,7 +4311,9 @@ return function(deps)
   Scene.last = nil
 
   local function build(st, key, wallpaper)
-    local env = engineEnv()
+    -- (a map battled on another, Scene.STAND_IN: the Abandoned Ship's cabins on its deck)
+    local alt, altX, altY, altFacing = standIn()
+    local env = engineEnv(alt)
     local Player = req("src.core.game3.player")
     local NativeTileset = req("src.core.game3.tileset_native")
     if not (env and Player and NativeTileset) then return nil, "no map" end
@@ -4185,6 +4358,8 @@ return function(deps)
     end
     local px, py = tonumber(Player.cellX) or 0, tonumber(Player.cellY) or 0
     if Player.moving and Player.targetX then px, py = Player.targetX, Player.targetY end
+    local facing = Player.facing
+    if altX and altY then px, py, facing = altX, altY, altFacing or facing end
     -- (each phase's time, for the stats)
     local clock = love.timer and love.timer.getTime or os.clock
     local t0, phases = clock(), {}
@@ -4197,7 +4372,7 @@ return function(deps)
       Scene.WEST + Scene.EAST + 1, Scene.NORTH + Scene.SOUTH + 1)
     local here = grid.at(px, py)
     local hereKind = here and STAND[here.kind] and here.kind or nil
-    local d = AHEAD[tostring(Player.facing)] or AHEAD.up
+    local d = AHEAD[tostring(facing)] or AHEAD.up
     local ahead = grid.at(px + d[1], py + d[2])
     local aheadKind = ahead and STAND[ahead.kind] and ahead.kind or nil
     local want = { player = Player.surfing and "water" or hereKind }
@@ -4542,9 +4717,30 @@ return function(deps)
     end
     hd.stats.sceneTrees = ("%d cells, %d steeper, ground on rock %d, on a slope %d (%s)"):format(treeTally.cells,
       treeTally.steep, treeTally.rock, treeTally.slope, table.concat(treeTally, " "))
+    -- (indoors: a room's black filler past its walls, unmodelled and never walked on, is left out
+    -- of the floor (cell.blank, render.lua), so the room's fill shows there. The stage still takes
+    -- it as the blocked ground it is: Mossdeep's gym, black between its paths, still fits)
+    if env.indoor then
+      local tilesOf, blank = tilesFor(NativeTileset), 0
+      for j = 0, grid.h - 1 do
+        for i = 0, grid.w - 1 do
+          local c = grid.rows[j][i]
+          if c.kind == "blocked" and c.pair and c.mid and not (c.model or c.up or c.sign or c.border) then
+            local t = tilesOf(c.pair)
+            local okB, isBlank = pcall(function() return t and t.blank and t.blank(c.groundMid or c.mid) end)
+            if okB and isBlank then
+              c.blank = true
+              blank = blank + 1
+            end
+          end
+        end
+      end
+      hd.stats.sceneBlank = blank
+    end
     local stage = Stage.search(Camera, grid, {
       player = { cx = px, cy = py }, want = want, feet = Scene.FEET, sprites = Scene.SPRITES,
-      void = env.walled,
+      -- (a room's or a cave's void, past its edges: counted, and an open spot looked for further)
+      void = env.walled or env.indoor,
     })
     -- (a fair stage always fits: Stage.tier; else the old floor)
     if not stage or (stage.tier < 3 and stage.score < Stage.FLOOR) then return nil, "no stage" end
@@ -4655,7 +4851,8 @@ return function(deps)
     if not meshes or #meshes == 0 then return nil, "no meshes" end
     shadows = shadows or { enemy = shadow(Scene.SHADOW.enemy), player = shadow(Scene.SHADOW.player) }
     local indoor = env.indoor
-    local haze = indoor and Scene.HAZE.indoor or topColour(wallpaper) or Scene.HAZE.outdoor
+    -- (a stand-in shown outdoors, the battle's wallpaper an indoor one: the outdoor sky)
+    local haze = indoor and Scene.HAZE.indoor or (not env.outdoor and topColour(wallpaper)) or Scene.HAZE.outdoor
     return {
       key = key, meshes = meshes, ox = px, oz = py, stage = stage, want = want, cards = cards,
       from = Camera.pose(px + 0.5, py + 0.5, Camera.FIELD_PITCH, Camera.FIELD_DIST),
@@ -4663,7 +4860,8 @@ return function(deps)
       to = Camera.pose(stage.tx, stage.tz + (stage.ty or 0), nil, nil, stage.ty),
       progress = 0, frames = 0, haze = haze, fog = indoor and Scene.FOG.indoor or Scene.FOG.outdoor,
       -- (Emerald 3DS's indoor, no haze: MAP_TYPE_INDOOR or SECRET_BASE; a cave's fog goes dark)
-      walled = env.walled, cave = tonumber(env.def and env.def.mapType) == 4, frameH = grid.frameH,
+      walled = env.walled, cave = not env.outdoor and tonumber(env.def and env.def.mapType) == 4, frameH = grid.frameH,
+      indoor = indoor,
       shadows = shadows, live = live,
       -- (for the Scene Workshop, tests/drivers/workshop.lua: what stands where, and each cell's map)
       grid = grid, where = env.where, game = famGame,
@@ -4789,13 +4987,34 @@ return function(deps)
     local light = Light.light({ indoor = s.walled, weather = weather, state = state, cave = s.cave })
     -- (the time of day outdoors, Emerald 3DS's cycle: by the game's clock, or WoobleDex's,
     -- Scene.timeOfDay -> the minute of the day, nil for none; never indoors or in a cave)
-    local sky = s.haze
-    if Scene.timeOfDay and not s.walled and not s.cave then
-      local okT, minute = pcall(Scene.timeOfDay)
+    local sky = s.fill or s.haze
+    -- (outdoors: the sky's top, deeper than its horizon)
+    local outdoor = not (s.walled or s.cave or s.indoor) and sky ~= nil
+    local top
+    if outdoor then
+      local d, k = Scene.SKY_DEEP, Scene.SKY_DEPTH
+      top = { sky[1] + (d[1] - sky[1]) * k, sky[2] + (d[2] - sky[2]) * k, sky[3] + (d[3] - sky[3]) * k }
+    end
+    -- (Scene.timeOverride: dev, a minute of the day pinned, tests/drivers/scene_battle.lua)
+    if (Scene.timeOverride or Scene.timeOfDay) and not s.walled and not s.cave then
+      local okT, minute = true, Scene.timeOverride
+      if not minute then okT, minute = pcall(Scene.timeOfDay) end
       if okT and type(minute) == "number" then
         local cycle = Light.cycle(minute)
         Light.dayNight(light, cycle)
         if sky then sky = Light.sky(sky, cycle) end
+        if top then
+          top = Light.sky(top, cycle)
+          local night = 1 - Scene.SKY_NIGHT * (Light.moon(cycle) or 0)
+          top[1], top[2], top[3] = top[1] * night, top[2] * night, top[3] * night
+          -- (a sunset: the horizon warm, the sky over it dusky)
+          local glow = Scene.sunset(minute)
+          if glow > 0 then
+            local a, b, ka, kb = Scene.SUNSET, Scene.DUSK, Scene.SUNSET_GLOW * glow, Scene.DUSK_GLOW * glow
+            sky = { sky[1] + (a[1] - sky[1]) * ka, sky[2] + (a[2] - sky[2]) * ka, sky[3] + (a[3] - sky[3]) * ka }
+            for c = 1, 3 do top[c] = top[c] + (b[c] - top[c]) * kb end
+          end
+        end
         hd.stats.sceneTime = ("%02d:%02d"):format(math.floor(minute / 60) % 24, math.floor(minute % 60))
       end
     end
@@ -4806,6 +5025,14 @@ return function(deps)
     -- (the weather in the scene, src/scene/weather.lua: as Emerald 3DS's CtrVoxel_Draw reads it,
     -- none of it indoors; the fog's banks outdoors only, dark in a cave)
     local class = Light.class(weather)
+    if top then
+      -- (an overcast sky: its gradient flattened toward the horizon's colour)
+      if class == "rain" or class == "sand" or class == "ash" or (light.fogDensity or Light.fogDensity(state) or 0) > 0 then
+        local f = Scene.SKY_DULL
+        for c = 1, 3 do top[c] = top[c] + (sky[c] - top[c]) * f end
+      end
+      sky = { sky[1], sky[2], sky[3], top = top, horizon = true }
+    end
     if not s.walled then
       light.fogDensity = Light.fogDensity(state)
       light.cave = s.cave
@@ -4913,6 +5140,8 @@ return function(deps)
     end
     local c = Render.draw(G, Camera, s, pose, proj, depth, smooth(s.progress), haze, fog, w, h, sky, light)
     if not c then return nil end
+    -- (indoors: the room's fill, from its first frame, for every frame after)
+    if s.indoor and s.fill == nil then s.fill = roomFill(c) or false end
     return c, x, y
   end
 

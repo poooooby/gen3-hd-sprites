@@ -673,6 +673,180 @@ do
     "scissorOver: on a whole DPI, the box out to whole pixels (" .. table.concat(got, ",") .. ")")
 end
 
+-- World scale (Battle Scene: Overworld): with the 3D world drawn, each battler stands in it at
+-- the world's scale: its art's real height (tag `height`, metres) over a tile's metres, times the
+-- canvas px a tile spans where its feet stand (the scene's groundScale), over its art's frame px;
+-- the camera alone makes room (no side shift, drop or raise); a giant held to its room at the
+-- furthest zoom; measured at rest
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  hd.fit.enabled, hd.fit.zMin = true, 0.4
+  check(hd.fit.worldMin == 0.07, "world: the smallest's share of the battle's height: 7%")
+  hd.fit.worldMin = 0   -- (true to scale until the minimum's own checks below)
+  -- (a tile spans 20 px plus a fifth of the row: 34 at the foe's feet row 70, 42.4 at the player's 112)
+  local function ppt(v) return 20 + v * 0.2 end
+  hd.scene = { METRES_PER_TILE = 1, SHADOW = { enemy = { 176, 70, 26, 6 }, player = { 72, 115, 32, 7 } },
+               groundScale = function(_, _, v) return ppt(v) end }
+  hd.sceneRenderer = function() return nil end   -- (the wallpaper shows: only the sizes matter here)
+  local base = canvas("ui", 240, 160)
+  local wall, shadow = canvas("wall", 256, 160), canvas("shadow", 256, 160)
+  local pic, mine, pic2 = canvas("pic", 64, 64), canvas("mine", 64, 64), canvas("pic2", 64, 64)
+  local pageE, pageP, page2 = canvas("atlasE", 4096, 4096), canvas("atlasP", 4096, 4096), canvas("atlas2", 4096, 4096)
+  -- a 100x200 frame, its feet on its bottom row, its art from the top: 200 frame px of art
+  local function mon(page, side, height, extra)
+    local spec = { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 62 },
+                   top = 0, art = { 0, 0, 100, 200 }, body = { 20, 100, 80, 200 }, side = side,
+                   height = height, scale = 0.3 }
+    for k, v in pairs(extra or {}) do spec[k] = v end
+    return spec
+  end
+  local function frame(o)
+    o = o or {}
+    G.setCanvas(base)
+    hd.beginPass("battle", base)
+    local okW = hd.world(wall, { to = {} }, 0, 0)
+    hd.drawStage(shadow, 0, 0, "enemy")
+    G.draw(pic, 176, 40 + (o.dy or 0), 0, o.s or 1, o.s or 1, 32, 32)
+    if o.pic2 then G.draw(pic2, 208, 36, 0, 1, 1, 32, 32) end
+    if o.mine ~= false then G.draw(mine, 72, 80, 0, 1, 1, 32, 32) end
+    hd.seam("ui")
+    G.rectangle("fill", 0, 112, 240, 48)
+    hd.endPass()
+    G.log = {}
+    hd.composite(base, function(c, bx, by, sx, sy) G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4) end,
+      0, 0, 4, 4, { 0, 0, 960, 640 })
+    hd.endFrame()
+    return okW
+  end
+  local function drawn(page)
+    local d
+    for _, e in ipairs(G.log) do if e.image == page then d = e end end
+    return d
+  end
+  -- (the size a draw has in the canvas, its zoom taken out: frame px -> canvas px)
+  local function size(page) local d = drawn(page) return d and d.args[5] / (4 * hd.stats.zoom) end
+  hd.tag(pic, mon(pageE, "enemy", 2))
+  hd.tag(mine, mon(pageP, "player", 2))
+  check(frame(), "world: the world item is recorded")
+  check(hd.worldScene ~= nil, "world: the pass drew the 3D world")
+  -- the foe's feet at row 70 (40 + 62 - 32): 34 px a tile, 2 m of art over its 200 frame px
+  local kE, kP = size(pageE), size(pageP)
+  check(kE and near(kE, 2 * ppt(70) / 200), "world: a 2 m foe at 34 px a tile: 68 canvas px of art (" .. tostring(kE) .. ")")
+  check(kP and near(kP, 2 * ppt(110) / 200), "world: the same height nearer the camera, larger by its ground's scale alone ("
+    .. tostring(kP) .. ")")
+  -- a giant foe (20 m: 680 px of art): the camera zooms out and the sides stay on their ground
+  hd.tag(pic, mon(pageE, "enemy", 20, { body = { 0, 100, 100, 200 } }))
+  for _ = 1, 60 do frame() end
+  kE = size(pageE)
+  check(hd.stats.zoom < 1, "world: a giant foe: the camera zooms out (" .. tostring(hd.stats.zoom) .. ")")
+  check(hd.stats.shiftEnemy == 0 and hd.stats.shiftPlayer == 0 and hd.stats.dropPlayer == 0
+    and hd.stats.raisePlayer == 0, "world: no side moved off its ground (shift, drop, raise all 0)")
+  -- (its room: from its feet (row 70) up to the screen's top at zoom 0.4 about the focus row 112,
+  -- 112 - 112 / 0.4 = -168: 238 rows for 200 px of art)
+  local most = (70 - (112 - 112 / 0.4)) / 200
+  local e
+  for _, w in ipairs(hd._worldMons) do if w.of.height == 20 then e = w end end
+  check(kE and near(kE, most) and e and e.limited, "world: the giant held to its room at the furthest zoom ("
+    .. tostring(kE) .. ", room " .. most .. ")")
+  -- the scene's shadow under each side spans its Pokemon's body at its size
+  check(hd.worldShadow.enemy and near(hd.worldShadow.enemy, 100 * most / 52), "world: the foe's shadow as wide as its body ("
+    .. tostring(hd.worldShadow.enemy) .. ")")
+  local sh
+  for _, en in ipairs(G.log) do if en.image == shadow then sh = en end end
+  check(sh and near(sh.args[4], 4 * hd.stats.zoom * hd.worldShadow.enemy), "world: ...drawn scaled to it")
+  local feet = drawn(pageE)
+  -- (a draw with no quad: x, y, r, sx, sy; the foe's feet at its pic's canvas (176, 70))
+  check(sh and feet and near(sh.args[1] + 176 * sh.args[4], feet.args[2]) and near(sh.args[2] + 70 * sh.args[5], feet.args[3]),
+    "world: ...about its middle, under the foe's feet (" .. tostring(sh and sh.args[1] + 176 * sh.args[4]) .. ", "
+    .. tostring(sh and sh.args[2] + 70 * sh.args[5]) .. " vs " .. tostring(feet and feet.args[2]) .. ", "
+    .. tostring(feet and feet.args[3]) .. ")")
+  -- a wide foe (3 m, its art 600 frame px across: 306 canvas px about its feet at x 176): the
+  -- camera zooms out until its art lies inside the scene's edges (less the margin), not just
+  -- under its top
+  hd.tag(pic, mon(pageE, "enemy", 3, { quad = quad(0, 0, 600, 200), pivot = { 300, 200 }, art = { 0, 0, 600, 200 },
+    body = { 0, 100, 600, 200 } }))
+  frame()
+  local half = 300 * 3 * ppt(70) / 200
+  local want = (240 - hd.fit.margin - 120) / (176 + half - 120)
+  check(near(hd.stats.zoomTarget, want, 1e-3), "world: a wide foe: zoomed until it fits across (" ..
+    tostring(hd.stats.zoomTarget) .. ", want " .. want .. ")")
+  -- coming out of its ball (drawn small, 16 rows low): measured again when it rests, then kept
+  -- through a lunge
+  hd.tag(pic, mon(pageE, "enemy", 1.2))
+  frame({ s = 0.16, dy = 16 })
+  frame({ dy = 0 })
+  local rest = size(pageE)
+  check(rest and near(rest, 1.2 * ppt(70) / 200), "world: the send-out measured where it rests (" .. tostring(rest) .. ")")
+  frame({ dy = -10 })
+  check(near(size(pageE), rest), "world: a lunge keeps its size")
+  -- a second foe further back (a double battle's): sized by its own ground
+  hd.tag(pic2, mon(page2, "enemy", 1.1))
+  frame({ pic2 = true })
+  local k2 = size(page2)
+  check(k2 and near(k2, 1.1 * ppt(66) / 200), "world: each battler by the ground under its own feet (" .. tostring(k2) .. ")")
+  -- the smallest: its art's longest side at least worldMin of the battle's 160 rows as the camera
+  -- shows it (a 0.1 m foe: 3.4 px of art, raised to 7% = 11.2 rows, more when zoomed out); above
+  -- it, true
+  hd.fit.worldMin = 0.07
+  hd.tag(pic2, mon(page2, "enemy", 0.1))
+  frame({ pic2 = true })
+  local tiny, z = size(page2), hd.stats.zoom
+  local e2
+  for _, w in ipairs(hd._worldMons) do if w.of.height == 0.1 then e2 = w end end
+  check(tiny and near(tiny * 200 * z, 0.07 * 160, 1e-6) and e2 and e2.raised,
+    "world: a tiny foe raised to 7% of the battle's height on screen (" .. tostring(tiny and tiny * 200 * z) .. " rows)")
+  -- a flat one (its art 400 px across, 200 tall): by its width, raised half as much
+  hd.tag(pic2, mon(page2, "enemy", 0.1, { quad = quad(0, 0, 400, 200), pivot = { 200, 200 }, art = { 0, 0, 400, 200 } }))
+  frame({ pic2 = true })
+  local flat, zf = size(page2), hd.stats.zoom
+  check(flat and near(flat * 400 * zf, 0.07 * 160, 1e-6), "world: a flat one by its longest side, its width ("
+    .. tostring(flat and flat * 400 * zf) .. " px across)")
+  -- (the 1.2 m foe: true to scale where that is above 7% at this zoom, else raised to it)
+  local want1 = math.max(rest, 0.07 * 160 / (200 * z))
+  check(near(size(pageE), want1), "world: ...a bigger one true to scale unless under it at this zoom ("
+    .. tostring(size(pageE)) .. ", want " .. want1 .. ")")
+  -- indoors, a ceiling: a 6 m foe stands as tall as the knee (2 m) plus the ceiling's metre less
+  -- e^-4 of it; one under the knee true to scale; outdoors the same foe at its 6 m
+  local function sized(indoor, h)
+    local G3 = fakeGraphics()
+    local h3 = HD.new(G3)
+    h3.install()
+    h3.fit.enabled, h3.fit.zMin, h3.fit.worldMin = true, 0.4, 0
+    h3.scene, h3.sceneRenderer = hd.scene, hd.sceneRenderer
+    h3.tag(pic, mon(pageE, "enemy", h))
+    G3.setCanvas(base)
+    h3.beginPass("battle", base)
+    h3.world(wall, { to = {}, indoor = indoor }, 0, 0)
+    G3.draw(pic, 176, 40, 0, 1, 1, 32, 32)
+    h3.seam("ui")
+    h3.endPass()
+    h3.composite(base, function(c) G3.draw(c, 0, 0, 0, 4, 4) end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+    h3.endFrame()
+    return h3._worldMons[1] and h3._worldMons[1].height
+  end
+  local inH, outH, smallH = sized(true, 6), sized(false, 6), sized(true, 1.5)
+  check(inH and near(inH, 2 + (1 - math.exp(-4))), "world: indoors a 6 m foe under the ceiling (" .. tostring(inH) .. " m)")
+  check(outH and near(outH, 6), "world: ...outdoors its own 6 m")
+  check(smallH and near(smallH, 1.5), "world: ...indoors one under the knee true to scale")
+  -- no world drawn: Battle Fit's species sizing, as before
+  local G2 = fakeGraphics()
+  local plain = HD.new(G2)
+  plain.install()
+  plain.fit.enabled = true
+  plain.tag(pic, mon(pageE, "enemy", 2))
+  G2.setCanvas(base)
+  plain.beginPass("battle", base)
+  plain.backdrop(wall, 0, 0)
+  G2.draw(pic, 176, 40, 0, 1, 1, 32, 32)
+  plain.seam("ui")
+  plain.endPass()
+  plain.composite(base, function(c) G2.draw(c, 0, 0, 0, 4, 4) end, 0, 0, 4, 4, { 0, 0, 960, 640 })
+  plain.endFrame()
+  check(plain.worldScene == nil, "world: none without the 3D world")
+end
+
 -- Battle Fit's species sizing: both at one scale, px per metre (the player's nearScale larger);
 -- the tighter fills its room (its pic box grown by fitRoom: Gen 3's enemy 8 rows up to the
 -- screen's top, 16 columns each side), the other true to size, never below sizeFloor

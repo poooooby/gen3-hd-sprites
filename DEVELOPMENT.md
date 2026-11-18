@@ -157,6 +157,10 @@ UI across the width, the enemy's HP box up at the top, the scene growing between
 
 ## Battle Fit
 
+Species sizing below (`speciesSize`, `doubleSize`), the side shift, the player's drop and a back's
+raise apply to the classic backgrounds. In the 3D world (Battle Scene: OVERWORLD) the battlers
+stand at the world's scale instead: see **World scale** under Battle Scene.
+
 **Species sizing** (`speciesSize` in `src/hd.lua`, singles, Battle Fit on): a battle
 Pokémon's tag with a `height` (metres; WoobleSpritePack's) is sized against the other side's,
 not by its `scale`:
@@ -619,8 +623,79 @@ battle pass (Battle HD on). FireRed / LeafGreen keep the cart's boxes (`Bar.LAYO
 
 **Battle Scene: OVERWORLD** (`battle_scene`, `Engine.Scene`, `hd.scene`) replaces the battle's
 wallpaper and pads with the map around the player, in 2.5D. It needs Battle Fit (it rides the
-battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` and handed to
-`init.lua`:
+battle pass) and is Gen 3 only.
+
+**World scale** (`worldSize` in `src/hd.lua`): when a pass draws the world (`hd.world` sets
+`cur.world`; the composite and `endPass` copy it to `hd.worldScene`), each species tag with a
+`height` stands in it at the world's scale in place of the species sizing:
+
+- `k = height / Scene.METRES_PER_TILE (1) * pxPerTile / artPx`. `height` is the real height of
+  the tag's art box (feet row to the top of the art over its animation; WoobleSpritePack measures
+  it per sprite, a back's corrected for its own animation). `artPx = hpy - art[2]`.
+  `pxPerTile = Scene.groundScale(scene, X, Y)`: `Camera.F` over the depth of the ground under the
+  feet's canvas point on the settled pose `s.to` (33.8 at the foe's feet, 44.7 at the player's).
+  Perspective comes from the depth, not `nearScale`; `sizeCurve`, `sizeFloor`, `minShare` are not
+  used.
+- The smallest: its art's longest side (height or width of the art box: a flat Wishiwashi
+  counts its width) at least `fit.worldMin` (0.07) of the battle's 160 rows on screen, by the
+  current zoom (`k >= worldMin * 160 / (side * fit.z)`; `e.raised`), so it grows back as the
+  camera pulls out for a giant. Kept low because that growth is against the world: at 12% a
+  Pikachu beside a Wailord stood half a tree tall and Wishiwashi as big as one. Above it, true
+  to scale; the largest limit wins over it.
+- Indoors (the scene's `indoor`: a room or a cave) a ceiling: an art height over
+  `fit.indoorKnee` (2 m) eases toward `fit.indoorCeiling` (3 m),
+  `knee + (ceiling - knee) * (1 - exp(-(h - knee) / (ceiling - knee)))` (Gyarados 3.2 m stands
+  2.7, Wailord 6.4 stands 3.0), so the camera need not pull back past a gym's or a cabin's walls
+  for a giant. Under the knee, true to scale. `e.height` is the height it was sized by.
+- Measured where it rests: per battler (`worldMons`, keyed by side and `sameMon`, cleared when a
+  battle starts), again at each draw until one at the game's own scale 1 (the send-out grow,
+  `rec.sx` 0.16, is measured again), then kept (a lunge or jump never changes it). Two of one
+  species on one side of a double battle share one.
+- The largest: `k` at most what puts its art inside the view at `zMin` about the focus, from
+  where its feet stand (the screen's top, `fit.topY`; the scene's edges `fit.viewL` / `viewR`,
+  set by the composite from `sceneBox`). `e.limited` marks one held to it.
+- The camera alone makes room: `fitStep` makes no side shift, no slide inward and no player drop,
+  and `playerDrop` / `backRaise` return 0, so each side stays on its ground and `Engine.shiftCoords`
+  hands the game unshifted coordinates (move effects land on the sprites). `fitSolve` keeps only
+  its on-screen test (a back may stand under the HP boxes, as the cart's do), and the zoom also
+  fits each side's art between the scene's edges (`across`). Never zoomed in past 1.
+- The scene's shadows (`Scene.SHADOW`, radii) are scaled about their middle to the side's body
+  width at its size (`hd.worldShadow[side]`, the stage item's draw).
+- Indoors the void past a room's or a cave's edges (the camera pulled back for a giant) is a
+  soft dark gradient in the room's colour, not black: `roomFill` averages the scene's first
+  rendered frame (a 32x18 copy, its near-black pixels left out) into `s.fill` (`Scene.FILL`
+  0.42 of it at the canvas's foot, `FILL_TOP` 0.16 at its top), the sky `Render.draw` clears to
+  and draws its gradient (`drawGradient`, one mesh) behind the world. A room's black filler past
+  its walls (an unmodelled blocked cell whose metatile is blank: `tiles(pair).blank`, every texel
+  of its lower layer near black and its upper layer black or clear, read from the tileset's
+  `imageData`) is marked `cell.blank` before the stage and left out of the floor, so the fill
+  shows there too. The stage still takes it as blocked ground (Mossdeep's gym is black between
+  its paths: as void it left no stage at all). `stats().sceneBlank` counts them.
+- Tests: `tests/hd_test.lua` "World scale" (a fake `hd.scene` with `groundScale`),
+  `tests/scene_test.lua` (`groundScale` at the feet).
+
+**The sky** (`hazeFor`): indoors the room's fill (below); outdoors a gradient, the battle's sky
+colour (`s.haze`, the wallpaper's top) at the canvas's foot deepening toward `Scene.SKY_DEEP` by
+`SKY_DEPTH` (0.55) at its top (the `top` of the sky table `Render.draw` clears to and draws as a
+gradient behind the world). Both ends take the time of day (`Light.sky`), the top darker by
+`SKY_NIGHT` (0.45) of the moonlight, and flatter by `SKY_DULL` (0.75) under rain, sand, ash or
+fog. A sunset warms the horizon toward `Scene.SUNSET` by `SUNSET_GLOW` (0.65) and the sky over it
+toward `Scene.DUSK` by `DUSK_GLOW` (0.35), as far as `Scene.sunset(minute)` says (full 17:00-18:00,
+easing in from 15:00 and out by 20:00; a dawn `DAWN` 0.35 as much, about 5:00-7:00). Outdoors
+the gradient meets the horizon where the camera sees it (`sky.horizon`: screen row
+`proj[4] - proj[3] * tan(pitch)`), the horizon's colour from there down and the top's reached
+`Render.SKY_SPAN` (0.55) of the screen above it; a room's fill runs the whole canvas. `Scene.timeOverride` (dev; the Workshop's `setMinute`, `SCENE_MINUTE` in
+`tests/drivers/scene_battle.lua`) pins the minute of the day.
+
+**Stand-in maps** (`Scene.STAND_IN`, `standIn`, `engineEnv(alt)`): a map whose battles are shown
+on another, by name with the game's prefix left off. The Abandoned Ship's cabins, corridors and
+captain's office are battled on its deck, at (11, 12) facing up, and the deck's own battles where
+the player stands. `engineEnv(alt)` reads the window off that map alone (`Map.ensureMidLayout`,
+no neighbours, its border past its edges); `outdoor` makes it outdoors though its map type is a
+cave's (4): no fill, no ceiling, no cave fog, the outdoor sky (`Scene.HAZE.outdoor`, not the
+indoor wallpaper's top colour), the time of day.
+
+Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
 
 - `cells.lua`: once per battle (a new `Battle._st`), a 61x65 window of cells around the player
   (`Map.worldMidAt` for art; collision and behaviour through the cell's own map: the primary
@@ -678,6 +753,15 @@ battle pass) and is Gen 3 only. Modules in `src/scene/`, loaded by `main.lua` an
   stays inside the window of cells (`inWindow`, with a margin for Fill Screen). A best score
   under `Stage.FLOOR` keeps the wallpaper, unless the stage is fair. `stats().sceneStage` gives
   the tier, why and how far it moved. The search takes about a millisecond.
+  Indoors (a room or a cave: `opts.void`), where the camera pulled back for a big Pokémon would
+  show the void past the edges, the void is also counted as a camera at `Stage.WIDE.z` (0.6,
+  about the focus) would show it, each cell at `WIDE.weight` (0.5), and the share of the screen's
+  lower half that walls, furniture and models between the camera and the battle cover
+  (`Stage.foreground`, `W.fore` -40). Both rank the targets (`best.rank`) but stay out of
+  `best.score`, so a small room still clears `Stage.FLOOR`. `Stage.REACH_INDOOR` is 6, as
+  outdoors: at 9 the search moved battles to the rooms' entrances (Sidney's room, the Champion's),
+  their walls framing the view, and the wall penalty did not hold them back. What void is left
+  shows the room's fill (below).
 - **The stage census (`tests/drivers/stage_census.lua`):** builds the scene at anchors across
   each map in `CENSUS_MAPS` (`CENSUS_STEP` apart) and runs the search for every cell a battle
   could start on, by score alone and with the strict check. It logs how often each is fair,
@@ -1735,7 +1819,7 @@ end
 | `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
 | `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
 | `art` | `{x0, y0, x1, y1}`: the art's box over its whole animation (quad pixels). Battle Fit's species sizing fits it in the Pokémon's room; without it the frame is taken as the art, from `top` down |
-| `height` | the species' real height in metres. With it (and a `side`), Battle Fit sizes the two battlers against each other (the taller fills its room, the other by height) instead of by `scale`. Check `features.speciesSize` |
+| `height` | the real height in metres of the tag's art box (feet to the top of its animation). With it (and a `side`), Battle Fit sizes the two battlers against each other (the taller fills its room, the other by height) instead of by `scale`, and in the 3D world stands it at the world's scale (`worldSize`). Check `features.speciesSize` |
 | `flip` | `true`: the `texture`/`quad` frame is drawn mirrored about its `pivot` (a stand-in the mod drew mirrored; `lowPivot` is in the stand-in as drawn). Check `features.flip` |
 | `shades` | a shader: the stand-in is in the Game Boy's four shades, made by this shader from the frame's colours. The `texture`/`quad` frame is drawn through it and then coloured as the stand-in is: in Gen 1 into a canvas a whole number of times the pass's size, then through the Renderer's blit (its SGB zones); in Gen 2 (a direct pass) 1:1 into a canvas, then drawn under the palette shader in force. Without it a tagged frame under a shader falls back to the stand-in. Check `features.shades` |
 | `shadow` | `{ texture, quad?, w, dx, dy }`: a contact shadow the stand-in has baked in under the Pokémon, drawn first: `w` wide, its bottom middle at (`dx`, `dy`) from the `pivot`, all in the frame's pixels, so it takes the frame's final size and `flip`. Not under a part of the pic drawn on its own (a row-by-row move), nor through a shader mapped to the frame. Check `features.shadow` |

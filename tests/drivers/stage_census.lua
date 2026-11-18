@@ -116,7 +116,7 @@ local function body(game, log)
       if not grid then log(spot, "no scene") else
         local c0 = grid.at(x, y)
         local want = { player = c0.kind, enemy = c0.kind }
-        local opts = { player = { cx = x, cy = y }, want = want, feet = ws.FEET, sprites = ws.SPRITES, void = scene.walled }
+        local opts = { player = { cx = x, cy = y }, want = want, feet = ws.FEET, sprites = ws.SPRITES, void = scene.walled or scene.indoor }
         Stage.tier = function() return 0 end
         local old = Stage.search(Camera, grid, opts)
         Stage.tier = strictTier
@@ -231,7 +231,7 @@ local function body(game, log)
                 if c and STAND[c.kind] and not c.border and px >= 0 and py >= 0 and px < W and py < H then
                   local want = { player = c.kind, enemy = c.kind }
                   local opts = { player = { cx = px, cy = py }, want = want, feet = ws.FEET, sprites = ws.SPRITES,
-                                 void = scene.walled }
+                                 void = scene.walled or scene.indoor }
                   Stage.tier = function() return 0 end
                   local old = Stage.search(Camera, grid, opts)
                   Stage.tier = strictTier

@@ -65,9 +65,17 @@ and Crystal.
   many other buildings and rooms stand in 3D, rebuilt from the game's own art.
 - 🎯 **A fair place to fight:** Each battle is set on the nearest spot where both Pokémon stand
   on level, open ground, with nothing between them and nothing blocking the view.
+- 📏 **True to size:** Every Pokémon stands on the ground at its real size, a map tile being
+  about a metre, and nearer the camera looks bigger. A Wailord towers over the houses while a
+  Pikachu looks tiny beside it. The camera zooms out to fit a giant, and one too big even then
+  is shrunk just enough to fit. The tiniest are never drawn too small to see. Indoors, the biggest
+  are held to about a room's height, so a gym or a ship's cabin stays in view, and anything past
+  the walls fades into the room's own colours instead of black. Battles inside the Abandoned
+  Ship are fought out on its deck.
 - ☀️ **Light and weather:** Sunlight, shadows, rain, sand, ash and fog fill the scene.
 - 🌙 **Time of day:** Outdoor battles are lit by the clock: a warm morning, the plain day, an
-  orange evening and a blue, moonlit night, easing from one to the next. Ruby, Sapphire and
+  orange evening and a blue, moonlit night, easing from one to the next, under a sky that deepens
+  overhead with the hour and glows warm at sunset. Ruby, Sapphire and
   Emerald follow the game's clock, FireRed and LeafGreen your device's. With WoobleDex, battles
   follow its Clock Source and its Day & Night setting, so they match the overworld around you.
 - 🎥 **Cinematic entrance:** The camera swoops down from the overworld into the battle.
@@ -84,7 +92,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little, never under about a third of the bigger one's size), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
-| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
+| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you, the Pokémon at their real size (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
 | **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |

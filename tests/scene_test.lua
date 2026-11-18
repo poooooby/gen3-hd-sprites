@@ -168,6 +168,31 @@ do
   check(p3 and p3.kind == "floor" and e3 and e3.kind == "floor", "indoors: both sides stand inside the room")
   check(best3 and best3.score > Stage.FLOOR, "...a stage that fits")
 
+  -- a wide room (30 x 16 in the void), the battle started by its west wall: indoors the search
+  -- reaches further and counts the void a pulled-back camera would show, so the battle moves
+  -- into the room's open middle
+  local hall = {}
+  for y = 1, 50 do hall[y] = string.rep(" ", 60) end
+  for y = 20, 35 do hall[y] = string.rep(" ", 10) .. string.rep(".", 30) .. string.rep(" ", 20) end
+  local envH = fakeEnv(hall, true)
+  local cellH = envH.cell
+  envH.cell = function(cx, cy)
+    local line = hall[cy + 1]
+    if not line or cx < 0 or cx >= #line or line:sub(cx + 1, cx + 1) == " " then return nil end
+    return cellH(cx, cy)
+  end
+  local gH = Cells.build(envH, 0, 0, 60, 50)
+  local optsH = { player = { cx = 12, cy = 32 }, feet = FEET, sprites = SPRITES, void = true }
+  local wide = Stage.search(Camera, gH, optsH)
+  local wW, rW = Stage.WIDE.weight, Stage.REACH_INDOOR
+  Stage.WIDE.weight, Stage.REACH_INDOOR = 0, Stage.REACH
+  local plainH = Stage.search(Camera, gH, optsH)
+  Stage.WIDE.weight, Stage.REACH_INDOOR = wW, rW
+  check(wide.tier == 3 and plainH.tier == 3 and wide.tx >= plainH.tx + 3,
+    "indoors: by the west wall the battle moves into the room's middle (x " .. ("%.1f"):format(plainH.tx)
+    .. " -> " .. ("%.1f"):format(wide.tx) .. ")")
+  check(wide.score > Stage.FLOOR, "...and still fits (its score leaves the pulled-back view out)")
+
   -- all void: nothing fits
   local none = Cells.build(fakeEnv({ "" }, true), 0, 0, 30, 30)
   local best4 = Stage.search(Camera, none, { player = { cx = 15, cy = 15 }, feet = FEET, sprites = SPRITES, void = true })
@@ -319,6 +344,23 @@ do
     "...its feet hidden: the view blocked")
   local g11m = Stage.search(Camera, g11, opts)
   check(g11m.tier == 3 and g11m.moved > 0, "...the stage moves off them (" .. tostring(g11m.moved) .. " tiles)")
+end
+
+-- the world's scale where each side's feet stand (hd.lua's worldSize): canvas px per tile, F over
+-- the ground point's depth on the battle's settled camera
+do
+  local Scene = dofile("src/scene/init.lua")({ Camera = Camera, hd = { real = {}, stats = {} } })
+  local s = { to = Camera.pose(10.5, 20.5) }
+  local e = Scene.groundScale(s, Scene.FEET.enemy[1], Scene.FEET.enemy[2])
+  local p = Scene.groundScale(s, Scene.FEET.player[1], Scene.FEET.player[2])
+  check(e and near(e, 33.77, 0.01), "the foe's feet: 33.8 canvas px per tile (" .. tostring(e) .. ")")
+  check(p and near(p, 44.66, 0.01), "the player's: 44.7, nearer the camera (" .. tostring(p) .. ")")
+  check(near(Scene.groundScale(s, 120, 120), Camera.F / select(3, Camera.view(s.to,
+    Camera.ground(s.to, 120, 120), 0, select(2, Camera.ground(s.to, 120, 120))))), "F over the ground point's depth")
+  local lifted = { to = Camera.pose(10.5, 22.5, nil, nil, 2) }
+  check(near(Scene.groundScale(lifted, 176, 70), e), "on ground two levels up: the same")
+  check(Scene.groundScale({ to = Camera.pose(0, 0, math.rad(10)) }, 120, 0) == nil, "above the horizon: none")
+  check(Scene.groundScale(nil, 120, 120) == nil and Scene.METRES_PER_TILE == 1, "no scene: none; a tile is a metre")
 end
 
 -- ------------------------------------------------------------------- render
