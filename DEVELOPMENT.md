@@ -544,9 +544,16 @@ already covers the view.
 - The outward side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px
   canvas. The stacked layout's inward slide needs no cap.
 
-**Safety.** Every engine hook calls into this mod under `pcall`. The first error goes to
-`hd.fail(err)`: it is logged once, any pass in flight is flattened back into its canvas, and
-nothing more is captured that session (`stats().failed`). `hd.canCapture()` is false when the
+**Safety.** Every engine hook calls into this mod under `pcall`. An error goes to
+`hd.fail(err)`: it is logged with its count ("failure n of 3"), any pass in flight is flattened
+back into its canvas, and nothing is captured for `hd.retryAfter` (2 s); then `hd.recover`
+(each `endFrame`, `beginPass`, `beginDirect` and `hd.down()`) captures again. The
+`hd.maxFailures`-th (3) turns it off until a restart (`stats().failed`, `stats().failures`).
+While it is down the exports report it off (`isActive`, `enabled`, `fitEnabled`: `hd.down()`),
+so a sprite mod draws its own plain sprites, not the stand-ins it leaves for this mod (a big
+back's close-up in the 64-px box, drawn by the game it looked several times too large), and
+Gold's draw wrappers (`hd.down()`) leave the battle to the game. Before, the first error was
+for the whole session and the exports kept saying on. `hd.canCapture()` is false when the
 engine presents without the Renderer (`Display.planesBroken`, its Android fallback), since a
 captured pass would never be composited there.
 

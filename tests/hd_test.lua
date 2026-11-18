@@ -1360,9 +1360,14 @@ end
 -- nothing is captured: every frame is drawn the game's own way
 do
   local G = fakeGraphics()
-  local logged = {}
-  local hd = HD.new(G, { log = { error = function(_, fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end } })
+  local logged, infos = {}, {}
+  local hd = HD.new(G, { log = { error = function(_, fmt, ...) logged[#logged + 1] = string.format(fmt, ...) end,
+                                 info = function(_, fmt, ...) infos[#infos + 1] = string.format(fmt, ...) end } })
   hd.install()
+  local clock = 100
+  hd.now = function() return clock end
+  local mod = {}
+  assert(loadfile("src/api.lua"))()(mod, hd, { active = true })
   local base = canvas("ui", 240, 160)
   local pic = canvas("pic", 64, 64)
   hd.tag(pic, {})
@@ -1382,9 +1387,31 @@ do
   local sawPic = false
   for _, e in ipairs(G.log) do if e.image == pic and e.target == base then sawPic = true end end
   check(sawPic, "...its sprite drawn into the canvas the usual way")
-  check(hd.beginPass("battle", base) == false, "...and nothing more is captured this session")
+  check(hd.beginPass("battle", base) == false, "...and nothing is captured meanwhile")
+  check(mod.exports.isActive() == false and mod.exports.enabled("battle") == false,
+    "...while it is down the exports say it is off (a sprite mod draws its own plain sprites)")
   hd.fail("again")
-  check(#logged == 1 and hd.failed == "boom", "...a second failure is not logged again")
+  check(#logged == 1 and hd.failed == "boom", "...a second failure meanwhile is not logged again")
+  -- retryAfter (2 s) later it tries again: captured, the exports on again
+  clock = clock + 1.9
+  check(hd.beginPass("battle", base) == false, "...not before retryAfter")
+  clock = clock + 0.2
+  check(hd.beginPass("battle", base) == true and hd.failed == nil and #infos == 1,
+    "...then it tries again (" .. tostring(infos[1]) .. ")")
+  check(mod.exports.isActive() == true and mod.exports.enabled("battle") == true, "...the exports on again")
+  hd.flatten(hd.cur)
+  check(logged[1]:find("failure 1 of 3", 1, true) ~= nil, "the failure is logged with its count (" .. logged[1] .. ")")
+  -- the third failure turns it off for the session
+  hd.fail("two")
+  clock = clock + 5
+  hd.endFrame()
+  check(hd.failed == nil, "a second failure is retried too")
+  hd.fail("three")
+  check(logged[3]:find("turned off for this session", 1, true) ~= nil, "the third turns it off (" .. logged[3] .. ")")
+  clock = clock + 60
+  hd.endFrame()
+  check(hd.beginPass("battle", base) == false and hd.failed == "three" and mod.exports.isActive() == false,
+    "...for good: no retry, the exports off")
 end
 
 -- the wallpaper drawn again in the scene (Kanto Gear continuing the ground under a text box it

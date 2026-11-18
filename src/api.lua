@@ -75,8 +75,10 @@ return function(mod, hd, state)
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end
-  exports.isActive = function() return state.active == true end
-  exports.enabled = function(pass) return state.active == true and hd.enabled[pass] == true end
+  -- (off while it is down after a failure, hd.down: a sprite mod then draws its own plain
+  -- sprites, not the stand-ins it leaves for this mod to draw over)
+  exports.isActive = function() return state.active == true and not hd.down() end
+  exports.enabled = function(pass) return state.active == true and hd.enabled[pass] == true and not hd.down() end
   exports.setEnabled = function(pass, on)
     if hd.enabled[pass] ~= nil then hd.enabled[pass] = on and true or false end
   end
@@ -87,7 +89,7 @@ return function(mod, hd, state)
     return hd.caps[pass]
   end
   exports.fitEnabled = function()
-    return state.active == true and hd.enabled.battle == true and hd.fit.enabled == true
+    return state.active == true and hd.enabled.battle == true and hd.fit.enabled == true and not hd.down()
   end
   exports.setFit = function(on)
     hd.fit.enabled = hd.fit.available == true and on ~= nil and on ~= false and on ~= "off"

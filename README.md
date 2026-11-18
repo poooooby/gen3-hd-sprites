@@ -120,7 +120,9 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
   overworld Pokémon from supported mods. Fill Screen in Red, Blue and Yellow; Gold, Silver and
   Crystal keep the game's own framed battle screen, so their battles look as other mods (Facets'
   battle scenes) draw them. There's no Battle Scene in these games.
-- If your device can't draw battles this way, the mod steps aside and the game draws as usual.
+- If a frame ever can't be drawn this way, that moment is drawn the game's usual way (sprites at
+  their normal size) and the mod tries again a couple of seconds later. Only if it keeps
+  happening does it step aside until you restart the game.
 
 ## 🪪 Credits
 

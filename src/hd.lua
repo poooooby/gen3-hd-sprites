@@ -1231,18 +1231,52 @@ function HD.new(G, opts)
     self.installed = false
   end
 
-  --- Something of ours failed on this device: say so once, put back any pass in flight, and
-  --- capture nothing more this session, so every frame is drawn the game's own way.
+  -- failures this session; after a failure nothing is captured for retryAfter seconds, then it
+  -- tries again (a one-off error, say on a screen rushed through on a phone, costs a moment, not
+  -- the session); the maxFailures-th turns it off until the game restarts
+  self.failures, self.maxFailures, self.retryAfter = 0, 3, 2
+  function self.now()
+    return love and love.timer and love.timer.getTime and love.timer.getTime() or os.clock()
+  end
+
+  --- Something of ours failed on this device: say so (which failure, the error), put back any
+  --- pass in flight, and capture nothing until it tries again (self.recover), so the frames
+  --- meanwhile are drawn the game's own way. While it is down, the exports report it off
+  --- (isActive, enabled), so a sprite mod draws its own plain sprites, not stand-ins left for us.
   function self.fail(err)
     if self.failed then return end
+    self.failures = self.failures + 1
     self.failed = tostring(err)
-    self.stats.failed = self.failed
+    self.failedAt = self.now()
+    self.stats.failed, self.stats.failures = self.failed, self.failures
     self.direct = false
     if self.log and self.log.error then
-      pcall(self.log.error, self.log, "turned off for this session, frames are drawn the game's usual way: %s",
-        self.failed)
+      if self.failures < self.maxFailures then
+        pcall(self.log.error, self.log, "could not draw a frame (failure %d of %d), drawn the game's usual way "
+          .. "and trying again in %d s: %s", self.failures, self.maxFailures, self.retryAfter, self.failed)
+      else
+        pcall(self.log.error, self.log, "turned off for this session after %d failures, frames are drawn the "
+          .. "game's usual way: %s", self.failures, self.failed)
+      end
     end
     if self.cur then pcall(self.flatten, self.cur) end
+  end
+
+  --- After a failure, once retryAfter seconds have passed (and fewer than maxFailures so far):
+  --- capture again.
+  function self.recover()
+    if not self.failed or self.failures >= self.maxFailures then return end
+    if self.now() - (self.failedAt or 0) < self.retryAfter then return end
+    self.failed, self.stats.failed = nil, nil
+    if self.log and self.log.info then
+      pcall(self.log.info, self.log, "trying again after failure %d of %d", self.failures, self.maxFailures)
+    end
+  end
+
+  --- Is it down (failed, not yet trying again)? Checks for a retry first.
+  function self.down()
+    self.recover()
+    return self.failed ~= nil
   end
 
   --- Start capturing a pass on `base` (the canvas currently drawn into).
@@ -1250,7 +1284,7 @@ function HD.new(G, opts)
     -- a pass that was never ended (its frame was not presented the usual way): put it back
     if self.cur then self.flatten(self.cur) end
     self.inAnim = false
-    if self.failed then return false end
+    if self.down() then return false end
     -- the engine no longer presents through the Renderer (canCapture: src/engine.lua): a pass
     -- could never be composited, so the game draws its own way
     if self.canCapture and not self.canCapture() then return false end
@@ -1502,7 +1536,7 @@ function HD.new(G, opts)
   --- its cap does on the canvas): already sharp and between pixels, so nothing is recorded.
   --- Returns true when it turned it on (a nested call returns false: the outer one ends it).
   function self.beginDirect(pass)
-    if self.direct or self.cur or self.failed then return false end
+    if self.direct or self.cur or self.down() then return false end
     if not (self.installed and self.enabled[pass]) then return false end
     self.direct = pass
     return true
@@ -3165,6 +3199,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
   --- (it was flattened when that could be known in time).
   function self.endFrame()
     self.done = {}
+    self.recover()
     -- frames since a battle was last fitted: a gap means the next battle starts afresh
     self.fit.idle = self.fit.idle + 1
   end
