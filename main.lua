@@ -436,5 +436,13 @@ return function(mod)
     end
   end)
 
+  -- a WOOBLEVIEW row on the game's OPTION screen that opens this mod's settings page
+  -- (optional: missing or broken, the Mod Manager still has it)
+  local makeShortcut = loadSibling(mod, "src/shortcut.lua", true)
+  if type(makeShortcut) == "function" then
+    local okS, err = pcall(function() makeShortcut({ mod = mod, generation = Engine.generation }).install() end)
+    if not okS then mod.log:warn("OPTION shortcut is off: %s", tostring(err)) end
+  end
+
   Api(mod, hd, state)
 end

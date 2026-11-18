@@ -1286,6 +1286,10 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   Gen 1/2 (`Engine.generation() < 3`) it leaves out Battle Scene's (`battle_scene`, `scene_build`,
   `scene_clear`, `scene_blur`, `scene_cache`). The engine sets the game before it loads mods, and
   loads them again for another game. Their stored values stay; reads fall back to the defaults.
+- **OPTION shortcut (`src/shortcut.lua`):** wraps `ui.options.rows` to add a `WOOBLEVIEW` row to the
+  game's own OPTION screen (all generations). A opens the Mod Manager (Gen 1/2 `Screens.push(game,
+  "ManagerState")`, Gen 3 `src.ui.game3.mod_manager`.show) and jumps it to this mod's settings page with
+  an empty back stack, so B closes the Manager and returns to OPTION. Same as WoobleSpawns' row.
 - **Build as I play:** the progress panel's one button, `Build as I play (B)`, is taken by B or a
   click, never by A, so mashing through text can't close it.
   - It closes the panel and keeps the job (`bgJob`). The build carries on as it would have in the

@@ -71,7 +71,8 @@ and Crystal.
 
 ## ⚙️ Options
 
-Open **OPTIONS → MODS → WoobleView**. Battle Textbox, Battle Scene and the five options after
+Pick **WOOBLEVIEW** on the game's own OPTION screen (or open **OPTIONS → MODS → WoobleView**);
+B there takes you straight back. Battle Textbox, Battle Scene and the five options after
 it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 | Option | Choices | Default | What it does |
