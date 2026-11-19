@@ -889,6 +889,19 @@ do
     hd.fit.idle = 3
     for _ = 1, 30 do frame() end
     check(hd.stats.zoomTarget <= 1, "world: ...not with a big one on the field")
+    -- 3D Sizing off: drawn as outside the 3D world, at the tag's own size (0.3: its 60 px of art
+    -- fit the 70 rows of its room), nothing fitted round it
+    check(hd.fit.worldSizes == true, "world: 3D Sizing on by default")
+    hd.fit.worldSizes, hd.fit.fill = false, true
+    hd.tag(pic, mon(pageE, "enemy", 20))
+    hd.fit.idle = 3
+    for _ = 1, 30 do frame({ view = { 0, 0, 960, 640 } }) end
+    check(near(size(pageE), 0.3) and not hd.fit.headBox and hd.stats.zoomTarget == 1,
+      "world: 3D Sizing off, a 20 m foe at its own size, nothing fitted (" .. tostring(size(pageE)) .. ")")
+    hd.fit.worldSizes, hd.fit.fill = true, false
+    hd.tag(pic, giant)
+    hd.fit.idle = 3
+    for _ = 1, 30 do frame() end
   end
   -- (its room: from its feet (row 70) up to the screen's top at zoom 0.4 about the focus row 112,
   -- 112 - 112 / 0.4 = -168: 238 rows for 200 px of art)

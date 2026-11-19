@@ -134,6 +134,9 @@ function HD.new(G, opts)
       -- Pokemon comes out, eased spreadEase of the way a frame), split halfway between
       -- neighbours, less spotGap, so none reaches over the next (the outer sides left to the
       -- screen). Each battler, its shadow and the engine's coordinates for it move with its spot
+      -- (worldSizes: the 3D world's sizing at all, the 3D Sizing option; false: its battlers
+      -- drawn and framed as outside it)
+      worldSizes = true,
       -- (doublesOwnSize: a double battle's four drawn at the sprite mod's own size instead, as
       -- it is, and nothing else done: no world scale, no shrinking (they may overlap a little),
       -- no spread, the camera at zoom 1, the HP boxes where the game puts them)
@@ -875,14 +878,21 @@ function HD.new(G, opts)
       and x[1] == y[1] and x[2] == y[2] and x[3] == y[3] and x[4] == y[4]
   end
 
-  -- Battle Fit outside the 3D world: a battle Pokemon (a side's, not a trainer's) at its tag's
-  -- own size k, the sprite mod's, unless that is too big for its room (fillScale): then just
-  -- small enough to fit it. Nothing else changes its size.
+  -- the 3D world drawn this pass, with its sizing on (fit.worldSizes, the 3D Sizing option):
+  -- the battlers at the world's scale and everything fitted round them (worldSize, the soft
+  -- ceilings, the zoom in, the step outward, the foe's HP box over the heads, the doubles'
+  -- rules). Off, the 3D world's battlers are drawn and framed as outside it (ownSize)
+  local function tuned() return self.worldScene ~= nil and self.fit.worldSizes ~= false end
+  self.worldTuned = tuned
+
+  -- Battle Fit outside the 3D world (and in it with 3D Sizing off): a battle Pokemon (a side's,
+  -- not a trainer's) at its tag's own size k, the sprite mod's, unless that is too big for its
+  -- room (fillScale): then just small enough to fit it. Nothing else changes its size.
   local function ownSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
     if not (self.fit.enabled and spec.side ~= nil and not spec.trainer and spec.texture ~= nil) then return k end
     -- (the 3D world's double battles with doublesOwnSize: the sprite mod's size as it is, never
     -- shrunk; the camera pulls back for what would leave the screen)
-    if self.worldScene and self.fit.double and self.fit.doublesOwnSize then return k end
+    if tuned() and self.fit.double and self.fit.doublesOwnSize then return k end
     -- (its room measured as it rests: coming out of its ball the game draws it small, its room
     -- in those pixels larger, and it grew to its full size, then shrank)
     local f = fillScale(spec, image, lpx, lpy, hpx, hpy, 1, 1)
@@ -1031,7 +1041,7 @@ function HD.new(G, opts)
     local fit = self.fit
     local sp = fit.spread or 1
     local spots = fit.doubleSpots
-    if not (fit.double and self.worldScene and sp ~= 1 and type(spots) == "table" and #spots > 0) then return 0 end
+    if not (fit.double and tuned() and sp ~= 1 and type(spots) == "table" and #spots > 0) then return 0 end
     if spec then
       for i = 1, #worldMons do
         local w = worldMons[i]
@@ -1225,7 +1235,7 @@ function HD.new(G, opts)
             rec.tx = rec.tx - (cur.shift[spec.side] or 0)
             -- (and the doubles spread the coordinates were moved by: off the spot drawn nearest)
             local spots, sp = self.fit.doubleSpots, cur.spread or 1
-            if sp ~= 1 and self.worldScene and type(spots) == "table" and #spots > 0 then
+            if sp ~= 1 and tuned() and type(spots) == "table" and #spots > 0 then
               local fx0 = self.fit.focus[1]
               local x0 = rec.tx + rec.x * rec.tsx
               local best, bd = 0, math.huge
@@ -1863,7 +1873,7 @@ function HD.new(G, opts)
     local k = (qp and qp[3]) or spec.scale or 1
     if not qp then
       -- (in the 3D world: at its scale, where it stands; else its own size, unless too big)
-      local w = self.worldScene and self.fit.enabled and speciesTag(spec)
+      local w = tuned() and self.fit.enabled and speciesTag(spec)
         and not (self.fit.double and self.fit.doublesOwnSize)
         and worldSize(spec, rec.image, lpx, lpy, hpx, hpy, rec.sx, rec.sy, X, Y, rec.rest)
       k = w or ownSize(spec, rec.image, k, lpx, lpy, hpx, hpy, rec.sx, rec.sy)
@@ -2299,8 +2309,8 @@ function HD.new(G, opts)
     local fit = self.fit
     -- (the foe's HP box over the heads: placed afresh each battle, and when a new Pokemon comes
     -- out or the screen changes; else held)
-    local placing = fit.headBox or (fit.double and self.worldScene ~= nil)
-    if not (fit.double and self.worldScene ~= nil) then fit.spread, fit.spreadTarget = 1, nil end
+    local placing = fit.headBox or (fit.double and tuned())
+    if not (fit.double and tuned()) then fit.spread, fit.spreadTarget = 1, nil end
     if placing then
       local k = fit.boxKey
       local screen = string.format("%.1f|%.1f|%s", fit.screenTopUI or 0, (fit.viewR or 0) - (fit.viewL or 0),
@@ -2411,6 +2421,8 @@ function HD.new(G, opts)
     -- (in the 3D world, where each battler stands at its true size, its art across the screen
     -- too: zoomed out until it lies between the scene's edges, as far as zMin)
     local world = self.worldScene ~= nil
+    -- (the 3D world's sizing on: 3D Sizing)
+    local sized = tuned()
     if world then
       local fx = fit.focus[1]
       local vl, vr = (fit.viewL or 0) + fit.margin, (fit.viewR or 240) - fit.margin
@@ -2424,13 +2436,13 @@ function HD.new(G, opts)
       -- (singles: a side's outer edge, the player's left, the foe's right, is left to the wide
       -- step outward, which keeps most of it on the screen: the camera pulled back for a wide
       -- one's whole width only to have it stepped half off again)
-      if not fit.double and tonumber(fit.wideLine) then
+      if sized and not fit.double and tonumber(fit.wideLine) then
         zt = math.max(fit.zMin, math.min(zt, across(eL, math.min(eR, fx)), across(math.max(pL, fx), pR)))
       else
         zt = math.max(fit.zMin, math.min(zt, across(eL, eR), across(pL, pR)))
       end
       -- (a giant: a little further back)
-      if zt < 1 - 1e-6 and fit.bigPull then zt = math.max(fit.zMin, zt * fit.bigPull) end
+      if sized and zt < 1 - 1e-6 and fit.bigPull then zt = math.max(fit.zMin, zt * fit.bigPull) end
       -- (the foe's HP box: every head under its columns, where the side shift puts it, under the
       -- box, held where it is, else under the room it needs below the screen's top; a head
       -- beside the box, a foe's on the right, needs no room)
@@ -2475,7 +2487,7 @@ function HD.new(G, opts)
       -- (every battler small: in, toward the tallest standing smallFill of the battle's height,
       -- the camera rising as it comes in so the player's feet stay on the row they stand on at
       -- zoom 1: a back grows upward instead of sinking under the text box)
-      if zt >= 1 - 1e-9 and (fit.zMax or 1) > 1 and #heads > 0 and not (fit.double and fit.doublesOwnSize) then
+      if sized and zt >= 1 - 1e-9 and (fit.zMax or 1) > 1 and #heads > 0 and not (fit.double and fit.doublesOwnSize) then
         local tall, low = 0, nil
         for _, h in ipairs(heads) do
           if h[5] and h[5] > h[3] then tall = math.max(tall, h[5] - h[3]) end
@@ -2500,7 +2512,7 @@ function HD.new(G, opts)
     if fit.spreadPending then
       fit.spreadPending = nil
       local spots = fit.doubleSpots
-      if fit.double and world and type(spots) == "table" and #spots > 1 then
+      if fit.double and sized and type(spots) == "table" and #spots > 1 then
         local fx = fit.focus[1]
         local lo, hi = math.huge, -math.huge
         for i = 1, #spots do lo, hi = math.min(lo, spots[i]), math.max(hi, spots[i]) end
@@ -2536,7 +2548,7 @@ function HD.new(G, opts)
     end
     -- (the 3D world's double battles at the sprite mod's own sizes: drawn as the game lays them
     -- out, the camera where it stands, nothing fitted)
-    if world and fit.double and fit.doublesOwnSize then zt, et = 1, 0 end
+    if sized and fit.double and fit.doublesOwnSize then zt, et = 1, 0 end
     fit.target, fit.extraTarget = zt, et
     if fit.idle > 2 then
       -- a new battle: start where it should be, unshifted until its intro is over
@@ -2615,7 +2627,7 @@ function HD.new(G, opts)
     -- as the zoom now shows them; canvas px before the zoom, as every side shift), never so far
     -- that less than wideKeep of its art's width stays on the screen
     local line = tonumber(fit.wideLine)
-    if world and not fit.double and line then
+    if sized and not fit.double and line then
       local vl0, vr0 = fit.viewL or 0, fit.viewR or 240
       local W, z = vr0 - vl0, math.max(fit.z, 1e-3)
       local keep = math.max(0, math.min(1, tonumber(fit.wideKeep) or 1))
@@ -3189,7 +3201,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- the 3D world filling the screen: the foe's HP box (both, in a double battle) over the
     -- highest head
     -- (fitStep places it), eased there
-    local headBox = filling and self.worldScene ~= nil and not (fit.double and fit.doublesOwnSize)
+    local headBox = filling and tuned() and not (fit.double and fit.doublesOwnSize)
     fit.headBox = headBox
     fit.screenTopUI = filling and round2((top - uby) / Uy) or 0
     if headBox and fit.boxBottom and fit.idle <= 2 then
@@ -3394,7 +3406,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           local d = (fitted and cur.shift[item.side]) or 0
           local dy = (fitted and item.side == "player" and cur.shift.playerY) or 0
           -- (in the 3D world: the scene's shadow scaled about its middle to the Pokemon's body)
-          local k = self.worldScene and self.worldShadow[item.side]
+          local k = tuned() and self.worldShadow[item.side]
           local sh = k and type(self.scene) == "table" and type(self.scene.SHADOW) == "table"
             and self.scene.SHADOW[item.side]
           if sh then

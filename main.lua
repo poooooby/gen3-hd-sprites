@@ -52,7 +52,7 @@ return function(mod)
   -- (Fill Screen is not Gold, Silver and Crystal's: their battles stay in the game's own frame)
   if type(schema) == "table" and Engine.generation() < 3 then
     local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
-                       scene_cache = true, battle_textbox = true, scene_daytime = true }
+                       scene_cache = true, battle_textbox = true, scene_daytime = true, scene_sizes = true }
     if Engine.generation() == 2 then gen3Only.fill_screen = true end
     local kept = {}
     for _, row in ipairs(schema) do
@@ -354,6 +354,8 @@ return function(mod)
     hd.fit.fillAllowed = Engine.generation() ~= 2
     hd.fit.fill = hd.fit.fillAllowed and option("fill_screen", true) ~= false
     hd.barEnabled = option("battle_textbox", true) ~= false
+    -- (3D Sizing: the 3D world's sizing; off, its battlers drawn and framed as outside it)
+    hd.fit.worldSizes = option("scene_sizes", true) ~= false
     -- (the screens before the game starts, and the whole screens opened over the field, are
     -- only captured to fill the screen)
     hd.enabled.boot = hd.enabled.battle and hd.fit.enabled and hd.fit.fill

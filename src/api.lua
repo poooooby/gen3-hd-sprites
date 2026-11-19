@@ -54,6 +54,8 @@
 --   sceneZoom()           the battle scene's zoom this frame (1 = none)
 --   sceneEnabled() / setScene(on)   Battle Scene (Gen 3): battles over the overworld in 2.5D
 --                         (needs Battle Fit)
+--   realSizes() / setRealSizes(on)  3D Sizing: in the 3D world the Pokemon at their real size
+--                         and the battle fitted round them; off, drawn as in classic battles
 --   fillEnabled() / setFill(on)   Fill Screen: the battle scene fills the screen, its UI
 --                         docked to the bottom at its own scale (needs Battle Fit)
 --   uiMap()               where this frame's UI canvas went when WoobleView placed it (Fill
@@ -105,6 +107,8 @@ return function(mod, hd, state)
   exports.setScene = function(on)
     if hd.scene then hd.scene.enabled = on and true or false end
   end
+  exports.realSizes = function() return hd.fit.worldSizes ~= false end
+  exports.setRealSizes = function(on) hd.fit.worldSizes = on and true or false end
   -- (tests: aim the current battle scene's settled camera at map cell (tx, tz), pitch in
   -- degrees, distance in tiles; nil to leave the stage's)
   exports._sceneLook = function(tx, tz, pitch, dist, yaw)

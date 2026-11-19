@@ -66,7 +66,8 @@ and Crystal.
   In single battles a wide Pokémon steps back toward its own side of the screen, partly out of
   view, rather than reaching across the middle and covering its opponent, always with most of
   it in view. In double battles the four are drawn at your sprite pack's own sizes, as on the
-  game's own screen, which shows their differences best when four share it.
+  game's own screen, which shows their differences best when four share it. Prefer your sprite
+  pack's sizes everywhere? Turn **3D Sizing** off.
 - 🏷️ **HP box over their heads:** The opponent's HP box (both of them in a double battle) sits
   just above the tallest Pokémon's head, and the camera leaves room for it. It only moves when a new Pokémon
   comes out, so it never jumps about when one faints or the battle ends. The tiniest are never drawn too small to see. Indoors, the biggest
@@ -93,7 +94,8 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | **Battle Fit** | On / Off | On | Pokémon at the sprite mod's own size, one too big for its space shrunk just enough to fit; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
-| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you, the Pokémon at their real size, the biggest gently scaled down to about 5 m tall and 6 m wide (Gen 3 games). Needs Battle Fit. |
+| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
+| **3D Sizing** | On / Off | On | With Battle Scene on Overworld: the Pokémon at their real size in the world, the biggest gently scaled down to about 5 m tall and 6 m wide, the camera zooming out for giants and in for small ones, and the opponent's HP box over their heads. Off: drawn and framed as in Classic battles, at your sprite pack's own sizes. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
 | **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |

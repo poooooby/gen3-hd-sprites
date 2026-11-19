@@ -597,7 +597,13 @@ boxes, was dropped in 2026-11; it is kept in a git stash, "hp-boxes: 3D custom p
 
 **World scale** (`worldSize` in `src/hd.lua`): when a pass draws the world (`hd.world` sets
 `cur.world`; the composite and `endPass` copy it to `hd.worldScene`), each species tag with a
-`height` stands in it at the world's scale in place of its own size (`ownSize`):
+`height` stands in it at the world's scale in place of its own size (`ownSize`). All of it, and
+everything below that fits the battle round those sizes (the soft ceilings, the zoom in, the
+step outward, the foe's HP box over the heads, the doubles' rules, the scaled shadows), is
+behind `tuned()` (`hd.worldTuned`): the world drawn and `fit.worldSizes` on, the **3D Sizing**
+option (`scene_sizes`, main.lua). Off, the world's battlers are drawn and framed as outside it
+(`ownSize`, `fitSolve`, the camera's fit across the scene's edges); the sides still stand on
+their ground (no side shift or drop: those are for the classic platforms):
 
 - `k = height / Scene.METRES_PER_TILE (1) * pxPerTile / artPx`. `height` is the real height of
   the tag's art box (feet row to the top of the art over its animation; WoobleSpritePack measures
@@ -1898,7 +1904,8 @@ draws a tagged pic outside the battle, field and Pokédex passes can draw the fu
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
-`sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `sceneZoom()` (the battle scene's zoom this
+`sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `realSizes()` / `setRealSizes(on)` (Real
+Sizes: `fit.worldSizes`), `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none), `sceneDecks(layout)` (a layout's deck table, for an overworld view: see Battle
 Scene) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,

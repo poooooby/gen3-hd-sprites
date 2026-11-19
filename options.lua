@@ -34,7 +34,15 @@ return {
     type = "choice",
     default = "classic",
     choices = { { "CLASSIC", "classic" }, { "OVERWORLD", "overworld" } },
-    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. The Pokemon stand in it at their real size (a tile about a metre, the biggest gently scaled down to about 5 m tall and 6 m wide; double battles at the sprite pack's own sizes), the camera zooming out for big ones and in for small ones. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
+    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. With 3D Sizing on, the Pokemon stand in it at their real size. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
+  },
+  {
+    key = "scene_sizes",
+    label = "3D Sizing",
+    type = "toggle",
+    default = true,
+    visible_if = { key = "battle_scene", equals = "overworld" },
+    description = "With Battle Scene on OVERWORLD: the Pokemon stand in the world at their real size (a tile about a metre, the biggest gently scaled down to about 5 m tall and 6 m wide; double battles at the sprite pack's own sizes), the camera zooming out for big ones and in for small ones, a wide one stepping toward its own side, the opponent's HP box over their heads. Off: drawn and framed as in CLASSIC battles, at the sprite pack's own sizes, shrunk only if too big.",
   },
   {
     key = "scene_build",

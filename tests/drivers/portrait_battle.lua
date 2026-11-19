@@ -49,6 +49,8 @@ local function body(game, log)
   if os.getenv("HD_FILLOFF") == "1" and hd.setFill then hd.setFill(false) end
   -- HD_SCENE=off: Battle Scene on CLASSIC (no 3D world) for this run
   if os.getenv("HD_SCENE") == "off" and hd.setScene then hd.setScene(false) end
+  -- HD_REALSIZES=off: 3D Sizing off (the 3D world's battlers drawn as in classic battles)
+  if os.getenv("HD_REALSIZES") == "off" and hd.setRealSizes then hd.setRealSizes(false) end
   if os.getenv("HD_HIDEBOTTOM") == "1" then
     local BUi = require("src.core.game3.battle.ui")
     BUi.bottomUIVisible = function() return false end

@@ -56,6 +56,8 @@ local function body(game, log)
   local loader = game.mods
   local hd = loader and loader.exports and loader.exports["gen3-hd-sprites"]
   if not hd then log("FAIL gen3-hd-sprites exports missing"); return end
+  -- HD_REALSIZES=off: 3D Sizing off (the 3D world's battlers drawn as in classic battles)
+  if os.getenv("HD_REALSIZES") == "off" and hd.setRealSizes then hd.setRealSizes(false) end
   for _, id in ipairs({ "play_nav", "ds_touch" }) do
     loader.modOptions[id] = loader.modOptions[id] or {}
     loader.modOptions[id].display = "off"
