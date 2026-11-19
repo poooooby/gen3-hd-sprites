@@ -4,7 +4,8 @@
 -- Run from the engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/doubles_battle.lua love .
--- HD_SIZE=WxH (default 1920x1080); POKEPORT_TOUCH=1 shows the touch controls.
+-- HD_SIZE=WxH (default 1920x1080); POKEPORT_TOUCH=1 shows the touch controls; HD_SPOT=MAP:x:y the
+-- spot the battle starts on (default: where a new game starts).
 
 local PAIRS = {
   { "small", "SPECIES_SEEDOT", "SPECIES_LOTAD" },
@@ -13,12 +14,13 @@ local PAIRS = {
   { "tall", "SPECIES_DRAGONITE", "SPECIES_RAYQUAZA" },
 }
 
+-- (vsync = 0: the runs go as fast as the machine allows)
 local function body(game, log)
   local U = require("tests.drivers.util")
   local dir = os.getenv("SHOT_DIR") or "/tmp/hd_doubles"
   local sw, sh = (os.getenv("HD_SIZE") or "1920x1080"):match("(%d+)x(%d+)")
   sw, sh = tonumber(sw), tonumber(sh)
-  love.window.setMode(sw, sh, { resizable = true, highdpi = true })
+  love.window.setMode(sw, sh, { resizable = true, highdpi = true, vsync = 0 })
   U.wait(2)
   for _ = 1, 900 do
     if game.phase == "boot" and game.boot then break end
@@ -27,6 +29,22 @@ local function body(game, log)
   game:_handleBootAction({ action = "new_game", name = "HD", gender = 0 })
   U.wait(60)
   local Runtime = require("src.core.game3.runtime")
+  -- HD_SPOT=MAP:x:y: the battle starts there (the 3D world around it with Battle Scene on)
+  local spot = os.getenv("HD_SPOT")
+  if spot and spot ~= "" then
+    local mapId, px, py = spot:match("^([%w_]+):(%d+):(%d+)$")
+    if mapId then
+      local Map = require("src.core.game3.map")
+      local Player = require("src.core.game3.player")
+      px, py = tonumber(px), tonumber(py)
+      pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "down" })
+      local s0 = Runtime.getSession()
+      if s0 then s0.x, s0.y = px, py end
+      Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
+      Player.targetX, Player.targetY = px, py
+      U.wait(30)
+    end
+  end
   local Party = require("src.core.game3.party")
   local Trainers = require("src.core.game3.scripting.trainers")
   local BattleBridge = require("src.core.game3.battle_bridge")
@@ -43,9 +61,15 @@ local function body(game, log)
     loader.modOptions[id].refresh = false
   end
   s.party = {}
-  Party.giveMon(s, C.species.byName.SPECIES_SWAMPERT, 45, "SWAMPERT")
-  Party.giveMon(s, C.species.byName.SPECIES_BLAZIKEN, 45, "BLAZIKEN")
-  Party.giveMon(s, C.species.byName.SPECIES_SCEPTILE, 45, "SCEPTILE")
+  -- HD_PARTY=SPECIES_A,SPECIES_B: the player's two (default Swampert and Blaziken)
+  local party = {}
+  for name in (os.getenv("HD_PARTY") or "SPECIES_SWAMPERT,SPECIES_BLAZIKEN"):gmatch("[%w_]+") do
+    party[#party + 1] = name
+  end
+  party[#party + 1] = "SPECIES_SCEPTILE"
+  for _, name in ipairs(party) do
+    Party.giveMon(s, C.species.byName[name], 45, (name:gsub("^SPECIES_", "")))
+  end
   local foe = Trainers.foeFromId(C.trainers.byName.TRAINER_GINA_AND_MIA_1)
   foe.doubleBattle = true
   local ok, err = pcall(function()
@@ -74,7 +98,8 @@ local function body(game, log)
     local name = ("%dx%d_%s"):format(sw, sh, pair[1])
     log(("%s: fill %s ui %s zoom %s target %s lift %s shiftE %s shiftP %s failed %s"):format(name, tostring(v.fill),
       tostring(v.uiScale), tostring(v.zoom), tostring(v.zoomTarget), tostring(v.lift), tostring(v.shiftEnemy),
-      tostring(v.shiftPlayer), tostring(v.failed)) .. " up " .. tostring(v.sceneUp) .. " topDy " .. tostring(v.uiTopDy))
+      tostring(v.shiftPlayer), tostring(v.failed)) .. " up " .. tostring(v.sceneUp) .. " topDy " .. tostring(v.uiTopDy) .. " packed " .. tostring(v.packed)
+      .. " shrink " .. tostring(v.worldShrink))
     U.shot(game, ("%s/%s.png"):format(dir, name))
   end
 

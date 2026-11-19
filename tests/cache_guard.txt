@@ -1,1 +1,1 @@
-relief=v1 firered=15,leafgreen=15,ruby=2,sapphire=2 models=v7 inputs=63c5c024
+relief=v1 firered=15,leafgreen=15,ruby=2,sapphire=2 models=v7 inputs=e22f70b8

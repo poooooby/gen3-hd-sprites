@@ -685,6 +685,11 @@ do
   hd.fit.enabled, hd.fit.zMin = true, 0.4
   check(hd.fit.worldMin == 0.07, "world: the smallest's share of the battle's height: 7%")
   hd.fit.worldMin = 0   -- (true to scale until the minimum's own checks below)
+  check(hd.fit.heightMax == 2.5 and hd.fit.heightMaxFoe == 2.25 and hd.fit.widthMax == 3,
+    "world: no art taller than 2.5 m (a foe's 2.25 m) nor wider than 3 m")
+  local heightMax, heightMaxFoe, widthMax = hd.fit.heightMax, hd.fit.heightMaxFoe, hd.fit.widthMax
+  -- (uncapped until the caps' own checks below)
+  hd.fit.heightMax, hd.fit.heightMaxFoe, hd.fit.widthMax = nil, nil, nil
   -- (a tile spans 20 px plus a fifth of the row: 34 at the foe's feet row 70, 42.4 at the player's 112)
   local function ppt(v) return 20 + v * 0.2 end
   hd.scene = { METRES_PER_TILE = 1, SHADOW = { enemy = { 176, 70, 26, 6 }, player = { 72, 115, 32, 7 } },
@@ -716,7 +721,7 @@ do
     hd.endPass()
     G.log = {}
     hd.composite(base, function(c, bx, by, sx, sy) G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4) end,
-      0, 0, 4, 4, { 0, 0, 960, 640 })
+      0, 0, 4, 4, { 0, 0, 960, 640 }, o.view)
     hd.endFrame()
     return okW
   end
@@ -737,12 +742,84 @@ do
   check(kP and near(kP, 2 * ppt(110) / 200), "world: the same height nearer the camera, larger by its ground's scale alone ("
     .. tostring(kP) .. ")")
   -- a giant foe (20 m: 680 px of art): the camera zooms out and the sides stay on their ground
+  -- (the wide ones' step outward off until its own checks below)
+  check(hd.fit.wideLine == 0.45 and hd.fit.wideKeep == 0.6,
+    "world: a wide one kept back of 45% of the screen from its edge, 60% of it on the screen")
+  local wideLine = hd.fit.wideLine
+  hd.fit.wideLine = nil
   hd.tag(pic, mon(pageE, "enemy", 20, { body = { 0, 100, 100, 200 } }))
   for _ = 1, 60 do frame() end
   kE = size(pageE)
   check(hd.stats.zoom < 1, "world: a giant foe: the camera zooms out (" .. tostring(hd.stats.zoom) .. ")")
   check(hd.stats.shiftEnemy == 0 and hd.stats.shiftPlayer == 0 and hd.stats.dropPlayer == 0
     and hd.stats.raisePlayer == 0, "world: no side moved off its ground (shift, drop, raise all 0)")
+  -- ... wide, each stepped out toward its own edge (the screen the canvas's 240 columns, the
+  -- focus column 120): the foe's art's left edge (its feet at 176, 50 frame px each side) on the
+  -- 55% line (132), the player's right edge (at 72) on the 45% line (108), the camera unmoved
+  do
+    local zBefore = hd.stats.zoom
+    hd.fit.wideLine = wideLine
+    frame()
+    local z, kP2 = hd.stats.zoom, size(pageP)
+    local foeL = 120 + (176 - 50 * kE + hd.stats.shiftEnemy - 120) * z
+    local mineR = 120 + (72 + 50 * kP2 + hd.stats.shiftPlayer - 120) * z
+    check(near(z, zBefore) and hd.stats.shiftEnemy > 0 and math.abs(foeL - 132) < 0.02,
+      "world: a wide foe stepped right, its left edge on the 55% line (" .. string.format("%.2f", foeL) .. ")")
+    check(hd.stats.shiftPlayer < 0 and math.abs(mineR - 108) < 0.02,
+      "world: ...a wide back stepped left, its right edge on the 45% line (" .. string.format("%.2f", mineR) .. ")")
+    -- ... never past 40% of it off the screen: with the line on the screen's edges (0), each
+    -- would go all the way off; the point 60% of its art in from its inner edge (10 frame px
+    -- past its feet, outward) is held on the edge instead
+    hd.fit.wideLine = 0
+    frame()
+    z = hd.stats.zoom
+    kP2 = size(pageP)
+    local midE = 120 + (176 + 10 * kE + hd.stats.shiftEnemy - 120) * z
+    local midP = 120 + (72 - 10 * kP2 + hd.stats.shiftPlayer - 120) * z
+    check(math.abs(midE - 240) < 0.02 and math.abs(midP) < 0.02,
+      "world: ...never more than 40% off the screen (at " .. string.format("%.2f, %.2f", midP, midE) .. ")")
+    hd.fit.wideLine = wideLine
+    hd.fit.double = true
+    frame()
+    check(hd.stats.shiftEnemy == 0 and hd.stats.shiftPlayer == 0, "world: ...not in a double battle")
+    hd.fit.double = false
+    hd.fit.wideLine = nil
+    frame()
+  end
+  -- the foe's HP box over the highest head (Fill Screen, singles: the screen the canvas, 4x;
+  -- the box's rows 16-44 in UI px, the UI 1:1 over the scene): placed when a new Pokemon comes
+  -- out, held through a faint, placed afresh for a new one and a new battle
+  do
+    local view = { 0, 0, 960, 640 }
+    local giant = hd.pair.enemy
+    hd.fit.fill = true
+    hd.tag(pic, mon(pageE, "enemy", 2))
+    for _ = 1, 60 do frame({ view = view }) end
+    local b1 = hd.fit.boxBottom
+    check(hd.fit.headBox and b1 and b1 >= 2 + 28 - 1e-6 and b1 <= hd.fit.ui.player[2] - 2,
+      "world: the foe's HP box placed over the heads (its bottom at " .. tostring(b1) .. ")")
+    check(near(hd.fit.uiTopDy, b1 - 44), "world: ...the top band moved there (" .. tostring(hd.fit.uiTopDy) .. ")")
+    -- (the heads under it, at the camera's target: the foe's art top, 200 frame px over its feet)
+    local z, lift = hd.stats.zoomTarget, hd.fitLift(hd.stats.zoomTarget) + hd.fit.extraTarget
+    local head = 112 + (70 - 200 * size(pageE) - 112) * z - lift
+    check(head >= b1 + 2 - 0.05, "world: ...the foe's head under it (" .. string.format("%.2f", head) .. ")")
+    -- the player's Pokemon gone (fainted): held
+    for _ = 1, 30 do frame({ view = view, mine = false }) end
+    check(hd.fit.boxBottom == b1, "world: ...held when a Pokemon faints")
+    -- a new foe, much shorter: placed afresh
+    hd.tag(pic, mon(pageE, "enemy", 0.5))
+    for _ = 1, 60 do frame({ view = view }) end
+    check(hd.fit.boxBottom and hd.fit.boxBottom ~= b1, "world: ...placed afresh for a new Pokemon ("
+      .. tostring(hd.fit.boxBottom) .. ")")
+    -- a new battle: afresh
+    hd.fit.idle = 3
+    frame({ view = view })
+    check(hd.fit.boxBottom ~= nil, "world: ...and when a battle starts")
+    hd.fit.fill = false
+    hd.tag(pic, giant)
+    for _ = 1, 60 do frame() end
+    check(hd.fit.headBox == false and hd.fit.boxBottom == nil, "world: no Fill Screen, no box placement")
+  end
   -- (its room: from its feet (row 70) up to the screen's top at zoom 0.4 about the focus row 112,
   -- 112 - 112 / 0.4 = -168: 238 rows for 200 px of art)
   local most = (70 - (112 - 112 / 0.4)) / 200
@@ -769,8 +846,9 @@ do
     body = { 0, 100, 600, 200 } }))
   frame()
   local half = 300 * 3 * ppt(70) / 200
-  local want = (240 - hd.fit.margin - 120) / (176 + half - 120)
-  check(near(hd.stats.zoomTarget, want, 1e-3), "world: a wide foe: zoomed until it fits across (" ..
+  -- (and then bigPull further back, a giant)
+  local want = (240 - hd.fit.margin - 120) / (176 + half - 120) * hd.fit.bigPull
+  check(near(hd.stats.zoomTarget, want, 1e-3), "world: a wide foe: zoomed until it fits across, a little further (" ..
     tostring(hd.stats.zoomTarget) .. ", want " .. want .. ")")
   -- coming out of its ball (drawn small, 16 rows low): measured again when it rests, then kept
   -- through a lunge
@@ -809,13 +887,14 @@ do
     .. tostring(size(pageE)) .. ", want " .. want1 .. ")")
   -- indoors, a ceiling: a 6 m foe stands as tall as the knee (2 m) plus the ceiling's metre less
   -- e^-4 of it; one under the knee true to scale; outdoors the same foe at its 6 m
-  local function sized(indoor, h)
+  local function sized(indoor, h, cap, side, extra, wide)
     local G3 = fakeGraphics()
     local h3 = HD.new(G3)
     h3.install()
-    h3.fit.enabled, h3.fit.zMin, h3.fit.worldMin = true, 0.4, 0
+    h3.fit.enabled, h3.fit.zMin, h3.fit.worldMin, h3.fit.heightMax = true, 0.4, 0, cap
+    h3.fit.widthMax, h3.fit.heightMaxFoe = wide, cap and heightMaxFoe or nil
     h3.scene, h3.sceneRenderer = hd.scene, hd.sceneRenderer
-    h3.tag(pic, mon(pageE, "enemy", h))
+    h3.tag(pic, mon(pageE, side or "enemy", h, extra))
     G3.setCanvas(base)
     h3.beginPass("battle", base)
     h3.world(wall, { to = {}, indoor = indoor }, 0, 0)
@@ -829,6 +908,20 @@ do
   local inH, outH, smallH = sized(true, 6), sized(false, 6), sized(true, 1.5)
   check(inH and near(inH, 2 + (1 - math.exp(-4))), "world: indoors a 6 m foe under the ceiling (" .. tostring(inH) .. " m)")
   check(outH and near(outH, 6), "world: ...outdoors its own 6 m")
+  -- the cap: the same 6 m foe outdoors stands 2.25 m, the player's own 2.5 m; indoors capped
+  -- first, then under the ceiling
+  local capH, capIn = sized(false, 6, heightMax), sized(true, 6, heightMax)
+  check(capH and near(capH, 2.25), "world: a 6 m foe capped at 2.25 m (" .. tostring(capH) .. ")")
+  check(capIn and near(capIn, 2 + (1 - math.exp(-0.25))), "world: ...indoors, capped then under the ceiling ("
+    .. tostring(capIn) .. ")")
+  local ownH = sized(false, 6, heightMax, "player")
+  check(ownH and near(ownH, 2.5), "world: ...the player's own at 2.5 m (" .. tostring(ownH) .. ")")
+  -- the width: a 2 m art box twice as wide as tall (4 m) drawn 3 m wide, 1.5 m tall; the test's
+  -- 100x200 frame (1 m wide at 2 m) keeps its height
+  local wideH = sized(false, 2, heightMax, "enemy", { art = { -50, 100, 150, 200 }, top = 100 }, widthMax)
+  check(wideH and near(wideH, 1.5), "world: a wide one held to 3 m across (" .. tostring(wideH) .. " m tall)")
+  local thinH = sized(false, 2.2, heightMax, "enemy", nil, widthMax)
+  check(thinH and near(thinH, 2.2), "world: ...a tall, thin one keeps its height (" .. tostring(thinH) .. ")")
   check(smallH and near(smallH, 1.5), "world: ...indoors one under the knee true to scale")
   -- no world drawn: Battle Fit's species sizing, as before
   local G2 = fakeGraphics()
@@ -847,9 +940,9 @@ do
   check(plain.worldScene == nil, "world: none without the 3D world")
 end
 
--- Battle Fit's species sizing: both at one scale, px per metre (the player's nearScale larger);
--- the tighter fills its room (its pic box grown by fitRoom: Gen 3's enemy 8 rows up to the
--- screen's top, 16 columns each side), the other true to size, never below sizeFloor
+-- Battle Fit outside the 3D world: each battler at its tag's own size (the sprite mod's), shrunk
+-- only when too big for its room (its pic box grown by fitRoom: Gen 3's enemy 8 rows up to the
+-- screen's top, 16 columns each side)
 do
   local G = fakeGraphics()
   local hd = HD.new(G)
@@ -870,292 +963,108 @@ do
     for k, v in pairs(extra or {}) do spec[k] = v end
     return spec
   end
-  -- before the player's Pokemon has been drawn (sliding in, the player's only prefitted): its
-  -- own size
+  -- (its room: the 64 rows over its feet and the 8 above them hold 72 / 148 of its art)
   hd.tag(pic, tall())
   fitFrame(G, hd, base, frame)
   local d = drawn()
-  check(d and near(d.args[5], 4 * 0.3) and not hd.playerIn, "species: the enemy at its own size until the player's comes in ("
-    .. tostring(d and d.args[5]) .. ")")
-  -- ... but no larger than its room (the camera need not pull back for the slide-in)
+  check(d and near(d.args[5], 4 * 0.3) and near(d.args[3], 4 * 72) and near(hd.stats.zoomTarget, 1),
+    "own size: a battler that fits is drawn at its own size, on its feet, the camera in (" .. tostring(d and d.args[5]) .. ")")
+  -- ... whatever the other side's species: no sizing by height
+  hd.pair.player = { height = 7.2 }
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 0.3), "own size: the other side's height changes nothing (" .. tostring(d and d.args[5]) .. ")")
+  hd.pair.player = nil
+  -- too big for its room: just small enough to fit it, so the camera need not pull back
   hd.tag(pic, tall({ scale = 1 }))
   fitFrame(G, hd, base, frame)
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148) and near(hd.stats.zoomTarget, 1),
-    "species: sliding in, its own size capped at its room (" .. tostring(d and d.args[5]) .. ")")
-  hd.tag(pic, tall())
-  -- the player's drawn (its send-out): from then on the enemy's sized; alone (no player's
-  -- measure yet) it fills its room, the 64 rows over its feet and the 8 above them holding
-  -- 72 / 148 of its art; the camera stays in
-  local mine = canvas("mine", 64, 64)
-  hd.tag(mine, tall({ side = "player" }))
-  fitFrame(G, hd, base, { wall = wall, pad = pad, pic = pic, mine = mine })
-  check(hd.playerIn == true, "species: the player's drawn: it has come in")
-  hd.pair.player = nil
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(near(hd.stats.zoomTarget, 1) and d and near(d.args[5], 4 * 72 / 148) and near(d.args[3], 4 * 72),
-    "species: the taller fills its room, standing on its feet, the camera in (" .. tostring(d and d.args[5]) .. ")")
-  -- the player's 4x taller: this one at a quarter of its fill
-  hd.pair.player = { height = 7.2 }
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  local C = hd.fit.sizeCurve
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ C), "species: the shorter at (its height / the taller's) ^ sizeCurve of its fill ("
-    .. tostring(d and d.args[5]) .. ")")
-  -- ... never below sizeFloor
-  hd.pair.player = { height = 100 }
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.2), "species: never below sizeFloor")
-  -- the player's shorter: this one fills
-  hd.pair.player = { height = 0.4 }
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148), "species: the taller of the pair fills")
-  -- the player's side measured (its art's height at its fill, canvas px): one scale, px per
-  -- metre (^ sizeCurve, 0.5), the player's nearScale (1.15) larger. This one's fill: 72 px for 1.8 m.
-  local mon = { height = 0.7 }
-  hd.pair.player, hd._fillOf.player, hd._fillPx.player = mon, mon, 100
-  hd._fillBody.player = nil   -- (no body measured: no minimum until the checks below set one)
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148), "species: roomier for its height than the other: it fills ("
-    .. tostring(d and d.args[5]) .. ")")
-  -- the same species on the player's side, the same room: this one 1 / 1.15 of its fill
-  mon.height, hd._fillPx.player = 1.8, 72
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 / 1.15), "species: the same species smaller on the enemy's side ("
-    .. tostring(d and d.args[5]) .. ")")
-  -- the player's room tight for its height (14 px for 0.7 m): this one sized to it
-  mon.height, hd._fillPx.player = 0.7, 14
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * (14 / 0.7 ^ C / 1.15) / (72 / 1.8 ^ C)), "species: sized against the tighter side ("
-    .. tostring(d and d.args[5]) .. ")")
-  -- ... and still when the measured side's Pokemon is tagged afresh (a sprite mod's new frame,
-  -- a rebuilt picture: a new table, the same species and art): no jump for that frame
-  hd.pair.player = { height = 0.7 }
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * (14 / 0.7 ^ C / 1.15) / (72 / 1.8 ^ C)),
-    "species: the other side's new tag for the same Pokemon keeps its measure (" .. tostring(d and d.args[5]) .. ")")
-  hd.pair.player = mon
-  -- the minimum: the smaller's body at least minShare (0.3) of the other's, which fills its
-  -- room. This one has no body: its art (72 px at its fill) stands in. The other's body 100 px:
-  -- this one at 30 / 72 of its fill, more than the heights give (0.27)
-  hd._fillBody.player = 100
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 100 / 72),
-    "species: the smaller kept at minShare of the other's body (" .. tostring(d and d.args[5]) .. ")")
-  -- ... by its own body when it has one (50 of its 148 rows: 24.3 px at its fill)
-  hd.tag(pic, tall({ body = { 40, 150, 60, 200 } }))
-  hd._fillBody.player = 40
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 40 / (72 * 50 / 148)),
-    "species: the minimum measures the smaller's body (" .. tostring(d and d.args[5]) .. ")")
-  -- ... by its body's longest side: a long, flat body (100 wide, 50 tall: 48.6 px wide at its
-  -- fill) held by its width, not lifted until its height is minShare of the other's
-  hd.tag(pic, tall({ body = { 0, 150, 100, 200 } }))
-  hd._fillBody.player = 60
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.3 * 60 / (72 * 100 / 148)),
-    "species: the minimum measures a wide body by its width (" .. tostring(d and d.args[5]) .. ")")
-  hd.tag(pic, tall({ body = { 40, 150, 60, 200 } }))
-  -- ... never past its own fill
-  hd._fillBody.player = 400
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148), "species: the minimum stops at its fill (" .. tostring(d and d.args[5]) .. ")")
-  hd.tag(pic, tall())
-  hd._fillBody.player = nil
-  -- (measured for another tag: the heights' ratio until it is measured again)
-  hd._fillOf.player = nil
-  mon.height = 7.2
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 72 / 148 * 0.25 ^ C), "species: a stale measure falls back to the heights")
-  -- a battle starting afresh forgets the last one's pair
-  hd.pair.player = { height = 7.2 }
-  hd.fit.idle = 10
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 0.3) and hd.pair.player == nil and hd.pair.enemy ~= nil and not hd.playerIn,
-    "species: a new battle starts a new pair, the enemy at its own size again (" .. tostring(d and d.args[5]) .. ")")
-  hd.playerIn = true
+    "own size: one too big for its room shrinks to fit it (" .. tostring(d and d.args[5]) .. ")")
   -- the art's own columns (spec.art, not the frame's) and the room's sides: 30 art px each side
   -- of its feet, 32 + 16 canvas px beside them
-  hd.tag(pic, tall({ quad = quad(0, 0, 100, 40), pivot = { 50, 40 }, art = { 20, 0, 80, 40 }, top = 0 }))
+  hd.tag(pic, tall({ quad = quad(0, 0, 100, 40), pivot = { 50, 40 }, art = { 20, 0, 80, 40 }, top = 0, scale = 4 }))
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 48 / 30), "species: sized by the art's own columns and the room's sides ("
+  check(d and near(d.args[5], 4 * 48 / 30), "own size: the room measured by the art's own columns and its sides ("
     .. tostring(d and d.args[5]) .. ")")
   -- a mirrored frame: its right side drawn on the left (feet at x 20 of the box: 20 + 16 / 40)
-  hd.tag(pic, tall({ quad = quad(0, 0, 50, 20), pivot = { 10, 20 }, lowPivot = { 20, 64 }, top = 0, flip = true }))
+  hd.tag(pic, tall({ quad = quad(0, 0, 50, 20), pivot = { 10, 20 }, lowPivot = { 20, 64 }, top = 0, flip = true, scale = 4 }))
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], -4 * 36 / 40), "species: a mirrored frame fits by its drawn sides (" .. tostring(d and d.args[5]) .. ")")
+  check(d and near(d.args[5], -4 * 36 / 40), "own size: a mirrored frame fits by its drawn sides (" .. tostring(d and d.args[5]) .. ")")
   -- the player's room: up to the enemy's HP box (16 rows here), its feet kept
   hd.fit.fitRoom = { player = { up = 16 } }
-  hd.pair.enemy = nil
-  hd.tag(pic, tall({ side = "player" }))
+  hd.tag(pic, tall({ side = "player", scale = 1 }))
   fitFrame(G, hd, base, frame)
   d = drawn()
   check(d and near(d.args[5], 4 * 80 / 148) and near(d.args[3], 4 * 72),
-    "species: the player's room reaches up to the enemy's HP box (" .. tostring(d and d.args[5]) .. ")")
-  -- the tag's own size: no height, a trainer, a double battle, Battle Fit off
+    "own size: the player's room reaches up to the enemy's HP box (" .. tostring(d and d.args[5]) .. ")")
+  -- a tag without a height is held to its room too; a trainer keeps its own size
+  hd.tag(pic, tall({ side = "player", scale = 1, height = false }))
+  fitFrame(G, hd, base, frame)
+  d = drawn()
+  check(d and near(d.args[5], 4 * 80 / 148), "own size: a tag without a height is held to its room too")
   local function own(spec, msg)
     hd.tag(pic, spec)
     fitFrame(G, hd, base, frame)
     d = drawn()
-    check(d and near(d.args[5], 4 * 0.3), msg .. " (" .. tostring(d and d.args[5]) .. ")")
+    check(d and near(d.args[5], 4 * spec.scale), msg .. " (" .. tostring(d and d.args[5]) .. ")")
   end
-  own(tall({ height = false }), "species: a tag without a height keeps its own size")
-  own(tall({ trainer = true }), "species: a trainer keeps its own size")
-  -- a double battle: up to two a side, all at one scale (the one tightest for its height fills).
-  -- (this room: 64 px over its feet, the player's room above having no `up` for the enemy)
+  own(tall({ trainer = true, scale = 1 }), "own size: a trainer keeps its own size")
+  -- a double battle: each the same way
   hd.fit.double = true
-  hd.pair.player, hd.playerIn = nil, true
-  local Q = hd._quads
-  hd.tag(pic, tall())
+  hd.fit.fitRoom = { enemy = { up = 0 } }
+  own(tall(), "doubles: one that fits keeps its own size")
+  hd.tag(pic, tall({ scale = 1 }))
   fitFrame(G, hd, base, frame)
   d = drawn()
-  check(d and near(d.args[5], 4 * 64 / 148), "doubles: alone, it fills (" .. tostring(d and d.args[5]) .. ")")
-  check(#Q.enemy == 1 and Q.enemy[1].h and near(Q.enemy[1].h, 64), "doubles: measured at its fill")
-  -- a player's Pokemon tighter for its height (14 px for 0.7 m, nearScale 1.15): this one true
-  -- to size against it
-  Q.player[1] = { of = { height = 0.7 }, h = 14, bh = 14, m = 14 / 0.7 ^ C / 1.15, at = 0 }
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 64 / 148 * (14 / 0.7 ^ C / 1.15) / (64 / 1.8 ^ C)),
-    "doubles: sized against the tightest of the four (" .. tostring(d and d.args[5]) .. ")")
-  -- ... its body (no body: its art, 64 px) at least minShare of the one filling's
-  Q.player[1].bh = 100
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 64 / 148 * 0.3 * 100 / 64),
-    "doubles: the minimum against the one filling (" .. tostring(d and d.args[5]) .. ")")
-  -- roomier than the others for its height: it fills
-  Q.player[1].m, Q.player[1].bh = 1000, 14
-  fitFrame(G, hd, base, frame)
-  d = drawn()
-  check(d and near(d.args[5], 4 * 64 / 148), "doubles: the tightest fills (" .. tostring(d and d.args[5]) .. ")")
-  -- a new Pokemon on a full side takes the place of the one drawn longest ago (switched out)
-  local gone, kept = { of = { height = 9 }, m = 1, at = -5 }, { of = { height = 8 }, m = 1, at = -1 }
-  Q.enemy[1], Q.enemy[2] = gone, kept
-  hd.tag(pic, tall({ height = 1.2 }))
-  fitFrame(G, hd, base, frame)
-  check(#Q.enemy == 2 and Q.enemy[2] == kept and Q.enemy[1] == gone and gone.of.height == 1.2,
-    "doubles: a switch-in replaces the side's longest-undrawn")
-  -- a new battle starts afresh
-  hd.fit.idle = 3
-  hd.beginPass("battle", base)
-  hd.endPass()
-  check(#Q.enemy == 0 and #Q.player == 0, "doubles: cleared when a battle starts")
-  hd.fit.idle = 0
+  check(d and near(d.args[5], 4 * 64 / 148), "doubles: one too big shrinks to its room (" .. tostring(d and d.args[5]) .. ")")
   hd.fit.double = false
   hd.fit.enabled = false
-  own(tall(), "species: none with Battle Fit off")
+  own(tall({ scale = 1 }), "own size: Battle Fit off, never shrunk")
 end
 
--- Battle Fit and the player's own Pokemon (a back sprite: side = "player", body)
+-- Battle Fit and the player's own Pokemon (a back sprite: side = "player", body): outside the 3D
+-- world as in it, the camera only makes room for what would leave the screen; the HP boxes and
+-- the text box may cover a back, as on the cart
 do
   local G = fakeGraphics()
   local hd = HD.new(G)
   hd.install()
   hd.fit.enabled, hd.fit.zMin = true, 0.4
   local fit = hd.fit
-  -- a back as drawn: its side lowered so its pad stays tucked, the Pokemon raised above a small
-  -- back's pad so minVisible of its body shows
   local function placed(r, z, e)
     local lift = hd.fitLift(z) + e
-    local drop = hd.fitPlayerDrop(z, lift)
-    local raise = hd.fitBackRaise(r, z, lift, drop)
-    local v = drop - raise
-    local ue, uo, y0 = hd.fitHidden({ r[1], r[2] + v, r[3], r[4] + v }, z, lift)
-    local visible = (fit.focus[2] - y0) / ((r[4] - r[2]) * z)
+    local v = hd.fitPlayerDrop(z, lift)
+    local _, _, y0 = hd.fitHidden({ r[1], r[2] + v, r[3], r[4] + v }, z, lift)
     local t = r.top and (fit.focus[2] + (r.top + v - fit.focus[2]) * z - lift)
-    return ue, uo, y0, t, visible, raise
+    return y0, t
   end
-  local function check2(z, e, rects, label)
-    local ok = true
-    for _, r in ipairs(rects) do
-      local ue, _, y0, _, visible = placed(r, z, e)
-      if ue > fit.maxHidden + 1e-9 or y0 < fit.backTopMin - 1e-9 then ok = false end
-      if visible < fit.minVisible - 1e-6 then ok = false end
-    end
-    check(ok, label .. " (zoom " .. string.format("%.3f", z) .. ", rise +" .. e .. ")")
+  -- a back mostly under the text box, or reaching up under the enemy's HP box: nothing moves
+  for _, r in ipairs({ { 20, 60, 100, 130 }, { 20, 60, 100, 200 }, { 20, 14, 100, 50 } }) do
+    local z, e = hd.fitSolve(math.huge, { r })
+    check(z == 1 and e == 0, "a back on the screen: no zoom, no rise (" .. table.concat(r, ",") .. ")")
   end
-
-  -- a small back (30 px body, feet 7 px under the text box's top) is raised to show whole; a big
-  -- one (79 px) already shows minVisible and keeps the over-the-shoulder cut
-  check(math.abs(hd.fitBackRaise({ 20, 89, 50, 119 }, 1, 0, 0) - 7) < 1e-9,
-    "a small back is raised until its whole body shows")
-  check(hd.fitBackRaise({ 10, 40, 100, 119 }, 1, 0, 0) == 0, "a big back keeps its cut")
-
-  -- a back that shows most of itself already: nothing moves, nothing raised
-  local small = { 20, 60, 100, 130 }
-  local z, e = hd.fitSolve(math.huge, { small })
-  local _, _, _, _, _, raise = placed(small, z, e)
-  check(z == 1 and e == 0 and raise == 0, "a back mostly in view: no zoom, no rise, not raised")
-
-  -- a back mostly under the text box (37% shows): raised until 65% shows, standing behind its
-  -- pad; raised that high it needs the camera back for its headroom (112 - 0.65 * 140 * z >= 52)
-  local deep = { 20, 60, 100, 200 }
-  z, e = hd.fitSolve(math.huge, { deep })
-  _, _, _, _, _, raise = placed(deep, z, e)
-  check(raise > 0, "a back mostly under the text box is raised")
-  check2(z, e, { deep }, "...until 65% of it shows, its headroom kept")
-
-  -- a back reaching up under the enemy's HP box: brought down to the cart's headroom
-  local high = { 20, 14, 100, 50 }
-  z, e = hd.fitSolve(math.huge, { high })
-  check2(z, e, { high }, "a back up under the enemy's HP box is brought down to the cart's headroom")
-
-  -- with a tall enemy too: the enemy still fits (its top under the screen's)
+  -- with a tall enemy: the enemy fits (its top under the screen's)
   local top = -40
-  z, e = hd.fitSolve(top, { deep })
+  local z, e = hd.fitSolve(top, { { 20, 60, 100, 200 } })
   local lift = hd.fitLift(z) + e
   local enemyTop = fit.focus[2] + (top - fit.focus[2]) * z - lift
-  check(enemyTop >= fit.margin - 1e-6, "...and a tall enemy still fits under the top (" .. string.format("%.2f", enemyTop) .. ")")
-  check2(z, e, { deep }, "...with the back's headroom and 65% kept")
-
-  -- headroom: a large body that starts above the tallest cart back (row 52) is brought down to
-  -- it, and not raised (it shows all of itself)
-  local horned = { 20, 30, 140, 112 }
-  z, e = hd.fitSolve(math.huge, { horned })
-  local _, _, y0, _, _, hraise = placed(horned, z, e)
-  check(y0 >= fit.backTopMin - 1e-9 and hraise == 0, "a large back gets the cart's headroom, unraised (top "
-    .. string.format("%.2f, zoom %.3f", y0, z) .. ")")
-  local _, _, y1 = placed(horned, z + fit.zStep, 0)
-  check(z > fit.zMin and y1 < fit.backTopMin, "...and no further back than that ("
-    .. string.format("%.3f", z) .. ")")
-
-  -- the whole animation must stay on the screen, but only the resting body needs headroom: a
-  -- head flung high in the animation (Blacephalon) pulls back only as far as the screen's top
+  check(enemyTop >= fit.margin - 1e-6, "a tall enemy fits under the top (" .. string.format("%.2f", enemyTop) .. ")")
+  -- the whole animation stays on the screen: a head flung high (Blacephalon) pulls back only as
+  -- far as the screen's top
   local flung = { 20, 60, 100, 112, top = -40 }
   z, e = hd.fitSolve(math.huge, { flung })
-  local _, _, _, t = placed(flung, z, e)
-  check(t >= fit.margin - 1e-9, "a flung head stays on the screen (" .. string.format("%.2f", t) .. ")")
-
-  -- a back that needs more than the limit: clamped to the limit, not left at the enemy's 1.00
-  local huge = { 10, -150, 130, 112, top = -200 }
-  z, e = hd.fitSolve(math.huge, { huge })
+  local _, t = placed(flung, z, e)
+  check(z < 1 and t >= fit.margin - 1e-9, "a flung head stays on the screen (" .. string.format("%.2f", t) .. ")")
+  local _, t2 = placed(flung, z + fit.zStep, 0)
+  check(t2 < fit.margin, "...and no further back than that")
+  -- a back that needs more than the limit: clamped to the limit
+  z, e = hd.fitSolve(math.huge, { { 10, -150, 130, 112, top = -200 } })
   check(near(z, fit.zMin) and e == 0, "a back past the limit clamps to zMin (" .. tostring(z) .. "), not 1")
   z = hd.fitSolve(-300, {})
   check(near(z, fit.zMin), "...as an enemy past the limit does")
-
-  -- a back whose headroom is out of reach (its body's top on row -80: even zoom 0.4 with its
-  -- side lowered leaves it above 44), with a small enemy: the limit, not 1.00 -- the looser
-  -- rules would be met at 1.00, but the limit is still the nearest to the headroom
-  local eternatus = { 10, -80, 130, 112 }
-  z, e = hd.fitSolve(math.huge, { eternatus })
-  check(near(z, fit.zMin), "headroom out of reach clamps to zMin (" .. tostring(z) .. "), not 1")
-
   -- without backs the solve is the enemy's own fit
   z, e = hd.fitSolve(-76, {})
   check(near(z, 0.5) and e == 0, "no back: the enemy's fit, unchanged")
@@ -1171,7 +1080,8 @@ do
   local base = canvas("ui", 240, 160)
   local wall, pad = canvas("wall", 256, 160), canvas("pad", 256, 160)
   local foe, mine, page = canvas("foe", 64, 64), canvas("mine", 64, 64), canvas("atlas", 4096, 4096)
-  -- a tall enemy (zoom 0.5) and a small back
+  -- a tall enemy (zoom 0.5: its room past the screen's top, so it keeps its size) and a small back
+  fit.fitRoom = { enemy = { up = 400, left = 400, right = 400 } }
   hd.tag(foe, { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
                 top = 52, side = "enemy" })
   hd.tag(mine, { texture = page, quad = quad(0, 0, 40, 40), pivot = { 20, 40 }, lowPivot = { 32, 64 },

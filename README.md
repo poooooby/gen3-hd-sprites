@@ -22,27 +22,18 @@ and Crystal.
 
 ### Battle Fit 🎥
 
-- 📏 **True-to-size battles:** Both Pokémon are drawn to one scale by their real heights. The
-  bigger one fills all the room it has, never hidden under the HP boxes or the text box, and the
-  other stands at its size beside it, small ones nudged up a little so they stay easy to see:
-  a Bulbasaur comes up to a little over half a Meganium. However far apart they are, the smaller
-  one's body is never under about a third of the bigger one's, so even a Cutiefly beside a
-  Haunter is easy to spot.
-  Your own Pokémon is a touch bigger than the same one on the far side, being nearer to you, and
-  two giants both fill the screen. The opponent slides in at its normal size and settles to its
-  true size when your Pokémon comes out.
-- 👯 **Double battles too:** All four Pokémon share one scale, so a Rayquaza towers over its
-  Dragonite partner and over your team. The one that needs the most room fills it, and the
-  others stand at their true size beside it.
-- 📐 **Nothing cut off:** If a Pokémon still doesn't fit, the camera pulls back just enough to
-  show it in full, and eases back in when it leaves.
+- 📏 **Your sprites, as drawn:** Every Pokémon is drawn at the size your sprite mod gives it,
+  in single and double battles. One too big for its space is shrunk just enough to fit, so it
+  is never cut off by the top or the sides of the screen.
+- 📐 **Nothing cut off:** If a Pokémon still doesn't fit (a head flung high in its animation),
+  the camera pulls back just enough to show it in full, and eases back in when it leaves.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
   bag and the intro fill any screen shape without black bars. The text box and HP bars stay
-  sharp. In Gen 3 the enemy's HP box moves up to the top of the screen, giving your Pokémon
-  more room. Gold, Silver and Crystal keep the game's own framed screen.
+  sharp. In Gen 3's classic battles the enemy's HP box moves up to the top of the screen, giving
+  your Pokémon more room. Gold, Silver and Crystal keep the game's own framed screen.
 - 📱 **Phone-friendly:** On a phone held upright, the text box runs full width above the touch
-  controls, the battle grows into the space above it, and the opponent's HP box stays put just
-  inside the battle's top edge, whatever the Pokémon do.
+  controls, the battle grows into the space above it, and in classic battles the opponent's HP
+  box stays put just inside the battle's top edge, whatever the Pokémon do.
 
 ### Battle Text Box 💬
 
@@ -66,9 +57,15 @@ and Crystal.
 - 🎯 **A fair place to fight:** Each battle is set on the nearest spot where both Pokémon stand
   on level, open ground, with nothing between them and nothing blocking the view.
 - 📏 **True to size:** Every Pokémon stands on the ground at its real size, a map tile being
-  about a metre, and nearer the camera looks bigger. A Wailord towers over the houses while a
-  Pikachu looks tiny beside it. The camera zooms out to fit a giant, and one too big even then
-  is shrunk just enough to fit. The tiniest are never drawn too small to see. Indoors, the biggest
+  half a metre, and nearer the camera looks bigger. The biggest are capped at 2.5 m tall (2.25 m
+  for an opponent) and 3 m wide, so a Wailord towers over a Pikachu without leaving the screen, while a tall, thin
+  Steelix keeps its height. The camera zooms
+  out to fit a giant, and one too big even then is shrunk just enough to fit. In single battles
+  a wide Pokémon steps back toward its own side of the screen, partly out of view, rather than
+  reaching across the middle and covering its opponent, always with most of it in view.
+- 🏷️ **HP box over their heads:** In single battles the opponent's HP box sits just above the
+  taller Pokémon's head, and the camera leaves room for it. It only moves when a new Pokémon
+  comes out, so it never jumps about when one faints or the battle ends. The tiniest are never drawn too small to see. Indoors, the biggest
   are held to about a room's height, so a gym or a ship's cabin stays in view, and anything past
   the walls fades into the room's own colours instead of black. Battles inside the Abandoned
   Ship are fought out on its deck.
@@ -89,10 +86,10 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | Option | Choices | Default | What it does |
 |---|---|---|---|
 | **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | Both Pokémon drawn to one scale by their real heights: the bigger fills its space, the other stands at its size beside it (small ones nudged up a little, never under about a third of the bigger one's size), yours a touch bigger for being nearer; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
+| **Battle Fit** | On / Off | On | Pokémon at the sprite mod's own size, one too big for its space shrunk just enough to fit; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
-| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you, the Pokémon at their real size (Gen 3 games). Needs Battle Fit. |
+| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you, the Pokémon at their real size, the biggest capped at 2.5 m tall (2.25 m for an opponent) and 3 m wide (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
 | **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |

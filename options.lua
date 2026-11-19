@@ -12,7 +12,7 @@ return {
     label = "Battle Fit",
     type = "toggle",
     default = true,
-    description = "Battle Pokemon sized by their species: the taller of the two fills the space it has, without the HP boxes or text box covering it, and the other is drawn to the same scale, small ones nudged up a little so they stay easy to see: a Bulbasaur comes up to a little over half a Meganium, and the smaller is never under about a third of the bigger one. Your own Pokemon is a touch bigger, being nearer. In double battles all four share one scale. If one is still too tall for the screen, the camera pulls back so the whole Pokemon fits. The text box and HP bars never change. Off: the sprite mod's own sizes. Needs Battle HD.",
+    description = "Battle Pokemon drawn at the sprite mod's own size, and one too big for its space shrunk just enough to fit, so none is cut off; if one still doesn't fit, the camera pulls back so the whole Pokemon shows. With Battle Scene on OVERWORLD the Pokemon stand in the world at their real size instead. Off: the sprite mod's own sizes, whatever they are. Needs Battle HD.",
   },
   {
     key = "fill_screen",
@@ -34,7 +34,7 @@ return {
     type = "choice",
     default = "classic",
     choices = { { "CLASSIC", "classic" }, { "OVERWORLD", "overworld" } },
-    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. The Pokemon stand in it at their real size (a tile about a metre), the camera zooming out for big ones. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
+    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. The Pokemon stand in it at their real size (a tile half a metre, the biggest capped at 2.5 m tall, 2.25 m for an opponent, and 3 m wide), the camera zooming out for big ones. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
   },
   {
     key = "scene_build",

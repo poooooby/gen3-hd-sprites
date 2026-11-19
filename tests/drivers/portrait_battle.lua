@@ -4,6 +4,7 @@
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/portrait_battle.lua love .
 
+-- (vsync = 0: the runs go as fast as the machine allows)
 local function body(game, log)
   local U = require("tests.drivers.util")
   local dir = os.getenv("SHOT_DIR") or "/tmp/hd_portrait"
@@ -14,7 +15,7 @@ local function body(game, log)
     end
     return pred() and true or false
   end
-  love.window.setMode(432, 768, { resizable = true, highdpi = true })
+  love.window.setMode(432, 768, { resizable = true, highdpi = true, vsync = 0 })
   U.wait(2)
   if not waitFor(function() return game.phase == "boot" and game.boot end, 900) then
     log("FAIL boot phase not reached; phase:", game.phase)
@@ -46,6 +47,8 @@ local function body(game, log)
   -- HD_FILLOFF=1: Fill Screen off; HD_HIDEBOTTOM=1: the battle's bottom UI hidden, as Kanto
   -- Gear's GEAR screens hide it (battle.bottom_ui_visible)
   if os.getenv("HD_FILLOFF") == "1" and hd.setFill then hd.setFill(false) end
+  -- HD_SCENE=off: Battle Scene on CLASSIC (no 3D world) for this run
+  if os.getenv("HD_SCENE") == "off" and hd.setScene then hd.setScene(false) end
   if os.getenv("HD_HIDEBOTTOM") == "1" then
     local BUi = require("src.core.game3.battle.ui")
     BUi.bottomUIVisible = function() return false end
@@ -73,8 +76,12 @@ local function body(game, log)
     local reached = false
     -- HD_BAR=1: the battle's text box shot too, with its first message and its move menu
     local bar, msgShot = os.getenv("HD_BAR") == "1", false
-    for _ = 1, 1500 do
+    -- HD_EARLY=f,f,...: shots that many frames into the battle (its opening)
+    local early = {}
+    for f in (os.getenv("HD_EARLY") or ""):gmatch("%d+") do early[tonumber(f)] = true end
+    for frame = 1, 1500 do
       U.wait(1)
+      if early[frame] then U.shot(game, ("%s/%s_f%03d.png"):format(dir, name, frame)) end
       local p, sn = prompt()
       if p == "advance" then
         if bar and not msgShot then
@@ -100,7 +107,8 @@ local function body(game, log)
     log(("%s: menu %s  window %dx%d  view %d,%d %dx%d cut %s  controlsTop %s  fill %.3f ui %.2f topDy %.2f zoom %.2f composites %d flattened %d failed %s"):format(
       name, tostring(reached), w, h, R.vux, R.vuy, R.vuw, R.vuh, tostring(R.cut), ctop, st.fill or -1, st.uiScale or -1,
       st.uiTopDy or 0, st.zoom or -1, st.composites or 0, st.flattened or 0, tostring(st.failed))
-      .. "  grow " .. tostring(st.grow) .. " inward " .. tostring(st.inward) .. " shiftE " .. tostring(st.shiftEnemy) .. " shiftP " .. tostring(st.shiftPlayer))
+      .. "  grow " .. tostring(st.grow) .. " inward " .. tostring(st.inward) .. " shiftE " .. tostring(st.shiftEnemy) .. " shiftP " .. tostring(st.shiftPlayer)
+      .. " scene " .. tostring(st.scene) .. " " .. tostring(st.sceneError) .. " packed " .. tostring(st.packed) .. " shrink " .. tostring(st.worldShrink) .. " rest " .. tostring(st.boxRest))
     U.shot(game, dir .. "/" .. name .. ".png")
     if bar then
       U.tap(game, "a"); U.wait(20)
@@ -126,12 +134,18 @@ local function body(game, log)
   for w, h in (os.getenv("HD_SIZES") or "432x768,540x960,540x1200,1280x720"):gmatch("(%d+)x(%d+)") do
     sizes[#sizes + 1] = { tonumber(w), tonumber(h) }
   end
+  -- HD_SCENES=on,off,...: Battle Scene for each battle in turn (OVERWORLD / CLASSIC)
+  local scenes = {}
+  for v in (os.getenv("HD_SCENES") or ""):gmatch("[^,]+") do scenes[#scenes + 1] = v end
   for i, sz in ipairs(sizes) do
-    if i > 1 or sz[1] ~= 432 or sz[2] ~= 768 then
-      love.window.setMode(sz[1], sz[2], { resizable = true, highdpi = true })
+    local w0, h0 = love.graphics.getDimensions()
+    if (i > 1 or sz[1] ~= 432 or sz[2] ~= 768) and (w0 ~= sz[1] or h0 ~= sz[2]) then
+      love.window.setMode(sz[1], sz[2], { resizable = true, highdpi = true, vsync = 0 })
       U.wait(10)
     end
-    battleShot((sz[2] > sz[1] and "portrait_" or "landscape_") .. sz[1] .. "x" .. sz[2])
+    if scenes[i] and hd.setScene then hd.setScene(scenes[i] ~= "off") end
+    battleShot((sz[2] > sz[1] and "portrait_" or "landscape_") .. sz[1] .. "x" .. sz[2]
+      .. (scenes[i] and ("_" .. i .. "_" .. scenes[i]) or ""))
   end
 end
 

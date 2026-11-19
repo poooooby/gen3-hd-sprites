@@ -104,30 +104,38 @@ function HD.new(G, opts)
     fit = {
       -- zMin: the farthest it may pull back (40% fits the very biggest, Lugia and Koraidon)
       enabled = false, available = false, zMin = 0.4, focus = { 120, 112 }, margin = 2, parallax = 0.35,
-      -- species sizing (singles, tags with a `height`): each battle Pokemon's room, in canvas px:
-      -- its picture box grown `up` rows above its top and `left` / `right` columns beside it, the
-      -- most it may fill without the UI covering it (fillScale). Gen 3: the enemy up to the
-      -- screen's top (its box at 144-208, from row 8), the player's up to the enemy's HP box's
-      -- bottom (44, or where the top band has moved it; its box at 40-104, from row 52: it
-      -- stands on its pad, the UI over its lower rows as in the cart), each 16 columns wider
+      -- outside the 3D world each battle Pokemon is drawn at its tag's own size (the sprite
+      -- mod's), shrunk only when it is too big for its room, in canvas px: its picture box grown
+      -- `up` rows above its top and `left` / `right` columns beside it (fillScale). Gen 3: the
+      -- enemy up to the screen's top (its box at 144-208, from row 8), the player's up to the
+      -- enemy's HP box's bottom (44, or where the top band has moved it; its box at 40-104, from
+      -- row 52: it stands on its pad, the UI over its lower rows as in the cart), each 16 columns
+      -- wider
       fitRoom = { enemy = { up = 8, left = 16, right = 16 }, player = { up = 8, left = 16, right = 16 } },
-      -- ... the two drawn at one scale, pixels per metre: the one whose room is tighter for its
-      -- height fills it, the other true to size against it (never below sizeFloor of its own
-      -- fill), the player's nearScale times larger (nearer the camera: the same species stands
-      -- taller on the player's side). Heights count as height ^ sizeCurve, narrowing the gap
-      -- between big and small species (Oddish against Swampert at 0.52, not 0.33)
-      sizeFloor = 0.2, nearScale = 1.15, sizeCurve = 0.5,
-      -- ... and the smaller's body (spec.body, else its art) drawn at least minShare of the
-      -- other's, by each one's longest side (height or width), however far apart their heights
-      -- are (0: no such minimum): a Cutiefly whose fluttering art spans a box far bigger than
-      -- itself still reads beside a Haunter, and a flat Wishiwashi is not lifted to half a
-      -- Raging Bolt's width
-      minShare = 0.3,
       -- in the 3D world (worldSize): no battler's art smaller on screen than this share of the
       -- battle's 160 rows, by its longest side (height or width: a flat Wishiwashi counts its
       -- width), after the camera's zoom (a Pikachu beside a Wailord still reads); above it, true
       -- to scale. Kept low: the camera pulled out for a giant, it grows against the world
       worldMin = 0.07,
+      -- ... and no art taller than heightMax metres: a Wailord or an Eternatus stands 2.5 m (5
+      -- tiles), so a giant never needs the camera pulled far back; a foe's no taller than
+      -- heightMaxFoe. And no art wider than
+      -- widthMax metres (its art box's width at that height): a wide giant (Wailord) drawn
+      -- smaller to fit it, a tall, thin one (Steelix) keeping its height
+      heightMax = 2.5, heightMaxFoe = 2.25, widthMax = 3,
+      -- ... and in singles a wide one stepped out toward its own edge, partly off the screen,
+      -- rather than reaching across the middle: the player's art no further right than wideLine
+      -- of the screen's width from its left, the foe's no further left than wideLine from its
+      -- right (the camera is fitted to where they rest, so it never pulls back for this), but
+      -- never so far that less than wideKeep of its art's width stays on the screen
+      wideLine = 0.45, wideKeep = 0.6,
+      -- ... and in singles the foe's HP box just over the highest head (the foe's or the
+      -- player's art top), headGap UI px above it, the camera leaving room for it under the
+      -- screen's top (headMargin UI px); worked out when a new Pokemon comes out, from where the
+      -- camera is heading, then held (a faint, the battle's end move nothing), eased boxEase of
+      -- the way a frame when it moves. A giant that needs the camera pulled back has it pulled
+      -- back bigPull further
+      headGap = 2, headMargin = 2, boxEase = 0.25, bigPull = 0.9,
       -- ... and indoors (a room or a cave: the scene's `indoor`) a ceiling: an art height over
       -- indoorKnee metres eases toward indoorCeiling (a Wailord in a gym stands about 3 m, not
       -- 6.4, so the camera need not pull back past the walls); below the knee, true to scale
@@ -173,14 +181,11 @@ function HD.new(G, opts)
       raise = 0, anchor = nil,
       -- the battle UI over the scene, in canvas pixels (singles, both cart layouts): the
       -- enemy's HP box, the player's HP box, the text box (and everything below it, off the
-      -- screen too). The player's own Pokemon (a tag with side = "player" and its body box)
-      -- keeps at most maxHiddenOwn of its body under its own side's UI when the camera can
-      -- manage it, and at most maxHidden under the enemy's box when there is no headroom
+      -- screen too). Where the UI covers a Pokemon is told in the stats (hiddenEnemyUI,
+      -- hiddenOwnUI); the camera makes no room for it
       ui = { enemy = { 14, 16, 113, 44 }, player = { 134, 74, 236, 110 }, text = { -1e4, 112, 1e4, 1e4 } },
-      maxHidden = 0.5, maxHiddenOwn = 0.3,
-      -- headroom: the player's Pokemon's body top stays no higher than the enemy's HP box's
-      -- bottom (44; the tallest cart back sprites, Tyranitar, Steelix, Meganium, start 8 px
-      -- lower, at row 0 of the 64x64 back box centred at y = 80 + 4)
+      -- the enemy's HP box's bottom (44): the tallest cart back sprites (Tyranitar, Steelix,
+      -- Meganium) start 8 px lower, at row 0 of the 64x64 back box centred at y = 80 + 4
       backTopMin = 44,
       -- the camera may rise this far past what the enemy's feet need, to lift the player's
       -- Pokemon out from under the text box; zooms are tried in steps of zStep
@@ -201,14 +206,6 @@ function HD.new(G, opts)
       -- (playerY) so that only padRows * (1 - padTuck) show at zMin, blending from the cart's
       -- 11 at zoom 1. Its Pokemon, trainer and the engine's coordinates go down with it.
       padTop = 101, padRows = 32, padTuck = 0.75,
-      -- a small back stands a little behind its pad: when less than minVisible of its resting
-      -- body shows above the text box, the Pokemon alone (not its pad or trainer) is raised
-      -- (playerRaise) until that much shows; a larger back is left where it is
-      minVisible = 0.65,
-      -- ... and a back whose resting body is no taller than wholeBelow (canvas px, before the
-      -- zoom) shows WHOLE: its feet just above the text box (Pikachu, Joltik, Natu). Taller than
-      -- cutAbove it keeps minVisible (the over-the-shoulder cut); in between the share blends.
-      wholeBelow = 36, cutAbove = 56,
       outRate = 0.2, inRate = 0.05, holdFrames = 45,
       -- a turn playing (setTurn: the adapter's battle phase, not the menu): the camera may pull
       -- out but never comes back in until the battle waits for the player again. A move swells,
@@ -238,7 +235,7 @@ function HD.new(G, opts)
   -- battle pass; "gen3" is the table above.
   local LAYOUT_KEYS = { "focus", "feetY", "feetMax", "split", "spanDefault", "pads", "inwardMax",
     "ui", "backTopMin", "extraMax", "enemyX", "playerX", "shiftMax", "ground", "padTop", "padRows",
-    "padTuck", "wholeBelow", "cutAbove", "fitRoom", "topGap" }
+    "padTuck", "fitRoom", "topGap" }
   self.layouts = { gen3 = {} }
   for _, key in ipairs(LAYOUT_KEYS) do self.layouts.gen3[key] = self.fit[key] end
   self.layout = "gen3"
@@ -460,7 +457,7 @@ function HD.new(G, opts)
     cur.layerSet[layer] = true
     cur.current = layer
     local item = { kind = "layer", canvas = layer, screen = open == "screen", edge = open == "edge",
-                   bar = cur.barSpec }
+                   bar = cur.barSpec, box = cur.boxId }
     cur.items[#cur.items + 1] = item
     cur.openItem = item
     if open == "edge" then self.stats.edge = (self.stats.edge or 0) + 1 end
@@ -648,6 +645,24 @@ function HD.new(G, opts)
     cur.uiStraddle = true
   end
 
+  -- a draw inside an HP box's draw (self.boxBegin): its rect (x, y, w, h, in the current
+  -- transform) taken into the box's bounds, canvas px
+  local function boxBounds(x, y, w, h)
+    local cur = self.cur
+    local b = cur and cur.boxId ~= nil and cur.boxes and cur.boxes[cur.boxId]
+    if not b or type(x) ~= "number" or type(y) ~= "number" or type(w) ~= "number" or type(h) ~= "number" then
+      return
+    end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + h)
+    if x0 > x1 then x0, x1 = x1, x0 end
+    if y0 > y1 then y0, y1 = y1, y0 end
+    if x0 < b.x0 then b.x0 = x0 end
+    if y0 < b.y0 then b.y0 = y0 end
+    if x1 > b.x1 then b.x1 = x1 end
+    if y1 > b.y1 then b.y1 = y1 end
+  end
+
   -- an opaque draw over the battle's whole canvas after the UI seam (a screen opened over the
   -- battle: the summary, the party, the bag, evolution; a fade at full black): that frame is a
   -- whole picture, and fills the screen as one (compositeCard)
@@ -809,8 +824,8 @@ function HD.new(G, opts)
     if left > 0 then s = math.min(s, (lpx + roomL) / left) end
     if right > 0 then s = math.min(s, (W - lpx + roomR) / right) end
     if s > 0 and s < math.huge then
-      -- (and the art's height at that size, canvas px, and its body's longest side: a long, flat
-      -- Pokemon held to minShare of the other's height would stand as wide as half of it)
+      -- (and the art's height at that size, canvas px, and its body's longest side, by height or
+      -- width)
       local kx, ky = s * math.abs(sx or 1), s * math.abs(sy or 1)
       local h = above > 0 and ky * above or nil
       local b = spec.body
@@ -824,13 +839,9 @@ function HD.new(G, opts)
     return nil
   end
 
-  -- each side's art height at its fill (canvas px), its body's, and the tag it was measured for
-  local fillPx, fillBody, fillOf = {}, {}, {}
-
   -- the same Pokemon's tag: the same table, or one with the same species' height and art. A
   -- sprite mod tags each frame it builds afresh (an animation frame, a rebuilt picture), so the
-  -- side measured a frame ago may carry a new tag for the same Pokemon; matched only by the
-  -- table, the other side fell back to the heights' ratio for that frame and jumped in size
+  -- side measured a frame ago may carry a new tag for the same Pokemon
   local function sameMon(a, b)
     if a == b then return true end
     if not (a and b) or a.height ~= b.height or a.top ~= b.top then return false end
@@ -840,97 +851,15 @@ function HD.new(G, opts)
       and x[1] == y[1] and x[2] == y[2] and x[3] == y[3] and x[4] == y[4]
   end
 
-  -- Battle Fit's species sizing: both battlers at one scale, canvas px per metre of their
-  -- species' height (^ sizeCurve), the player's nearScale times the enemy's. Each would fill its room
-  -- (fillScale) at its own scale; the smaller of the two (the tighter room for its height) is
-  -- taken, so that one fills and the other stands true to size against it, never below
-  -- sizeFloor of its fill. Until the other side has been measured, the shorter species at
-  -- (its height / the taller's) of its fill. Else k, the tag's own size (Battle Fit off, a
-  -- double battle, a tag without a height, a trainer; the enemy's until the player's Pokemon
-  -- has been drawn this battle, self.playerIn: it slides in at its own size, never above its
-  -- fill, its fitting size from the player's send-out on, not from the player's prefit).
-  -- Double battles: up to two battlers a side, each measured at its fill (the latest tag of
-  -- that Pokemon, its art's height and body there, its px per metre ^ sizeCurve in the enemy's
-  -- terms, and the pass it was last drawn in). All four at one scale: the one tightest for its
-  -- height fills its room, the others true to size against it (sizeFloor, minShare as in
-  -- singles). A new Pokemon on a side takes the place of the one drawn longest ago (switched
-  -- out); a fainted one with none to replace it still counts, as a single's side does.
-  local quads = { enemy = {}, player = {} }
-  local passNo = 0
-
-  local function doubleSize(spec, side, f, h, bh, sx, sy)
-    local fit = self.fit
-    local list, e = quads[side], nil
-    for i = 1, #list do
-      if sameMon(list[i].of, spec) then e = list[i] break end
-    end
-    if not e then
-      if #list < 2 then
-        e = {}
-        list[#list + 1] = e
-      else
-        e = list[1].at <= list[2].at and list[1] or list[2]
-      end
-    end
-    local near, c = fit.nearScale or 1, fit.sizeCurve or 1
-    e.of, e.at = spec, passNo
-    -- (measured as it rests: drawn grown or shrunk by the game (coming out of its ball), its
-    -- room in its own pixels is not its room, and the others would dip in size with it)
-    if not e.m or (math.abs(sx or 1) == 1 and math.abs(sy or 1) == 1) then
-      e.h, e.bh = h, bh
-      e.m = h and h / spec.height ^ c / (side == "player" and near or 1) or nil
-    end
-    if not e.m then return f end
-    -- (the one filling: the least px per metre at its fill)
-    local ref
-    for _, l in pairs(quads) do
-      for i = 1, #l do
-        local o = l[i]
-        if o.m and (not ref or o.m < ref.m) then ref = o end
-      end
-    end
-    if ref == e or ref.m >= e.m then return f end
-    local k = math.max(fit.sizeFloor, ref.m / e.m)
-    local least, rb = fit.minShare or 0, ref.bh
-    if least > 0 and bh and rb and bh > 0 then k = math.min(1, math.max(k, least * rb / bh)) end
-    return f * k
+  -- Battle Fit outside the 3D world: a battle Pokemon (a side's, not a trainer's) at its tag's
+  -- own size k, the sprite mod's, unless that is too big for its room (fillScale): then just
+  -- small enough to fit it. Nothing else changes its size.
+  local function ownSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
+    if not (self.fit.enabled and spec.side ~= nil and not spec.trainer and spec.texture ~= nil) then return k end
+    local f = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
+    if f and f < k then return f end
+    return k
   end
-
-  local function speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy)
-    local fit = self.fit
-    if not (fit.enabled and speciesTag(spec)) then return k end
-    local f, h, bh = fillScale(spec, image, lpx, lpy, hpx, hpy, sx, sy)
-    if not f then return k end
-    -- (sliding in: its own size, but no larger than its room, so the camera need not pull back
-    -- for it and then ease in again at the send-out)
-    if spec.side ~= "player" and not self.playerIn then return math.min(k, f) end
-    local side = spec.side == "player" and "player" or "enemy"
-    if fit.double then return doubleSize(spec, side, f, h, bh, sx, sy) end
-    local otherSide = side == "player" and "enemy" or "player"
-    fillPx[side], fillBody[side], fillOf[side] = h, bh, spec
-    local other = self.pair[otherSide]
-    if not other then return f end
-    local oh = fillPx[otherSide]
-    local near, c = fit.nearScale or 1, fit.sizeCurve or 1
-    local myH, theirH = spec.height ^ c, other.height ^ c
-    if h and oh and sameMon(fillOf[otherSide], other) then
-      -- (px per metre at its fill, in the enemy's terms)
-      local mine = h / myH / (side == "player" and near or 1)
-      local theirs = oh / theirH / (otherSide == "player" and near or 1)
-      if theirs < mine then
-        local k = math.max(fit.sizeFloor, theirs / mine)
-        -- (its body's longest side at least minShare of the other's, which fills its room: never past its own
-        -- fill)
-        local least, mb, ob = fit.minShare or 0, bh, fillBody[otherSide]
-        if least > 0 and mb and ob and mb > 0 then k = math.min(1, math.max(k, least * ob / mb)) end
-        f = f * k
-      end
-    elseif theirH > myH then
-      f = f * math.max(fit.sizeFloor, myH / theirH)
-    end
-    return f
-  end
-  self._fillPx, self._fillOf, self._fillBody, self._quads = fillPx, fillOf, fillBody, quads
 
   -- World scale (Battle Scene: Overworld): with the 3D world drawn this pass (self.worldScene,
   -- the world item's scene), each battler stands in it at the world's own scale in place of the
@@ -996,6 +925,19 @@ function HD.new(G, opts)
       end
     end
     if not e.ppt then return nil end
+    -- (the tallest: capped at heightMax, a foe's at heightMaxFoe; the widest at widthMax, its
+    -- art box's width in metres at that height)
+    local cap = tonumber(self.fit.heightMax)
+    if spec.side ~= "player" and tonumber(self.fit.heightMaxFoe) then
+      cap = math.min(cap or math.huge, tonumber(self.fit.heightMaxFoe))
+    end
+    if cap and cap > 0 and height > cap then height = cap end
+    local wcap = tonumber(self.fit.widthMax)
+    local wx0, wx1 = type(art) == "table" and tonumber(art[1]), type(art) == "table" and tonumber(art[3])
+    if wcap and wcap > 0 and wx0 and wx1 and wx1 > wx0 then
+      local wide = height * (wx1 - wx0) / (hpy - atop)
+      if wide > wcap then height = height * wcap / wide end
+    end
     -- (indoors: under the ceiling, eased in from the knee)
     local knee, ceiling = tonumber(self.fit.indoorKnee), tonumber(self.fit.indoorCeiling)
     if scene.indoor and knee and ceiling and ceiling > knee and height > knee then
@@ -1076,7 +1018,7 @@ function HD.new(G, opts)
       hpx, hpy = hp and hp[1] or lpx, hp and hp[2] or lpy
     end
     local k = (qp and qp[3]) or spec.scale or 1
-    if not qp then k = speciesSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy) end
+    if not qp then k = ownSize(spec, image, k, lpx, lpy, hpx, hpy, sx, sy) end
     -- where the draw put the pivot, then the frame drawn k times larger about it
     local dx, dy = (lpx - ox) * sx, (lpy - oy) * sy
     local cs, sn = math.cos(r), math.sin(r)
@@ -1246,6 +1188,7 @@ function HD.new(G, opts)
       end
       beforeDraw(kind)
       if kind and not uiScreen then markBottom() end
+      if cur.boxId ~= nil then boxBounds(drawRect(image, ...)) end
       if overSpec and drawAtScale(real.getShader() ~= nil, image, overSpec, ...) then return end
     end
     return real.draw(image, ...)
@@ -1302,6 +1245,10 @@ function HD.new(G, opts)
         end
         beforeDraw(kind)
         if scene then markBottom() end
+        if name == "rectangle" and self.cur.boxId ~= nil then
+          local _, x, y, w, h = ...
+          boxBounds(x, y, w, h)
+        end
       end
       return real[name](...)
     end
@@ -1475,6 +1422,38 @@ function HD.new(G, opts)
       cur.hasUI = true
     end
     openLayer(false)
+  end
+
+  --- A battle's HP box is drawn from here to boxEnd (the adapter wraps the game's box draw): id
+  --- its battler (0 / 2 the player's, 1 / 3 the foes'), ox, oy (canvas px) how far the game's
+  --- slide-in and bounce move it from where it rests. With self.boxLayers set (a placement that
+  --- moves the boxes; none yet) it is drawn in a layer of its own, with whatever another mod
+  --- draws with it (badges, its own box picture), and its bounds are kept (cur.boxes[id]), so the
+  --- composite could move it whole (the layer's item.box). Otherwise nothing changes.
+  function self.boxBegin(id, ox, oy)
+    local cur = self.cur
+    if not (cur and self.boxLayers and cur.pass == "battle" and cur.segment == "ui" and cur.boxId == nil
+            and id ~= nil and onPass()) then
+      return false
+    end
+    cur.boxes = cur.boxes or {}
+    local b = cur.boxes[id]
+    if not b then
+      b = {}
+      cur.boxes[id] = b
+    end
+    b.ox, b.oy = tonumber(ox) or 0, tonumber(oy) or 0
+    b.x0, b.y0, b.x1, b.y1 = math.huge, math.huge, -math.huge, -math.huge
+    cur.boxId = id
+    openLayer(nil)
+    return true
+  end
+  function self.boxEnd()
+    local cur = self.cur
+    if not (cur and cur.boxId ~= nil) then return end
+    cur.boxId = nil
+    -- (what is drawn next goes to a layer of its own)
+    cur.pending = true
   end
 
   --- Paint at the screen's resolution, here in the pass's order (over what the UI drew so far,
@@ -1670,15 +1649,9 @@ function HD.new(G, opts)
       if self.fit.idle > 2 then
         self.pair = {}
         self.playerIn = false
-        fillPx.enemy, fillPx.player, fillOf.enemy, fillOf.player = nil, nil, nil, nil
-        fillBody.enemy, fillBody.player = nil, nil
-        for _, l in pairs(quads) do
-          for i = #l, 1, -1 do l[i] = nil end
-        end
         for i = #worldMons, 1, -1 do worldMons[i] = nil end
         self.worldShadow.enemy, self.worldShadow.player = nil, nil
       end
-      passNo = passNo + 1
       for side, spec in pairs(cur.sides) do self.pair[side] = spec end
       if cur.playerIn then self.playerIn = true end
     end
@@ -1796,10 +1769,10 @@ function HD.new(G, opts)
     local X, Y = rec.tx + px * rec.tsx, rec.ty + py * rec.tsy
     local k = (qp and qp[3]) or spec.scale or 1
     if not qp then
-      -- (in the 3D world: at its scale, where it stands; else the species sizing)
+      -- (in the 3D world: at its scale, where it stands; else its own size, unless too big)
       local w = self.worldScene and self.fit.enabled and speciesTag(spec)
         and worldSize(spec, rec.image, lpx, lpy, hpx, hpy, rec.sx, rec.sy, X, Y)
-      k = w or speciesSize(spec, rec.image, k, lpx, lpy, hpx, hpy, rec.sx, rec.sy)
+      k = w or ownSize(spec, rec.image, k, lpx, lpy, hpx, hpy, rec.sx, rec.sy)
     end
     -- (cut: {x0, y0, x1, y1} in the HD texture's pixels)
     local cut
@@ -2068,8 +2041,18 @@ function HD.new(G, opts)
   -- the highest canvas row art may reach: the screen's top, less the margin (none when species
   -- sizing fits the battlers in their rooms: on the Game Boy the enemy's starts at the top)
   local function topLimit()
-    local sized = not self.fit.double and (self.pair.enemy ~= nil or self.pair.player ~= nil)
-    return (self.fit.topY or 0) + (sized and 0 or self.fit.margin)
+    local fit = self.fit
+    local sized = not fit.double and (self.pair.enemy ~= nil or self.pair.player ~= nil)
+    local limit = (fit.topY or 0) + (sized and 0 or fit.margin)
+    -- (the 3D world, singles: the heads under the foe's HP box, held where it is, else under
+    -- the room it needs below the screen's top)
+    if fit.headBox then
+      local e = fit.ui.enemy
+      local line = fit.boxBottom
+        or ((fit.screenTopUI or 0) + fit.headMargin + (e[4] - e[2]))
+      limit = math.max(limit, uiY(line + fit.headGap))
+    end
+    return limit
   end
 
   local function fitLift(z)
@@ -2122,27 +2105,6 @@ function HD.new(G, opts)
   end
   self.fitPlayerDrop = playerDrop
 
-  --- How far a back (r, its resting body, canvas px) is raised above its side (canvas px
-  --- before the zoom) at zoom z raised by lift, its side lowered by v: enough that its body
-  --- shows above the text box's line, all of it for a small back (wholeBelow), minVisible of it
-  --- for a big one (cutAbove), blended between; 0 for a back already showing that much.
-  local function backRaise(r, z, lift, v)
-    local fit = self.fit
-    -- (in the 3D world a back stands on its ground: the camera alone makes room)
-    if self.worldScene then return 0 end
-    local fy = fit.focus[2]
-    -- the text box's top in the scene's pixels (the scene's line, unless the scene is raised)
-    local line = uiY(fy)
-    local top = fy + (r[2] + v - fy) * z - lift
-    local h = r[4] - r[2]
-    local u = math.max(0, math.min(1, (h - fit.wholeBelow) / math.max(1e-6, fit.cutAbove - fit.wholeBelow)))
-    local share = 1 + (fit.minVisible - 1) * u          -- 1 (whole) for a small back
-    local want = line - share * h * z
-    if top <= want then return 0 end
-    return (top - want) / z
-  end
-  self.fitBackRaise = backRaise
-
   local function hidden(r, z, lift)
     local fit = self.fit
     local fx, fy = fit.focus[1], fit.focus[2]
@@ -2156,14 +2118,10 @@ function HD.new(G, opts)
 
   --- The camera for a frame: the largest zoom (and with it the least rise past the enemy's
   --- feet) that keeps the enemy's art under the top of the screen with its feet above the
-  --- player's HP box, and for each of the player's Pokemon (`backs`, resting body rects):
-  ---   * its whole animation (r.top, a head flung up) on the screen, always;
-  ---   * headroom: its body's top no higher than backTopMin, the tallest cart back sprite's
-  ---     (which also keeps its head out from under the enemy's HP box);
-  ---   * at most maxHiddenOwn of its body under its own side's UI, if any camera manages it.
-  --- When no camera gives the headroom, at most maxHidden of the body may sit under the enemy's
-  --- HP box instead. In the 3D world (worldSize) only the first: the art on the screen. top: the
-  --- enemy art's top (math.huge: none). Returns the zoom and the rise.
+  --- player's HP box, and each of the player's Pokemon (`backs`, resting body rects) with its
+  --- whole animation (r.top, a head flung up) on the screen. The HP boxes and the text box may
+  --- cover a Pokemon, as on the cart: the camera only makes room for what would leave the
+  --- screen. top: the enemy art's top (math.huge: none). Returns the zoom and the rise.
   local solved, solvedCount = {}, 0
   local function fitSolveRaw(top, backs)
     local fit = self.fit
@@ -2171,47 +2129,28 @@ function HD.new(G, opts)
     local zFront = math.max(fit.zMin, fitZoom(top))
     if #backs == 0 then return zFront, 0 end
     local limit = topLimit()
-    -- headroom: the cart's gap under the enemy's HP box, moved up with the box
-    local headroom = uiY(fit.backTopMin + (fit.uiTopDy or 0))
-    -- levels, strictest first: { headroom, own side mostly in view }
-    local levels = { { true, true }, { true, false }, { false, true }, { false, false } }
-    local function fits(z, lift, level)
+    local function fits(z, lift)
       for _, r in ipairs(backs) do
         -- the back where the player side's drop puts it
         local v = playerDrop(z, lift)
-        v = v - backRaise(r, z, lift, v)
-        local underEnemy, underOwn, y0 = hidden({ r[1], r[2] + v, r[3], r[4] + v }, z, lift)
+        local y0 = fy + (r[2] + v - fy) * z - lift
         local t = r.top and (fy + (r.top + v - fy) * z - lift) or y0
         if y0 < limit or t < limit then return false end
-        -- (in the 3D world the camera makes room only for what would leave the screen: a back
-        -- stands where it stands, under the HP boxes or not, as the cart's own do)
-        if not self.worldScene then
-          if level[1] then
-            if y0 < headroom then return false end
-          elseif underEnemy > fit.maxHidden then
-            return false
-          end
-          if level[2] and underOwn > fit.maxHiddenOwn then return false end
-        end
       end
       return true
     end
-    for _, level in ipairs(levels) do
-      -- headroom out of reach at every allowed zoom: the limit is still the nearest to it,
-      -- so the looser levels only choose the rise there (never a closer camera)
-      local z = level[1] and zFront or fit.zMin
-      while z >= fit.zMin - 1e-9 do
-        local base = fitLift(z)
-        local most = base + fit.extraMax
-        -- rising lifts the enemy too: its art's top must stay under the screen's
-        if top < math.huge then most = math.min(most, fy + (top - fy) * z - limit) end
-        local lift = base
-        while lift <= most + 1e-9 do
-          if fits(z, lift, level) then return z, lift - base end
-          lift = lift + 1
-        end
-        z = z - fit.zStep
+    local z = zFront
+    while z >= fit.zMin - 1e-9 do
+      local base = fitLift(z)
+      local most = base + fit.extraMax
+      -- rising lifts the enemy too: its art's top must stay under the screen's
+      if top < math.huge then most = math.min(most, fy + (top - fy) * z - limit) end
+      local lift = base
+      while lift <= most + 1e-9 do
+        if fits(z, lift) then return z, lift - base end
+        lift = lift + 1
       end
+      z = z - fit.zStep
     end
     -- nothing fits even pulled all the way back: pulled all the way back is still the
     -- nearest, so clamp to the limit (never fall back to the enemy's own zoom)
@@ -2221,8 +2160,9 @@ function HD.new(G, opts)
   -- the same, remembered: an animation repeats its frames, so a frame's inputs recur
   local function fitSolve(top, backs)
     local fit = self.fit
-    local parts = { string.format("%.2f|%.3f|%.4f|%.2f|%.2f|%.2f|%s|%s", top, fit.zMin, fit.uiK or 1,
-      fit.topY or 0, fit.uiTopDy or 0, fit.sceneUp or 0, tostring(fit.doubleArt), tostring(self.worldScene ~= nil)) }
+    local parts = { string.format("%.2f|%.3f|%.4f|%.2f|%.2f|%.2f|%s|%s|%s|%s|%s", top, fit.zMin, fit.uiK or 1,
+      fit.topY or 0, fit.uiTopDy or 0, fit.sceneUp or 0, tostring(fit.doubleArt), tostring(self.worldScene ~= nil),
+      tostring(fit.headBox), tostring(fit.boxBottom), tostring(fit.screenTopUI)) }
     for _, r in ipairs(backs) do
       parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f", r[1], r[2], r[3], r[4], r.top or 0)
     end
@@ -2269,14 +2209,31 @@ function HD.new(G, opts)
 
   -- the stage zoom for this frame: the camera that fits the tagged sprites, eased (out fast;
   -- back in only after the target has stayed nearer for holdFrames)
+  -- the same Pokemon on each side (and the same screen) as when the foe's HP box was placed
+  local function sameOut(a, b) return (a == nil and b == nil) or (a ~= nil and b ~= nil and sameMon(a, b)) end
   local function fitStep(cur)
     local fit = self.fit
+    -- (the foe's HP box over the heads: placed afresh each battle, and when a new Pokemon comes
+    -- out or the screen changes; else held)
+    if fit.headBox then
+      local k = fit.boxKey
+      local screen = string.format("%.1f|%.1f", fit.screenTopUI or 0, (fit.viewR or 0) - (fit.viewL or 0))
+      if fit.idle > 2 or not k or not sameOut(k.enemy, self.pair.enemy) or not sameOut(k.player, self.pair.player)
+          or k.screen ~= screen then
+        fit.boxBottom = nil
+        fit.boxKey = { enemy = self.pair.enemy, player = self.pair.player, screen = screen }
+      end
+    else
+      fit.boxBottom, fit.boxKey = nil, nil
+    end
     local top, backs = math.huge, {}
     local seen = {}
     -- each side's art where it rests (canvas px, unshifted, unzoomed): its frame across, the
     -- enemy's feet (its pic box's bottom), the top of the player's body (else of its art)
     local eL, eR, eB = math.huge, -math.huge, -math.huge
     local pL, pR, pT = math.huge, -math.huge, math.huge
+    -- (and their art alone, the platforms left out: how wide the Pokemon themselves are)
+    local aeL, aeR, apL, apR = math.huge, -math.huge, math.huge, -math.huge
     local function take(rec)
       local spec = rec.spec
       if spec.side then seen[spec.side] = true end
@@ -2285,6 +2242,7 @@ function HD.new(G, opts)
       if spec.side == "player" then
         if not rec.inAnim then a, b = a + d - cur.shift.player, b + d - cur.shift.player end
         pL, pR = math.min(pL, a), math.max(pR, b)
+        apL, apR = math.min(apL, a), math.max(apR, b)
         if spec.body then
           local r = { bodyRect(rec) }
           pT = math.min(pT, r[2])
@@ -2298,6 +2256,7 @@ function HD.new(G, opts)
       else
         if not rec.inAnim then a, b = a + d - cur.shift.enemy, b + d - cur.shift.enemy end
         eL, eR = math.min(eL, a), math.max(eR, b)
+        aeL, aeR = math.min(aeL, a), math.max(aeR, b)
         -- its feet: where the cart's pic box ends (a frame's own bottom may be empty margin)
         eB = fit.feetY
         local t = artTop(rec)
@@ -2342,6 +2301,26 @@ function HD.new(G, opts)
         return z
       end
       zt = math.max(fit.zMin, math.min(zt, across(eL, eR), across(pL, pR)))
+      -- (a giant: a little further back)
+      if zt < 1 - 1e-6 and fit.bigPull then zt = math.max(fit.zMin, zt * fit.bigPull) end
+    end
+    -- (the foe's HP box, just placed afresh: over the highest head where the camera is heading,
+    -- UI px, then held)
+    if fit.headBox and not fit.boxBottom and (top < math.huge or pT < math.huge) then
+      local fy = fit.focus[2]
+      local lift = fitLift(zt) + et
+      local hi = math.huge
+      if top < math.huge then hi = fy + (top - fy) * zt - lift end
+      local v = playerDrop(zt, lift)
+      for _, r in ipairs(backs) do hi = math.min(hi, fy + ((r.top or r[2]) + v - fy) * zt - lift) end
+      if pT < math.huge then hi = math.min(hi, fy + (pT + v - fy) * zt - lift) end
+      local e = fit.ui.enemy
+      local yu = fy + (hi - fy) / (fit.uiK or 1) - (fit.sceneUp or 0)
+      local b = yu - fit.headGap
+      b = math.min(b, fit.ui.player[2] - fit.headGap)
+      b = math.max(b, (fit.screenTopUI or 0) + fit.headMargin + (e[4] - e[2]))
+      fit.boxBottom = round2(b)
+      self.stats.boxBottom = fit.boxBottom
     end
     fit.target, fit.extraTarget = zt, et
     if fit.idle > 2 then
@@ -2379,8 +2358,7 @@ function HD.new(G, opts)
     end
     fit.shift.playerY = (fit.z < 1 and seen.player and not world)
       and playerDrop(fit.z, fitLift(fit.z) + fit.extra) or 0
-    fit.shift.playerRaise = backs[1]
-      and backRaise(backs[1], fit.z, fitLift(fit.z) + fit.extra, fit.shift.playerY) or 0
+    fit.shift.playerRaise = 0
     -- stacked, the width short of what growing to the top needs: the sides slide inward, as far
     -- as they may without the Pokemon overlapping (canvas px before the zoom, split evenly);
     -- both Pokemon must be tagged, or one would be left behind its pad
@@ -2391,7 +2369,7 @@ function HD.new(G, opts)
       local need = ((R - L) * z - fit.wantW) / z
       if need > 0 then
         local most
-        if pT + fit.shift.playerY - fit.shift.playerRaise >= eB then
+        if pT + fit.shift.playerY >= eB then
           most = ((eL + eR) - (pL + pR)) / 2 + wantE - wantP        -- centres aligned
         else
           -- side by side, the back in front of the enemy's platform
@@ -2417,6 +2395,29 @@ function HD.new(G, opts)
       local R = math.max(eR + fit.shift.enemy, pR + fit.shift.player)
       fit.span = { fx + (L - fx) * z, fx + (R - fx) * z }
     end
+    -- (the 3D world, singles: a wide Pokemon stepped out toward its own edge, partly off the
+    -- screen, so it never reaches past wideLine: the player's art's right edge, the foe's left,
+    -- as the zoom now shows them; canvas px before the zoom, as every side shift), never so far
+    -- that less than wideKeep of its art's width stays on the screen
+    local line = tonumber(fit.wideLine)
+    if world and not fit.double and line then
+      local vl0, vr0 = fit.viewL or 0, fit.viewR or 240
+      local W, z = vr0 - vl0, math.max(fit.z, 1e-3)
+      local keep = math.max(0, math.min(1, tonumber(fit.wideKeep) or 1))
+      if seen.player and apL < apR then
+        local over = fx + (apR - fx) * z - (vl0 + line * W)
+        -- (its art's point keep of its width in from its right edge on the screen's left edge)
+        local most = fx + (apR - keep * (apR - apL) - fx) * z - vl0
+        local s = math.min(over, most)
+        if s > 0 then fit.shift.player = round2(-s / z) end
+      end
+      if seen.enemy and aeL < aeR then
+        local over = (vr0 - line * W) - (fx + (aeL - fx) * z)
+        local most = vr0 - (fx + (aeL + keep * (aeR - aeL) - fx) * z)
+        local s = math.min(over, most)
+        if s > 0 then fit.shift.enemy = round2(s / z) end
+      end
+    end
     self.stats.inward = inward
     fit.idle = 0
     self.stats.zoom, self.stats.zoomTarget, self.stats.extraLift = fit.z, zt, fit.extra
@@ -2429,7 +2430,6 @@ function HD.new(G, opts)
     for _, r in ipairs(backs) do
       local lift = fitLift(fit.z) + fit.extra
       local v = playerDrop(fit.z, lift)
-      v = v - backRaise(r, fit.z, lift, v)
       local e, o, y0 = hidden({ r[1], r[2] + v, r[3], r[4] + v }, fit.z, lift)
       he, ho, bt = math.max(he, e), math.max(ho, o), math.min(bt, y0)
     end
@@ -2971,6 +2971,25 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     if raised then
       dyTop = math.min(dyTop, round2((top - uby) / Uy + fit.topGap - fit.ui.enemy[2]))
     end
+    -- the 3D world, singles, filling the screen: the foe's HP box over the highest head
+    -- (fitStep places it), eased there
+    local headBox = filling and self.worldScene ~= nil and not fit.double
+    fit.headBox = headBox
+    fit.screenTopUI = filling and round2((top - uby) / Uy) or 0
+    if headBox and fit.boxBottom and fit.idle <= 2 then
+      local want = fit.boxBottom - fit.ui.enemy[4]
+      local d = fit.boxDy
+      if not d then
+        d = want
+      elseif d ~= want then
+        local step = math.max(math.abs(want - d) * fit.boxEase, 0.25)
+        d = want > d and math.min(want, d + step) or math.max(want, d - step)
+      end
+      fit.boxDy = d
+      dyTop = round2(d)
+    else
+      fit.boxDy = nil
+    end
     -- the UI over the scene, in the scene's canvas pixels: shrunk about the line by the
     -- ratio of their scales; the enemy's HP box moved with the top band; the screen's top
     fit.uiK = U / S
@@ -3029,7 +3048,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         break
       end
     end
-    local banded = (stacked or raised) and dyTop < 0 and (topLayer or not cur.uiStraddle)
+    local banded = ((stacked or raised) and dyTop < 0 or headBox and dyTop ~= 0) and (topLayer or not cur.uiStraddle)
     local topBy = uby + dyTop * Uy
     local topBox, lowBox
     -- (unfilled: the Renderer's clip, else its letterbox)

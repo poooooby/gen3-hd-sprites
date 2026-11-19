@@ -62,10 +62,10 @@ Gen2.LAYOUTS = {
     enemyX = 124, playerX = 40, shiftMax = 0,
     ground = false,
     padTop = 96, padRows = 0, padTuck = 0,
-    wholeBelow = 36, cutAbove = 56,
-    -- species sizing's room, clear of the UI: the enemy (its box at x 96-152, from the screen's
-    -- top, its HUD up to x 96) out to the screen's edge; the player's up to the enemy's HUD's
-    -- bottom (row 32; its box at 48), out to the screen's edge and its own HUD (x 16-64 to 0-72)
+    -- a Pokemon's room, clear of the UI (one too big for it is shrunk to fit): the enemy (its
+    -- box at x 96-152, from the screen's top, its HUD up to x 96) out to the screen's edge; the
+    -- player's up to the enemy's HUD's bottom (row 32; its box at 48), out to the screen's edge
+    -- and its own HUD (x 16-64 to 0-72)
     fitRoom = { enemy = { up = 0, left = 0, right = 8 }, player = { up = 16, left = 16, right = 8 } },
   },
   -- The WIDE battle screen (304x144): the ORIGINAL's scene moved right by FIELD_X (72): the
@@ -80,7 +80,6 @@ Gen2.LAYOUTS = {
     enemyX = 196, playerX = 112, shiftMax = 0,
     ground = false,
     padTop = 96, padRows = 0, padTuck = 0,
-    wholeBelow = 36, cutAbove = 56,
     -- (the enemy's box at x 168-224, its HUD up to x 96)
     fitRoom = { enemy = { up = 0, left = 8, right = 8 }, player = { up = 16, left = 16, right = 8 } },
   },

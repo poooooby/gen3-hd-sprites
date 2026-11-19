@@ -453,6 +453,46 @@ function Gen3.prepare(Engine, hd)
       end
       return span(1, 3, -31, 60, -14), span(0, 2, -22, 68, -13)
     end
+    -- each HP box drawn between hd.boxBegin and hd.boxEnd (so a placement can move it whole, in a
+    -- layer of its own): Healthbox.draw wrapped, and wrapped again whenever a mod
+    -- wraps it after us (Wooble Dex's badges, Facets' box sets), so what they draw with a box is
+    -- inside ours. id: its battler (singles: 1 the foe's, 0 the player's); ox, oy: the game's
+    -- slide-in (its stage offset) and bounce, from where it rests
+    local okA, Anim = pcall(require, "src.core.game3.battle.anim")
+    local boxDraw, boxDepth = nil, 0
+    local function boxOffsets(side, opts)
+      local key = side
+      local stage = okA and type(Anim) == "table" and Anim.stage and Anim.stage()
+      local tbl = type(stage) == "table" and stage.healthbox
+      local hb = type(tbl) == "table" and (tbl[key] or (key == 0 and tbl.player) or (key == 1 and tbl.enemy)
+        or (key == "player" and tbl[0]) or (key == "enemy" and tbl[1])) or nil
+      local ox = ((type(hb) == "table" and tonumber(hb.ox)) or 0) + ((type(opts) == "table" and tonumber(opts.ox)) or 0)
+      local oy = ((type(hb) == "table" and type(side) == "number" and tonumber(hb.oy)) or 0)
+        + ((type(opts) == "table" and tonumber(opts.oy)) or 0)
+      return ox, oy
+    end
+    local function wrapBoxes()
+      if not (okH and type(Healthbox) == "table" and type(Healthbox.draw) == "function" and hd.boxBegin) then return end
+      if Healthbox.draw == boxDraw then return end
+      local inner = Healthbox.draw
+      local function after(began, ok, ...)
+        if began then hd.boxEnd() end
+        boxDepth = boxDepth - 1
+        if not ok then error((...), 0) end
+        return ...
+      end
+      boxDraw = function(side, battler, opts, ...)
+        if boxDepth > 0 or battler == nil then return inner(side, battler, opts, ...) end
+        local id = side == "enemy" and 1 or side == "player" and 0 or side
+        local ox, oy = boxOffsets(side, opts)
+        boxDepth = boxDepth + 1
+        local began = hd.boxBegin(id, ox, oy)
+        return after(began, pcall(inner, side, battler, opts, ...))
+      end
+      Healthbox.draw = boxDraw
+      ours[boxDraw] = true
+    end
+
     local wasDouble = false
     local function noteDouble()
       local st = Battle._st
@@ -473,6 +513,7 @@ function Gen3.prepare(Engine, hd)
         pcall(noteDouble)
         -- (a turn playing, anything but the command menu: Battle Fit only pulls out meanwhile)
         if hd.setTurn then hd.setTurn(Battle._phase ~= nil and Battle._phase ~= "command") end
+        pcall(wrapBoxes)
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not ok then hd.fail("battle pass: " .. tostring(err)) end

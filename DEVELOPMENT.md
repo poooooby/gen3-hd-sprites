@@ -157,66 +157,34 @@ UI across the width, the enemy's HP box up at the top, the scene growing between
 
 ## Battle Fit
 
-Species sizing below (`speciesSize`, `doubleSize`), the side shift, the player's drop and a back's
-raise apply to the classic backgrounds. In the 3D world (Battle Scene: OVERWORLD) the battlers
-stand at the world's scale instead: see **World scale** under Battle Scene.
+The own-size rule below, the side shift and the player's drop apply to the classic backgrounds.
+In the 3D world (Battle Scene: OVERWORLD) the battlers stand at the world's scale instead: see
+**World scale** under Battle Scene.
 
-**Species sizing** (`speciesSize` in `src/hd.lua`, singles, Battle Fit on): a battle
-Pokémon's tag with a `height` (metres; WoobleSpritePack's) is sized against the other side's,
-not by its `scale`:
+**Own size** (`ownSize` in `src/hd.lua`, Battle Fit on, singles and doubles): a battle Pokémon
+(a side's tag, not a trainer's, with a full-resolution `texture`) is drawn at its tag's own
+`scale`, the sprite mod's, unless that is too big for its room (`fillScale`): then just small
+enough to fit it. No sizing by species height, no pairing of the two sides, no lift for a small
+back. (Until 2026-11 Battle Fit sized both sides to one scale by their species' heights, with
+`sizeCurve`, `nearScale`, `sizeFloor`, `minShare` and a raise for small backs; the 3D world's
+real sizes replaced it, and the classic battles went back to the sprite mod's own sizes.)
 
-- **The pair** (`hd.pair`): each side's latest such tag, from its draws and from `hd.prefit`
-  (`cur.sides`, merged at `endPass`), kept from pass to pass so a side not drawn this frame
-  (fainted, before its send-out) still counts, and started afresh with a new battle (`fit.idle`).
-- **Each side's fill** (`fillScale`): the stand-in's box (the picture box the game
-  draws) grown by the layout's `fitRoom[side]` (`up` rows above, `left` / `right` columns
-  beside), the art kept inside it above and beside its feet (`lowPivot`, which stays put). The
-  art is the tag's `art` box (its union over the animation), else the frame from its `top` down.
-  The player's room reaches up to the enemy's HP box's bottom wherever the UI puts it over the
-  scene (`uiTopDy`, `uiK`, `sceneUp`).
+- **The room** (`fillScale`): the stand-in's box (the picture box the game draws) grown by the
+  layout's `fitRoom[side]` (`up` rows above, `left` / `right` columns beside), the art kept
+  inside it above and beside its feet (`lowPivot`, which stays put). The art is the tag's `art`
+  box (its union over the animation), else the frame from its `top` down. The player's room
+  reaches up to the enemy's HP box's bottom wherever the UI puts it over the scene (`uiTopDy`,
+  `uiK`, `sceneUp`).
   - **Gen 3:** the enemy's up to the screen's top (8 rows), the player's up to the enemy's HP box
     (it stands on its pad, the UI over its lower rows as in the cart), each 16 columns wider.
   - **Gen 1 / 2:** the enemy's out to its HUD and the screen's edge (its box already starts at
     the top); the player's up to the enemy's HUD (row 32) and out to the screen's edge and its
     own HUD.
-- **One scale for both:** canvas px per metre of species height, the height taken as
-  height ^ `sizeCurve` (0.5: narrows the gap between big and small species, so small ones
-  stay easy to see; Oddish against Swampert at 0.58 of its height, not 0.33). Each side's fill gives its
-  art's height at that size (`fillPx[side]`, kept with the tag it was measured for, `fillOf`);
-  divided by its species' height (and the player's by `nearScale`, 1.15: nearer the camera, the
-  same species stands that much taller on the player's side) that is the scale at which it
-  would fill. The smaller of the two is used: that side fills its room, the other is drawn true
-  to size against it, never below `sizeFloor` (0.2) of its own fill, and its body (`spec.body`,
-  else its art: `fillBody[side]`, its longest side, height or width, at the fill) never below
-  `minShare` (0.3) of the other's, up to its own fill. By the longest side, so a long, flat
-  Pokemon is not lifted until its height is 0.3 of the other's (Wishiwashi beside Raging Bolt
-  stood half as wide as it). A front's body is its first frame's box (the pack's `cx0`…`cy1`):
-  a flier's animation spans far more than itself, so Cutiefly's art box against Haunter's kept
-  the bug a speck. Crystal: Bulbasaur (0.7 m)
-  against a player's Meganium (1.8 m) at about 0.55 of its height, a player's Bulbasaur at about
-  0.72 of an enemy Meganium's, a Meganium mirror match the enemy's at 1 / 1.15 (the curve leaves
-  the same species alone). (Until the other side has been measured, the shorter species at
-  (its height / the taller's) ^ `sizeCurve` of its own fill. Each
-  side filling its own room and the shorter shrunk by the heights' ratio, the old rule, drew
-  the same species the same size on both sides and Bulbasaur near Meganium's height.)
-- **Sliding in:** until the player's Pokemon has been drawn this battle (`hd.playerIn`, set by a
-  recorded draw of a player-side species tag, not by `prefit`, which knows it before its
-  send-out; cleared with the pair), the enemy is drawn at its tag's own `scale`, capped at its
-  fill so the camera need not pull back for the slide and ease in again. From the send-out on,
-  the one scale above.
-- **Double battles (`doubleSize`, `quads`):** up to two battlers a side, each kept with its
-  latest tag (matched by `sameMon`), its art's height and body at its fill, its px per metre
-  (^ `sizeCurve`, the player's / `nearScale`) and the pass it was last drawn in. All four at
-  one scale: the least px per metre fills its room, the others at `ref.m / m`, never under
-  `sizeFloor`, their body never under `minShare` of the one filling's (up to their own fill). A
-  new Pokemon on a full side takes the place of the one drawn longest ago (a switch-in); a
-  fainted one with no replacement still counts. Measured only while drawn at scale 1: coming
-  out of its ball the game draws it grown, and its room in those pixels would make the other
-  three dip for a frame or two. Cleared with the pair when a battle starts. Sliding in as in
-  singles. `quads` is `hd._quads` for tests.
-- **Else** the tag's own `scale`: Battle Fit off, a trainer, a tag without a height. With a pair in the battle the camera's top `margin` is 0 (`topLimit`): on the Game
-  Boy the enemy's room starts at the screen's top. The camera's code is unchanged: it still
-  pulls back for whatever does not fit.
+- **The camera** (`fitSolve`): only for what would leave the screen: the enemy's art under the
+  screen's top, each back's whole animation (`r.top`, a head flung up) on it. The HP boxes and
+  the text box may cover a Pokémon, as on the cart (`hiddenEnemyUI` / `hiddenOwnUI` in the stats
+  say how much). `hd.pair` (each side's latest tag) is still kept for `topLimit`: with a pair
+  the camera's top `margin` is 0.
 
 A battle pass is cut into the **scene** and the **UI** over it.
 
@@ -350,17 +318,9 @@ The target zoom:
   - **What moves:** the player's pad and Pokémon; the trainer stays anchored to the text box.
     The engine's coordinates go down
     with them: `AnimCoords.SINGLES[0].y` and `Anim.PLAYER_MON.y`.
-- **A small back stands behind its pad:** when too little of a back's resting body shows
-  above the text box, the Pokémon alone is raised (`shift.playerRaise`) until enough shows.
-  A back whose body is at most `fit.wholeBelow` (36 px, before the zoom) tall shows **whole**,
-  feet just above the text box (Pikachu, Joltik, Natu). One taller than `fit.cutAbove` (56 px)
-  needs only `fit.minVisible` (65%), keeping the over-the-shoulder cut. In between, the share
-  blends.
-  - **What stays:** its pad and trainer. A back already showing that much is left where it is.
-  - **What follows:** the engine's battler coordinates (`AnimCoords.SINGLES[0].y`,
-    `Anim.PLAYER_MON.y`) take the raise too, so attacks and the ball land on the Pokémon. The
-    send-out origin (the trainer's hand) does not.
-  - **In the search:** the camera search places the back with both the drop and the raise.
+- **No lift for a small back:** a back stands on its pad where the game puts it, however
+  little of it shows over the text box (`shift.playerRaise` stays 0; the engine's coordinates
+  still read it). Until 2026-11 a small back was raised until enough of it showed.
 - **Battlers as they rest:** before the UI seam, `src/engine.lua` (`Engine.prefit`, inside the
   battle's draw) asks `Pokemon.frontPic` / `backPic` for both leads, so a sprite mod hands over
   its battle pics. It hands each to `hd.prefit(side, image, x, y)` at the spot
@@ -625,13 +585,28 @@ battle pass (Battle HD on). FireRed / LeafGreen keep the cart's boxes (`Bar.LAYO
 wallpaper and pads with the map around the player, in 2.5D. It needs Battle Fit (it rides the
 battle pass) and is Gen 3 only.
 
+**HP box hooks** (`hd.boxBegin(id, ox, oy)` / `hd.boxEnd()` in `src/hd.lua`; Gen 3's adapter
+wraps `Healthbox.draw` with them, outermost, re-wrapping whenever another mod wraps it later, so
+Wooble Dex's badges or Facets' box pictures drawn with a box fall inside). `id` is the battler
+(singles: 1 the foe's, 0 the player's), `ox, oy` the game's slide-in and bounce. They do nothing
+unless `hd.boxLayers` is set; nothing sets it yet. Set, each box draws in a layer of its own
+(`item.box`) with its drawn bounds kept in `cur.boxes[id]`, so a composite could move a box
+whole. (A first 3D placement built on them, fixed corners with the Pokémon packed around the
+boxes, was dropped in 2026-11; it is kept in a git stash, "hp-boxes: 3D custom positioning".)
+
 **World scale** (`worldSize` in `src/hd.lua`): when a pass draws the world (`hd.world` sets
 `cur.world`; the composite and `endPass` copy it to `hd.worldScene`), each species tag with a
-`height` stands in it at the world's scale in place of the species sizing:
+`height` stands in it at the world's scale in place of its own size (`ownSize`):
 
-- `k = height / Scene.METRES_PER_TILE (1) * pxPerTile / artPx`. `height` is the real height of
+- `k = height / Scene.METRES_PER_TILE (0.5) * pxPerTile / artPx`. `height` is the real height of
   the tag's art box (feet row to the top of the art over its animation; WoobleSpritePack measures
-  it per sprite, a back's corrected for its own animation). `artPx = hpy - art[2]`.
+  it per sprite, a back's corrected for its own animation), capped at `fit.heightMax` (2.5 m;
+  a foe at `fit.heightMaxFoe`, 2.25 m: a Wailord or an Eternatus stands about 5 tiles tall; Raging Bolt's 5.2 m and then 3 m were tried
+  first, and a player's Wailord still filled the screen), then at `fit.widthMax` (3 m) across:
+  the art box's width in metres at that height (`height * artW / artH`), a wider one's height
+  scaled down to fit it, so a wide giant (Wailord) shrinks and a tall, thin one (Steelix) keeps
+  its height. Both before the indoor ceiling. Half a
+  metre a tile since 2026-11 (it was 1: Pokemon looked small against the houses and trees). `artPx = hpy - art[2]`.
   `pxPerTile = Scene.groundScale(scene, X, Y)`: `Camera.F` over the depth of the ground under the
   feet's canvas point on the settled pose `s.to` (33.8 at the foe's feet, 44.7 at the player's).
   Perspective comes from the depth, not `nearScale`; `sizeCurve`, `sizeFloor`, `minShare` are not
@@ -642,6 +617,32 @@ battle pass) and is Gen 3 only.
   camera pulls out for a giant. Kept low because that growth is against the world: at 12% a
   Pikachu beside a Wailord stood half a tree tall and Wishiwashi as big as one. Above it, true
   to scale; the largest limit wins over it.
+- Wide ones step outward (singles; `fit.wideLine`, 0.4): after the camera has eased, a side
+  whose art (its own, not the platforms) reaches past the line is shifted toward its own edge,
+  partly off the screen: the player's art's right edge no further right than 40% of the screen's
+  width (`viewL`/`viewR`) from its left, the foe's left edge no further left than 40% from its
+  right. It is the side shift (`fit.shift.player` / `enemy`, canvas px before the zoom), so the
+  shadow and the engine's battler coordinates follow it. The camera is fitted to where the
+  battlers rest, unshifted, so it never pulls back for the step. Never so far that less than
+  `fit.wideKeep` (0.5) of the art's width stays on the screen: the player's art's point half its
+  width in from its right edge stays on the screen's left edge, the foe's likewise on the right,
+  so a giant still shows half of itself and may then reach past the line. Since 2026-11 the line
+  is 0.45 and the share kept 0.6 (`wideKeep`): the point 60% of the art in from its inner edge
+  stays on the screen. Not in double battles.
+- A giant pulls the camera back a little further: a world zoom target under 1 is multiplied by
+  `fit.bigPull` (0.9), as far as `zMin`.
+- **The foe's HP box over the heads** (`fit.headBox`: Fill Screen, singles, the 3D world): the
+  top band (`dyTop`, UI px) moves so the box's bottom (`fit.boxBottom`, UI px) sits
+  `fit.headGap` (2) above the highest art top, the foe's or the player's, at the camera's
+  target (`fit.target`), no lower than `headGap` above the player's HP box and no higher than
+  its own height plus `headMargin` (2) under the screen's top (`fit.screenTopUI`). The camera
+  makes room for it: `topLimit` is the box's line plus `headGap` (`uiY`), so `fitSolve` keeps
+  every art top under it, under the room it needs (the box's height plus `headMargin`) before
+  it is placed. Placed in `fitStep` when a battle starts, when a new Pokémon comes out
+  (`hd.pair` changes: `sameMon`), or when the screen changes (`fit.boxKey`); otherwise held,
+  so a faint or the end of the battle moves nothing, and the camera never comes in under it.
+  Eased `boxEase` (0.25) of the way a frame (`fit.boxDy`). The band is drawn moved down as well
+  as up (`banded` allows `dyTop > 0` here).
 - Indoors (the scene's `indoor`: a room or a cave) a ceiling: an art height over
   `fit.indoorKnee` (2 m) eases toward `fit.indoorCeiling` (3 m),
   `knee + (ceiling - knee) * (1 - exp(-(h - knee) / (ceiling - knee)))` (Gyarados 3.2 m stands
@@ -1818,8 +1819,8 @@ end
 | `top` | the first row of art in the frame (quad pixels), the highest over the animation: Battle Fit fits the art, not the frame's empty margin (default 0) |
 | `side` | `"enemy"` (default) or `"player"`: whose Pokémon the draw is |
 | `body` | `{x0, y0, x1, y1}`, side `"player"`: its resting body box (quad pixels). Battle Fit keeps its top at or below the tallest cart back sprite's (y 52) and, when it can, keeps at most 30% of it under the player's HP box and the text box |
-| `art` | `{x0, y0, x1, y1}`: the art's box over its whole animation (quad pixels). Battle Fit's species sizing fits it in the Pokémon's room; without it the frame is taken as the art, from `top` down |
-| `height` | the real height in metres of the tag's art box (feet to the top of its animation). With it (and a `side`), Battle Fit sizes the two battlers against each other (the taller fills its room, the other by height) instead of by `scale`, and in the 3D world stands it at the world's scale (`worldSize`). Check `features.speciesSize` |
+| `art` | `{x0, y0, x1, y1}`: the art's box over its whole animation (quad pixels). Battle Fit keeps it in the Pokémon's room (shrinking one too big for it); without it the frame is taken as the art, from `top` down |
+| `height` | the real height in metres of the tag's art box (feet to the top of its animation). With it (and a `side`), the 3D world stands it at the world's scale (`worldSize`); the classic backgrounds draw it at its `scale` (shrunk only to fit its room). Check `features.speciesSize` |
 | `flip` | `true`: the `texture`/`quad` frame is drawn mirrored about its `pivot` (a stand-in the mod drew mirrored; `lowPivot` is in the stand-in as drawn). Check `features.flip` |
 | `shades` | a shader: the stand-in is in the Game Boy's four shades, made by this shader from the frame's colours. The `texture`/`quad` frame is drawn through it and then coloured as the stand-in is: in Gen 1 into a canvas a whole number of times the pass's size, then through the Renderer's blit (its SGB zones); in Gen 2 (a direct pass) 1:1 into a canvas, then drawn under the palette shader in force. Without it a tagged frame under a shader falls back to the stand-in. Check `features.shades` |
 | `shadow` | `{ texture, quad?, w, dx, dy }`: a contact shadow the stand-in has baked in under the Pokémon, drawn first: `w` wide, its bottom middle at (`dx`, `dy`) from the `pivot`, all in the frame's pixels, so it takes the frame's final size and `flip`. Not under a part of the pic drawn on its own (a row-by-row move), nor through a shader mapped to the frame. Check `features.shadow` |

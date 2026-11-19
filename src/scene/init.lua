@@ -79,8 +79,9 @@ return function(deps)
   Scene.GLIDE_FRAMES = 100
   -- the world's scale: a tile (one world unit) is this many metres. The battlers stand in the
   -- world at it (hd.lua's worldSize: the tag's `height`, its art's real height, over the tile's
-  -- canvas pixels where its feet stand), the camera zooming out for a giant
-  Scene.METRES_PER_TILE = 1
+  -- canvas pixels where its feet stand), the camera zooming out for a giant. Half a metre: a
+  -- Pokemon stands twice as tall against the trees and houses as at a metre a tile
+  Scene.METRES_PER_TILE = 0.5
 
   -- maps whose battles are shown on another map: by name, the game's prefix left off (EM_). The
   -- Abandoned Ship's cabins and corridors are battled on its deck, outdoors (its maps are caves

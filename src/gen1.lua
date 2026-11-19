@@ -61,11 +61,10 @@ Gen1.LAYOUTS = {
     -- the back pic stands on the text box (no pad to tuck): a rising camera lowers it with
     -- the line
     padTop = 96, padRows = 0, padTuck = 0,
-    wholeBelow = 36, cutAbove = 56,
-    -- species sizing's room, clear of the UI: the enemy (its box at x 96-152, from the screen's
-    -- top) out to its HUD (x 88) and the screen's edge; the player's up to the enemy's HUD's
-    -- bottom (row 32: its 64-row box, feet on row 96, is there) and out to the screen's edge (its
-    -- box at x 8-72, its own HUD from x 72)
+    -- a Pokemon's room, clear of the UI (one too big for it is shrunk to fit): the enemy (its
+    -- box at x 96-152, from the screen's top) out to its HUD (x 88) and the screen's edge; the
+    -- player's up to the enemy's HUD's bottom (row 32: its 64-row box, feet on row 96, is there)
+    -- and out to the screen's edge (its box at x 8-72, its own HUD from x 72)
     fitRoom = { enemy = { up = 0, left = 8, right = 8 }, player = { up = 0, left = 8 } },
   },
   -- The WIDE battle screen (304x144, src/battle/WideBattle.lua): the field above row 104
@@ -84,7 +83,6 @@ Gen1.LAYOUTS = {
     enemyX = 260, playerX = 56, shiftMax = 0,
     ground = false,
     padTop = 104, padRows = 0, padTuck = 0,
-    wholeBelow = 36, cutAbove = 56,
     -- (the player's 64-row box from row 40, its feet on the windows at 104)
     fitRoom = { enemy = { up = 0, left = 8, right = 8 }, player = { up = 8, left = 8, right = 8 } },
   },

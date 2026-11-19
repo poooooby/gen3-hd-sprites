@@ -360,7 +360,7 @@ do
   local lifted = { to = Camera.pose(10.5, 22.5, nil, nil, 2) }
   check(near(Scene.groundScale(lifted, 176, 70), e), "on ground two levels up: the same")
   check(Scene.groundScale({ to = Camera.pose(0, 0, math.rad(10)) }, 120, 0) == nil, "above the horizon: none")
-  check(Scene.groundScale(nil, 120, 120) == nil and Scene.METRES_PER_TILE == 1, "no scene: none; a tile is a metre")
+  check(Scene.groundScale(nil, 120, 120) == nil and Scene.METRES_PER_TILE == 0.5, "no scene: none; a tile is half a metre")
 end
 
 -- ------------------------------------------------------------------- render
