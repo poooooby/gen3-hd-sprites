@@ -333,8 +333,23 @@ The target zoom:
   Without this, the target cursor (which hides the picked foe every other beat:
   `Ui.targetHidden`) moved the camera with each blink. Portrait was worst: Fill Screen's
   growth jumped every few frames. Drawn pics are used where nothing was reported (Red to Crystal).
-- The zoom snaps to the target at a battle's first frame and eases out about 20% per frame.
-  The extra rise eases the same way.
+- **The 3D world's single battles frame what is out** (`live` in `fitStep`: `tuned()`, not a
+  double battle). `Engine.prefit` passes each lead's `present` (`hd.prefit(side, image, x, y,
+  nil, present)`): false while its sprite is not up (`Anim._present[0 / 1].visible`, false
+  before its send-out and after its faint, withdrawal or Fly). Such a record (`rec.out ==
+  false`) is still sized but not framed, nor is its side's drawn art (a send-out grows it). The
+  adapter also reports the opposing trainer (`hd.fieldTrainer(Anim._stage.trainer.enemy.visible)`,
+  `cur.trainerOut`). The camera starts each battle at zoom 1 with no rise (not at its target),
+  pulls out for the foe once it is out, and is framed again when the player's is; the zoom-in
+  for small ones waits for both. A side that was out (`fit.wasOut`) and is not holds the target
+  (`fit.target` / `extraTarget`) and the HP box (no re-placement) until a Pokémon is out again,
+  the next one reported before its send-out included. The trainer shown with no foe out (its
+  intro, its last words) sets the target to zoom 1, settled at once, so the trainer is drawn at
+  its size. Not held back by `fit.turn` (below): framed at rest and only as the Pokémon come
+  and go, it follows a send-out mid-turn. Until 2026-11 both leads were framed from the
+  battle's first frame, before either was out, and a faint let the camera come back in.
+- The zoom snaps to the target at a battle's first frame (the 3D world's singles: at 1) and
+  eases out about 20% per frame. The extra rise eases the same way.
 - It eases back in about 5% per frame, but only after the target has stayed larger for 45
   frames.
 - **Not back in while a turn plays.** Before each battle pass the adapter calls
@@ -626,11 +641,17 @@ their ground (no side shift or drop: those are for the classic platforms):
   Perspective comes from the depth, not `nearScale`; `sizeCurve`, `sizeFloor`, `minShare` are not
   used.
 - The smallest: its art's longest side (height or width of the art box: a flat Wishiwashi
-  counts its width) at least `fit.worldMin` (0.07) of the battle's 160 rows on screen, by the
-  current zoom (`k >= worldMin * 160 / (side * fit.z)`; `e.raised`), so it grows back as the
-  camera pulls out for a giant. Kept low because that growth is against the world: at 12% a
-  Pikachu beside a Wailord stood half a tree tall and Wishiwashi as big as one. Above it, true
-  to scale; the largest limit wins over it.
+  counts its width) at least `fit.worldMin` (0.07) of the battle's 160 rows, and at least
+  `fit.worldShare` (0.155) of the art height of the tallest on the field (`e.px`, canvas px
+  before the zoom, after the caps, of the entries for `hd.pair`'s two), both before the zoom
+  (`k >= max(worldMin * 160, worldShare * tallest) / side`; `e.raised`). Above it, true to
+  scale; the largest limit wins over it. Until 2026-11 `worldMin` was taken after the zoom
+  (`/ fit.z`), so it grew as the camera pulled out for a giant: a wide screen pulls out for a
+  foe's Wailord (0.49) and an upright one, with room above, does not (1.0), so a Pikachu beside
+  it was drawn smaller on the upright screen (0.39 against 0.48). `worldShare` matches what the
+  wide screen drew (the small one's art 14-16% of the giant's for Wailord, Groudon and Steelix
+  pairs) on any screen. At 12% after the zoom a Pikachu beside a Wailord stood half a tree tall
+  and Wishiwashi as big as one.
 - Wide ones step outward (singles; `fit.wideLine`, 0.4): after the camera has eased, a side
   whose art (its own, not the platforms) reaches past the line is shifted toward its own edge,
   partly off the screen: the player's art's right edge no further right than 40% of the screen's
@@ -670,8 +691,11 @@ their ground (no side shift or drop: those are for the classic platforms):
 - **Double battles at the sprite mod's own sizes** (`fit.doublesOwnSize`, on): in the 3D
   world a double battle's four are drawn at their tag's own `scale`, never shrunk (`ownSize`
   returns it as it is; they may overlap a little), with no world scale (`worldSize` is not
-  asked), no spread (`spreadTarget` 1), and nothing fitted: the camera's target is zoom 1
-  with no rise (`fitStep`), and the HP boxes stay where the game puts them (`headBox` off).
+  asked), no spread (`spreadTarget` 1), and the HP boxes where the game puts them (`headBox`
+  off). The camera stands at zoom 1 with no rise, pulled back (`fitStep`, by `zStep`, as far as
+  `zMin`) only as far as shows every reported battler's art whole: its top under the screen's
+  top (`topLimit`), its sides inside the screen's; never in. Until 2026-11 it never moved, and
+  a wide screen cut the top foe's head (Steelix, Rayquaza).
   The world's sizes squeezed a double's giants hardest (a wide Wailord to its spot's width), so
   Wailord and Steelix stood barely bigger than Seedot and Lotad; the sprite mod's sizes show the
   differences. The rules below apply with it off.

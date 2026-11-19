@@ -61,13 +61,19 @@ and Crystal.
   bigger they are, up to about 5 m tall (a little less for an opponent), so a Groudon still
   stands taller than a Blaziken, and a Wailord towers over a Pikachu without leaving the
   screen. Very wide ones are kept to 6 m across, while a tall, thin Steelix keeps its height.
-  The camera zooms out to fit a giant, and one too big even then is shrunk just enough to fit;
-  when every Pokémon on the field is small, it comes in close so they fill more of the screen.
-  In single battles a wide Pokémon steps back toward its own side of the screen, partly out of
-  view, rather than reaching across the middle and covering its opponent, always with most of
-  it in view. In double battles the four are drawn at your sprite pack's own sizes, as on the
-  game's own screen, which shows their differences best when four share it. Prefer your sprite
-  pack's sizes everywhere? Turn **3D Sizing** off.
+  A small Pokémon beside a giant is drawn the same on an upright phone as on a wide screen.
+- 🎬 **A camera that follows the battle:** A single battle opens at the camera's usual view, so
+  the trainer is shown at their proper size. As the opponent's Pokémon comes out, the camera
+  zooms out to fit a giant, then adjusts again when yours comes out, coming in close when every
+  Pokémon on the field is small; one too big even for the widest view is shrunk just enough to
+  fit. When a Pokémon faints the camera holds still until the next one is out, and it returns
+  to its usual view for the trainer's last words. A wide Pokémon steps back toward its own side
+  of the screen, partly out of view, rather than reaching across the middle and covering its
+  opponent, always with most of it in view.
+- 👥 **Double battles:** The four are drawn at your sprite pack's own sizes, as on the game's
+  own screen, which shows their differences best when four share it, and the camera pulls back
+  only as far as keeps every one of them in view. Prefer your sprite pack's sizes everywhere?
+  Turn **3D Sizing** off.
 - 🏷️ **HP box over their heads:** The opponent's HP box (both of them in a double battle) sits
   just above the tallest Pokémon's head, and the camera leaves room for it. It only moves when a new Pokémon
   comes out, so it never jumps about when one faints or the battle ends. The tiniest are never drawn too small to see. Indoors, the biggest

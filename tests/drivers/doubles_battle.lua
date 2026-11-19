@@ -33,12 +33,39 @@ local function body(game, log)
   -- HD_SPOT=MAP:x:y: the battle starts there (the 3D world around it with Battle Scene on)
   local spot = os.getenv("HD_SPOT")
   if spot and spot ~= "" then
-    local mapId, px, py = spot:match("^([%w_]+):(%d+):(%d+)$")
+    local mapId, px, py = spot:match("^([%w_]+):?(%d*):?(%d*)$")
     if mapId then
       local Map = require("src.core.game3.map")
       local Player = require("src.core.game3.player")
+      local Collision = require("src.core.game3.collision")
       px, py = tonumber(px), tonumber(py)
+      pcall(Map.load, nil, game, mapId, { x = px or 0, y = py or 0, facing = "down" })
+      -- (the walkable land cell nearest x, y; the map's middle without them)
+      local def = Map.currentDef()
+      local L = def and def.midLayout
+      local W, H = L and L.width or 0, L and L.height or 0
+      local sx, sy = px or math.floor(W / 2), py or math.floor(H / 2)
+      local function land(x, y)
+        if x < 0 or y < 0 or x >= W or y >= H then return false end
+        local okW, walk = pcall(Collision.isWalkable, x, y)
+        if not (okW and walk) then return false end
+        local okB, beh = pcall(Collision.behavior, x, y)
+        return not (okB and Collision.isSurfable(beh))
+      end
+      px, py = sx, sy
+      for r = 0, 40 do
+        local hit
+        for dy = -r, r do
+          for dx = -r, r do
+            if not hit and math.max(math.abs(dx), math.abs(dy)) == r and land(sx + dx, sy + dy) then
+              hit = { sx + dx, sy + dy }
+            end
+          end
+        end
+        if hit then px, py = hit[1], hit[2]; break end
+      end
       pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "down" })
+      log(("spot %s %dx%d asked %d,%d at %d,%d"):format(mapId, W, H, sx, sy, px, py))
       local s0 = Runtime.getSession()
       if s0 then s0.x, s0.y = px, py end
       Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
@@ -105,7 +132,7 @@ local function body(game, log)
     log(("%s: fill %s ui %s zoom %s target %s lift %s shiftE %s shiftP %s failed %s"):format(name, tostring(v.fill),
       tostring(v.uiScale), tostring(v.zoom), tostring(v.zoomTarget), tostring(v.lift), tostring(v.shiftEnemy),
       tostring(v.shiftPlayer), tostring(v.failed)) .. " up " .. tostring(v.sceneUp) .. " topDy " .. tostring(v.uiTopDy) .. " packed " .. tostring(v.packed)
-      .. " shrink " .. tostring(v.worldShrink))
+      .. " shrink " .. tostring(v.worldShrink) .. " scene " .. tostring(v.scene) .. " " .. tostring(v.sceneError))
     U.shot(game, ("%s/%s.png"):format(dir, name))
    end
   end

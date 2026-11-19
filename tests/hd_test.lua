@@ -861,12 +861,16 @@ do
     for _ = 1, 30 do frame() end
     check(near(size(pageE), 0.3) and hd.fit.spread == 1, "world doubles: own sizes, no spread ("
       .. tostring(size(pageE)) .. ", " .. tostring(hd.fit.spread) .. ")")
-    -- ... and nothing fitted: one far too big for the screen keeps its size, the camera at 1
+    check(hd.stats.zoomTarget == 1, "world doubles: ...the camera where it stands while all show ("
+      .. tostring(hd.stats.zoomTarget) .. ")")
+    -- ... one far too big for the screen keeps its size, the camera pulled back only as far as
+    -- shows its art whole: its top on the screen, its sides inside it
     hd.tag(pic, mon(pageE, "enemy", 4, { scale = 3 }))
     for _ = 1, 30 do frame() end
-    check(near(size(pageE), 3) and hd.stats.zoomTarget == 1 and hd.fit.extraTarget == 0,
-      "world doubles: ...never shrunk, the camera never moved (" .. tostring(size(pageE)) .. ", "
-      .. tostring(hd.stats.zoomTarget) .. ")")
+    local zd = hd.stats.zoomTarget
+    check(near(size(pageE), 3) and zd < 1 and hd.fit.extraTarget == 0,
+      "world doubles: ...never shrunk, the camera pulled back for it (" .. tostring(size(pageE)) .. ", "
+      .. tostring(zd) .. ")")
     hd.fit.double = false
     frame()
     check(hd.spreadDx(200) == 0 and hd.fit.spread == 1, "world: no spread in singles")
@@ -899,6 +903,73 @@ do
     check(near(size(pageE), 0.3) and not hd.fit.headBox and hd.stats.zoomTarget == 1,
       "world: 3D Sizing off, a 20 m foe at its own size, nothing fitted (" .. tostring(size(pageE)) .. ")")
     hd.fit.worldSizes, hd.fit.fill = true, false
+    -- the 3D world's single battles frame what is out on the field (each side as the engine
+    -- reports it, out or not yet / no longer, and whether the opposing trainer is shown)
+    local function frameLive(eOut, pOut, trainer)
+      G.setCanvas(base)
+      hd.beginPass("battle", base)
+      hd.world(wall, { to = {} }, 0, 0)
+      hd.prefit("enemy", pic, 176, 40, nil, eOut)
+      hd.prefit("player", mine, 72, 80, nil, pOut)
+      hd.fieldTrainer(trainer)
+      if eOut then G.draw(pic, 176, 40, 0, 1, 1, 32, 32) end
+      if pOut then G.draw(mine, 72, 80, 0, 1, 1, 32, 32) end
+      hd.seam("ui")
+      G.rectangle("fill", 0, 112, 240, 48)
+      hd.endPass()
+      G.log = {}
+      hd.composite(base, function(c, bx, by, sx, sy) G.draw(c, bx or 0, by or 0, 0, sx or 4, sy or 4) end,
+        0, 0, 4, 4, { 0, 0, 960, 640 })
+      hd.endFrame()
+    end
+    hd.tag(pic, giant)
+    hd.tag(mine, mon(pageP, "player", 0.3))
+    hd.fit.idle = 3
+    -- (the trainer's intro, nothing out: the camera's own zoom)
+    frameLive(false, false, true)
+    check(hd.stats.zoom == 1 and hd.stats.zoomTarget == 1, "world live: a battle starts at the camera's own zoom ("
+      .. tostring(hd.stats.zoom) .. ")")
+    for _ = 1, 30 do frameLive(false, false, true) end
+    check(hd.stats.zoom == 1, "world live: ...held there until a Pokemon is out")
+    -- (the foe out: pulled out for it, from 1)
+    frameLive(true, false, false)
+    local z1 = hd.stats.zoom
+    for _ = 1, 60 do frameLive(true, false, false) end
+    local zFoe = hd.stats.zoomTarget
+    check(zFoe < 1 and z1 > zFoe and near(hd.stats.zoom, zFoe, 1e-3),
+      "world live: the giant foe out, the camera eased out for it (" .. tostring(z1) .. " -> " .. tostring(zFoe) .. ")")
+    -- (the player's out: framed again with both)
+    for _ = 1, 120 do frameLive(true, true, false) end
+    local zBoth = hd.stats.zoomTarget
+    check(zBoth <= 1 and near(hd.stats.zoom, zBoth, 1e-3), "world live: the player's out, framed again (" .. tostring(zBoth) .. ")")
+    -- (the foe down, then its next reported before its send-out: held where it was)
+    local small = mon(pageE, "enemy", 0.3)
+    for _ = 1, 60 do frameLive(false, true, false) end
+    check(hd.stats.zoomTarget == zBoth and near(hd.stats.zoom, zBoth, 1e-3),
+      "world live: the foe down, the camera held (" .. tostring(hd.stats.zoom) .. ")")
+    hd.tag(pic, small)
+    for _ = 1, 60 do frameLive(false, true, false) end
+    check(hd.stats.zoomTarget == zBoth and near(hd.stats.zoom, zBoth, 1e-3),
+      "world live: ...the next foe not yet out, still held (" .. tostring(hd.stats.zoom) .. ")")
+    -- (the next out: framed again, a turn playing or not; both small, in)
+    hd.setTurn(true)
+    for _ = 1, 400 do frameLive(true, true, false) end
+    hd.setTurn(false)
+    check(hd.stats.zoomTarget > 1 and near(hd.stats.zoom, hd.stats.zoomTarget, 1e-3),
+      "world live: the next foe out, framed again mid-turn (" .. tostring(hd.stats.zoom) .. ")")
+    -- (the foe down for good, the trainer's last words: back to the camera's own zoom)
+    hd.tag(pic, giant)
+    for _ = 1, 120 do frameLive(true, true, false) end
+    local zEnd = hd.stats.zoom
+    hd.setTurn(true)
+    for _ = 1, 30 do frameLive(false, true, false) end
+    check(near(hd.stats.zoom, zEnd, 1e-3), "world live: the last foe down, held")
+    for _ = 1, 300 do frameLive(false, true, true) end
+    hd.setTurn(false)
+    check(zEnd < 1 and hd.stats.zoomTarget == 1 and near(hd.stats.zoom, 1, 1e-3),
+      "world live: the trainer back for its last words, at the camera's own zoom (" .. tostring(zEnd) .. " -> "
+      .. tostring(hd.stats.zoom) .. ")")
+    hd.tag(mine, mineSpec)
     hd.tag(pic, giant)
     hd.fit.idle = 3
     for _ = 1, 30 do frame() end
@@ -947,27 +1018,41 @@ do
   frame({ pic2 = true })
   local k2 = size(page2)
   check(k2 and near(k2, 1.1 * ppt(66) / 200), "world: each battler by the ground under its own feet (" .. tostring(k2) .. ")")
-  -- the smallest: its art's longest side at least worldMin of the battle's 160 rows as the camera
-  -- shows it (a 0.1 m foe: 3.4 px of art, raised to 7% = 11.2 rows, more when zoomed out); above
-  -- it, true
-  hd.fit.worldMin = 0.07
+  -- the smallest: its art's longest side at least worldMin of the battle's 160 rows before the
+  -- camera's zoom, the same on any screen (a 0.1 m foe: 3.4 px of art, raised to 7% = 11.2
+  -- rows); above it, true (worldShare off for these)
+  local shareDefault = hd.fit.worldShare
+  check(shareDefault == 0.155, "world: the smallest at least 15.5% of the tallest by default")
+  hd.fit.worldMin, hd.fit.worldShare = 0.07, 0
   hd.tag(pic2, mon(page2, "enemy", 0.1))
   frame({ pic2 = true })
-  local tiny, z = size(page2), hd.stats.zoom
+  local tiny = size(page2)
   local e2
   for _, w in ipairs(hd._worldMons) do if w.of.height == 0.1 then e2 = w end end
-  check(tiny and near(tiny * 200 * z, 0.07 * 160, 1e-6) and e2 and e2.raised,
-    "world: a tiny foe raised to 7% of the battle's height on screen (" .. tostring(tiny and tiny * 200 * z) .. " rows)")
+  check(tiny and near(tiny * 200, 0.07 * 160, 1e-6) and e2 and e2.raised,
+    "world: a tiny foe raised to 7% of the battle's 160 rows, before the zoom (" .. tostring(tiny and tiny * 200) .. " rows)")
+  -- ... and no smaller than worldShare of the tallest on the field's art height (here the
+  -- player's), before the zoom too: a Pikachu beside a Wailord alike on an upright screen and a
+  -- wide one
+  hd.fit.worldShare = 0.15
+  frame({ pic2 = true })
+  local mineW
+  for _, w in ipairs(hd._worldMons) do if w.of == hd.pair.player then mineW = w end end
+  local wantS = mineW and math.max(0.07 * 160, 0.15 * mineW.px) / 200
+  check(wantS and wantS * 200 > 0.07 * 160 and near(size(page2), wantS, 1e-6),
+    "world: ...and 15% of the tallest's art height (" .. tostring(size(page2)) .. ", want " .. tostring(wantS) .. ")")
+  hd.fit.worldShare = 0
   -- a flat one (its art 400 px across, 200 tall): by its width, raised half as much
   hd.tag(pic2, mon(page2, "enemy", 0.1, { quad = quad(0, 0, 400, 200), pivot = { 200, 200 }, art = { 0, 0, 400, 200 } }))
   frame({ pic2 = true })
-  local flat, zf = size(page2), hd.stats.zoom
-  check(flat and near(flat * 400 * zf, 0.07 * 160, 1e-6), "world: a flat one by its longest side, its width ("
-    .. tostring(flat and flat * 400 * zf) .. " px across)")
-  -- (the 1.2 m foe: true to scale where that is above 7% at this zoom, else raised to it)
-  local want1 = math.max(rest, 0.07 * 160 / (200 * z))
-  check(near(size(pageE), want1), "world: ...a bigger one true to scale unless under it at this zoom ("
+  local flat = size(page2)
+  check(flat and near(flat * 400, 0.07 * 160, 1e-6), "world: a flat one by its longest side, its width ("
+    .. tostring(flat and flat * 400) .. " px across)")
+  -- (the 1.2 m foe: true to scale where that is above 7%, else raised to it)
+  local want1 = math.max(rest, 0.07 * 160 / 200)
+  check(near(size(pageE), want1), "world: ...a bigger one true to scale unless under it ("
     .. tostring(size(pageE)) .. ", want " .. want1 .. ")")
+  hd.fit.worldShare = shareDefault
   -- indoors, a ceiling: a 6 m foe stands as tall as the knee (2 m) plus the ceiling's metre less
   -- e^-4 of it; one under the knee true to scale; outdoors the same foe at its 6 m
   local function sized(indoor, h, cap, side, extra, wide)

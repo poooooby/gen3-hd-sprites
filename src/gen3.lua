@@ -351,10 +351,17 @@ function Gen3.wrapFit(Engine, hd)
           end
           return
         end
+        -- (whether each is out on the field, its sprite up: before its send-out and after its
+        -- faint it is not; and whether the opposing trainer is shown)
+        local stage = okAnim and type(Anim._stage) == "table" and Anim._stage
+        local tr = stage and type(stage.trainer) == "table" and stage.trainer.enemy
+        if hd.fieldTrainer then hd.fieldTrainer(type(tr) == "table" and tr.visible == true) end
         for side, spot in pairs(spots) do
           local battler = st[side]
           local mon = battler and battler.mon
           local sp = mon and Pokemon.speciesOf and Pokemon.speciesOf(mon)
+          local pres = okAnim and type(Anim._present) == "table" and rawget(Anim._present, side == "player" and 0 or 1)
+          local out = not (type(pres) == "table" and pres.visible == false)
           if sp then
             local picSp, shiny, personality = Ui.picArgs(battler, sp)
             local entry
@@ -365,7 +372,7 @@ function Gen3.wrapFit(Engine, hd)
             end
             if entry and entry.image then
               local cx, cy = Ui.battlerSpriteCenter(side, sp, { x = spot.x, y = spot.y }, nil, false)
-              hd.prefit(side, entry.image, cx, cy)
+              hd.prefit(side, entry.image, cx, cy, nil, out)
             end
           end
         end

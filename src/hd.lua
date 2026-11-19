@@ -112,11 +112,12 @@ function HD.new(G, opts)
       -- row 52: it stands on its pad, the UI over its lower rows as in the cart), each 16 columns
       -- wider
       fitRoom = { enemy = { up = 8, left = 16, right = 16 }, player = { up = 8, left = 16, right = 16 } },
-      -- in the 3D world (worldSize): no battler's art smaller on screen than this share of the
-      -- battle's 160 rows, by its longest side (height or width: a flat Wishiwashi counts its
-      -- width), after the camera's zoom (a Pikachu beside a Wailord still reads); above it, true
-      -- to scale. Kept low: the camera pulled out for a giant, it grows against the world
-      worldMin = 0.07,
+      -- in the 3D world (worldSize): no battler's art smaller than worldMin of the battle's 160
+      -- rows, by its longest side (height or width: a flat Wishiwashi counts its width), nor
+      -- than worldShare of the tallest on the field's art height (a Pikachu beside a Wailord
+      -- still reads), both before the camera's zoom, so every screen shape draws the pair alike;
+      -- above them, true to scale
+      worldMin = 0.07, worldShare = 0.155,
       -- ... and a soft ceiling on height: true to size up to heightKnee metres, a taller one
       -- eased toward heightMax (a foe's heightMaxFoe) and never past it, the taller still the
       -- taller (knee + (max - knee) * (1 - e^-((h - knee) / (max - knee))): Groudon's 3.5 m drawn
@@ -994,14 +995,32 @@ function HD.new(G, opts)
     end
     e.height = height
     local k = height / (tonumber(S.METRES_PER_TILE) or 1) * e.ppt / (hpy - atop)
-    -- (the smallest: its art's longest side at least worldMin of the battle's height as the
-    -- camera now shows it, so it grows back as the camera pulls out for a giant)
+    -- (its art's height where it stands, canvas px before the zoom: what worldShare measures by)
+    e.px = (hpy - atop) * k
+    -- (the smallest: its art's longest side at least worldMin of the battle's height, and at
+    -- least worldShare of the tallest on the field's art height, both before the zoom: the same
+    -- on any screen. Measured after the zoom it grew as the camera pulled out for a giant, which
+    -- a wide screen does and an upright one, room to spare above, does not)
     local least = tonumber(self.fit.worldMin) or 0
     local side = hpy - atop
     if type(art) == "table" and tonumber(art[1]) and tonumber(art[3]) then
       side = math.max(side, math.abs(art[3] - art[1]))
     end
-    local kMin = least > 0 and least * 160 / (side * math.max(tonumber(self.fit.z) or 1, 1e-3)) or 0
+    local kMin = least > 0 and least * 160 / side or 0
+    local share = tonumber(self.fit.worldShare) or 0
+    local pair = self.pair
+    if share > 0 and type(pair) == "table" then
+      local tallest = 0
+      for i = 1, #worldMons do
+        local w = worldMons[i]
+        local o = w.of
+        if w ~= e and w.px and o and ((pair.enemy and o.side == pair.enemy.side and sameMon(o, pair.enemy))
+            or (pair.player and o.side == pair.player.side and sameMon(o, pair.player))) then
+          tallest = math.max(tallest, w.px)
+        end
+      end
+      kMin = math.max(kMin, share * tallest / side)
+    end
     e.raised = k < kMin
     if e.raised then k = kMin end
     e.limited = e.most ~= nil and k > e.most
@@ -1729,15 +1748,23 @@ function HD.new(G, opts)
   --- camera is framed for a trainer's Pokemon before its send-out and does not follow the
   --- Pokemon's own movement (a jump, a lunge). Cleared each pass. key: one of several on a side
   --- (a double battle's battler id); the side by default.
-  function self.prefit(side, image, x, y, key)
+  --- present: false while it is not out (before its send-out, after its faint): sized, but the
+  --- 3D world's single battles frame only the Pokemon out on the field.
+  function self.prefit(side, image, x, y, key, present)
     local cur = self.cur
     local spec = image ~= nil and self.tags[image]
     if not (cur and spec and type(x) == "number" and type(y) == "number") then return end
     cur.prefit[key or side] = {
       spec = spec, image = image, x = x, y = y, r = 0, sx = 1, sy = 1, ox = 32, oy = 32,
-      tx = 0, ty = 0, tsx = 1, tsy = 1, rest = true,
+      tx = 0, ty = 0, tsx = 1, tsy = 1, rest = true, out = present ~= false,
     }
     if cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
+  end
+
+  --- Whether the opposing trainer is shown this pass (its intro, its last words): the 3D world's
+  --- single battles frame it at the camera's own zoom.
+  function self.fieldTrainer(on)
+    if self.cur then self.cur.trainerOut = on == true end
   end
 
   --- Stop capturing. The pass waits for its canvas's blit (or flatten).
@@ -2307,6 +2334,34 @@ function HD.new(G, opts)
   local function sameOut(a, b) return (a == nil and b == nil) or (a ~= nil and b ~= nil and sameMon(a, b)) end
   local function fitStep(cur)
     local fit = self.fit
+    -- (the 3D world's single battles, sized: the camera frames what is out on the field. It
+    -- starts at its own zoom, moves when the foe comes out and again when the player's does,
+    -- holds while a side's Pokemon is down (fainted, withdrawn, flown) until the next is out,
+    -- and goes back to its own zoom for the opposing trainer's last words)
+    local live = tuned() and not fit.double
+    local outE, outP = false, false
+    local reported = {}
+    for _, rec in pairs(cur.prefit) do
+      reported[rec.spec.side or ""] = true
+      if rec.out ~= false then
+        if rec.spec.side == "enemy" then outE = true elseif rec.spec.side == "player" then outP = true end
+      end
+    end
+    -- (a side the engine reports nothing for: out while its Pokemon is drawn)
+    for _, item in ipairs(cur.items) do
+      if item.kind == "seam" and item.name == "ui" then break end
+      local spec = item.kind == "hd" and item.rec.spec
+      if spec and spec.side and not spec.trainer and not reported[spec.side] then
+        if spec.side == "enemy" then outE = true elseif spec.side == "player" then outP = true end
+      end
+    end
+    if fit.idle > 2 or not fit.wasOut then fit.wasOut = {} end
+    local was = fit.wasOut
+    local hold = live and ((was.enemy and not outE) or (was.player and not outP)) or false
+    local trainerView = live and cur.trainerOut and not outE or false
+    local grew = (outE and not was.enemy) or (outP and not was.player)
+    if outE then was.enemy = true end
+    if outP then was.player = true end
     -- (the foe's HP box over the heads: placed afresh each battle, and when a new Pokemon comes
     -- out or the screen changes; else held)
     local placing = fit.headBox or (fit.double and tuned())
@@ -2319,11 +2374,15 @@ function HD.new(G, opts)
       -- (singles: each side's latest; both: each battler the engine reports, kept through a faint)
       if not fresh and not fit.double then
         fresh = not sameOut(k.enemy, self.pair.enemy) or not sameOut(k.player, self.pair.player)
+        -- (live: placed again when a Pokemon comes out, never while a side is down: the next
+        -- one, reported before its send-out, waits for it)
+        if live then fresh = (fresh or grew) and not hold end
       end
       if not fresh then
         for id, rec in pairs(cur.prefit) do
           if not sameOut(k.mons[id], rec.spec) then fresh = true break end
         end
+        if live and hold then fresh = false end
       end
       if fresh then
         fit.boxBottom = nil
@@ -2397,9 +2456,10 @@ function HD.new(G, opts)
     -- a battler the engine reported (hd.prefit) is fitted where it rests, drawn yet or not:
     -- its send-out jump, a lunge or a shake never moves the camera
     -- (a side reported by any of its battlers is fitted by those alone)
+    -- (live: one not out is not framed, its side's drawn art neither: its send-out grows it)
     local preE, preP = false, false
     for _, rec in pairs(cur.prefit) do
-      take(rec)
+      if not (live and rec.out == false) then take(rec) end
       if rec.spec.side == "enemy" then preE = true elseif rec.spec.side == "player" then preP = true end
     end
     -- the platforms count as each side's art: the scene never crops them
@@ -2487,7 +2547,9 @@ function HD.new(G, opts)
       -- (every battler small: in, toward the tallest standing smallFill of the battle's height,
       -- the camera rising as it comes in so the player's feet stay on the row they stand on at
       -- zoom 1: a back grows upward instead of sinking under the text box)
-      if sized and zt >= 1 - 1e-9 and (fit.zMax or 1) > 1 and #heads > 0 and not (fit.double and fit.doublesOwnSize) then
+      -- (live: only with both sides out; the foe alone only pulls the camera out)
+      if sized and zt >= 1 - 1e-9 and (fit.zMax or 1) > 1 and #heads > 0 and not (fit.double and fit.doublesOwnSize)
+          and not (live and not (outE and outP)) then
         local tall, low = 0, nil
         for _, h in ipairs(heads) do
           if h[5] and h[5] > h[3] then tall = math.max(tall, h[5] - h[3]) end
@@ -2506,6 +2568,25 @@ function HD.new(G, opts)
         end
       end
       self.stats.zoomIn = zt > 1 and zt or nil
+      -- (the 3D world's double battles at the sprite mod's own sizes: the camera where it
+      -- stands, pulled back only as far as shows every Pokemon's art whole, its top under the
+      -- screen's and its sides inside the screen's; never in)
+      if sized and fit.double and fit.doublesOwnSize then
+        local function whole(z)
+          local lift = fitLift(z)
+          local v = playerDrop(z, lift)
+          for _, h in ipairs(heads) do
+            local sh = fit.shift[h[4]] or 0
+            local l, r = fx + (h[1] + sh - fx) * z, fx + (h[2] + sh - fx) * z
+            local t = fy + (h[3] + (h[4] == "player" and v or 0) - fy) * z - lift
+            if t < top0 - 1e-6 or r > vr + 1e-6 or l < vl - 1e-6 then return false end
+          end
+          return true
+        end
+        local z = 1
+        while z > fit.zMin + 1e-9 and not whole(z) do z = z - fit.zStep end
+        zt, et = math.max(fit.zMin, z), 0
+      end
     end
     -- (the doubles spread, just placed afresh: the outer two's feet spreadEdge inside the
     -- screen, unzoomed)
@@ -2546,20 +2627,27 @@ function HD.new(G, opts)
       fit.boxBottom = round2(b)
       self.stats.boxBottom = fit.boxBottom
     end
-    -- (the 3D world's double battles at the sprite mod's own sizes: drawn as the game lays them
-    -- out, the camera where it stands, nothing fitted)
-    if sized and fit.double and fit.doublesOwnSize then zt, et = 1, 0 end
+    -- (live: the opposing trainer shown with no foe out at the camera's own zoom; a side down,
+    -- the camera held where it was)
+    if trainerView then
+      zt, et = 1, 0
+    elseif hold and fit.target then
+      zt, et = fit.target, fit.extraTarget or et
+    end
     fit.target, fit.extraTarget = zt, et
     if fit.idle > 2 then
-      -- a new battle: start where it should be, unshifted until its intro is over
-      fit.z, fit.extra, fit.hold = zt, et, 0
+      -- a new battle: start where it should be (live: at the camera's own zoom, moving as the
+      -- Pokemon come out), unshifted until its intro is over
+      if live then fit.z, fit.extra = 1, 0 else fit.z, fit.extra = zt, et end
+      fit.hold = 0
       fit.shift.enemy, fit.shift.player = 0, 0
     else
       local outward = zt < fit.z or et > fit.extra
       local inward = zt > fit.z or et < fit.extra
-      -- (a turn playing: never settled, so never back in; held from the menu on)
-      if outward or fit.turn then fit.hold = 0 elseif inward then fit.hold = fit.hold + 1 else fit.hold = 0 end
-      local settle = fit.hold >= fit.holdFrames
+      -- (a turn playing: never settled, so never back in; held from the menu on. Live, framed
+      -- at rest and only as the Pokemon come and go, it follows a send-out mid-turn)
+      if outward or (fit.turn and not live) then fit.hold = 0 elseif inward then fit.hold = fit.hold + 1 else fit.hold = 0 end
+      local settle = fit.hold >= fit.holdFrames or trainerView
       if zt < fit.z then
         fit.z = math.max(zt, fit.z - math.max((fit.z - zt) * fit.outRate, 0.002))
       elseif zt > fit.z and settle then

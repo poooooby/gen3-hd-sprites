@@ -109,6 +109,8 @@ return function(mod, hd, state)
   end
   exports.realSizes = function() return hd.fit.worldSizes ~= false end
   exports.setRealSizes = function(on) hd.fit.worldSizes = on and true or false end
+  -- (tests: the core itself, its fit and world sizes)
+  exports._core = function() return hd end
   -- (tests: aim the current battle scene's settled camera at map cell (tx, tz), pitch in
   -- degrees, distance in tiles; nil to leave the stage's)
   exports._sceneLook = function(tx, tz, pitch, dist, yaw)

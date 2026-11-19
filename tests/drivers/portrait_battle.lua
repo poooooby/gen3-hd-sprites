@@ -28,11 +28,57 @@ local function body(game, log)
   local Player = require("src.core.game3.player")
   local C = require("src.core.game3.constants").of("emerald")
   local Party = require("src.core.game3.party")
-  pcall(Map.load, nil, game, "EM_LITTLEROOT_TOWN", { x = 14, y = 12, facing = "down" })
+  -- HD_SPOT=MAP[:x:y]: the battle starts there (Littleroot by default), on the walkable land
+  -- cell nearest that one (the map's middle without x:y)
+  local mapId, sx, sy = (os.getenv("HD_SPOT") or ""):match("^([%w_]+):?(%d*):?(%d*)$")
+  mapId = mapId or "EM_LITTLEROOT_TOWN"
+  sx, sy = tonumber(sx), tonumber(sy)
+  if (os.getenv("HD_SPOT") or "") == "" then sx, sy = 14, 12 end
+  local okL, errL = pcall(Map.load, nil, game, mapId, { x = sx or 0, y = sy or 0, facing = "down" })
+  if not okL then log("FAIL Map.load", mapId, tostring(errL)) end
+  local def = Map.currentDef()
+  local L = def and def.midLayout
+  local W, H = L and L.width or 0, L and L.height or 0
+  sx, sy = sx or math.floor(W / 2), sy or math.floor(H / 2)
+  local Collision = require("src.core.game3.collision")
+  local function land(x, y)
+    if x < 0 or y < 0 or x >= W or y >= H then return false end
+    local okW, walk = pcall(Collision.isWalkable, x, y)
+    if not (okW and walk) then return false end
+    local okB, beh = pcall(Collision.behavior, x, y)
+    return not (okB and Collision.isSurfable(beh))
+  end
+  local px, py = sx, sy
+  if not land(sx, sy) then
+    for r = 1, 40 do
+      local hit
+      for dy = -r, r do
+        for dx = -r, r do
+          if not hit and math.max(math.abs(dx), math.abs(dy)) == r and land(sx + dx, sy + dy) then
+            hit = { sx + dx, sy + dy }
+          end
+        end
+      end
+      if hit then px, py = hit[1], hit[2]; break end
+    end
+  end
+  log(("spot %s %dx%d asked %d,%d at %d,%d"):format(mapId, W, H, sx, sy, px, py))
   local s = Runtime.getSession()
-  if s then s.x, s.y = 14, 12 end
-  Player.cellX, Player.cellY, Player.px, Player.py = 14, 12, 14 * 16, 12 * 16
-  Player.targetX, Player.targetY = 14, 12
+  -- (on the spot before each battle: a new game's intro, late on a busy machine, can still load
+  -- the moving truck after the spot is set)
+  local function toSpot()
+    local d0 = Map.currentDef()
+    if not (d0 and (d0.id or d0.name) == mapId) then
+      log("back to the spot from", tostring(d0 and (d0.id or d0.name)))
+      pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "down" })
+    end
+    s = Runtime.getSession() or s
+    if s then s.x, s.y = px, py end
+    Player.cellX, Player.cellY, Player.px, Player.py = px, py, px * 16, py * 16
+    Player.targetX, Player.targetY = px, py
+  end
+  pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "down" })
+  toSpot()
   -- HD_PLAYER / HD_ENEMY=SPECIES_X:level: the two battlers (Torchic 12 against Wailord 20)
   local function mon(name, sp, lv)
     local a, b = (os.getenv(name) or ""):match("^(SPECIES_[%w_]+):?(%d*)$")
@@ -67,6 +113,8 @@ local function body(game, log)
   local function prompt() local sn = bapi:snapshot(); return sn and sn.prompt, sn end
   local Renderer = require("src.render.Renderer")
   local function battleShot(name)
+    toSpot()
+    U.wait(2)
     local okB, errB = pcall(function()
       local BattleBridge = require("src.core.game3.battle_bridge")
       local sp, lv = mon("HD_ENEMY", "SPECIES_WAILORD", 20)
@@ -111,6 +159,16 @@ local function body(game, log)
       st.uiTopDy or 0, st.zoom or -1, st.composites or 0, st.flattened or 0, tostring(st.failed))
       .. "  grow " .. tostring(st.grow) .. " inward " .. tostring(st.inward) .. " shiftE " .. tostring(st.shiftEnemy) .. " shiftP " .. tostring(st.shiftPlayer)
       .. " scene " .. tostring(st.scene) .. " " .. tostring(st.sceneError) .. " packed " .. tostring(st.packed) .. " shrink " .. tostring(st.worldShrink) .. " rest " .. tostring(st.boxRest))
+    local defB = Map.currentDef()
+    log(("%s: at %s %s,%s facing %s moving %s stage %s score %s"):format(name, tostring(defB and (defB.id or defB.name)),
+      tostring(Player.cellX), tostring(Player.cellY), tostring(Player.facing), tostring(Player.moving),
+      tostring(st.sceneStage), tostring(st.sceneScore)))
+    -- each battler's world size: its side, height (m), scale, raised to the smallest, ground px/tile
+    local hdc = hd._core and hd._core() or hd
+    for _, e in ipairs((hdc and hdc._worldMons) or {}) do
+      log(("%s: mon %s h %.2f k %.4f raised %s limited %s ppt %.2f"):format(name, tostring(e.of and e.of.side),
+        e.height or -1, e.k or -1, tostring(e.raised), tostring(e.limited), e.ppt or -1))
+    end
     U.shot(game, dir .. "/" .. name .. ".png")
     if bar then
       U.tap(game, "a"); U.wait(20)
