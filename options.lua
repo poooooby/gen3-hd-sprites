@@ -34,7 +34,7 @@ return {
     type = "choice",
     default = "classic",
     choices = { { "CLASSIC", "classic" }, { "OVERWORLD", "overworld" } },
-    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. The Pokemon stand in it at their real size (a tile half a metre, the biggest capped at 2.5 m tall, 2.25 m for an opponent, and 3 m wide), the camera zooming out for big ones. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
+    description = "FireRed, LeafGreen, Ruby, Sapphire and Emerald. OVERWORLD: a battle takes place in the world around you, in 2.5D: the map's paths, grass, water, trees and houses around the spot where the battle started, the camera sweeping down to it as the battle begins, a soft shadow under each Pokemon. The Pokemon stand in it at their real size (a tile about a metre, the biggest gently scaled down to about 5 m tall and 6 m wide; double battles at the sprite pack's own sizes), the camera zooming out for big ones and in for small ones. Needs Battle Fit. CLASSIC: the game's own battle backgrounds.",
   },
   {
     key = "scene_build",

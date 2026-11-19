@@ -29,8 +29,8 @@ and Crystal.
   the camera pulls back just enough to show it in full, and eases back in when it leaves.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
   bag and the intro fill any screen shape without black bars. The text box and HP bars stay
-  sharp. In Gen 3's classic battles the enemy's HP box moves up to the top of the screen, giving
-  your Pokémon more room. Gold, Silver and Crystal keep the game's own framed screen.
+  sharp. In Gen 3's classic battles and double battles the opponents' HP boxes move up to the
+  top of the screen, giving the Pokémon more room. Gold, Silver and Crystal keep the game's own framed screen.
 - 📱 **Phone-friendly:** On a phone held upright, the text box runs full width above the touch
   controls, the battle grows into the space above it, and in classic battles the opponent's HP
   box stays put just inside the battle's top edge, whatever the Pokémon do.
@@ -57,14 +57,18 @@ and Crystal.
 - 🎯 **A fair place to fight:** Each battle is set on the nearest spot where both Pokémon stand
   on level, open ground, with nothing between them and nothing blocking the view.
 - 📏 **True to size:** Every Pokémon stands on the ground at its real size, a map tile being
-  half a metre, and nearer the camera looks bigger. The biggest are capped at 2.5 m tall (2.25 m
-  for an opponent) and 3 m wide, so a Wailord towers over a Pikachu without leaving the screen, while a tall, thin
-  Steelix keeps its height. The camera zooms
-  out to fit a giant, and one too big even then is shrunk just enough to fit. In single battles
-  a wide Pokémon steps back toward its own side of the screen, partly out of view, rather than
-  reaching across the middle and covering its opponent, always with most of it in view.
-- 🏷️ **HP box over their heads:** In single battles the opponent's HP box sits just above the
-  taller Pokémon's head, and the camera leaves room for it. It only moves when a new Pokémon
+  about a metre, and nearer the camera looks bigger. Big Pokémon are gently scaled down the
+  bigger they are, up to about 5 m tall (a little less for an opponent), so a Groudon still
+  stands taller than a Blaziken, and a Wailord towers over a Pikachu without leaving the
+  screen. Very wide ones are kept to 6 m across, while a tall, thin Steelix keeps its height.
+  The camera zooms out to fit a giant, and one too big even then is shrunk just enough to fit;
+  when every Pokémon on the field is small, it comes in close so they fill more of the screen.
+  In single battles a wide Pokémon steps back toward its own side of the screen, partly out of
+  view, rather than reaching across the middle and covering its opponent, always with most of
+  it in view. In double battles the four are drawn at your sprite pack's own sizes, as on the
+  game's own screen, which shows their differences best when four share it.
+- 🏷️ **HP box over their heads:** The opponent's HP box (both of them in a double battle) sits
+  just above the tallest Pokémon's head, and the camera leaves room for it. It only moves when a new Pokémon
   comes out, so it never jumps about when one faints or the battle ends. The tiniest are never drawn too small to see. Indoors, the biggest
   are held to about a room's height, so a gym or a ship's cabin stays in view, and anything past
   the walls fades into the room's own colours instead of black. Battles inside the Abandoned
@@ -89,7 +93,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 | **Battle Fit** | On / Off | On | Pokémon at the sprite mod's own size, one too big for its space shrunk just enough to fit; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
 | **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
-| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you, the Pokémon at their real size, the biggest capped at 2.5 m tall (2.25 m for an opponent) and 3 m wide (Gen 3 games). Needs Battle Fit. |
+| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you, the Pokémon at their real size, the biggest gently scaled down to about 5 m tall and 6 m wide (Gen 3 games). Needs Battle Fit. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
 | **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |

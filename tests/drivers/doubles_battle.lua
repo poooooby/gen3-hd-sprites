@@ -5,7 +5,8 @@
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/doubles_battle.lua love .
 -- HD_SIZE=WxH (default 1920x1080); POKEPORT_TOUCH=1 shows the touch controls; HD_SPOT=MAP:x:y the
--- spot the battle starts on (default: where a new game starts).
+-- spot the battle starts on (default: where a new game starts); HD_PAIRS=small,mid only those foe
+-- pairs (default: all).
 
 local PAIRS = {
   { "small", "SPECIES_SEEDOT", "SPECIES_LOTAD" },
@@ -88,7 +89,10 @@ local function body(game, log)
   end
   log("menu reached:", tostring(reached), "double:", tostring(Battle._st and Battle._st.double))
   local st = Battle._st
+  local only = {}
+  for k in (os.getenv("HD_PAIRS") or ""):gmatch("[%w_]+") do only[k] = true end
   for _, pair in ipairs(PAIRS) do
+   if next(only) == nil or only[pair[1]] then
     for slot, key in pairs({ [1] = pair[2], [3] = pair[3] }) do
       local b = st.battlers[slot]
       b.species, b.mon.species = C.species.byName[key], C.species.byName[key]
@@ -101,6 +105,7 @@ local function body(game, log)
       tostring(v.shiftPlayer), tostring(v.failed)) .. " up " .. tostring(v.sceneUp) .. " topDy " .. tostring(v.uiTopDy) .. " packed " .. tostring(v.packed)
       .. " shrink " .. tostring(v.worldShrink))
     U.shot(game, ("%s/%s.png"):format(dir, name))
+   end
   end
 
   -- HD_ATTACK=1: a move from each of the player's two, shots through the turn (the last foes)

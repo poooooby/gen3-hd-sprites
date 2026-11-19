@@ -284,7 +284,9 @@ function Gen3.wrapFit(Engine, hd)
       if D then
         for id = 0, 3 do
           local h = home.doubles[id]
-          if h then place(D[id], h.x + (id % 2 == 0 and dp or de)) end
+          -- (and its spot spread apart, the 3D world's doubles: hd.spreadDx)
+          local sx = two and hd.spreadDx and hd.spreadDx(h and h.x or 0) or 0
+          if h then place(D[id], h.x + (id % 2 == 0 and dp or de) + sx) end
         end
         Engine.doublesY(true)
       end

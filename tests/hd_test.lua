@@ -512,7 +512,7 @@ local function fitFrame(G, hd, base, opts)
   hd.beginPass("battle", base)
   hd.backdrop(opts.wall, 0, 0)
   hd.drawStage(opts.pad, 0, 0)                        -- screen-sized, but part of the stage
-  G.draw(opts.pic, 176, opts.picY or 40, 0, 1, 1, 32, 32)
+  G.draw(opts.pic, 176, opts.picY or 40, 0, opts.picS or 1, opts.picS or 1, 32, 32)
   if opts.mine then G.draw(opts.mine, 64, 80, 0, 1, 1, 32, 32) end  -- the player's Pokemon
   if opts.flash then G.rectangle("fill", 0, 0, 240, 160) end
   G.rectangle("fill", 170, 30, 4, 4)                  -- a particle
@@ -685,8 +685,8 @@ do
   hd.fit.enabled, hd.fit.zMin = true, 0.4
   check(hd.fit.worldMin == 0.07, "world: the smallest's share of the battle's height: 7%")
   hd.fit.worldMin = 0   -- (true to scale until the minimum's own checks below)
-  check(hd.fit.heightMax == 2.5 and hd.fit.heightMaxFoe == 2.25 and hd.fit.widthMax == 3,
-    "world: no art taller than 2.5 m (a foe's 2.25 m) nor wider than 3 m")
+  check(hd.fit.heightKnee == 3 and hd.fit.heightMax == 5 and hd.fit.heightMaxFoe == 4.5 and hd.fit.widthMax == 6,
+    "world: a soft ceiling from 3 m toward 5 m (a foe's 4.5 m), no art wider than 6 m")
   local heightMax, heightMaxFoe, widthMax = hd.fit.heightMax, hd.fit.heightMaxFoe, hd.fit.widthMax
   -- (uncapped until the caps' own checks below)
   hd.fit.heightMax, hd.fit.heightMaxFoe, hd.fit.widthMax = nil, nil, nil
@@ -799,10 +799,12 @@ do
     check(hd.fit.headBox and b1 and b1 >= 2 + 28 - 1e-6 and b1 <= hd.fit.ui.player[2] - 2,
       "world: the foe's HP box placed over the heads (its bottom at " .. tostring(b1) .. ")")
     check(near(hd.fit.uiTopDy, b1 - 44), "world: ...the top band moved there (" .. tostring(hd.fit.uiTopDy) .. ")")
-    -- (the heads under it, at the camera's target: the foe's art top, 200 frame px over its feet)
+    -- (the heads under its columns, at the camera's target: the player's art top, 200 frame px
+    -- over its feet at row 110; the foe's, on the right, needs no room)
     local z, lift = hd.stats.zoomTarget, hd.fitLift(hd.stats.zoomTarget) + hd.fit.extraTarget
-    local head = 112 + (70 - 200 * size(pageE) - 112) * z - lift
-    check(head >= b1 + 2 - 0.05, "world: ...the foe's head under it (" .. string.format("%.2f", head) .. ")")
+    local head = 112 + (110 - 200 * size(pageP) - 112) * z - lift
+    check(head >= b1 + 2 - 0.05, "world: ...the player's head, under its columns, under it ("
+      .. string.format("%.2f", head) .. ")")
     -- the player's Pokemon gone (fainted): held
     for _ = 1, 30 do frame({ view = view, mine = false }) end
     check(hd.fit.boxBottom == b1, "world: ...held when a Pokemon faints")
@@ -819,6 +821,74 @@ do
     hd.tag(pic, giant)
     for _ = 1, 60 do frame() end
     check(hd.fit.headBox == false and hd.fit.boxBottom == nil, "world: no Fill Screen, no box placement")
+  end
+  -- a double battle: none taller than 1.5 m, and none wider than its spot (here columns 120, 176
+  -- and 232: the foe at 176 has 28 px each side, less the 2 px gap: its art, 50 frame px each
+  -- side of its feet, at most 26 / 50)
+  do
+    check(hd.fit.heightKneeDouble == 2 and hd.fit.heightMaxDouble == 5 and hd.fit.spotGap == 2
+      and hd.fit.spreadMax == 1.6, "world doubles: a soft ceiling from 2 m toward 5 m, 2 px between spots")
+    local spots, giant = hd.fit.doubleSpots, hd.pair.enemy
+    -- (the world's sizes in a double battle: doublesOwnSize off until its own check below)
+    check(hd.fit.doublesOwnSize == true, "world doubles: the sprite mod's own sizes by default")
+    hd.fit.doublesOwnSize = false
+    -- (the spread off until its own checks below)
+    hd.fit.double, hd.fit.doubleSpots, hd.fit.spreadMax = true, { 120, 176, 232 }, 1
+    hd.tag(pic, mon(pageE, "enemy", 4))
+    for _ = 1, 30 do frame() end
+    local eh
+    for _, w in ipairs(hd._worldMons) do if w.of.height == 4 then eh = w.height end end
+    local want4 = 2 + 3 * (1 - math.exp(-2 / 3))
+    check(eh and near(eh, want4), "world doubles: a 4 m foe eased to " .. want4 .. " m (" .. tostring(eh) .. ")")
+    hd.fit.heightMaxDouble = nil
+    hd.tag(pic, mon(pageE, "enemy", 4, { body = { 0, 100, 100, 200 } }))
+    for _ = 1, 30 do frame() end
+    check(near(size(pageE), 26 / 50), "world doubles: ...no wider than its spot (" .. tostring(size(pageE)) .. ")")
+    -- the spread: Gen 3's columns moved apart about the focus (120) as far as keeps the outer
+    -- two's feet 20 px inside the screen at the camera's target, up to 1.6; each battler's move
+    -- its column's distance from the focus times (spread - 1)
+    hd.fit.doubleSpots, hd.fit.spreadMax, hd.fit.heightMaxDouble = spots, 1.6, 5
+    hd.fit.idle = 3
+    for _ = 1, 90 do frame() end
+    local sp, st = hd.fit.spread, hd.fit.spreadTarget
+    check(st and st > 1 and st <= 1.6 and near(sp, st, 1e-3),
+      "world doubles: spread apart (" .. tostring(sp) .. ", target " .. tostring(st) .. ")")
+    check(near(hd.spreadDx(200), 80 * (sp - 1)) and near(hd.spreadDx(32), -88 * (sp - 1)),
+      "world doubles: ...each battler moved by its column's distance from the focus")
+    -- own sizes: the tag's scale (0.3), no spread
+    hd.fit.doublesOwnSize = true
+    hd.fit.idle = 3
+    for _ = 1, 30 do frame() end
+    check(near(size(pageE), 0.3) and hd.fit.spread == 1, "world doubles: own sizes, no spread ("
+      .. tostring(size(pageE)) .. ", " .. tostring(hd.fit.spread) .. ")")
+    -- ... and nothing fitted: one far too big for the screen keeps its size, the camera at 1
+    hd.tag(pic, mon(pageE, "enemy", 4, { scale = 3 }))
+    for _ = 1, 30 do frame() end
+    check(near(size(pageE), 3) and hd.stats.zoomTarget == 1 and hd.fit.extraTarget == 0,
+      "world doubles: ...never shrunk, the camera never moved (" .. tostring(size(pageE)) .. ", "
+      .. tostring(hd.stats.zoomTarget) .. ")")
+    hd.fit.double = false
+    frame()
+    check(hd.spreadDx(200) == 0 and hd.fit.spread == 1, "world: no spread in singles")
+    -- every battler small (0.3 m: 10 and 13 canvas px of art): the camera comes in, toward the
+    -- taller (the player's, 0.3 * 42 px) standing 30% of the battle's 112 rows, as far as 2.5,
+    -- every art top still on the screen
+    check(hd.fit.zMax == 2.5 and hd.fit.smallFill == 0.3, "world: small ones zoomed in, up to 2.5, toward 30%")
+    local mineSpec = hd.pair.player
+    hd.tag(pic, mon(pageE, "enemy", 0.3))
+    hd.tag(mine, mon(pageP, "player", 0.3))
+    hd.fit.idle = 3
+    frame()
+    local zi = hd.stats.zoomTarget
+    local want = math.min(2.5, 0.3 * 112 / (0.3 * ppt(110)))
+    check(zi > 1 and zi <= want + 1e-6, "world: ...in (" .. tostring(zi) .. ", at most " .. want .. ")")
+    local foeTop = 112 + (70 - 200 * size(pageE) - 112) * hd.stats.zoom
+    check(foeTop >= -1e-6, "world: ...the foe's head still on the screen (" .. string.format("%.2f", foeTop) .. ")")
+    hd.tag(pic, giant)
+    hd.tag(mine, mineSpec)
+    hd.fit.idle = 3
+    for _ = 1, 30 do frame() end
+    check(hd.stats.zoomTarget <= 1, "world: ...not with a big one on the field")
   end
   -- (its room: from its feet (row 70) up to the screen's top at zoom 0.4 about the focus row 112,
   -- 112 - 112 / 0.4 = -168: 238 rows for 200 px of art)
@@ -908,20 +978,22 @@ do
   local inH, outH, smallH = sized(true, 6), sized(false, 6), sized(true, 1.5)
   check(inH and near(inH, 2 + (1 - math.exp(-4))), "world: indoors a 6 m foe under the ceiling (" .. tostring(inH) .. " m)")
   check(outH and near(outH, 6), "world: ...outdoors its own 6 m")
-  -- the cap: the same 6 m foe outdoors stands 2.25 m, the player's own 2.5 m; indoors capped
-  -- first, then under the ceiling
+  -- the soft ceiling: 3 + (max - 3) * (1 - e^-((h - 3) / (max - 3))); the same 6 m foe
+  -- outdoors under 4.5 m, the player's own under 5 m; indoors eased first, then under the
+  -- room's ceiling
+  local function soft(h, mx) return 3 + (mx - 3) * (1 - math.exp(-(h - 3) / (mx - 3))) end
   local capH, capIn = sized(false, 6, heightMax), sized(true, 6, heightMax)
-  check(capH and near(capH, 2.25), "world: a 6 m foe capped at 2.25 m (" .. tostring(capH) .. ")")
-  check(capIn and near(capIn, 2 + (1 - math.exp(-0.25))), "world: ...indoors, capped then under the ceiling ("
+  check(capH and near(capH, soft(6, 4.5)), "world: a 6 m foe eased under 4.5 m (" .. tostring(capH) .. ")")
+  check(capIn and near(capIn, 2 + (1 - math.exp(-(soft(6, 4.5) - 2)))), "world: ...indoors, capped then under the ceiling ("
     .. tostring(capIn) .. ")")
   local ownH = sized(false, 6, heightMax, "player")
-  check(ownH and near(ownH, 2.5), "world: ...the player's own at 2.5 m (" .. tostring(ownH) .. ")")
-  -- the width: a 2 m art box twice as wide as tall (4 m) drawn 3 m wide, 1.5 m tall; the test's
-  -- 100x200 frame (1 m wide at 2 m) keeps its height
-  local wideH = sized(false, 2, heightMax, "enemy", { art = { -50, 100, 150, 200 }, top = 100 }, widthMax)
-  check(wideH and near(wideH, 1.5), "world: a wide one held to 3 m across (" .. tostring(wideH) .. " m tall)")
-  local thinH = sized(false, 2.2, heightMax, "enemy", nil, widthMax)
-  check(thinH and near(thinH, 2.2), "world: ...a tall, thin one keeps its height (" .. tostring(thinH) .. ")")
+  check(ownH and near(ownH, soft(6, 5)), "world: ...the player's own under 5 m (" .. tostring(ownH) .. ")")
+  -- the width: a 4 m foe (eased to 3.73) whose art box is twice as wide as tall drawn 6 m wide,
+  -- 3 m tall; the test's 100x200 frame (half as wide as tall) keeps its height
+  local wideH = sized(false, 4, heightMax, "enemy", { art = { -50, 100, 150, 200 }, top = 100 }, widthMax)
+  check(wideH and near(wideH, 3), "world: a wide one held to 6 m across (" .. tostring(wideH) .. " m tall)")
+  local thinH = sized(false, 4.4, heightMax, "enemy", nil, widthMax)
+  check(thinH and near(thinH, soft(4.4, 4.5)), "world: ...a tall, thin one keeps its height (" .. tostring(thinH) .. ")")
   check(smallH and near(smallH, 1.5), "world: ...indoors one under the knee true to scale")
   -- no world drawn: Battle Fit's species sizing, as before
   local G2 = fakeGraphics()
@@ -981,6 +1053,14 @@ do
   d = drawn()
   check(d and near(d.args[5], 4 * 72 / 148) and near(hd.stats.zoomTarget, 1),
     "own size: one too big for its room shrinks to fit it (" .. tostring(d and d.args[5]) .. ")")
+  -- ... measured as it rests: drawn at half size coming out of its ball, it is half its fitted
+  -- size, not its own (its room in those pixels twice as big), so it never grows past it
+  frame.picS = 0.5
+  fitFrame(G, hd, base, frame)
+  frame.picS = nil
+  d = drawn()
+  check(d and near(d.args[5], 4 * 0.5 * 72 / 148), "own size: coming out of its ball, the room as it rests ("
+    .. tostring(d and d.args[5]) .. ")")
   -- the art's own columns (spec.art, not the frame's) and the room's sides: 30 art px each side
   -- of its feet, 32 + 16 canvas px beside them
   hd.tag(pic, tall({ quad = quad(0, 0, 100, 40), pivot = { 50, 40 }, art = { 20, 0, 80, 40 }, top = 0, scale = 4 }))

@@ -382,12 +382,13 @@ already covers the view.
   safe area's top, a notch) and, on a tall screen with on-screen touch controls and no cutout,
   `view.bottom`: the top of the controls (the highest `TouchControls:layout()` zone except the
   corner hotbar button).
-- **The enemy's HP box raised** (Gen 3 singles, `fit.topGap` = 2 UI px): on a wide screen the
+- **The enemy's HP box raised** (Gen 3, `fit.topGap` = 2 UI px; a double battle's foes' two
+  boxes moved up as one, since 2026-11): on a wide screen the
   battle fills, the top band (the rows above `fit.split`) is blitted so the enemy's HP box's top
   (`fit.ui.enemy[2]`) is `topGap` under the screen's top, the player's HP box's gap over the text
   box, as the stacked arrangement moves it (`dyTop`, `banded`; `noteUi` records it for `uiMap`).
   The fit sees it there (`fit.uiTopDy`), so the player's Pokémon has the rows it left. Not on a
-  frame whose UI crosses the split (the straddle guard), not in doubles, not with Fill Screen off
+  frame whose UI crosses the split (the straddle guard), not with Fill Screen off
   (the game's own frame).
 - **Gen 2's intro slide** (`drawSliding` in `src/gen2.lua`): the game slides its halves in the
   way the cart's scroll does (`BattleAnimView:presentSlide`: bands blitted row by row, shifted,
@@ -598,15 +599,22 @@ boxes, was dropped in 2026-11; it is kept in a git stash, "hp-boxes: 3D custom p
 `cur.world`; the composite and `endPass` copy it to `hd.worldScene`), each species tag with a
 `height` stands in it at the world's scale in place of its own size (`ownSize`):
 
-- `k = height / Scene.METRES_PER_TILE (0.5) * pxPerTile / artPx`. `height` is the real height of
+- `k = height / Scene.METRES_PER_TILE (1) * pxPerTile / artPx`. `height` is the real height of
   the tag's art box (feet row to the top of the art over its animation; WoobleSpritePack measures
-  it per sprite, a back's corrected for its own animation), capped at `fit.heightMax` (2.5 m;
-  a foe at `fit.heightMaxFoe`, 2.25 m: a Wailord or an Eternatus stands about 5 tiles tall; Raging Bolt's 5.2 m and then 3 m were tried
-  first, and a player's Wailord still filled the screen), then at `fit.widthMax` (3 m) across:
+  it per sprite, a back's corrected for its own animation), eased under a soft ceiling:
+  true to size up to `fit.heightKnee` (3 m), a taller one at `knee + (max - knee) * (1 -
+  e^-((h - knee) / (max - knee)))` toward `fit.heightMax` (5 m; a foe's `fit.heightMaxFoe`,
+  4.5 m), so the taller stays the taller (Groudon 3.5 m drawn 3.4, Steelix 9.2 m and Wailord
+  14.5 m just under 5). Tuned at half a metre a tile as 1.5, 2.5, 2.25 and 3 m (width); back at
+  a metre a tile they were doubled, or the giants came out half as tall. Hard caps came first
+  (Raging Bolt's 5.2 m, 3 m, then 2.5 m, at half a metre a tile):
+  a player's Wailord filled the screen, and a hard cap drew every giant the same height; then
+  at `fit.widthMax` (6 m) across:
   the art box's width in metres at that height (`height * artW / artH`), a wider one's height
   scaled down to fit it, so a wide giant (Wailord) shrinks and a tall, thin one (Steelix) keeps
-  its height. Both before the indoor ceiling. Half a
-  metre a tile since 2026-11 (it was 1: Pokemon looked small against the houses and trees). `artPx = hpy - art[2]`.
+  its height. Both before the indoor ceiling. A metre a tile: half a metre was tried in
+  2026-11 (Pokemon looked small against the houses and trees at a metre), but a 2 m Pokemon
+  then stood as tall as a house, the player's, nearer the camera, taller. `artPx = hpy - art[2]`.
   `pxPerTile = Scene.groundScale(scene, X, Y)`: `Camera.F` over the depth of the ground under the
   feet's canvas point on the settled pose `s.to` (33.8 at the foe's feet, 44.7 at the player's).
   Perspective comes from the depth, not `nearScale`; `sizeCurve`, `sizeFloor`, `minShare` are not
@@ -629,17 +637,77 @@ boxes, was dropped in 2026-11; it is kept in a git stash, "hp-boxes: 3D custom p
   so a giant still shows half of itself and may then reach past the line. Since 2026-11 the line
   is 0.45 and the share kept 0.6 (`wideKeep`): the point 60% of the art in from its inner edge
   stays on the screen. Not in double battles.
+- Outside the 3D world (and in its doubles' own sizes, before `doublesOwnSize` returned the
+  size as it is) `ownSize` measures a battler's room as it rests (`fillScale` with the draw's
+  scale 1): coming out of its ball the game draws it small, its room in those pixels larger,
+  and it grew to its full size, then shrank.
+- In singles the camera's fit across (`across` in `fitStep`) leaves each side's outer edge
+  (the player's left, the foe's right) to the step outward, which keeps most of it on the
+  screen: fitting a wide one's whole width pulled the camera back only for the step to put it
+  half off the screen again (a player's Wailord at zoom 0.40).
+- **Small ones zoomed in** (`fitStep`, the 3D world): when the world zoom target is 1 (no
+  battler needs the camera back), it comes in toward the tallest art (each `heads` entry's
+  feet row less its top, at zoom 1) standing `fit.smallFill` (0.3) of the battle's height (the
+  screen's top, `topLimit`, to the text box's line), up to `fit.zMax` (2.5): the largest zoom,
+  in steps of 0.01, at which every art top stays on the screen and under the foe's HP box
+  where it is under its columns, every art lies wholly inside the screen's sides (the step
+  outward only ever moves one out, so coming in it may not lean on it: a foe went off the
+  screen's right), and `fit.zoomInShow` (0.75) of each player's art shows above the text box's
+  line (the zoom is about the focus row, which a filled screen's text box is not on: zoomed in,
+  a back sank under it). The camera rises as it comes in (`et`, the rise past `fitLift`, by
+  the lowest player's feet row past the focus row times `z - 1`), so the player's feet stay
+  on the row they stand on at zoom 1 and a back grows upward: a back's feet stand below the
+  focus row, and zoomed about it they sank under the text box (Pikachu half hidden at 1.85). Eased in as any zoom
+  in (after `holdFrames`). `stats.zoomIn` is the target when past 1.
 - A giant pulls the camera back a little further: a world zoom target under 1 is multiplied by
   `fit.bigPull` (0.9), as far as `zMin`.
-- **The foe's HP box over the heads** (`fit.headBox`: Fill Screen, singles, the 3D world): the
+- **Double battles at the sprite mod's own sizes** (`fit.doublesOwnSize`, on): in the 3D
+  world a double battle's four are drawn at their tag's own `scale`, never shrunk (`ownSize`
+  returns it as it is; they may overlap a little), with no world scale (`worldSize` is not
+  asked), no spread (`spreadTarget` 1), and nothing fitted: the camera's target is zoom 1
+  with no rise (`fitStep`), and the HP boxes stay where the game puts them (`headBox` off).
+  The world's sizes squeezed a double's giants hardest (a wide Wailord to its spot's width), so
+  Wailord and Steelix stood barely bigger than Seedot and Lotad; the sprite mod's sizes show the
+  differences. The rules below apply with it off.
+- **Double battles (world sizes, `doublesOwnSize` off):** the soft ceiling from `fit.heightKneeDouble` (2 m) toward
+  `fit.heightMaxDouble` (5 m; the metre width cap `widthMax` is not used; a hard 1.5 m cap,
+  tried first, drew everything from Blaziken to Wailord the same height), and each no wider
+  than its spot: `fit.doubleSpots` (Gen 3's battler columns 32, 90, 152, 200, canvas px),
+  spread apart about the focus column by `fit.spread` (below), split halfway between
+  neighbours less `fit.spotGap` (2),
+  its art's left and right of its feet each held inside (`k <= room / part`), the outer sides
+  left to the screen (`e.most`). The spot is the one nearest the column it rests on, from the
+  engine's report (`hd.prefit`, its record's `rest`: `e.restX`), else where it is drawn. The
+  cap wins over the smallest's minimum.
+- **The doubles spread** (`fit.spread`): each column moved to `fx + (x - fx) * spread`, the
+  battler drawn there (`hd.spreadDx(x, spec)` added to its side shift), and the engine's
+  coordinates for it with it (`Engine.shiftCoords` moves `AnimCoords.DOUBLES[id]` by
+  `hd.spreadDx(home x)`, so a move lands on it). The recorded draw is put back on its unspread
+  column (`cur.spread`, the spread the coordinates were moved by this frame, taken off the
+  column drawn nearest), as the side shift is. Its target (`fit.spreadTarget`) is set when the
+  HP boxes are placed (a battle starts, a new Pokémon comes out): as far as keeps the outer
+  two's feet `fit.spreadEdge` (20) canvas px inside the screen (`viewL`/`viewR`) at zoom 1,
+  between 1 and `fit.spreadMax` (1.6) (taken at the camera's target zoom, the bigger sizes it
+  allowed pulled the camera back, which allowed a wider spread: an upright screen's doubles
+  ended at the furthest zoom); eased `fit.spreadEase` (0.1) of the
+  way a frame, so the sizes it allows grow smoothly. Held otherwise: the zoom it allows never
+  feeds back into it. The scene's shadow under each side is not moved (one per side).
+- **The foe's HP box over the heads** (`fit.headBox`: Fill Screen, the 3D world; both foes'
+  boxes in a double battle, `fit.ui.enemy` being their group): the
   top band (`dyTop`, UI px) moves so the box's bottom (`fit.boxBottom`, UI px) sits
   `fit.headGap` (2) above the highest art top, the foe's or the player's, at the camera's
   target (`fit.target`), no lower than `headGap` above the player's HP box and no higher than
   its own height plus `headMargin` (2) under the screen's top (`fit.screenTopUI`). The camera
-  makes room for it: `topLimit` is the box's line plus `headGap` (`uiY`), so `fitSolve` keeps
-  every art top under it, under the room it needs (the box's height plus `headMargin`) before
-  it is placed. Placed in `fitStep` when a battle starts, when a new Pokémon comes out
-  (`hd.pair` changes: `sameMon`), or when the screen changes (`fit.boxKey`); otherwise held,
+  makes room for it only for the heads under its columns (`heads`, each battler's art across
+  where its side shift puts it, at each zoom tried): `fitStep` steps the world zoom target back
+  by `zStep` until every such art top is under the box's line plus `headGap` (`uiY`), or under
+  the room it needs (the box's height plus `headMargin`) before it is placed. A head beside the
+  box (a foe's, on the right) needs no room, and the box may sit beside it: with every head
+  counted, a double battle's two stacked boxes over its high-standing foes pulled the camera
+  all the way back (zoom 0.40 for Pikachu and Zigzagoon against Seedot and Lotad). Placed in `fitStep` when a battle starts, when a new Pokémon comes out (a
+  battler the engine reports, `cur.prefit`, with a Pokémon other than the one remembered for it
+  in `fit.boxKey.mons`, which a faint leaves as it is; in singles also `hd.pair`: `sameMon`), or
+  when the screen changes (`fit.boxKey.screen`); otherwise held,
   so a faint or the end of the battle moves nothing, and the camera never comes in under it.
   Eased `boxEase` (0.25) of the way a frame (`fit.boxDy`). The band is drawn moved down as well
   as up (`banded` allows `dyTop > 0` here).
