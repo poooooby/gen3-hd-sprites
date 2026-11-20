@@ -355,7 +355,13 @@ return function(mod)
     hd.fit.fill = hd.fit.fillAllowed and option("fill_screen", true) ~= false
     hd.barEnabled = option("battle_textbox", true) ~= false
     -- (3D Sizing: the 3D world's sizing; off, its battlers drawn and framed as outside it)
-    hd.fit.worldSizes = option("scene_sizes", true) ~= false
+    -- (Off / Minimal / Medium / Accurate; a value saved by the old On / Off toggle reads as
+    -- Medium / Off)
+    local sizes = option("scene_sizes", "medium")
+    if sizes == true or sizes == nil then sizes = "medium" elseif sizes == false then sizes = "off" end
+    if sizes ~= "off" and sizes ~= "minimal" and sizes ~= "accurate" then sizes = "medium" end
+    hd.fit.worldSizes = sizes ~= "off"
+    hd.fit.sizeMode = sizes ~= "off" and sizes or hd.fit.sizeMode
     -- (the screens before the game starts, and the whole screens opened over the field, are
     -- only captured to fill the screen)
     hd.enabled.boot = hd.enabled.battle and hd.fit.enabled and hd.fit.fill

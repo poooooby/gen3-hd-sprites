@@ -570,7 +570,18 @@ return function(deps)
     return Runtime ~= nil and Runtime.uiBusy ~= nil and not Runtime.uiBusy()
   end
 
+  local migrated = false
   local function tick(dt)
+    -- (3D Sizing was an On / Off toggle: a saved true / false set to MEDIUM / OFF once, so the
+    -- options show the choice the game uses)
+    if not migrated then
+      local v = option("scene_sizes", "medium")
+      if type(v) == "boolean" then
+        if P.setOption("scene_sizes", v and "medium" or "off") then migrated = true end
+      else
+        migrated = true
+      end
+    end
     if notice then
       notice.t = notice.t + dt
       if notice.t >= P.NOTICE_TIME then notice = nil end

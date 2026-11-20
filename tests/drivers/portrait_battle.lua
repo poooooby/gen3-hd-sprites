@@ -101,6 +101,8 @@ local function body(game, log)
   if os.getenv("HD_SCENE") == "off" and hd.setScene then hd.setScene(false) end
   -- HD_REALSIZES=off: 3D Sizing off (the 3D world's battlers drawn as in classic battles)
   if os.getenv("HD_REALSIZES") == "off" and hd.setRealSizes then hd.setRealSizes(false) end
+  -- HD_SIZEMODE=off|minimal|medium|accurate: 3D Sizing's choice for this run
+  if (os.getenv("HD_SIZEMODE") or "") ~= "" and hd.setSizeMode then hd.setSizeMode(os.getenv("HD_SIZEMODE")) end
   if os.getenv("HD_HIDEBOTTOM") == "1" then
     local BUi = require("src.core.game3.battle.ui")
     BUi.bottomUIVisible = function() return false end

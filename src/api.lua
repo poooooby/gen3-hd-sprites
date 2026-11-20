@@ -56,6 +56,8 @@
 --                         (needs Battle Fit)
 --   realSizes() / setRealSizes(on)  3D Sizing: in the 3D world the Pokemon at their real size
 --                         and the battle fitted round them; off, drawn as in classic battles
+--   sizeMode() / setSizeMode(m)  3D Sizing's choice: "off", "minimal", "medium" or "accurate"
+--                         (setRealSizes(true) keeps the last of the three on)
 --   fillEnabled() / setFill(on)   Fill Screen: the battle scene fills the screen, its UI
 --                         docked to the bottom at its own scale (needs Battle Fit)
 --   uiMap()               where this frame's UI canvas went when WoobleView placed it (Fill
@@ -109,6 +111,14 @@ return function(mod, hd, state)
   end
   exports.realSizes = function() return hd.fit.worldSizes ~= false end
   exports.setRealSizes = function(on) hd.fit.worldSizes = on and true or false end
+  exports.sizeMode = function()
+    return hd.fit.worldSizes == false and "off" or (hd.fit.sizeMode or "medium")
+  end
+  exports.setSizeMode = function(m)
+    if m == "off" then hd.fit.worldSizes = false return end
+    if m ~= "minimal" and m ~= "accurate" then m = "medium" end
+    hd.fit.worldSizes, hd.fit.sizeMode = true, m
+  end
   -- (tests: the core itself, its fit and world sizes)
   exports._core = function() return hd end
   -- (tests: aim the current battle scene's settled camera at map cell (tx, tz), pitch in

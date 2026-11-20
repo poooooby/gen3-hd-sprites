@@ -139,6 +139,14 @@ function HD.new(G, opts)
       -- (worldSizes: the 3D world's sizing at all, the 3D Sizing option; false: its battlers
       -- drawn and framed as outside it)
       worldSizes = true,
+      -- (sizeMode: how true the sizes, 3D Sizing's other choices. "medium": as above. "minimal":
+      -- medium's sizes, floors and all, drawn toward minimalMid metres, mid * (h / mid) ^
+      -- minimalPow (a Pikachu drawn as 0.62 m beside a Wailord drawn 0.70, the Wailord's eased
+      -- 4.3 drawn 3.0). "accurate":
+      -- the tag's measured height as it is (WoobleSpritePack's, WoobleDex's artHeightOf `art`:
+      -- one dataset): no soft ceiling, no width cap, no floors but worldMinAccurate of the
+      -- battle's height; the camera's furthest view and a room's ceiling still hold it)
+      sizeMode = "medium", minimalMid = 1, minimalPow = 0.75, worldMinAccurate = 0.04,
       -- (doublesOwnSize: a double battle's four drawn at the sprite mod's own size instead, as
       -- it is, and nothing else done: no world scale, no shrinking (they may overlap a little),
       -- no spread, the camera at zoom 1, the HP boxes where the game puts them)
@@ -982,6 +990,9 @@ function HD.new(G, opts)
     elseif spec.side ~= "player" and tonumber(self.fit.heightMaxFoe) then
       cap = math.min(cap or math.huge, tonumber(self.fit.heightMaxFoe))
     end
+    local mode = self.fit.sizeMode
+    local accurate = mode == "accurate" and not double
+    if accurate then cap = nil end
     if cap and cap > 0 and height > math.min(knee0 or cap, cap) then
       local kn = math.min(knee0 or cap, cap)
       if kn >= cap then
@@ -990,7 +1001,7 @@ function HD.new(G, opts)
         height = kn + (cap - kn) * (1 - math.exp(-(height - kn) / (cap - kn)))
       end
     end
-    local wcap = not double and tonumber(self.fit.widthMax)
+    local wcap = not double and not accurate and tonumber(self.fit.widthMax)
     local wx0, wx1 = type(art) == "table" and tonumber(art[1]), type(art) == "table" and tonumber(art[3])
     if wcap and wcap > 0 and wx0 and wx1 and wx1 > wx0 then
       local wide = height * (wx1 - wx0) / (hpy - atop)
@@ -1009,21 +1020,21 @@ function HD.new(G, opts)
     -- least worldShare of the tallest on the field's art height, both before the zoom: the same
     -- on any screen. Measured after the zoom it grew as the camera pulled out for a giant, which
     -- a wide screen does and an upright one, room to spare above, does not)
-    local least = tonumber(self.fit.worldMin) or 0
+    local least = tonumber(accurate and self.fit.worldMinAccurate or self.fit.worldMin) or 0
     local side = hpy - atop
     -- (a wide one, its art wider than tall: both floors raised by its width over its height, at
     -- most fit.wideFloor times; a long, low one by its length alone looked too small)
     local widen = 1
     if type(art) == "table" and tonumber(art[1]) and tonumber(art[3]) then
       local across = math.abs(art[3] - art[1])
-      if across > side and side > 0 then
+      if across > side and side > 0 and not accurate then
         widen = math.max(1, math.min(tonumber(self.fit.wideFloor) or 1, across / side))
       end
       side = math.max(side, across)
     end
     e.widen = widen
     local kMin = least > 0 and least * 160 * widen / side or 0
-    local share = tonumber(self.fit.worldShare) or 0
+    local share = not accurate and tonumber(self.fit.worldShare) or 0
     local pair = self.pair
     if share > 0 and type(pair) == "table" then
       local tallest = 0
@@ -1042,6 +1053,20 @@ function HD.new(G, opts)
     -- shows instead of the camera pulling back to undo it)
     e.lift = e.raised and k > 0 and kMin / k or 1
     if e.raised then k = kMin end
+    -- (Minimal: Medium's size, its floors' raise and all, drawn toward the middle: as metres at
+    -- this spot, mid * (h / mid) ^ minimalPow, the small less small, the big less big. What the
+    -- zoom-in leaves out (e.lift) is Medium's raise, curved alike)
+    if mode == "minimal" and not double then
+      local mid, pw = tonumber(self.fit.minimalMid) or 1, tonumber(self.fit.minimalPow) or 1
+      local perM = e.ppt / ((tonumber(S.METRES_PER_TILE) or 1) * (hpy - atop))
+      if mid > 0 and pw > 0 and perM > 0 and k > 0 then
+        local function curve(kk) return mid * (kk / perM / mid) ^ pw * perM end
+        local c0 = curve(k / (e.lift or 1))
+        k = curve(k)
+        e.lift = c0 > 0 and k / c0 or 1
+        e.height = k / perM
+      end
+    end
     e.limited = e.most ~= nil and k > e.most
     if e.limited then k = e.most end
     -- (a double battle: no wider than its spot, the column it rests on, as the engine reports it

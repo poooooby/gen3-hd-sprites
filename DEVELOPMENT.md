@@ -684,7 +684,9 @@ boxes, was dropped in 2026-11; it is kept in a git stash, "hp-boxes: 3D custom p
 everything below that fits the battle round those sizes (the soft ceilings, the zoom in, the
 step outward, the foe's HP box over the heads, the doubles' rules, the scaled shadows), is
 behind `tuned()` (`hd.worldTuned`): the world drawn and `fit.worldSizes` on, the **3D Sizing**
-option (`scene_sizes`, main.lua). Off, the world's battlers are drawn and framed as outside it
+option (`scene_sizes`, main.lua: Off / Minimal / Medium / Accurate, `fit.sizeMode` the last three;
+a saved true / false of the old toggle reads as Medium / Off and is rewritten so by
+src/prompt.lua's tick once a game runs). Off, the world's battlers are drawn and framed as outside it
 (`ownSize`, `fitSolve`, the camera's fit across the scene's edges); the sides still stand on
 their ground (no side shift or drop: those are for the classic platforms):
 
@@ -708,6 +710,20 @@ their ground (no side shift or drop: those are for the classic platforms):
   feet's canvas point on the settled pose `s.to` (33.8 at the foe's feet, 44.7 at the player's).
   Perspective comes from the depth, not `nearScale`; `sizeCurve`, `sizeFloor`, `minShare` are not
   used.
+- **3D Sizing's choices** (`fit.sizeMode`; singles only, a double's four as Medium):
+  - *Medium* (`"medium"`, the default): everything here.
+  - *Minimal* (`"minimal"`): Medium's final scale, its floors' raise included, as metres where it
+    stands (`k / perM`, `perM = ppt / (METRES_PER_TILE * artPx)`), drawn toward
+    `fit.minimalMid` (1 m) by `mid * (h / mid) ^ fit.minimalPow` (0.75). Applied after the
+    floors: before them, Medium's floors lifted a small one past its curve, so a Capsakid stayed
+    as it was while the Dewott beside it grew. `e.lift` (the raise the zoom-in leaves out) is
+    Medium's, curved alike. Pikachu by Wailord drawn as 0.70 m and 3.0 m (Medium 0.62 / 4.34),
+    Capsakid by Dewott 0.58 / 0.87, Zigzagoon by Blaziken 0.62 / 1.62.
+  - *Accurate* (`"accurate"`): the tag's height as it is (WoobleSpritePack's measured art height,
+    the same dataset as WoobleDex's `artHeightOf(...).art`: Wailord 6.36 m): no soft ceiling, no
+    width cap, no share of the tallest or wide raise, only `fit.worldMinAccurate` (4%) of the
+    battle's height; the camera's furthest view (`e.most`) and a room's ceiling still hold it.
+    Pikachu by Wailord: the camera at `zMin` (0.4), Wailord 6.35 m, Pikachu its 0.4.
 - The smallest: its art's longest side (height or width of the art box: a flat Wishiwashi
   counts its width) at least `fit.worldMin` (0.1) of the battle's 160 rows, and at least
   `fit.worldShare` (0.2) of the art height of the tallest on the field (`e.px`, canvas px
@@ -2010,7 +2026,8 @@ texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pas
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `realSizes()` / `setRealSizes(on)` (Real
-Sizes: `fit.worldSizes`), `sceneZoom()` (the battle scene's zoom this
+Sizes: `fit.worldSizes`), `sizeMode()` / `setSizeMode(m)` (3D Sizing's choice: `"off"`, `"minimal"`,
+`"medium"`, `"accurate"`), `sceneZoom()` (the battle scene's zoom this
 frame; 1 = none), `sceneDecks(layout)` (a layout's deck table, for an overworld view: see Battle
 Scene) and `stats()` (`splits`, `composites`, `flattened`, `overCap`, `zoom`,
 `zoomTarget`, `lift`, `extraLift`, `hiddenEnemyUI`, `hiddenOwnUI`, `backTop`, `shiftEnemy`, `shiftPlayer`, `dropPlayer`, `raisePlayer`, `fill` (the scene's scale over the Renderer's, 1 = none), `uiScale`, `uiTopDy`, `card`, `grow`, `inward`, `topY`, `uiK`,

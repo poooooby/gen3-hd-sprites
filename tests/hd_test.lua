@@ -1058,6 +1058,24 @@ do
   local wantS = mineW and math.max(0.07 * 160, 0.15 * mineW.px) / 200
   check(wantS and wantS * 200 > 0.07 * 160 and near(size(page2), wantS, 1e-6),
     "world: ...and 15% of the tallest's art height (" .. tostring(size(page2)) .. ", want " .. tostring(wantS) .. ")")
+  -- (Accurate: no share of the tallest, only worldMinAccurate of the battle's height)
+  check(hd.fit.worldMinAccurate == 0.04, "world: Accurate's floor 4% of the battle's height by default")
+  hd.fit.sizeMode, hd.fit.worldMinAccurate = "accurate", 0.07
+  frame({ pic2 = true })
+  check(near(size(page2), 0.07 * 160 / 200, 1e-6), "world: ...Accurate: the tiny foe at its own floor, not the tallest's share ("
+    .. tostring(size(page2)) .. ")")
+  -- (Minimal: Medium's raised size, curved toward 1 m: bigger still, as metres where it stands
+  -- ^0.75; its raise, curved alike, left out of the zoom-in)
+  hd.fit.sizeMode, hd.fit.worldMinAccurate, hd.fit.worldShare = "minimal", 0.04, 0
+  frame({ pic2 = true })
+  local eM
+  for _, w in ipairs(hd._worldMons) do if w.of.height == 0.1 then eM = w end end
+  local medK = 0.07 * 160 / 200
+  check(eM and size(page2) > medK and near(eM.height, (medK / (eM.ppt / 200)) ^ 0.75, 1e-6),
+    "world: ...Minimal: the raised tiny foe bigger than Medium's (" .. tostring(size(page2)) .. " over " .. medK .. ")")
+  check(eM and eM.lift > 1 and near(size(page2) / eM.lift, (0.1) ^ 0.75 * eM.ppt / 200, 1e-6),
+    "world: ...its raise left out of the zoom-in, curved (" .. tostring(eM and eM.lift) .. ")")
+  hd.fit.sizeMode, hd.fit.worldShare = "medium", 0.15
   hd.fit.worldShare = 0
   -- a flat one (its art 400 px across, 200 tall): by its width, raised half as much (wideFloor
   -- off) ...
@@ -1087,11 +1105,12 @@ do
   hd.fit.worldShare = shareDefault
   -- indoors, a ceiling: a 6 m foe stands as tall as the knee (2 m) plus the ceiling's metre less
   -- e^-4 of it; one under the knee true to scale; outdoors the same foe at its 6 m
-  local function sized(indoor, h, cap, side, extra, wide)
+  local function sized(indoor, h, cap, side, extra, wide, mode)
     local G3 = fakeGraphics()
     local h3 = HD.new(G3)
     h3.install()
     h3.fit.enabled, h3.fit.zMin, h3.fit.worldMin, h3.fit.heightMax = true, 0.4, 0, cap
+    h3.fit.worldMinAccurate, h3.fit.sizeMode = 0, mode or h3.fit.sizeMode
     h3.fit.widthMax, h3.fit.heightMaxFoe = wide, cap and heightMaxFoe or nil
     h3.scene, h3.sceneRenderer = hd.scene, hd.sceneRenderer
     h3.tag(pic, mon(pageE, side or "enemy", h, extra))
@@ -1125,6 +1144,26 @@ do
   local thinH = sized(false, 4.4, heightMax, "enemy", nil, widthMax)
   check(thinH and near(thinH, soft(4.4, 4.5)), "world: ...a tall, thin one keeps its height (" .. tostring(thinH) .. ")")
   check(smallH and near(smallH, 1.5), "world: ...indoors one under the knee true to scale")
+  -- 3D Sizing's choices: Medium by default (all of the above); Minimal draws Medium's heights
+  -- toward 1 m, 1 * (h / 1) ^ 0.75: a 0.4 m one 0.50, a 6 m foe eased to soft(6, 4.5) then
+  -- under it; Accurate the tag's height as it is: no soft ceiling, no width cap
+  check(hd.fit.sizeMode == "medium" and hd.fit.minimalMid == 1 and hd.fit.minimalPow == 0.75,
+    "world: 3D Sizing on Medium by default, Minimal toward 1 m by ^0.75")
+  local minSmall, minBig = sized(false, 0.4, heightMax, nil, nil, nil, "minimal"),
+    sized(false, 6, heightMax, nil, nil, nil, "minimal")
+  check(minSmall and near(minSmall, 0.4 ^ 0.75), "world: Minimal: a 0.4 m one drawn "
+    .. tostring(minSmall) .. " m, bigger")
+  check(minBig and near(minBig, soft(6, 4.5) ^ 0.75), "world: ...a 6 m foe Medium's eased "
+    .. soft(6, 4.5) .. " drawn " .. tostring(minBig) .. " m, smaller")
+  local mid = sized(false, 1, heightMax, nil, nil, nil, "minimal")
+  check(mid and near(mid, 1), "world: ...a 1 m one as it is")
+  local accBig = sized(false, 6, heightMax, nil, nil, widthMax, "accurate")
+  check(accBig and near(accBig, 6), "world: Accurate: a 6 m foe its own 6 m (" .. tostring(accBig) .. ")")
+  local accWide = sized(false, 4, heightMax, "enemy", { art = { -50, 100, 150, 200 }, top = 100 }, widthMax, "accurate")
+  check(accWide and near(accWide, 4), "world: ...a wide one not held to 6 m across (" .. tostring(accWide) .. ")")
+  local accIn = sized(true, 6, heightMax, nil, nil, nil, "accurate")
+  check(accIn and near(accIn, 2 + (1 - math.exp(-4))), "world: ...indoors still under the room's ceiling ("
+    .. tostring(accIn) .. ")")
   -- no world drawn: Battle Fit's species sizing, as before
   local G2 = fakeGraphics()
   local plain = HD.new(G2)

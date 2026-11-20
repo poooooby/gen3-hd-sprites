@@ -39,10 +39,11 @@ return {
   {
     key = "scene_sizes",
     label = "3D Sizing",
-    type = "toggle",
-    default = true,
+    type = "choice",
+    default = "medium",
+    choices = { { "OFF", "off" }, { "MINIMAL", "minimal" }, { "MEDIUM", "medium" }, { "ACCURATE", "accurate" } },
     visible_if = { key = "battle_scene", equals = "overworld" },
-    description = "With Battle Scene on OVERWORLD: the Pokemon stand in the world at their real size (a tile about a metre, the biggest gently scaled down to about 5 m tall and 6 m wide; double battles at the sprite pack's own sizes), the camera zooming out for big ones and in for small ones, a wide one stepping toward its own side, the opponent's HP box over their heads. Off: drawn and framed as in CLASSIC battles, at the sprite pack's own sizes, shrunk only if too big.",
+    description = "With Battle Scene on OVERWORLD, the Pokemon stand in the world sized by their real heights (a tile about a metre; double battles at the sprite pack's own sizes), the camera zooming out for big ones and in for small ones, a wide one stepping toward its own side, the opponent's HP box over their heads. MEDIUM: real sizes, the biggest gently scaled down to about 5 m tall and 6 m wide, the smallest raised so they are easy to see. MINIMAL: as MEDIUM, drawn toward the middle: small ones a little less small, big ones a little less big. ACCURATE: every Pokemon's real measured height, a Wailord towering over a Pikachu, scaled down only to fit the screen or the room. OFF: drawn and framed as in CLASSIC battles, at the sprite pack's own sizes, shrunk only if too big.",
   },
   {
     key = "scene_build",
