@@ -75,7 +75,7 @@ return function(mod, hd, state)
   local exports = {}
   exports.version = 2
   exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true,
-                       shades = true, uiMap = true, speciesSize = true, shadow = true }
+                       shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end

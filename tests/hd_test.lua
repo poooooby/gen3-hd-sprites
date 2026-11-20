@@ -388,6 +388,90 @@ do
   check(mod.exports.features and mod.exports.features.quadPivots == true, "features.quadPivots is advertised")
 end
 
+-- ------- `frame`: a piece of a frame (a reflection's slices) shows the grown frame through its own rectangle
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("world", 400, 240)
+  local sheet = canvas("npc", 32, 288)
+  hd.tag(sheet, { scale = 0.75, anchor = "feet", frame = { 32, 32 } })
+  -- one draw composited at 2x; returns its log entry and the quad's viewport as drawn
+  local function one(draw)
+    G.setCanvas(base)
+    hd.beginPass("field", base)
+    draw()
+    hd.endPass()
+    G.log = {}
+    hd.composite(base, function(c) G.draw(c, 0, 0) end, 0, 0, 2, 2, nil)
+    for _, e in ipairs(G.log) do
+      if e.image == sheet then return e, { e.args[1]:getViewport() } end
+    end
+  end
+  -- the window rectangle a draw covers: x0, x1, y0, y1
+  local function rect(e, v)
+    local X, Y, ssx, ssy, hx, hy = e.args[2], e.args[3], e.args[5], e.args[6], e.args[7], e.args[8]
+    local xa, xb = X - hx * ssx, X + (v[3] - hx) * ssx
+    local ya, yb = Y - hy * ssy, Y + (v[4] - hy) * ssy
+    return math.min(xa, xb), math.max(xa, xb), math.min(ya, yb), math.max(ya, yb)
+  end
+  local e, v = one(function() G.draw(sheet, quad(0, 64, 32, 32), 100, 50) end)
+  check(e and near(e.args[2], 116 * 2) and near(e.args[3], 82 * 2) and e.args[7] == 16 and e.args[8] == 32,
+    "a whole frame: about its feet, as without `frame`")
+  -- its piece x 8-16, rows 20-32, drawn upside down at (108, 90): it covers x 108-116, y 78-90
+  e, v = one(function() G.draw(sheet, quad(8, 64 + 20, 8, 12), 108, 90, 0, 1, -1) end)
+  local x0, x1, y0, y1 = rect(e, v)
+  check(near(x0, 216) and near(x1, 232) and near(y0, 156) and near(y1, 180),
+    ("a piece covers just its own rectangle (%.2f-%.2f, %.2f-%.2f)"):format(x0, x1, y0, y1))
+  -- ...showing the frame grown about its feet (16, 96 in the sheet): x 16 - 8/0.75 to 16, rows 96 - 12/0.75 to 96
+  check(near(v[1], 16 - 8 / 0.75) and near(v[3], 8 / 0.75) and near(v[2], 96 - 12 / 0.75) and near(v[4], 12 / 0.75),
+    ("...the grown frame's pixels there (%.2f, %.2f, %.2f, %.2f)"):format(v[1], v[2], v[3], v[4]))
+  check(near(e.args[5], 0.75 * 2) and near(e.args[6], -0.75 * 2), "...flipped, at 0.75")
+  -- the next 1-px column (x 9, at 109) covers 109-110: the columns meet
+  e, v = one(function() G.draw(sheet, quad(9, 64 + 20, 1, 12), 109, 90, 0, 1, -1) end)
+  x0, x1 = rect(e, v)
+  check(near(x0, 218) and near(x1, 220), ("...and a column covers its own pixel (%.2f-%.2f)"):format(x0, x1))
+  local api = assert(loadfile("src/api.lua"))
+  local mod = {}
+  api()(mod, hd, { active = true })
+  check(mod.exports.features.frame == true, "features.frame is advertised")
+end
+
+-- ------- one quad, moved between draws (a reflection's slices): each drawn through its own viewport
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("world", 400, 240)
+  local sheet = canvas("npc", 64, 64)
+  hd.tag(sheet, { scale = 0.75, anchor = "feet" })
+  G.setCanvas(base)
+  hd.beginPass("field", base)
+  local q = G.newQuad(0, 0, 1, 1, 64, 64)
+  q:setViewport(0, 0, 16, 32); G.draw(sheet, q, 10, 10)
+  G.rectangle()
+  q:setViewport(16, 0, 16, 32); G.draw(sheet, q, 50, 10)
+  q:setViewport(0, 0, 3, 3)                     -- moved again after the last draw
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function(c) G.draw(c, 0, 0) end, 0, 0, 2, 2, nil)
+  local d = {}
+  for _, e in ipairs(G.log) do
+    if e.image == sheet then d[#d + 1] = table.concat({ e.args[1]:getViewport() }, ",") end
+  end
+  check(#d == 2 and d[1] == "0,0,16,32" and d[2] == "16,0,16,32",
+    "each draw through the viewport it was drawn with (" .. table.concat(d, " / ") .. ")")
+  local sq = quad(0, 0, 32, 32)
+  hd.beginPass("field", base)
+  G.draw(sheet, sq, 10, 10)
+  hd.endPass()
+  G.log = {}
+  hd.composite(base, function(c) G.draw(c, 0, 0) end, 0, 0, 2, 2, nil)
+  local e
+  for _, x in ipairs(G.log) do if x.image == sheet then e = x end end
+  check(e and e.args[1] == sq, "an unmoved quad is drawn through itself")
+end
+
 -- -------------------------------- setCanvas and pop go to the current layer
 do
   local G = fakeGraphics()

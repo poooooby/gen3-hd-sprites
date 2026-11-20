@@ -757,12 +757,65 @@ function HD.new(G, opts)
         uniforms[name] = v
       end
     end
+    -- (the quad's viewport as drawn: the engine may move it before the composite)
+    local qx, qy, qw, qh, qsw, qsh
+    if quad then
+      qx, qy, qw, qh = quad:getViewport()
+      if quad.getTextureDimensions then qsw, qsh = quad:getTextureDimensions() end
+    end
     return {
-      spec = spec, image = image, quad = quad,
+      spec = spec, image = image, quad = quad, qx = qx, qy = qy, qw = qw, qh = qh, qsw = qsw, qsh = qsh,
       x = x, y = y or 0, r = r or 0, sx = sx or 1, sy = sy or (sx or 1), ox = ox or 0, oy = oy or 0,
       tx = t0x, ty = t0y, tsx = t1x - t0x, tsy = t2y - t0y,
       color = { cr, cg, cb, ca }, shader = shader, uniforms = uniforms, blend = { bm, am },
     }
+  end
+
+  -- a recorded draw's quad with the viewport it was drawn through. The engine may move a quad
+  -- after drawing with it (a reflection's slices all go through one quad, each its own
+  -- viewport), so a moved one is drawn through a copy of that viewport, from a ring of copies
+  -- kept for it (no garbage; each copy is used straight away). An unmoved one is itself, so
+  -- what is keyed by it (quadPivots) still finds it.
+  local viewRing, viewN, VIEW_RING = {}, 0, 32
+  local function ringQuad(x, y, w, h, iw, ih)
+    viewN = viewN % VIEW_RING + 1
+    local c = viewRing[viewN]
+    if c then
+      c:setViewport(x, y, w, h, iw, ih)
+    else
+      c = real.newQuad(x, y, w, h, iw, ih)
+      viewRing[viewN] = c
+    end
+    return c
+  end
+  local function viewOf(rec)
+    local q = rec.quad
+    if not (q and rec.qw) then return q end
+    local x, y, w, h = q:getViewport()
+    if x == rec.qx and y == rec.qy and w == rec.qw and h == rec.qh then return q end
+    local iw, ih = rec.qsw, rec.qsh
+    if not iw and rec.image and rec.image.getWidth then iw, ih = rec.image:getWidth(), rec.image:getHeight() end
+    if not (iw and real.newQuad) then return q end
+    return ringQuad(rec.qx, rec.qy, rec.qw, rec.qh, iw, ih)
+  end
+
+  -- a feet-anchored draw with `frame` through less than a whole frame: { x, y, w, h } of the
+  -- frame it is a piece of (in the sheet), else nil
+  local function frameOf(spec, rec, qp)
+    local fr = spec.frame
+    if not (fr and spec.anchor == "feet" and not spec.texture and rec.quad and rec.qw and not qp) then return nil end
+    local fw, fh = tonumber(fr[1]), tonumber(fr[2])
+    if not (fw and fh and fw > 0 and fh > 0) or (rec.qw >= fw and rec.qh >= fh) then return nil end
+    local fx, fy = rec.qx - rec.qx % fw, math.floor(rec.qy / fh) * fh
+    if rec.qx + rec.qw > fx + fw + 1e-6 or rec.qy + rec.qh > fy + fh + 1e-6 then return nil end
+    return { fx, fy, fw, fh }
+  end
+  -- that whole frame's quad (from the ring)
+  local function frameQuad(piece, rec)
+    local iw, ih = rec.qsw, rec.qsh
+    if not iw and rec.image and rec.image.getWidth then iw, ih = rec.image:getWidth(), rec.image:getHeight() end
+    if not (iw and real.newQuad) then return viewOf(rec) end
+    return ringQuad(piece[1], piece[2], piece[3], piece[4], iw, ih)
   end
 
   -- a tagged draw past the pass's cap: drawn on the pass's own pixels (no layer), but at the size
@@ -1144,6 +1197,18 @@ function HD.new(G, opts)
     end
   end
 
+  -- a feet-anchored draw's pivot in its quad: the quad's bottom middle, or with `frame`
+  -- ({w, h}: the sheet's frames, stacked in a column) the feet of the frame the quad is in, so
+  -- a piece of a frame drawn on its own (a reflection's slices) grows with the whole frame
+  local function feetOf(spec, vx, vy, qw, qh)
+    local fr = spec.frame
+    local fw, fh = fr and tonumber(fr[1]), fr and tonumber(fr[2])
+    if fw and fh and fw > 0 and fh > 0 then
+      return fw / 2 - vx % fw, (math.floor(vy / fh) + 1) * fh - vy
+    end
+    return qw / 2, qh
+  end
+
   local function drawAtScale(shaded, image, spec, a, b, c, d, e, f, g, h)
     local quad, x, y, r, sx, sy, ox, oy
     if isQuad(a) then
@@ -1160,8 +1225,7 @@ function HD.new(G, opts)
     local qp = spec.quadPivots and quad and spec.quadPivots[quad]
     local lpx, lpy, hpx, hpy
     if spec.anchor == "feet" and quad and not qp then
-      local _, _, qw, qh = quad:getViewport()
-      lpx, lpy = qw / 2, qh
+      lpx, lpy = feetOf(spec, quad:getViewport())
       hpx, hpy = lpx, lpy
     else
       local lp = qp or spec.lowPivot
@@ -2251,15 +2315,22 @@ function HD.new(G, opts)
   local function place(rec)
     local spec = rec.spec
     local tex = spec.texture or rec.image
-    local quad = spec.texture and spec.quad or rec.quad
+    local quad = spec.texture and spec.quad or viewOf(rec)
     -- a quad of its own may stand on another point (a sprite drawn cut short) and
     -- carry its own size (a slice already drawn at its final size: 1)
     local qp = spec.quadPivots and rec.quad and spec.quadPivots[rec.quad]
     -- the low-res point that the HD pivot stands on, and the pivot in the HD texture
     local lpx, lpy, hpx, hpy
-    if spec.anchor == "feet" and rec.quad and not qp then
-      local _, _, qw, qh = rec.quad:getViewport()
-      lpx, lpy = qw / 2, qh
+    -- a piece of a frame drawn on its own (`frame`: a reflection, drawn cell by cell or column
+    -- by column): a part of the frame, as below, so each piece shows the grown frame through
+    -- exactly the rectangle it was drawn in (no gaps, nothing past the water)
+    local piece = frameOf(spec, rec, qp)
+    if piece then
+      lpx, lpy = piece[3] / 2, piece[4]
+      hpx, hpy = lpx, lpy
+      quad = frameQuad(piece, rec)
+    elseif spec.anchor == "feet" and rec.quad and not qp then
+      lpx, lpy = feetOf(spec, rec.qx, rec.qy, rec.qw, rec.qh)
       hpx, hpy = lpx, lpy
     else
       local lp = qp or spec.lowPivot or { 32, 32 }
@@ -2269,10 +2340,13 @@ function HD.new(G, opts)
     -- a part of the pic drawn on its own (its rows one by one, each shifted: Rapid Spin,
     -- Extrasensory, Dig): the pivot is the whole pic's, and the HD frame is cut to that part
     local ox, oy = rec.ox, rec.oy
-    local part = spec.texture and spec.quad and rec.quad and not qp
+    local part = (spec.texture and spec.quad and rec.quad and not qp) or piece ~= nil
     local vx, vy, vw, vh
-    if part then
-      vx, vy, vw, vh = rec.quad:getViewport()
+    if piece then
+      vx, vy, vw, vh = rec.qx - piece[1], rec.qy - piece[2], rec.qw, rec.qh
+      ox, oy = ox + vx, oy + vy
+    elseif part then
+      vx, vy, vw, vh = rec.qx, rec.qy, rec.qw, rec.qh
       ox, oy = ox + vx, oy + vy
     end
     -- where the low-res draw put that point, in the pass canvas's pixels
@@ -2292,7 +2366,7 @@ function HD.new(G, opts)
     -- (cut: {x0, y0, x1, y1} in the HD texture's pixels)
     local cut
     if part then
-      local fx, fy, fw, fh = spec.quad:getViewport()
+      local fx, fy, fw, fh = (piece and quad or spec.quad):getViewport()
       -- (a mirrored frame: the part's columns from the other side of the pivot)
       local x0, x1 = (vx - lpx) / k, (vx + vw - lpx) / k
       if spec.flip then x0, x1 = -x1, -x0 end
@@ -2340,7 +2414,7 @@ function HD.new(G, opts)
     local LW, LH = img:getWidth(), img:getHeight()
     local qx, qy, lqx, lqy = 0, 0, 0, 0
     if quad then qx, qy = quad:getViewport() end
-    if rec.quad then lqx, lqy = rec.quad:getViewport() end
+    if rec.quad then lqx, lqy = rec.qx, rec.qy end
     -- HD texel u lands at canvas X + (u - qx - hpx) * s; the low-res draw put its pixel lx at
     -- rec.tx + (rec.x + (lx - rec.ox) * rec.sx) * rec.tsx: so lx = lx0 + u * k
     local s, sy = rec.sx * k * rec.tsx, rec.sy * k * rec.tsy
@@ -2445,7 +2519,7 @@ function HD.new(G, opts)
     local X, Y = rec.tx + rec.x * rec.tsx, rec.ty + rec.y * rec.tsy
     local sx, sy = rec.sx * rec.tsx * bsx, rec.sy * rec.tsy * bsy
     if rec.quad then
-      real.draw(rec.image, rec.quad, bx + X * bsx, by + Y * bsy, rec.r, sx, sy, rec.ox, rec.oy)
+      real.draw(rec.image, viewOf(rec), bx + X * bsx, by + Y * bsy, rec.r, sx, sy, rec.ox, rec.oy)
     else
       real.draw(rec.image, bx + X * bsx, by + Y * bsy, rec.r, sx, sy, rec.ox, rec.oy)
     end
@@ -4189,7 +4263,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         local drawn = false
         if item.kind == "hd" then
           if rec.quad then
-            drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, rec.quad, rec.x, rec.y, rec.r, rec.sx, rec.sy,
+            drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, viewOf(rec), rec.x, rec.y, rec.r, rec.sx, rec.sy,
               rec.ox, rec.oy)
           else
             drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
@@ -4208,7 +4282,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         end
         if not drawn then
           if rec.quad then
-            real.draw(rec.image, rec.quad, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+            real.draw(rec.image, viewOf(rec), rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
           else
             real.draw(rec.image, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
           end

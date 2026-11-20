@@ -36,6 +36,12 @@ their uniforms are remapped (`PIXEL_SHADERS` in `src/hd.lua`, told apart by thei
   battle pixel it covers, `flip` 0 (the mapping's sign mirrors it).
 - **Mosaic** (`texSize`, `block`; Transform): the HD texture's size, and `block` in its texels.
 
+**A quad as drawn.** A recorded draw keeps its quad's viewport (`rec.qx`, `qy`, `qw`, `qh`): the
+engine may move one quad between draws (Ruby to Emerald's reflections draw every slice through
+one `reflQuad`), so by the composite the quad shows only its last viewport. The composite reads
+the kept numbers, and draws a moved quad through a copy of its viewport (`viewOf`, from a ring of
+32 quads kept for it); an unmoved one is itself, so `quadPivots` keyed by it still finds it.
+
 **Part of a pic.** A tagged pic drawn through a quad of its own (a `texture` + `quad` spec, the
 quad not in `quadPivots`) is part of the pic: the engine draws a pic row by row, each row shifted,
 for Rapid Spin, Spite, Extrasensory, Dig and a ghost wave. Each such draw keeps the whole pic's
@@ -2006,6 +2012,7 @@ end
 |---|---|
 | `scale` | size multiplier, any value (default 1) |
 | `anchor = "feet"` | scale about the bottom-centre of the drawn quad |
+| `frame` | `{w, h}`, with `anchor = "feet"`: the sheet's frames, stacked in a column. A draw through a whole frame is as without it; one through a piece of a frame (a reflection, which the engine draws cell by cell, or column by column on rippling water) is a part of that frame: it shows the frame grown about the frame's feet, through exactly the rectangle the piece was drawn in, so the pieces meet and nothing shows past where the engine drew (Facets' NPC sheets and their reflections). Check `features.frame` |
 | `texture`, `quad` | draw this full-resolution frame in place of the tagged image |
 | `pivot` | the point of `texture`/`quad` that stands where the tagged image's `lowPivot` was drawn |
 | `lowPivot` | default `{32, 32}`, the engine's battle-pic origin |
@@ -2023,7 +2030,7 @@ end
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `realSizes()` / `setRealSizes(on)` (Real
 Sizes: `fit.worldSizes`), `sizeMode()` / `setSizeMode(m)` (3D Sizing's choice: `"off"`, `"minimal"`,
