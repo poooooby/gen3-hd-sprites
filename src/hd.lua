@@ -117,7 +117,7 @@ function HD.new(G, opts)
       -- than worldShare of the tallest on the field's art height (a Pikachu beside a Wailord
       -- still reads), both before the camera's zoom, so every screen shape draws the pair alike;
       -- above them, true to scale
-      worldMin = 0.07, worldShare = 0.155,
+      worldMin = 0.1, worldShare = 0.2,
       -- ... and a soft ceiling on height: true to size up to heightKnee metres, a taller one
       -- eased toward heightMax (a foe's heightMaxFoe) and never past it, the taller still the
       -- taller (knee + (max - knee) * (1 - e^-((h - knee) / (max - knee))): Groudon's 3.5 m drawn
@@ -162,8 +162,10 @@ function HD.new(G, opts)
       -- screen's top to the text box), as far as every art top stays on the screen and under
       -- the foe's HP box where it is under its columns, every art inside the screen's sides,
       -- and zoomInShow of each of the player's above the text box (the zoom, about the focus
-      -- row, sinks it when the text box's line is not that row)
-      zMax = 2.5, smallFill = 0.3, zoomInShow = 0.75,
+      -- row, sinks it when the text box's line is not that row). A small foe beside a bigger
+      -- Pokemon of the player's brings it in too, gently: toward the foe's art standing smallFoe
+      -- of that height, up to zFoeMax, within the same bounds (a Capsakid before a Dewott)
+      zMax = 2.5, smallFill = 0.3, zoomInShow = 0.75, smallFoe = 0.17, zFoeMax = 1.4,
       -- ... and indoors (a room or a cave: the scene's `indoor`) a ceiling: an art height over
       -- indoorKnee metres eases toward indoorCeiling (a Wailord in a gym stands about 3 m, not
       -- 6.4, so the camera need not pull back past the walls); below the knee, true to scale
@@ -2829,20 +2831,28 @@ function HD.new(G, opts)
         while z > fit.zMin + 1e-9 and not clear(z) do z = z - fit.zStep end
         zt = math.max(fit.zMin, z)
       end
-      -- (every battler small: in, toward the tallest standing smallFill of the battle's height,
-      -- the camera rising as it comes in so the player's feet stay on the row they stand on at
-      -- zoom 1: a back grows upward instead of sinking under the text box)
+      -- (every battler small, or the foe: in, toward the tallest standing smallFill of the
+      -- battle's height or the foe smallFoe of it, the camera rising as it comes in so the
+      -- player's feet stay on the row they stand on at zoom 1: a back grows upward instead of
+      -- sinking under the text box)
       -- (live: only with both sides out; the foe alone only pulls the camera out)
       if sized and zt >= 1 - 1e-9 and (fit.zMax or 1) > 1 and #heads > 0 and not (fit.double and fit.doublesOwnSize)
           and not (live and not (outE and outP)) then
-        local tall, low = 0, nil
+        local tall, foeTall, low = 0, 0, nil
         for _, h in ipairs(heads) do
-          if h[5] and h[5] > h[3] then tall = math.max(tall, h[5] - h[3]) end
+          if h[5] and h[5] > h[3] then
+            tall = math.max(tall, h[5] - h[3])
+            if h[4] == "enemy" then foeTall = math.max(foeTall, h[5] - h[3]) end
+          end
           if h[4] == "player" and h[5] then low = math.max(low or -math.huge, h[5]) end
         end
         local room = textLine - top0
         if tall > 0 and room > 0 then
           local hi = math.min(fit.zMax, (fit.smallFill or 0.3) * room / tall)
+          -- (a small foe: in toward its art standing smallFoe of the height, up to zFoeMax)
+          if foeTall > 0 and fit.smallFoe and fit.zFoeMax then
+            hi = math.max(hi, math.min(fit.zFoeMax, fit.zMax, fit.smallFoe * room / foeTall))
+          end
           local function rise(z) return low and math.max(0, (low - fy) * (z - 1)) or 0 end
           local z = hi
           while z > 1 + 1e-9 and not clear(z, true, rise(z)) do z = z - 0.01 end

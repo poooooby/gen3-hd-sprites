@@ -67,8 +67,8 @@ and Crystal.
 - 🎬 **A camera that follows the battle:** A single battle opens at the camera's usual view, so
   the trainer is shown at their proper size. As the opponent's Pokémon comes out, the camera
   zooms out to fit a giant, then adjusts again when yours comes out, coming in close when every
-  Pokémon on the field is small; one too big even for the widest view is shrunk just enough to
-  fit. When a Pokémon faints the camera holds still until the next one is out, and it returns
+  Pokémon on the field is small, and a little closer for a small opponent; one too big even for
+  the widest view is shrunk just enough to fit. When a Pokémon faints the camera holds still until the next one is out, and it returns
   to its usual view for the trainer's last words. A wide Pokémon steps back toward its own side
   of the screen, partly out of view, rather than reaching across the middle and covering its
   opponent, always with most of it in view.

@@ -79,9 +79,13 @@ local function body(game, log)
   end
   pcall(Map.load, nil, game, mapId, { x = px, y = py, facing = "down" })
   toSpot()
-  -- HD_PLAYER / HD_ENEMY=SPECIES_X:level: the two battlers (Torchic 12 against Wailord 20)
+  -- HD_PLAYER / HD_ENEMY=SPECIES_X:level (or a species number, WoobleDex's newer ones: 1015:40):
+  -- the two battlers (Torchic 12 against Wailord 20)
   local function mon(name, sp, lv)
-    local a, b = (os.getenv(name) or ""):match("^(SPECIES_[%w_]+):?(%d*)$")
+    local v = os.getenv(name) or ""
+    local n, nb = v:match("^(%d+):?(%d*)$")
+    if n then return tonumber(n), tonumber(nb) or lv end
+    local a, b = v:match("^(SPECIES_[%w_]+):?(%d*)$")
     return C:require("species", a or sp), tonumber(b) or lv
   end
   if s and #(s.party or {}) == 0 then Party.giveMon(s, mon("HD_PLAYER", "SPECIES_TORCHIC", 12)) end

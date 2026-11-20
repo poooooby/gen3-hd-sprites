@@ -683,7 +683,7 @@ do
   local hd = HD.new(G)
   hd.install()
   hd.fit.enabled, hd.fit.zMin = true, 0.4
-  check(hd.fit.worldMin == 0.07, "world: the smallest's share of the battle's height: 7%")
+  check(hd.fit.worldMin == 0.1, "world: the smallest's share of the battle's height: 10%")
   hd.fit.worldMin = 0   -- (true to scale until the minimum's own checks below)
   check(hd.fit.heightKnee == 3 and hd.fit.heightMax == 5 and hd.fit.heightMaxFoe == 4.5 and hd.fit.widthMax == 6,
     "world: a soft ceiling from 3 m toward 5 m (a foe's 4.5 m), no art wider than 6 m")
@@ -893,6 +893,19 @@ do
     hd.fit.idle = 3
     for _ = 1, 30 do frame() end
     check(hd.stats.zoomTarget <= 1, "world: ...not with a big one on the field")
+    -- a small foe (0.3 m) before a bigger Pokemon of the player's (1.2 m): in, gently, toward the
+    -- foe standing 17% of the height, no further than 1.4
+    check(hd.fit.smallFoe == 0.17 and hd.fit.zFoeMax == 1.4, "world: a small foe zoomed in toward 17%, up to 1.4")
+    hd.tag(pic, mon(pageE, "enemy", 0.3))
+    hd.tag(mine, mon(pageP, "player", 1.2))
+    hd.fit.idle = 3
+    for _ = 1, 30 do frame() end
+    local zs = hd.stats.zoomTarget
+    check(zs > 1 and zs <= 1.4 + 1e-6, "world: ...a small foe before a bigger one brings the camera in (" .. tostring(zs) .. ")")
+    hd.tag(pic, giant)
+    hd.tag(mine, mineSpec)
+    hd.fit.idle = 3
+    for _ = 1, 30 do frame() end
     -- 3D Sizing off: drawn as outside the 3D world, at the tag's own size (0.3: its 60 px of art
     -- fit the 70 rows of its room), nothing fitted round it
     check(hd.fit.worldSizes == true, "world: 3D Sizing on by default")
@@ -1022,7 +1035,7 @@ do
   -- camera's zoom, the same on any screen (a 0.1 m foe: 3.4 px of art, raised to 7% = 11.2
   -- rows); above it, true (worldShare off for these)
   local shareDefault = hd.fit.worldShare
-  check(shareDefault == 0.155, "world: the smallest at least 15.5% of the tallest by default")
+  check(shareDefault == 0.2, "world: the smallest at least 20% of the tallest by default")
   hd.fit.worldMin, hd.fit.worldShare = 0.07, 0
   hd.tag(pic2, mon(page2, "enemy", 0.1))
   frame({ pic2 = true })

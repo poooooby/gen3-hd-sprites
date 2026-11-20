@@ -688,8 +688,8 @@ their ground (no side shift or drop: those are for the classic platforms):
   Perspective comes from the depth, not `nearScale`; `sizeCurve`, `sizeFloor`, `minShare` are not
   used.
 - The smallest: its art's longest side (height or width of the art box: a flat Wishiwashi
-  counts its width) at least `fit.worldMin` (0.07) of the battle's 160 rows, and at least
-  `fit.worldShare` (0.155) of the art height of the tallest on the field (`e.px`, canvas px
+  counts its width) at least `fit.worldMin` (0.1) of the battle's 160 rows, and at least
+  `fit.worldShare` (0.2) of the art height of the tallest on the field (`e.px`, canvas px
   before the zoom, after the caps, of the entries for `hd.pair`'s two), both before the zoom
   (`k >= max(worldMin * 160, worldShare * tallest) / side`; `e.raised`). Above it, true to
   scale; the largest limit wins over it. Until 2026-11 `worldMin` was taken after the zoom
@@ -698,7 +698,9 @@ their ground (no side shift or drop: those are for the classic platforms):
   it was drawn smaller on the upright screen (0.39 against 0.48). `worldShare` matches what the
   wide screen drew (the small one's art 14-16% of the giant's for Wailord, Groudon and Steelix
   pairs) on any screen. At 12% after the zoom a Pikachu beside a Wailord stood half a tree tall
-  and Wishiwashi as big as one.
+  and Wishiwashi as big as one. Raised from 0.07 / 0.155 (2026-11-20): on an AYN Thor (a 6"
+  1920x1080 screen) a Capsakid before a Dewott stood 75 px of 1080; with these and the small
+  foe's zoom-in below, about 1.8 times that.
 - Wide ones step outward (singles; `fit.wideLine`, 0.4): after the camera has eased, a side
   whose art (its own, not the platforms) reaches past the line is shifted toward its own edge,
   partly off the screen: the player's art's right edge no further right than 40% of the screen's
@@ -732,7 +734,11 @@ their ground (no side shift or drop: those are for the classic platforms):
   the lowest player's feet row past the focus row times `z - 1`), so the player's feet stay
   on the row they stand on at zoom 1 and a back grows upward: a back's feet stand below the
   focus row, and zoomed about it they sank under the text box (Pikachu half hidden at 1.85). Eased in as any zoom
-  in (after `holdFrames`). `stats.zoomIn` is the target when past 1.
+  in (after `holdFrames`). `stats.zoomIn` is the target when past 1. A small foe before a
+  bigger Pokemon of the player's brings it in too, gently: toward the foe's art (the `enemy`
+  heads) standing `fit.smallFoe` (0.17) of that height, up to `fit.zFoeMax` (1.4), the larger
+  of the two targets, within the same bounds (a Capsakid before a Dewott: 1.26 wide, 1.45
+  upright, where the smallFill target with the sky's room goes further).
 - A giant pulls the camera back a little further: a world zoom target under 1 is multiplied by
   `fit.bigPull` (0.9), as far as `zMin`.
 - **Double battles at the sprite mod's own sizes** (`fit.doublesOwnSize`, on): in the 3D
