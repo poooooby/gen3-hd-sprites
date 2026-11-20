@@ -66,7 +66,8 @@ and Crystal.
   bigger they are, up to about 5 m tall (a little less for an opponent), so a Groudon still
   stands taller than a Blaziken, and a Wailord towers over a Pikachu without leaving the
   screen. Very wide ones are kept to 6 m across, while a tall, thin Steelix keeps its height.
-  A small Pokémon beside a giant is drawn the same on an upright phone as on a wide screen.
+  A small Pokémon beside a giant is drawn the same on an upright phone as on a wide screen,
+  and a long, low one like Zigzagoon a little bigger, so it never looks lost on the field.
 - 🎬 **A camera that follows the battle:** A single battle opens at the camera's usual view, so
   the trainer is shown at their proper size. As the opponent's Pokémon comes out, the camera
   zooms out to fit a giant, then adjusts again when yours comes out, coming in close when every

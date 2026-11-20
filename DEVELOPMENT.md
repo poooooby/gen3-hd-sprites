@@ -722,6 +722,10 @@ their ground (no side shift or drop: those are for the classic platforms):
   and Wishiwashi as big as one. Raised from 0.07 / 0.155 (2026-11-20): on an AYN Thor (a 6"
   1920x1080 screen) a Capsakid before a Dewott stood 75 px of 1080; with these and the small
   foe's zoom-in below, about 1.8 times that.
+- A wide one (its art box wider than tall): both floors times its width over its height, at
+  most `fit.wideFloor` (1.4; `e.widen`). By its length alone a long, low Zigzagoon (1.38 to 1)
+  stood a quarter of a Blaziken's height on an upright phone and read as lost; with it, 27-38%
+  bigger beside a Pupitar, Manectric or Blaziken. A tall or round one is unchanged.
 - Wide ones step outward (singles; `fit.wideLine`, 0.4): after the camera has eased, a side
   whose art (its own, not the platforms) reaches past the line is shifted toward its own edge,
   partly off the screen: the player's art's right edge no further right than 40% of the screen's
@@ -758,8 +762,11 @@ their ground (no side shift or drop: those are for the classic platforms):
   in (after `holdFrames`). `stats.zoomIn` is the target when past 1. A small foe before a
   bigger Pokemon of the player's brings it in too, gently: toward the foe's art (the `enemy`
   heads) standing `fit.smallFoe` (0.17) of that height, up to `fit.zFoeMax` (1.4), the larger
-  of the two targets, within the same bounds (a Capsakid before a Dewott: 1.26 wide, 1.45
-  upright, where the smallFill target with the sky's room goes further).
+  of the two targets, within the same bounds (a Capsakid before a Dewott: 1.35 wide, 1.39
+  upright). Both targets measure each Pokemon's art at its size before the floors raised it
+  (`e.lift`, its raised scale over its own): measured after, a floor raised 15% had the camera
+  come in 11% less, a Capsakid foe the same on a wide screen (0.458 to 0.468 of its scale at
+  zoom 1) and only the Dewott behind it smaller.
 - A giant pulls the camera back a little further: a world zoom target under 1 is multiplied by
   `fit.bigPull` (0.9), as far as `zMin`.
 - **Double battles at the sprite mod's own sizes** (`fit.doublesOwnSize`, on): in the 3D

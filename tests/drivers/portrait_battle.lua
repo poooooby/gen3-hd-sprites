@@ -170,8 +170,8 @@ local function body(game, log)
     -- each battler's world size: its side, height (m), scale, raised to the smallest, ground px/tile
     local hdc = hd._core and hd._core() or hd
     for _, e in ipairs((hdc and hdc._worldMons) or {}) do
-      log(("%s: mon %s h %.2f k %.4f raised %s limited %s ppt %.2f"):format(name, tostring(e.of and e.of.side),
-        e.height or -1, e.k or -1, tostring(e.raised), tostring(e.limited), e.ppt or -1))
+      log(("%s: mon %s h %.2f k %.4f raised %s limited %s ppt %.2f widen %.2f"):format(name, tostring(e.of and e.of.side),
+        e.height or -1, e.k or -1, tostring(e.raised), tostring(e.limited), e.ppt or -1, e.widen or 1))
     end
     U.shot(game, dir .. "/" .. name .. ".png")
     if bar then

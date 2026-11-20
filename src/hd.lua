@@ -116,8 +116,9 @@ function HD.new(G, opts)
       -- rows, by its longest side (height or width: a flat Wishiwashi counts its width), nor
       -- than worldShare of the tallest on the field's art height (a Pikachu beside a Wailord
       -- still reads), both before the camera's zoom, so every screen shape draws the pair alike;
-      -- above them, true to scale
-      worldMin = 0.1, worldShare = 0.2,
+      -- above them, true to scale. A wide one (its art wider than tall: a long, low Zigzagoon)
+      -- has both raised by its width over its height, at most wideFloor times
+      worldMin = 0.1, worldShare = 0.2, wideFloor = 1.4,
       -- ... and a soft ceiling on height: true to size up to heightKnee metres, a taller one
       -- eased toward heightMax (a foe's heightMaxFoe) and never past it, the taller still the
       -- taller (knee + (max - knee) * (1 - e^-((h - knee) / (max - knee))): Groudon's 3.5 m drawn
@@ -1010,10 +1011,18 @@ function HD.new(G, opts)
     -- a wide screen does and an upright one, room to spare above, does not)
     local least = tonumber(self.fit.worldMin) or 0
     local side = hpy - atop
+    -- (a wide one, its art wider than tall: both floors raised by its width over its height, at
+    -- most fit.wideFloor times; a long, low one by its length alone looked too small)
+    local widen = 1
     if type(art) == "table" and tonumber(art[1]) and tonumber(art[3]) then
-      side = math.max(side, math.abs(art[3] - art[1]))
+      local across = math.abs(art[3] - art[1])
+      if across > side and side > 0 then
+        widen = math.max(1, math.min(tonumber(self.fit.wideFloor) or 1, across / side))
+      end
+      side = math.max(side, across)
     end
-    local kMin = least > 0 and least * 160 / side or 0
+    e.widen = widen
+    local kMin = least > 0 and least * 160 * widen / side or 0
     local share = tonumber(self.fit.worldShare) or 0
     local pair = self.pair
     if share > 0 and type(pair) == "table" then
@@ -1026,9 +1035,12 @@ function HD.new(G, opts)
           tallest = math.max(tallest, w.px)
         end
       end
-      kMin = math.max(kMin, share * tallest / side)
+      kMin = math.max(kMin, share * tallest * widen / side)
     end
     e.raised = k < kMin
+    -- (how much the floors raised it: the camera's zoom-in measures it without, so the raise
+    -- shows instead of the camera pulling back to undo it)
+    e.lift = e.raised and k > 0 and kMin / k or 1
     if e.raised then k = kMin end
     e.limited = e.most ~= nil and k > e.most
     if e.limited then k = e.most end
@@ -2924,11 +2936,24 @@ function HD.new(G, opts)
       -- (live: only with both sides out; the foe alone only pulls the camera out)
       if sized and zt >= 1 - 1e-9 and (fit.zMax or 1) > 1 and #heads > 0 and not (fit.double and fit.doublesOwnSize)
           and not (live and not (outE and outP)) then
+        -- (each measured at its size before the floors raised it (worldSize's e.lift): else a
+        -- small foe raised 15% has the camera come in 13% less, the same on the screen)
+        local function lift(side)
+          local spec = type(self.pair) == "table" and self.pair[side]
+          if not spec then return 1 end
+          for i = 1, #worldMons do
+            local w = worldMons[i]
+            if w.k and w.of.side == spec.side and sameMon(w.of, spec) then return w.lift or 1 end
+          end
+          return 1
+        end
+        local lifts = { enemy = lift("enemy"), player = lift("player") }
         local tall, foeTall, low = 0, 0, nil
         for _, h in ipairs(heads) do
           if h[5] and h[5] > h[3] then
-            tall = math.max(tall, h[5] - h[3])
-            if h[4] == "enemy" then foeTall = math.max(foeTall, h[5] - h[3]) end
+            local ht = (h[5] - h[3]) / (lifts[h[4]] or 1)
+            tall = math.max(tall, ht)
+            if h[4] == "enemy" then foeTall = math.max(foeTall, ht) end
           end
           if h[4] == "player" and h[5] then low = math.max(low or -math.huge, h[5]) end
         end

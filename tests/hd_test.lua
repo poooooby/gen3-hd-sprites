@@ -1059,12 +1059,27 @@ do
   check(wantS and wantS * 200 > 0.07 * 160 and near(size(page2), wantS, 1e-6),
     "world: ...and 15% of the tallest's art height (" .. tostring(size(page2)) .. ", want " .. tostring(wantS) .. ")")
   hd.fit.worldShare = 0
-  -- a flat one (its art 400 px across, 200 tall): by its width, raised half as much
+  -- a flat one (its art 400 px across, 200 tall): by its width, raised half as much (wideFloor
+  -- off) ...
+  local wideDefault = hd.fit.wideFloor
+  check(wideDefault == 1.4, "world: a wide one's floors at most 1.4 times by default")
+  hd.fit.wideFloor = 1
   hd.tag(pic2, mon(page2, "enemy", 0.1, { quad = quad(0, 0, 400, 200), pivot = { 200, 200 }, art = { 0, 0, 400, 200 } }))
   frame({ pic2 = true })
   local flat = size(page2)
   check(flat and near(flat * 400, 0.07 * 160, 1e-6), "world: a flat one by its longest side, its width ("
     .. tostring(flat and flat * 400) .. " px across)")
+  -- ... and with wideFloor its floor raised by its width over its height (2), at most 1.4 times
+  hd.fit.wideFloor = 1.4
+  frame({ pic2 = true })
+  local flatW = size(page2)
+  check(flatW and near(flatW * 400, 0.07 * 160 * 1.4, 1e-6), "world: a wide one's floor raised 1.4 times ("
+    .. tostring(flatW and flatW * 400) .. " px across)")
+  hd.fit.wideFloor = 1.2
+  frame({ pic2 = true })
+  check(near(size(page2) * 400, 0.07 * 160 * 1.2, 1e-6), "world: ...by wideFloor at most ("
+    .. tostring(size(page2) * 400) .. ")")
+  hd.fit.wideFloor = wideDefault
   -- (the 1.2 m foe: true to scale where that is above 7%, else raised to it)
   local want1 = math.max(rest, 0.07 * 160 / 200)
   check(near(size(pageE), want1), "world: ...a bigger one true to scale unless under it ("
