@@ -2069,4 +2069,5 @@ run locally: pret's pokeemerald at their pinned commit with its graphics built, 
 `3ds_port` overlaid, `romfs/voxel/buildings.bin` in place, Python 3.13 (their pinned version;
 3.14 changes the output); the stages after export are then compared byte for byte.
 
-Keep [README.md](README.md) describing the mod as it is now (players read it).
+Keep [README.md](README.md) and the player guides in [docs/](docs) describing the mod as it is
+now (players read them; the guides ship with the mod).

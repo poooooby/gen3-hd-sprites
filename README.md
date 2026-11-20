@@ -4,128 +4,94 @@
 
 *Sharp Pokémon, battles that fit any screen, and battles set in a 3D world.*
 
+<table>
+<tr>
+<td width="50%" valign="top" align="center">
+<img src="docs/battle-3d.png" alt="A 3D battle in Littleroot Town: Blaziken faces a wild Treecko, with the battle text box along the bottom"><br>
+<sub>🏞️ A 3D battle in Littleroot Town, Blaziken towering over a wild Treecko</sub>
+</td>
+<td width="50%" valign="top" align="center">
+<img src="docs/ws-blur.png" alt="FireRed's title screen on a wide screen, the sides filled with a soft blur"><br>
+<sub>🖥️ FireRed's title screen on a wide screen, the sides softly blurred</sub>
+</td>
+</tr>
+</table>
+
 </div>
 
-A display mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp). It's built for FireRed,
-LeafGreen, Ruby, Sapphire and Emerald, and does part of the job in Red, Blue, Yellow, Gold, Silver
-and Crystal.
+The Pokémon games were drawn for a small, square-ish screen. Played on a phone or a wide monitor
+they come out blocky and boxed in. WoobleView makes them look at home on the screen you're
+playing on. Pokémon are drawn sharp instead of as blown-up pixels, and battles stretch to fill
+your screen without black bars. In the Gen 3 games your battles can even take place right where
+you're standing, in a 3D version of the world around you.
 
-## ✨ Features
+It's a display mod for [Gen1Recomp](https://github.com/bryanthaboi/gen1recomp), made for FireRed,
+LeafGreen, Ruby, Sapphire and Emerald. Red, Blue, Yellow, Gold, Silver and Crystal get the sharp
+Pokémon too ([what works in which game](docs/games.md)).
 
-### Core Mechanics
+## ✨ What it does
 
-- 🔍 **Sharp at any size:** With a sprite mod that supports it, Pokémon are drawn at your
-  screen's full resolution instead of the game's blocky scaling.
-- 🚶 **Smooth movement:** Overworld Pokémon glide smoothly instead of stepping pixel by pixel.
-- 🛟 **Safe:** Menus and text always stay on top. Any frame that can't be drawn this way is drawn
-  the normal way, so nothing ever goes missing.
+### 🔍 Sharp Pokémon
 
-### Battle Fit 🎥
+With a sprite mod that supports it, Pokémon in battle, in the Pokédex and on the summary screen
+are drawn at your screen's full resolution. Pokémon walking around the overworld glide smoothly
+instead of stepping pixel by pixel. Menus and text always stay on top, and nothing ever goes
+missing: any frame that can't be drawn this way is simply drawn the normal way.
 
-- 📏 **Your sprites, as drawn:** Every Pokémon is drawn at the size your sprite mod gives it,
-  in single and double battles. One too big for its space is shrunk just enough to fit, so it
-  is never cut off by the top or the sides of the screen.
-- 📐 **Nothing cut off:** If a Pokémon still doesn't fit (a head flung high in its animation),
-  the camera pulls back just enough to show it in full, and eases back in when it leaves.
-- 💥 **Moves in full:** When the camera pulls back, a move's effects, backgrounds and waves reach
-  the edges of your screen instead of stopping in a box the size of the original screen.
-- 🎯 **Moves that hit home:** In 3D battles a move lands on the middle of the Pokémon it hits,
-  however small or big, and its effects grow with a giant: a Hyper Beam widens as it reaches a
-  Wailord.
-- 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
-  bag and the intro fill any screen shape without black bars. The text box and HP bars stay
-  sharp. In Gen 3's classic battles and double battles the opponents' HP boxes move up to the
-  top of the screen, giving the Pokémon more room. Gold, Silver and Crystal keep the game's own framed screen.
-- 📱 **Phone-friendly:** On a phone held upright, the text box runs full width above the touch
-  controls, the battle grows into the space above it, and in classic battles the opponent's HP
-  box stays put just inside the battle's top edge, whatever the Pokémon do.
+### 🎥 Battles that fit your screen
 
-### Battle Text Box 💬
+Every Pokémon appears at the size your sprite mod gives it and is never cut off. If one won't
+fit, it's shrunk just enough, or the camera pulls back for a moment. Move effects reach right to
+the edges of your screen. Turn on **Fill Screen** and battles, menus, the Pokédex, the summary,
+the bag and the intro fill any screen shape. On a phone held upright, the battle fills the space
+above the text box and the touch controls.
 
-- ✨ **A sharp, modern text box:** In Ruby, Sapphire and Emerald the battle's text box and its
-  FIGHT / BAG and move menus are redrawn as one smooth bar across the bottom of the screen,
-  in the game's own colours: the red-framed teal message box and the white menus, joined
-  side by side.
-- 🖥️ **Fills the bottom:** The bar spans the whole width of any screen, the menu on the right,
-  your text on the left.
-- 📏 **More battle on screen:** The bar is a quarter shorter than the game's box, so more of the
-  battle shows above it.
-- 🎮 **Plays nicely with KantoGear:** When KantoGear's GEAR screens take over the battle's
-  menus, the bar and the battle's text step aside.
+In Ruby, Sapphire and Emerald, the battle's text box and menus become one sharp, modern bar
+across the bottom of the screen, in the game's own colours.
 
-### Battle Scene 🏞️
+➡️ [More about fitting battles to your screen](docs/fitting-the-screen.md)
 
-- 🗺️ **Battle where you stand:** With **Battle Scene** on **Overworld**, battles take place in
-  the world around you, with its 3D land, buildings and trees.
-- 🏠 **Towns and rooms in 3D:** Hoenn's and Kanto's towns, gyms, Pokémon Centers, Marts and
-  many other buildings and rooms stand in 3D, rebuilt from the game's own art.
-- 🎯 **A fair place to fight:** Each battle is set on the nearest spot where both Pokémon stand
-  on level, open ground, with nothing between them and nothing blocking the view.
-- 📏 **True to size:** Every Pokémon stands on the ground at its real size, a map tile being
-  about a metre, and nearer the camera looks bigger. Big Pokémon are gently scaled down the
-  bigger they are, up to about 5 m tall (a little less for an opponent), so a Groudon still
-  stands taller than a Blaziken, and a Wailord towers over a Pikachu without leaving the
-  screen. Very wide ones are kept to 6 m across, while a tall, thin Steelix keeps its height.
-  A small Pokémon beside a giant is drawn the same on an upright phone as on a wide screen,
-  and a long, low one like Zigzagoon a little bigger, so it never looks lost on the field.
-- 🎬 **A camera that follows the battle:** A single battle opens at the camera's usual view, so
-  the trainer is shown at their proper size. As the opponent's Pokémon comes out, the camera
-  zooms out to fit a giant, then adjusts again when yours comes out, coming in close when every
-  Pokémon on the field is small, and a little closer for a small opponent; one too big even for
-  the widest view is shrunk just enough to fit. When a Pokémon faints the camera holds still until the next one is out, and it returns
-  to its usual view for the trainer's last words. A wide Pokémon steps back toward its own side
-  of the screen, partly out of view, rather than reaching across the middle and covering its
-  opponent, always with most of it in view.
-- 👥 **Double battles:** The four are drawn at your sprite pack's own sizes, as on the game's
-  own screen, which shows their differences best when four share it, and the camera pulls back
-  only as far as keeps every one of them in view. Prefer your sprite pack's sizes everywhere?
-  Set **3D Sizing** to Off.
-- ⚖️ **Pick how true the sizes are:** **Medium** keeps giants within reach and small Pokémon easy
-  to see; **Minimal** draws everyone a little closer to the middle, the small a touch bigger and
-  the big a touch smaller; **Accurate** shows every Pokémon at its real measured height, so a
-  Wailord dwarfs a Pikachu, scaled down only to fit the screen or the room.
-- 🏷️ **HP box over their heads:** The opponent's HP box (both of them in a double battle) sits
-  just above the tallest Pokémon's head, and the camera leaves room for it. It only moves when a new Pokémon
-  comes out, so it never jumps about when one faints or the battle ends. The tiniest are never drawn too small to see. Indoors, the biggest
-  are held to about a room's height, so a gym or a ship's cabin stays in view, and anything past
-  the walls fades into the room's own colours instead of black. Battles inside the Abandoned
-  Ship are fought out on its deck.
-- ☀️ **Light and weather:** Sunlight, shadows, rain, sand, ash and fog fill the scene.
-- 🌙 **Time of day:** Outdoor battles are lit by the clock: a warm morning, the plain day, an
-  orange evening and a blue, moonlit night, easing from one to the next, under a sky that deepens
-  overhead with the hour and glows warm at sunset. Ruby, Sapphire and
-  Emerald follow the game's clock, FireRed and LeafGreen your device's. With WoobleDex, battles
-  follow its Clock Source and its Day & Night setting, so they match the overworld around you.
-- 🎥 **Cinematic entrance:** The camera swoops down from the overworld into the battle.
+### 🏞️ Battles in a 3D world
+
+Set **Battle Scene** to **Overworld** and battles leave the flat backdrop behind. The camera
+swoops down from the overworld, and you fight on open ground near where you stand. Around you
+are the towns, gyms, trees and buildings, rebuilt in 3D from the game's own art and lit by the
+time of day and the weather.
+
+Pokémon stand at their real sizes, so a Wailord towers over a Pikachu. **3D Sizing** lets you
+choose how true to life that is. The camera follows the battle, pulling back for giants and
+coming in close for small Pokémon.
+
+➡️ [Everything about 3D battles](docs/battle-scene.md)
 
 ## ⚙️ Options
 
-Pick **WOOBLEVIEW** on the game's own OPTION screen (or open **OPTIONS → MODS → WoobleView**);
-B there takes you straight back. Battle Textbox, Battle Scene and the five options after
-it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
+Pick **WOOBLEVIEW** on the game's own OPTION screen, or open **OPTIONS → MODS → WoobleView**.
+Everything is on by default except the 3D battles, which you can turn on whenever you like.
 
-| Option | Choices | Default | What it does |
-|---|---|---|---|
-| **Battle HD** | On / Off | On | Battle Pokémon at full resolution. |
-| **Battle Fit** | On / Off | On | Pokémon at the sprite mod's own size, one too big for its space shrunk just enough to fit; the camera pulls back if anything still doesn't fit. Off: the sprite mod's own sizes. Needs Battle HD. |
-| **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
-| **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
-| **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you (Gen 3 games). Needs Battle Fit. |
-| **3D Sizing** | Off / Minimal / Medium / Accurate | Medium | With Battle Scene on Overworld: the Pokémon sized by their real heights in the world, the camera zooming out for giants and in for small ones, and the opponent's HP box over their heads. Medium: the biggest gently scaled down to about 5 m tall and 6 m wide, the smallest raised so they are easy to see. Minimal: as Medium, everyone drawn toward the middle. Accurate: every Pokémon at its real measured height, scaled down only to fit the screen or the room. Off: drawn and framed as in Classic battles, at your sprite pack's own sizes. |
-| **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
-| **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
-| **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |
-| **Time of Day** | On / Off | On | Outdoor battle scenes lit by the time of day (morning, day, evening, night), by the game's clock or WoobleDex's. Off: always day. |
-| **Scene Cache** | On / Off | On | Keeps built towns and rooms on disk so battles load straight away. |
-| **Field HD** | On / Off | On | Overworld Pokémon at full resolution. Turn off on a slow device. |
-| **Pokedex & Summary HD** | On / Off | On | Pokédex and summary Pokémon at full resolution. |
+| Option | Default | In short |
+|---|---|---|
+| **Battle HD** | On | Sharp Pokémon in battle. |
+| **Battle Fit** | On | Pokémon at your sprite mod's sizes, never cut off. |
+| **Fill Screen** | On | Battles and full screens fill your screen. |
+| **Battle Textbox** | On | The modern text box (Ruby, Sapphire, Emerald). |
+| **Battle Scene** | Classic | Overworld: battles in the 3D world. |
+| **3D Sizing** | Medium | How true to life the sizes are in 3D battles. |
+| **Build / Clear 3D Cache** | – | Build the 3D world now, or delete it. |
+| **Scene Blur** | On | A soft miniature-style blur in 3D battles. |
+| **Time of Day** | On | 3D battles lit by the time of day. |
+| **Scene Cache** | On | Keep built towns and rooms for fast loading. |
+| **Field HD** | On | Sharp Pokémon in the overworld. |
+| **Pokedex & Summary HD** | On | Sharp Pokémon in the Pokédex and summary. |
+
+➡️ [Every option and choice explained](docs/options.md)
 
 ## 💾 Installation
 
 1. Download the latest release from the
    [Releases](https://github.com/poooooby/gen3-hd-sprites/releases) page.
 2. Import it with the Gen1Recomp Mod Manager, or drop it in your mods folder.
-3. Enable it. Add a supported sprite mod for full-resolution Pokémon.
+3. Enable it, and add a supported sprite mod (below) for sharp Pokémon.
 
 ## 🔗 Works With
 
@@ -135,36 +101,26 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
   [Vivid Worlds: OG](https://github.com/poooooby/vivid-worlds-og): overworld Pokémon drawn sharp
   and at their true sizes.
 - [WoobleDex](https://github.com/poooooby/national_dex_gen3): its move animations play in full,
-  their backgrounds, waves and mists filling your whole screen, in 3D battles too, however far
-  the camera pulls back.
+  filling your whole screen, in 3D battles too. 3D battles also follow its clock and its Day &
+  Night setting.
 
 ## 📌 Good to Know
 
-- 👋 **First run:** The first time you play each Gen 3 game, WoobleView asks whether you want 3D
-  battles and whether to build that game's 3D world now or while you play. You can change this
-  any time in the options.
-- 🔄 **Updates:** When an update improves the 3D world, it asks once whether to rebuild it now or
-  while you play.
-- **Battle Scene** works in FireRed, LeafGreen, Ruby, Sapphire and Emerald. Places without a 3D
-  model are drawn flat. A battle with no overworld around it, or no open ground nearby, keeps the
-  game's own background.
-- True-to-size battles need Pokémon from a supported sprite mod. With the game's own
-  sprites, Fill Screen still fits the battle to your screen.
-- 🔴 **Red, Blue, Yellow, Gold, Silver and Crystal:** sharp battle and Pokédex sprites, and sharp
-  overworld Pokémon from supported mods. Fill Screen in Red, Blue and Yellow; Gold, Silver and
-  Crystal keep the game's own framed battle screen, so their battles look as other mods (Facets'
-  battle scenes) draw them. There's no Battle Scene in these games.
-- If a frame ever can't be drawn this way, that moment is drawn the game's usual way (sprites at
-  their normal size) and the mod tries again a couple of seconds later. Only if it keeps
-  happening does it step aside until you restart the game.
+- 👋 The first time you play each Gen 3 game, WoobleView asks whether you'd like 3D battles and
+  whether to build that game's 3D world now or while you play. When an update improves the 3D
+  world, it asks once whether to rebuild it. You can change all of this in the options.
+- 🖼️ Sharp, true-to-size Pokémon need a supported sprite mod. With the game's own sprites, Fill
+  Screen still fits battles to your screen.
+- 🛟 If something can't be drawn the new way, that moment is drawn the game's usual way and
+  WoobleView tries again a couple of seconds later. If it keeps happening, it steps aside until
+  you restart the game.
 
 ## 🪪 Credits
 
 - **Battle Scene** is adapted from the 3D battles of
   [Emerald 3DS](https://github.com/ZallaxDev/emerald-3ds) by Zallax and contributors: its camera,
   entrance, battle placement, trees, buildings, rooms, land shapes, lighting, day-night cycle and
-  weather. The
-  battle text box's modern look follows its HD text box.
+  weather. The battle text box's modern look follows its HD text box.
 - **Kanto's land** in FireRed and LeafGreen comes from
   [Pokémon FireRed 3DS](https://github.com/NachoGonzalez2001/Pokemon-FireRed-3DS) by
   NachoGonzalez2001, and a few of WoobleView's Kanto buildings are modelled after its own.
