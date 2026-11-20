@@ -224,6 +224,7 @@ function Gen3.wrapFit(Engine, hd)
     end
     -- the intro's own copies of the battlers' spots (ball targets, the catch, a switch)
     local EM, PM = type(Anim.ENEMY_MON) == "table" and Anim.ENEMY_MON, type(Anim.PLAYER_MON) == "table" and Anim.PLAYER_MON
+    home.enemyY = home.enemyY or S[1].y
     home.enemyMon = home.enemyMon or (EM and EM.x)
     home.playerMon = home.playerMon or (PM and PM.x)
     home.playerMonY = home.playerMonY or (PM and PM.y)
@@ -273,7 +274,23 @@ function Gen3.wrapFit(Engine, hd)
       local pm = py - (on(Battle) and fit.shift.playerRaise or 0)
       place(S[1], home.enemy + e)
       place(S[0], home.player + p)
-      if home.playerY then S[0].y, S[0][2] = home.playerY + pm, home.playerY + pm end
+      -- (the 3D world: the foe's moves aimed at its body as drawn, hd's fit.aimEnemy)
+      local ey = (on(Battle) and fit.aimEnemy) or home.enemyY
+      if ey then S[1].y, S[1][2] = ey, ey end
+      if home.playerY then
+        -- (the 3D world: the player's moves too, at its body as drawn)
+        local py0 = (on(Battle) and fit.aimPlayer) or (home.playerY + pm)
+        S[0].y, S[0][2] = py0, py0
+      end
+      -- (the line the moves run along, player to foe: where hd grows their pieces, a giant's end
+      -- the bigger)
+      if on(Battle) and (fit.fxEnemy or 1) + (fit.fxPlayer or 1) > 2.002 then
+        local l = fit.fxLine or {}
+        l[1], l[2], l[3], l[4] = S[0].x, S[0].y, S[1].x, S[1].y
+        fit.fxLine = l
+      else
+        fit.fxLine = nil
+      end
       if EM and home.enemyMon then EM.x = home.enemyMon + e end
       if PM and home.playerMon then PM.x = home.playerMon + p end
       if PM and home.playerMonY then PM.y = home.playerMonY + pm end

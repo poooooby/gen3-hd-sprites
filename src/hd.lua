@@ -166,6 +166,11 @@ function HD.new(G, opts)
       -- Pokemon of the player's brings it in too, gently: toward the foe's art standing smallFoe
       -- of that height, up to zFoeMax, within the same bounds (a Capsakid before a Dewott)
       zMax = 2.5, smallFill = 0.3, zoomInShow = 0.75, smallFoe = 0.17, zFoeMax = 1.4,
+      -- the 3D world's singles: a move's effects grown with a Pokemon drawn bigger than the
+      -- sprite mod draws it (its world scale over the mod's, at least 1, at most fxMax), each
+      -- piece about its own middle by the factor where it lies on the line between the two
+      -- (a beam widens toward a giant); none past fxBig of the canvas across (a background)
+      fxGrow = true, fxMax = 4, fxBig = 0.6,
       -- ... and indoors (a room or a cave: the scene's `indoor`) a ceiling: an art height over
       -- indoorKnee metres eases toward indoorCeiling (a Wailord in a gym stands about 3 m, not
       -- 6.4, so the camera need not pull back past the walls); below the knee, true to scale
@@ -1454,8 +1459,12 @@ function HD.new(G, opts)
     if not (ty == "userdata" or ty == "table") or (image.typeOf and image:typeOf("Canvas")) then return false end
     local x0, y0, x1, y1 = freeBounds(image, a, ...)
     if not x0 then return false end
-    -- partly on the canvas, partly off it
-    if x1 <= 0 or x0 >= cur.w or y1 <= 0 or y0 >= cur.h then return false end
+    -- partly on the canvas, partly off it; or, drawn by a move's animation (hd.inAnim), wholly
+    -- off it but within a canvas's size of it (a giant of the player's stepped out past the
+    -- canvas's left side: its moves aimed at its middle there)
+    if x1 <= 0 or x0 >= cur.w or y1 <= 0 or y0 >= cur.h then
+      if not (self.inAnim and x1 > -cur.w and x0 < 2 * cur.w and y1 > -cur.h and y0 < 2 * cur.h) then return false end
+    end
     if x0 >= -0.5 and y0 >= -0.5 and x1 <= cur.w + 0.5 and y1 <= cur.h + 0.5 then return false end
     local rec = record(image, {}, a, ...)
     if not rec then return false end
@@ -1469,7 +1478,58 @@ function HD.new(G, opts)
     return true
   end
 
+  local drawInner
+  -- a piece of a move's animation in the 3D world's singles (hd.inAnim; not a tagged picture, not
+  -- one fxBig of the canvas across): grown about its own middle by the factor where its middle
+  -- lies on the line between the two Pokemon (fit.fxLine, src/gen3.lua: where the moves aim),
+  -- each end its side's growth (fit.fxPlayer at 0, fit.fxEnemy at 1)
+  local function fxFactor(image, ...)
+    local fit, cur = self.fit, self.cur
+    local line = fit.fxLine
+    if not (self.inAnim and line and fit.fxGrow and cur and cur.pass == "battle" and cur.segment == "scene") then
+      return nil
+    end
+    local fe, fp = fit.fxEnemy or 1, fit.fxPlayer or 1
+    if fe <= 1.001 and fp <= 1.001 then return nil end
+    if self.tags[image] then return nil end
+    local ty = type(image)
+    if not (ty == "userdata" or ty == "table") or (image.typeOf and image:typeOf("Canvas")) then return nil end
+    local x0, y0, x1, y1 = freeBounds(image, ...)
+    if not x0 then return nil end
+    local big = fit.fxBig or 0.6
+    if x1 - x0 >= big * cur.w or y1 - y0 >= big * cur.h then return nil end
+    local cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    local ax, ay, bx, by = line[1], line[2], line[3], line[4]
+    local dx, dy = bx - ax, by - ay
+    local len2 = dx * dx + dy * dy
+    local t = len2 > 1e-6 and math.max(0, math.min(1, ((cx - ax) * dx + (cy - ay) * dy) / len2)) or 0.5
+    local f = fp + (fe - fp) * t
+    if f <= 1.001 then return nil end
+    return f, cx, cy
+  end
+
   local function wrappedDraw(image, ...)
+    if self.inAnim and self.cur and onPass() then
+      local f, cx, cy = fxFactor(image, ...)
+      if f then
+        -- (the current transform, scaled by f about the canvas point (cx, cy))
+        local ox, oy = real.transformPoint(0, 0)
+        local ux = real.transformPoint(1, 0)
+        local _, vy = real.transformPoint(0, 1)
+        real.push()
+        real.origin()
+        real.translate(cx + (ox - cx) * f, cy + (oy - cy) * f)
+        real.scale((ux - ox) * f, (vy - oy) * f)
+        self.stats.fxGrown = (self.stats.fxGrown or 0) + 1
+        drawInner(image, ...)
+        real.pop()
+        return
+      end
+    end
+    return drawInner(image, ...)
+  end
+
+  drawInner = function(image, ...)
     local cur = self.cur
     -- the weather's colour pass drawing the field into its new canvas through its colour map
     -- (colorMapStart): its shader and uniforms are kept for the composite, which maps the whole
@@ -2700,6 +2760,7 @@ function HD.new(G, opts)
     local aeL, aeR, apL, apR = math.huge, -math.huge, math.huge, -math.huge
     -- (and each battler's own: across, its top, its side; the heads the foe's HP box must clear)
     local heads = {}
+    local aimE, aimP
     local function take(rec)
       local spec = rec.spec
       if spec.side then seen[spec.side] = true end
@@ -2715,6 +2776,10 @@ function HD.new(G, opts)
         if not rec.inAnim then u0, u1 = a + d - cur.shift[sd], b + d - cur.shift[sd] end
         local _, feetY = place(rec)
         heads[#heads + 1] = { u0, u1, artTop(rec), sd, feetY }
+        -- (each side's body: the middle of its art where it rests, what its moves are aimed at)
+        if not spec.trainer and feetY then
+          if sd == "enemy" then aimE = (artTop(rec) + feetY) / 2 else aimP = (artTop(rec) + feetY) / 2 end
+        end
       end
       if spec.side == "player" then
         if not rec.inAnim then a, b = a + d - cur.shift.player, b + d - cur.shift.player end
@@ -2764,6 +2829,27 @@ function HD.new(G, opts)
     end
     if fit.idle > 2 then fit.doubleArt = false end
     if seen.enemy then fit.doubleArt = true end
+    -- the 3D world's single battles: a move aimed at the middle of each side's art as drawn
+    -- (canvas y, unzoomed), not the middle of the cart's 64 px pic box: a small one stands at
+    -- its feet, well under that, and an effect landed over its head (src/gen3.lua shiftCoords)
+    local aiming = tuned() and not fit.double
+    fit.aimEnemy = (aiming and aimE) or nil
+    fit.aimPlayer = (aiming and aimP) or nil
+    -- (and how much bigger than the sprite mod draws it each side's Pokemon stands: its effects'
+    -- growth, hd's wrapped draw)
+    local function grown(spec)
+      if not (aiming and fit.fxGrow and spec) then return 1 end
+      for i = 1, #worldMons do
+        local w = worldMons[i]
+        if w.k and w.of.side == spec.side and sameMon(w.of, spec) then
+          local own = math.abs(tonumber(spec.scale) or 0)
+          if own <= 0 then return 1 end
+          return math.max(1, math.min(fit.fxMax or 4, w.k / own))
+        end
+      end
+      return 1
+    end
+    fit.fxEnemy, fit.fxPlayer = grown(self.pair.enemy), grown(self.pair.player)
     local zt, et = fitSolve(top, backs)
     -- (in the 3D world, where each battler stands at its true size, its art across the screen
     -- too: zoomed out until it lies between the scene's edges, as far as zMin)

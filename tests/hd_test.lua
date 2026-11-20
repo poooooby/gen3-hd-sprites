@@ -902,6 +902,10 @@ do
     for _ = 1, 30 do frame() end
     local zs = hd.stats.zoomTarget
     check(zs > 1 and zs <= 1.4 + 1e-6, "world: ...a small foe before a bigger one brings the camera in (" .. tostring(zs) .. ")")
+    -- its moves aimed at the middle of its art as drawn, under the cart's pic box's middle (row
+    -- 40, its feet at 72): a small foe stands low
+    local aim = hd.fit.aimEnemy
+    check(aim and aim > 40 and aim < 72, "world: a small foe's moves aimed at its body (row " .. tostring(aim) .. ")")
     hd.tag(pic, giant)
     hd.tag(mine, mineSpec)
     hd.fit.idle = 3
@@ -1767,6 +1771,24 @@ do
   check(#freeItems() == 0, "one wholly off the canvas is not drawn")
   cur = frame(function() G.draw(slash, 100, 40) end)
   check(#freeItems() == 0, "one inside it stays in its layer")
+  -- a move's pieces grown with a giant (the 3D world's singles: fxLine where the moves run, each
+  -- side's growth): one at the foe's end by its factor, about its middle; none outside a move's
+  -- animation, nor a background
+  hd.fit.fxLine, hd.fit.fxPlayer, hd.fit.fxEnemy = { 72, 100, 176, 40 }, 1, 2
+  local grownBefore = hd.stats.fxGrown or 0
+  local grownAt
+  cur = frame(function()
+    hd.inAnim = true
+    G.draw(slash, 176, 40, 0, 1, 1, 32, 16)
+    local e = G.log[#G.log]
+    grownAt = e and e.sx
+    G.draw(sheet, G.newQuad(0, 0, 240, 160, 1024, 1024), 0, 0)
+    hd.inAnim = false
+    G.draw(slash, 100, 40, 0, 1, 1, 32, 16)
+  end)
+  check((hd.stats.fxGrown or 0) - grownBefore == 1 and grownAt and near(grownAt, 2),
+    "a move's piece at a giant's end grown by its factor, nothing else (" .. tostring(grownAt) .. ")")
+  hd.fit.fxLine, hd.fit.fxPlayer, hd.fit.fxEnemy = nil, nil, nil
   -- a mosaic (pieces that together cover the scene, Seismic Toss's sky): a whole-scene layer
   -- from the pass after it is seen
   local left, right = G.newQuad(0, 700, 120, 112, 1024, 1024), G.newQuad(120, 700, 120, 112, 1024, 1024)

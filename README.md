@@ -29,6 +29,9 @@ and Crystal.
   the camera pulls back just enough to show it in full, and eases back in when it leaves.
 - 💥 **Moves in full:** When the camera pulls back, a move's effects, backgrounds and waves reach
   the edges of your screen instead of stopping in a box the size of the original screen.
+- 🎯 **Moves that hit home:** In 3D battles a move lands on the middle of the Pokémon it hits,
+  however small or big, and its effects grow with a giant: a Hyper Beam widens as it reaches a
+  Wailord.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
   bag and the intro fill any screen shape without black bars. The text box and HP bars stay
   sharp. In Gen 3's classic battles and double battles the opponents' HP boxes move up to the

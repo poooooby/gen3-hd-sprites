@@ -6,7 +6,7 @@
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/ess_scene.lua love .
 -- HD_SIZE=WxH (default 1920x1080); HD_SPOT=MAP[:x:y] (default Route 101's middle);
--- HD_PLAYER / HD_ENEMY=SPECIES_X (default Blaziken / Swampert); MOVES=SURF,SEED_FLARE (WoobleDex's
+-- HD_PLAYER / HD_ENEMY=SPECIES_X or a species number (default Blaziken / Swampert); MOVES=SURF,SEED_FLARE (WoobleDex's
 -- names); SIDES=p,e (default both); SHOT_EVERY=n (default 6; 0 none); HD_SCENE=off: the classic backgrounds;
 -- COVER=1: each move's coverage, every 6 frames against the battle before it (the view's outer 8% a
 -- side and its middle 30%, between its 15% and 70% rows): "boxed" when the middle changed and the
@@ -92,9 +92,11 @@ local function body(game, log)
 
   s.party = {}
   local mine = os.getenv("HD_PLAYER") or "SPECIES_BLAZIKEN"
-  Party.giveMon(s, C.species.byName[mine], 50, (mine:gsub("^SPECIES_", "")))
+  -- (a species by name, or by number: WoobleDex's newer ones)
+  local function species(v) return tonumber(v) or C.species.byName[v] end
+  Party.giveMon(s, species(mine), 50, (mine:gsub("^SPECIES_", "")))
   local foe = os.getenv("HD_ENEMY") or "SPECIES_SWAMPERT"
-  local started, why = BattleBridge.startWild(Runtime._mod, game, { species = C.species.byName[foe], level = 50 }, { fade = false })
+  local started, why = BattleBridge.startWild(Runtime._mod, game, { species = species(foe), level = 50 }, { fade = false })
   if not started then log("FAIL wild battle: " .. tostring(why)); return end
   local ready = false
   for _ = 1, 6000 do
@@ -169,6 +171,16 @@ local function body(game, log)
       targetSide = foeSide and "player" or "enemy", isReversed = foeSide,
       moveTurn = info and info.turns and 1 or 0 })
     if not ok then log("FAIL launch " .. tag .. ": " .. tostring(err)); return end
+    do
+      local okAC, AC = pcall(require, "src.core.game3.battle.anim_coords")
+      local S = okAC and AC.SINGLES
+      local core = hd._core and hd._core()
+      if S then
+        log(("%s: aim player %.1f,%.1f enemy %.1f,%.1f (fit aim %s / %s) grow player %s enemy %s"):format(
+          id .. (foeSide and "_e" or "_p"), S[0].x, S[0].y, S[1].x, S[1].y, tostring(core and core.fit.aimPlayer),
+          tostring(core and core.fit.aimEnemy), tostring(core and core.fit.fxPlayer), tostring(core and core.fit.fxEnemy)))
+      end
+    end
     local n, ticks, saw = 0, 0, false
     local sum, worst, timed = 0, 0, 0
     local boxed, covered, peak = 0, 0, 0

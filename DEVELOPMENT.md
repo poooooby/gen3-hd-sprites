@@ -258,6 +258,24 @@ The target zoom:
     - `Pokedude.sendOutOrigin`, where the player's ball leaves the trainer's hand.
   - **Double-shift guard:** a Pokémon drawn inside `Anim.drawParticles` (an afterimage, a
     move's copy of it) is flagged `inAnim` and not shifted again.
+  - **Aimed at the body (the 3D world's singles):** a move aims at `AnimCoords.SINGLES`, the
+    middle of the cart's 64 px pic box (the foe's row 40, its feet at 72). A Pokemon drawn at
+    its true size stands at its feet, so a small one's body lies well under that, and an
+    effect landed over its head (more so zoomed in on it). `fitStep` notes each side's art
+    middle where it rests (`(artTop + feet) / 2`, canvas px, unzoomed; trainers left out) as
+    `fit.aimEnemy` / `fit.aimPlayer`, and `Engine.shiftCoords` puts `SINGLES[1].y` /
+    `SINGLES[0].y` there (else their own rows, the player's with its shift). Not the intro's
+    `ENEMY_MON` / `PLAYER_MON` (ball targets).
+  - **Effects grown with a giant** (the 3D world's singles, `fit.fxGrow`): `fitStep` works out
+    each side's growth, its world scale over the sprite mod's own (`e.k / spec.scale`), at
+    least 1, at most `fit.fxMax` (4): `fit.fxEnemy` / `fit.fxPlayer` (a Wailord before a
+    Pikachu 1.69, the Pikachu 1). `Engine.shiftCoords` hands over the line the moves run
+    along, `fit.fxLine` (player's aim to the foe's), while either grows. The wrapped draw grows
+    each piece of a move's animation (`hd.inAnim`; not a tagged picture, a canvas, or one
+    `fit.fxBig` (0.6) of the canvas across: a background) about its own middle by the factor
+    where that middle lies on the line, the player's at 0 and the foe's at 1 (`fxFactor`): the
+    current transform scaled about that canvas point for the one draw. A beam's pieces widen as
+    they near a giant, a cone; positions stay where the move puts them. `stats.fxGrown`.
   - **Not fitted:** trainers are left out of the fit itself.
 - **The intro's scrolling grass** (`BattleChrome.drawEntry`): on the cart it is a background
   layer that wraps sideways, but the engine draws it as one screen-wide image. With Battle Fit
@@ -328,7 +346,10 @@ The target zoom:
     zoomed out the view shows past it (a slash on a giant near a side, a burst low on the
     player's side). An image draw in the scene that crosses an edge (its corners through the
     draw's own rotation, scale and origin, and the transform: partly on the canvas, partly off;
-    one wholly off may be parked there to hide it) is recorded as a `free` item, its quad's
+    one wholly off may be parked there to hide it, unless a move's animation draws it,
+    `hd.inAnim`, within a canvas's size of the canvas: a giant of the player's stepped out past
+    the left side has its moves aimed at its middle there, x -49 for a Wailord) is recorded as
+    a `free` item, its quad's
     viewport as drawn, and replayed in the composite at the scene's mapping, clipped only by the
     view. Up to 48 a pass (`freeMax`), the rest in their layer as before. A row's pieces
     crossing the edges are drawn this way; the row adds only what lies past them.
