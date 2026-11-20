@@ -1206,6 +1206,267 @@ function HD.new(G, opts)
              bottom = y1 >= self.fit.focus[2] - 0.5 }
   end
 
+  -- a picture repeated across the battle's scene as tiles (a plane: WoobleDex's Gen 9 animations'
+  -- backgrounds and foregrounds, Essentials' planes, drawn as copies of one picture on a grid from
+  -- the canvas's top left, scrolled). The copies together always cover the canvas, but alone
+  -- they don't once it scrolls, so each would be zoomed with the scene, cut off at the canvas's
+  -- edges. A run of them is one "screen" layer instead, covering the view whatever the scroll.
+  -- An upright, unscaled quad at least planeMin a side reaching over the canvas's top left corner
+  -- may start a run ("start": it gets a layer of its own, kind as usual, cur.plane); the same
+  -- picture drawn next on its grid continues it ("continue": that layer becomes a "screen" one).
+  -- A copy alone stays what it was (Encore's dimming, its spotlight on its target, at 0, 0)
+  local planeMin = 48
+  local function planeTile(image, a, b, c, d, e, f, g, h)
+    local cur = self.cur
+    local run = cur.plane
+    cur.plane = nil
+    if not isQuad(a) or (d or 0) ~= 0 or (e or 1) ~= 1 or (f or e or 1) ~= 1 then return nil end
+    local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
+    if not x or w < planeMin or hh < planeMin then return nil end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + hh)
+    if math.abs((x1 - x0) - w) > 0.01 or math.abs((y1 - y0) - hh) > 0.01 then return nil end
+    local qx, qy, qw, qh = a:getViewport()
+    if run and run.image == image and run.qx == qx and run.qy == qy and run.qw == qw and run.qh == qh then
+      local i, j = (x0 - run.x0) / w, (y0 - run.y0) / hh
+      if math.abs(i - math.floor(i + 0.5)) < 0.01 and math.abs(j - math.floor(j + 0.5)) < 0.01 then
+        cur.plane = run
+        return "continue", run
+      end
+    end
+    if x0 <= 0.5 and y0 <= 0.5 and x1 > 0.5 and y1 > 0.5 then
+      local fresh = { image = image, qx = qx, qy = qy, qw = qw, qh = qh, x0 = x0, y0 = y0 }
+      cur.plane = fresh
+      return "start", fresh
+    end
+    return nil
+  end
+
+  -- a row of pictures of one width side by side across the battle's scene (WoobleDex's Surf: its
+  -- wall of water, the wave's crest and water placed by turns on Essentials' screen to fill it).
+  -- Each crosses at most one side, so none is an edge draw, and the row stopped at the canvas's
+  -- sides. Once a pass's pieces (upright, unmirrored quads at least rowMin wide, of one width,
+  -- sharing their top or bottom row, each the last's width along) reach both sides, a "row" item
+  -- is recorded: with fill it carries the row on out to the view's sides (drawRow) with an end
+  -- piece that is its body (its lowest) or was seen repeated in a row (rowSeen), and runs its
+  -- pieces on below their feet. The candidates are this pass's (cur.rowN), in tables kept
+  -- across passes
+  local rowMin = 64
+  local rowPool = {}
+  -- the pieces seen repeated in a row, by picture (weak: a picture dropped takes its entries)
+  local rowSeen = setmetatable({}, { __mode = "k" })
+  local function samePiece(p, q)
+    return p.image == q.image and p.qx == q.qx and p.qy == q.qy and p.qw == q.qw and p.qh == q.qh
+  end
+  local function rowTile(image, a, b, c, d, e, f, g, h)
+    if not isQuad(a) or (d or 0) ~= 0 or (e or 1) <= 0 or (f or e or 1) <= 0 then return end
+    local ty = type(image)
+    if not (ty == "userdata" or ty == "table") or (image.typeOf and image:typeOf("Canvas")) then return end
+    local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
+    if not x or w < rowMin then return end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + hh)
+    w, hh = x1 - x0, y1 - y0
+    if w < rowMin or hh <= 0 then return end
+    local cur = self.cur
+    if x1 <= 0 or x0 >= cur.w or y1 <= 0 or y0 >= cur.h then return end
+    local qx, qy, qw, qh = a:getViewport()
+    local n = cur.rowN or 0
+    local t = rowPool[n + 1]
+    if not t then
+      t = {}
+      rowPool[n + 1] = t
+    end
+    t.image, t.qx, t.qy, t.qw, t.qh, t.x0, t.y0, t.w, t.h, t.done = image, qx, qy, qw, qh, x0, y0, w, hh, false
+    cur.rowN = n + 1
+    -- the pieces of this row drawn this pass (this one too): their span, each its width along
+    local lo, hi, count = x0, x0, 0
+    for i = 1, n + 1 do
+      local o = rowPool[i]
+      if math.abs(o.w - w) < 0.01 and (math.abs(o.y0 - y0) < 0.5 or math.abs(o.y0 + o.h - y1) < 0.5) then
+        local k = (o.x0 - x0) / w
+        if math.abs(k - math.floor(k + 0.5)) < 0.01 then
+          if o.done then return end
+          if o.x0 < lo then lo = o.x0 end
+          if o.x0 > hi then hi = o.x0 end
+          count = count + 1
+        end
+      end
+    end
+    local last = math.floor((hi - lo) / w + 0.5)
+    if count < 2 or lo > 0.5 or hi + w < cur.w - 0.5 or count ~= last + 1 then return end
+    -- the row's pieces in order across (its end pieces carry it on)
+    local pieces = {}
+    for i = 1, n + 1 do
+      local o = rowPool[i]
+      if math.abs(o.w - w) < 0.01 and (math.abs(o.y0 - y0) < 0.5 or math.abs(o.y0 + o.h - y1) < 0.5) then
+        local k = (o.x0 - lo) / w
+        if math.abs(k - math.floor(k + 0.5)) < 0.01 then
+          o.done = true
+          pieces[math.floor(k + 0.5) + 1] = { image = o.image, qx = o.qx, qy = o.qy, qw = o.qw, qh = o.qh,
+                                              y0 = o.y0, h = o.h }
+        end
+      end
+    end
+    for k = 1, last + 1 do
+      if not pieces[k] then return end
+    end
+    -- (an end piece a row repeats, in this frame or one before, carries it on: Muddy Water's mud
+    -- at its end, beside its crest)
+    for k = 1, last + 1 do
+      for j = k + 1, last + 1 do
+        if samePiece(pieces[k], pieces[j]) then
+          local o = pieces[k]
+          local byImage = rowSeen[o.image]
+          if not byImage then
+            byImage = {}
+            rowSeen[o.image] = byImage
+          end
+          byImage[o.qx .. ":" .. o.qy .. ":" .. o.qw .. ":" .. o.qh] = true
+        end
+      end
+    end
+    -- (and so does the row's lowest piece, its body: a wave's crest stands above its water)
+    local low = math.huge
+    for k = 1, last + 1 do low = math.min(low, pieces[k].h) end
+    local function repeats(piece)
+      if piece.h <= low + 0.5 then return true end
+      local byImage = rowSeen[piece.image]
+      return byImage ~= nil and byImage[piece.qx .. ":" .. piece.qy .. ":" .. piece.qw .. ":" .. piece.qh] == true
+    end
+    local carryLo, carryHi = repeats(pieces[1]), repeats(pieces[last + 1])
+    local rec = record(image, {}, a, b, c, d, e, f, g, h)
+    if not rec then return end
+    cur.items[#cur.items + 1] = { kind = "row", rec = rec, pieces = pieces, lo = lo, hi = hi, w = w,
+                                  cw = cur.w, ch = cur.h, line = self.fit.focus[2], carryLo = carryLo,
+                                  carryHi = carryHi }
+    self.stats.row = (self.stats.row or 0) + 1
+  end
+
+  -- a move's effect crossing the canvas's edges (a slash on a giant drawn near a side, a burst on
+  -- the player's Pokemon low on the screen): drawn in a layer, its part past the canvas is lost,
+  -- though zoomed out the view shows past it. One that crosses an edge (partly on the canvas: one
+  -- wholly off it may be parked there to hide it) is recorded instead, a "free" item drawn at the
+  -- scene's mapping over the whole view, uncut (drawFree). Up to freeMax a pass; the rest as before
+  local freeMax = 48
+  -- a mosaic: big upright pieces drawn one after another that together cover the canvas, down to
+  -- the text box's line (Seismic Toss's starry sky, six tiles in two rows). Seen covering it in a
+  -- pass, its pieces are "screen" draws from the next pass on, one whole-scene layer covering the
+  -- view, as a single whole background is (one frame late, while the run is being seen)
+  local mosaicPool = {}
+  local function mosaicCovers(n)
+    local cur = self.cur
+    local line = self.fit.focus[2]
+    for j = 0, 7 do
+      local py = (j + 0.5) * line / 8
+      for i = 0, 11 do
+        local px = (i + 0.5) * cur.w / 12
+        local hit = false
+        for k = 1, n do
+          local t = mosaicPool[k]
+          if px >= t.x0 and px <= t.x1 and py >= t.y0 and py <= t.y1 then hit = true break end
+        end
+        if not hit then return false end
+      end
+    end
+    return true
+  end
+  -- a draw in the scene: is it a piece of a mosaic seen last pass? Noted for this pass's
+  local function mosaicPiece(image, a, b, c, d, e, f, g, h)
+    local cur = self.cur
+    if not isQuad(a) or (d or 0) ~= 0 then
+      cur.mosaicN = 0
+      return false
+    end
+    local qx, qy, qw, qh = a:getViewport()
+    local key = qx .. ":" .. qy .. ":" .. qw .. ":" .. qh
+    local now = self.mosaicNow
+    local known = now ~= nil and now[image] ~= nil and now[image][key] == true
+    local x, y, w, hh = drawRect(image, a, b, c, d, e, f, g, h)
+    if not x then
+      cur.mosaicN = 0
+      return known
+    end
+    local x0, y0 = real.transformPoint(x, y)
+    local x1, y1 = real.transformPoint(x + w, y + hh)
+    if x1 < x0 then x0, x1 = x1, x0 end
+    if y1 < y0 then y0, y1 = y1, y0 end
+    -- (one too small, or one covering the scene alone, a whole background: no mosaic's piece)
+    if x1 - x0 < planeMin or y1 - y0 < planeMin
+        or (x0 <= 0.5 and y0 <= 0.5 and x1 >= cur.w - 0.5 and y1 >= self.fit.focus[2] - 0.5) then
+      cur.mosaicN = 0
+      return known
+    end
+    local n = (cur.mosaicN or 0) + 1
+    local t = mosaicPool[n]
+    if not t then
+      t = {}
+      mosaicPool[n] = t
+    end
+    t.image, t.key, t.x0, t.y0, t.x1, t.y1 = image, key, x0, y0, x1, y1
+    cur.mosaicN = n
+    if n >= 2 and mosaicCovers(n) then
+      local nextSet = self.mosaicNext or {}
+      self.mosaicNext = nextSet
+      for k = 1, n do
+        local o = mosaicPool[k]
+        nextSet[o.image] = nextSet[o.image] or {}
+        nextSet[o.image][o.key] = true
+      end
+    end
+    return known
+  end
+  local function freeBounds(image, a, b, c, d, e, f, g, h)
+    local quadded = isQuad(a)
+    local w, hh, x, y, r, sx, sy, ox, oy
+    if quadded then
+      local _
+      _, _, w, hh = a:getViewport()
+      x, y, r, sx, sy, ox, oy = b, c, d, e, f, g, h
+    else
+      if not image.getWidth then return nil end
+      w, hh = image:getWidth(), image:getHeight()
+      x, y, r, sx, sy, ox, oy = a, b, c, d, e, f, g
+    end
+    if type(x) ~= "number" then return nil end
+    y, r, sx = y or 0, r or 0, sx or 1
+    sy, ox, oy = sy or sx, ox or 0, oy or 0
+    local cs, sn = math.cos(r), math.sin(r)
+    local x0, y0, x1, y1 = math.huge, math.huge, -math.huge, -math.huge
+    for corner = 0, 3 do
+      local u = ((corner % 2 == 1) and w or 0) - ox
+      local v = ((corner >= 2) and hh or 0) - oy
+      u, v = u * sx, v * sy
+      local px, py = real.transformPoint(x + u * cs - v * sn, y + u * sn + v * cs)
+      if px < x0 then x0 = px end
+      if px > x1 then x1 = px end
+      if py < y0 then y0 = py end
+      if py > y1 then y1 = py end
+    end
+    return x0, y0, x1, y1
+  end
+  local function freeDraw(image, a, ...)
+    local cur = self.cur
+    if (cur.freeN or 0) >= freeMax then return false end
+    local ty = type(image)
+    if not (ty == "userdata" or ty == "table") or (image.typeOf and image:typeOf("Canvas")) then return false end
+    local x0, y0, x1, y1 = freeBounds(image, a, ...)
+    if not x0 then return false end
+    -- partly on the canvas, partly off it
+    if x1 <= 0 or x0 >= cur.w or y1 <= 0 or y0 >= cur.h then return false end
+    if x0 >= -0.5 and y0 >= -0.5 and x1 <= cur.w + 0.5 and y1 <= cur.h + 0.5 then return false end
+    local rec = record(image, {}, a, ...)
+    if not rec then return false end
+    local item = { kind = "free", rec = rec }
+    if isQuad(a) then item.qx, item.qy, item.qw, item.qh = a:getViewport() end
+    cur.items[#cur.items + 1] = item
+    cur.freeN = (cur.freeN or 0) + 1
+    cur.pending = true
+    cur.open = nil
+    self.stats.free = (self.stats.free or 0) + 1
+    return true
+  end
+
   local function wrappedDraw(image, ...)
     local cur = self.cur
     -- the weather's colour pass drawing the field into its new canvas through its colour map
@@ -1302,11 +1563,33 @@ function HD.new(G, opts)
       -- its own that covers the whole screen; with fill, one spanning the scene's width gets one
       -- whose sides run on to the screen's
       local kind = uiScreen and "screen" or nil
+      local plane, run
+      if not kind and sceneFit() and mosaicPiece(image, ...) then kind = "screen" end
       if not kind and sceneFit() then
-        if self.fit.fill then kind = sceneDrawKind(image, ...)
+        plane, run = planeTile(image, ...)
+        if plane == "continue" then
+          kind = "screen"
+          -- (the run's first copy, alone in its layer still open: that layer covers the view)
+          local item = run.item
+          if item and cur.openItem == item and not item.screen then
+            item.screen, item.edge, cur.open = true, false, "screen"
+          end
+          if not run.counted then
+            run.counted = true
+            self.stats.plane = (self.stats.plane or 0) + 1
+          end
+        elseif self.fit.fill then kind = sceneDrawKind(image, ...)
         elseif drawCoversScene(image, ...) then kind = "screen" end
       end
+      -- (a run's first copy in a layer of its own, for it to become a whole-scene one)
+      if plane == "start" and kind ~= "screen" then
+        if kind and cur.open == kind then openLayer(kind) else cur.pending = true end
+      end
+      if not kind and self.fit.fill and sceneFit() then rowTile(image, ...) end
+      -- (a move's effect crossing the canvas's edges: drawn uncut over the view instead)
+      if not kind and not plane and sceneFit() and freeDraw(image, ...) then return end
       beforeDraw(kind)
+      if plane == "start" then run.item = cur.openItem end
       if kind and not uiScreen then markBottom() end
       if cur.boxId ~= nil then boxBounds(drawRect(image, ...)) end
       if overSpec and drawAtScale(real.getShader() ~= nil, image, overSpec, ...) then return end
@@ -1529,6 +1812,8 @@ function HD.new(G, opts)
       -- (the doubles spread the engine's coordinates were moved by for this frame)
       spread = self.fit.spread or 1,
     }
+    -- (the mosaics seen covering the scene last battle pass are this one's whole-scene pieces)
+    if pass == "battle" then self.mosaicNow, self.mosaicNext = self.mosaicNext, nil end
     return true
   end
 
@@ -2962,6 +3247,97 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
   -- filled screen's narrower one, the water runs on under it). With its own colour, blend and
   -- shader as drawn.
   local wideQuad
+  -- A row of pieces (rowTile) carried on past the canvas: an end piece that carries it (carryLo,
+  -- carryHi) repeated, each its width along, out to the view's (box) sides; a piece reaching the
+  -- text box's line (the cart's text box hid the rows below it) carried on down from its foot
+  -- (its last row of texels) to the view's. With the scene's mapping (canvas point (cx, cy) at
+  -- x0 + cx * sx, y0 + cy * sy). The row's own pieces are drawn in their layer, or uncut where
+  -- they cross its edges (freeDraw): here only their run-on
+  local rowQuad
+  local function rowPiece(piece, px, x0, y0, sx, sy, w, line, bottom, body)
+    local img = piece.image
+    local iw, ih = img:getWidth(), img:getHeight()
+    if rowQuad then
+      rowQuad:setViewport(piece.qx, piece.qy, piece.qw, piece.qh, iw, ih)
+    else
+      rowQuad = real.newQuad(piece.qx, piece.qy, piece.qw, piece.qh, iw, ih)
+    end
+    local kx, ky = sx * w / piece.qw, sy * piece.h / piece.qh
+    local x, foot = x0 + px * sx, y0 + (piece.y0 + piece.h) * sy
+    if body then real.draw(img, rowQuad, x, y0 + piece.y0 * sy, 0, kx, ky) end
+    if piece.y0 + piece.h >= line - 0.5 and foot < bottom then
+      rowQuad:setViewport(piece.qx, piece.qy + piece.qh - 1, piece.qw, 1, iw, ih)
+      real.draw(img, rowQuad, x, foot, 0, kx, bottom - foot)
+    end
+  end
+  local function drawRow(item, x0, y0, sx, sy, box)
+    local rec = item.rec
+    local w = item.w
+    if not (w > 0 and sx > 0 and sy > 0) then return end
+    local bl, bt, br, bb = box[1], box[2], box[1] + box[3], box[2] + box[4]
+    local cl, cr, cb = x0, x0 + item.cw * sx, y0 + item.ch * sy
+    local pieces = item.pieces
+    local first, final = pieces[1], pieces[#pieces]
+    local k0 = math.floor(((bl - x0) / sx - item.lo) / w)
+    local k1 = math.ceil(((br - x0) / sx - item.hi) / w)
+    real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
+    useShader(rec)
+    real.setBlendMode(rec.blend[1], rec.blend[2])
+    -- the view left of the canvas, right of it, under it, and the canvas itself (there only the
+    -- pieces' run-on, below their feet)
+    for region = 1, 4 do
+      local rx0, ry0, rx1, ry1 = bl, bt, cl, bb
+      if region == 2 then rx0, rx1 = cr, br
+      elseif region == 3 then rx0, ry0, rx1 = math.max(bl, cl), math.max(bt, cb), math.min(br, cr)
+      elseif region == 4 then rx0, ry0, rx1, ry1 = math.max(bl, cl), bt, math.min(br, cr), math.min(bb, cb) end
+      rx0, rx1 = math.max(rx0, bl), math.min(rx1, br)
+      if rx1 - rx0 >= 1 and ry1 - ry0 >= 1 then
+        scissorOver(rx0, ry0, rx1 - rx0, ry1 - ry0)
+        for k = item.carryLo and math.min(k0, 0) or 0, -1 do
+          rowPiece(first, item.lo + k * w, x0, y0, sx, sy, w, item.line, bb, true)
+        end
+        for i = 1, #pieces do
+          rowPiece(pieces[i], item.lo + (i - 1) * w, x0, y0, sx, sy, w, item.line, bb, false)
+        end
+        for k = 1, item.carryHi and math.max(k1, 0) or 0 do
+          rowPiece(final, item.hi + k * w, x0, y0, sx, sy, w, item.line, bb, true)
+        end
+      end
+    end
+    real.setScissor()
+    real.setShader()
+  end
+
+  -- A move's effect that crossed the canvas's edges (freeDraw), replayed as drawn at the scene's
+  -- mapping (canvas point (cx, cy) at x0 + cx * sx, y0 + cy * sy), uncut but for the view (box)
+  local freeQuad
+  local function drawFree(item, x0, y0, sx, sy, box)
+    local rec = item.rec
+    local img = rec.image
+    real.push()
+    real.origin()
+    real.translate(x0 + rec.tx * sx, y0 + rec.ty * sy)
+    real.scale(sx * rec.tsx, sy * rec.tsy)
+    real.setColor(rec.color[1], rec.color[2], rec.color[3], rec.color[4])
+    useShader(rec)
+    real.setBlendMode(rec.blend[1], rec.blend[2])
+    scissorOver(box[1], box[2], box[3], box[4])
+    if item.qx then
+      local iw, ih = img:getWidth(), img:getHeight()
+      if freeQuad then
+        freeQuad:setViewport(item.qx, item.qy, item.qw, item.qh, iw, ih)
+      else
+        freeQuad = real.newQuad(item.qx, item.qy, item.qw, item.qh, iw, ih)
+      end
+      real.draw(img, freeQuad, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+    else
+      real.draw(img, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
+    end
+    real.pop()
+    real.setScissor()
+    real.setShader()
+  end
+
   local function drawWide(item, x0, y0, sx, sy, box)
     local rec = item.rec
     local img = rec.image
@@ -3454,6 +3830,12 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       elseif item.kind == "wide" then
         -- a move's background band: across the whole view with fill, else in the canvas's box
         drawWide(item, sx0, sy0, ssx, ssy, sceneBox or cover)
+      elseif item.kind == "row" then
+        -- a row of copies, on past the canvas's sides
+        drawRow(item, sx0, sy0, ssx, ssy, sceneBox or cover)
+      elseif item.kind == "free" then
+        -- a move's effect crossing the canvas's edges, uncut
+        drawFree(item, sx0, sy0, ssx, ssy, sceneBox or cover)
       elseif item.kind == "world" then
         -- the battle scene's world: the ground under the battlers, so zoomed with them (no
         -- parallax), over the whole view; told where the UI's box is (the world shows beside a
@@ -3647,7 +4029,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       if item.kind == "seam" and item.name == "ui" then inUi = true end
       -- (the battle scene's world goes back as the wallpaper it stands in for)
       if item.kind == "hd" or item.kind == "backdrop" or item.kind == "stage" or item.kind == "band"
-          or item.kind == "wide" or item.kind == "world" then
+          or item.kind == "wide" or item.kind == "world" or item.kind == "free" then
         local rec = item.rec
         real.push()
         real.translate(rec.tx, rec.ty)
@@ -3667,7 +4049,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
             drawn = drawAtScale(rec.shader ~= nil, rec.image, rec.spec, rec.x, rec.y, rec.r, rec.sx, rec.sy, rec.ox, rec.oy)
           end
         end
-        if not drawn and item.kind == "wide" then
+        if not drawn and (item.kind == "wide" or (item.kind == "free" and item.qx)) then
           -- (through the quad's viewport as it was drawn: the engine has moved its quad since)
           local iw, ih = rec.image:getWidth(), rec.image:getHeight()
           if wideQuad then

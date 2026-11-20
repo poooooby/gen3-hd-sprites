@@ -27,6 +27,8 @@ and Crystal.
   is never cut off by the top or the sides of the screen.
 - 📐 **Nothing cut off:** If a Pokémon still doesn't fit (a head flung high in its animation),
   the camera pulls back just enough to show it in full, and eases back in when it leaves.
+- 💥 **Moves in full:** When the camera pulls back, a move's effects, backgrounds and waves reach
+  the edges of your screen instead of stopping in a box the size of the original screen.
 - 🖥️ **Fills your screen:** With **Fill Screen**, battles, menus, the Pokédex, the summary, the
   bag and the intro fill any screen shape without black bars. The text box and HP bars stay
   sharp. In Gen 3's classic battles and double battles the opponents' HP boxes move up to the
@@ -124,6 +126,9 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 - [Vivid Worlds](https://github.com/poooooby/wilds-of-hoenn) and
   [Vivid Worlds: OG](https://github.com/poooooby/vivid-worlds-og): overworld Pokémon drawn sharp
   and at their true sizes.
+- [WoobleDex](https://github.com/poooooby/national_dex_gen3): its move animations play in full,
+  their backgrounds, waves and mists filling your whole screen, in 3D battles too, however far
+  the camera pulls back.
 
 ## 📌 Good to Know
 

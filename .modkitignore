@@ -42,3 +42,4 @@ tests/drivers/emerald_prints.lua
 tests/cache_guard.txt
 tests/drivers/load_hitch.lua
 tests/drivers/trainer_battle.lua
+tests/drivers/ess_scene.lua

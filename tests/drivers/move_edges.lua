@@ -97,6 +97,7 @@ local function body(game, log)
   local function run(label, launch)
     local st0 = hd.stats()
     local e0, w0, s0 = st0.edge or 0, st0.wide or 0, st0.screen or 0
+    local p0, r0 = st0.plane or 0, st0.row or 0
     local ok, err = pcall(launch)
     if not ok then log("launch failed", label, tostring(err)) return end
     local shotAt, f = nil, 0
@@ -117,7 +118,8 @@ local function body(game, log)
     if de > 0 then edgeMoves[#edgeMoves + 1] = label .. "(" .. de .. ")" end
     if dw > 0 then wideMoves[#wideMoves + 1] = label .. "(" .. dw .. ")" end
     if ds > 0 then screenMoves[#screenMoves + 1] = label .. "(" .. ds .. ")" end
-    log(("%s frames %d edge %d wide %d screen %d"):format(label, f, de, dw, ds))
+    log(("%s frames %d edge %d wide %d screen %d plane %d row %d"):format(label, f, de, dw, ds,
+      (s2.plane or 0) - p0, (s2.row or 0) - r0))
     restore()
     U.wait(4)
   end

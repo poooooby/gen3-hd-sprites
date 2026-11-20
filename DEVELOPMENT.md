@@ -298,6 +298,53 @@ The target zoom:
   - **Whole backgrounds** (a quad the canvas's size, over the whole scene) are left as they
     were: a `screen` layer stretched to cover the view, since many backgrounds hold unrelated
     rows below their visible 160.
+  - **Planes** (`planeTile`; with or without fill): WoobleDex's Gen 9 animations (its `NdxEss`
+    task) draw an Essentials plane, a background or foreground repeated across the screen, as
+    copies of one atlas rect on a grid from the canvas's top left, scrolled (`drawPlane`:
+    Surf's foe-side wave, 286 x 480, rising; Steam Eruption's mist sliding sideways). Together
+    they always cover the canvas, alone they don't once it scrolls, so each copy was zoomed with
+    the scene and cut off at the canvas's edges. An upright, unscaled quad at least 48 px a side
+    reaching over the canvas's top left corner starts a run (`cur.plane`); the same picture next
+    on its grid continues it; the run is one `screen` layer, as a single whole background is.
+    `stats().plane` counts runs.
+  - **Rows** (`rowTile`, `drawRow`; with fill): pieces of one width side by side across the
+    canvas, sharing their top or bottom row (WoobleDex's Surf from the player's side: its wall
+    of water, the crest and the water pieces by turns, placed on Essentials' screen). Upright,
+    unmirrored quads at least 64 px wide; once a pass's pieces reach both sides, each the last's
+    width along, a `row` item is recorded (it opens no layer). The composite carries the row on:
+    an end piece that carries it (`carryLo` / `carryHi`, below) repeated out to the view's
+    sides, and a piece reaching the text box's line (the cart's text box hid the rows below it)
+    run on down from its foot (its last texel row) to the view's bottom, inside the canvas's box
+    too. The row's own pieces are drawn in their layer, or uncut past the canvas's edges
+    (`freeDraw`, below). `stats().row`.
+  - **Mosaics** (`mosaicPiece`): big upright quads (48 px a side or more, none covering the
+    scene alone) drawn one after another that together cover the canvas down to the text
+    box's line (Seismic Toss's starry sky: six different tiles in two rows, so no row repeats).
+    Seen covering it in a battle pass (`self.mosaicNext`, keyed by picture and viewport), its
+    pieces are `screen` draws in the next (`self.mosaicNow`): one whole-scene layer, a frame
+    late.
+  - **Effects past the canvas** (`freeDraw`, `drawFree`; with or without fill): a layer is the
+    canvas's size, so a move's effect drawn partly past its edges was cut off there, though
+    zoomed out the view shows past it (a slash on a giant near a side, a burst low on the
+    player's side). An image draw in the scene that crosses an edge (its corners through the
+    draw's own rotation, scale and origin, and the transform: partly on the canvas, partly off;
+    one wholly off may be parked there to hide it) is recorded as a `free` item, its quad's
+    viewport as drawn, and replayed in the composite at the scene's mapping, clipped only by the
+    view. Up to 48 a pass (`freeMax`), the rest in their layer as before. A row's pieces
+    crossing the edges are drawn this way; the row adds only what lies past them.
+  - **Which end carries a row on:** the row's lowest piece (its body: a wave's water, the
+    crest standing taller above it), and a piece seen repeated in a row before (`rowSeen`,
+    weak by picture), even when it shows only once in this one (Muddy Water's last frames); the row's run-on is also drawn inside the canvas below its pieces' feet. A row
+    no longer opens a new layer after it.
+  - Checked in game with `tests/drivers/ess_scene.lua` (WoobleDex in mods/: its animations in a
+    3D battle, both sides, shots and frame times; `MOVES=`, `HD_PLAYER` / `HD_ENEMY`, `HD_SIZE`):
+    Spacial Rend, Springtide Storm, Seed Flare, Shadow Force, Surf, Spectral Thief and Steam
+    Eruption cover the view at zoom 1, 0.49 (a Wailord) and 1.8 (two small ones), wide and
+    upright. `move_edges.lua` logs `plane` and `row` per move. `COVER=1` measures every 6
+    frames how much the view's outer 8% a side and its middle 30% changed from the battle before
+    the move: "boxed" when the middle changed (over 30 of 255) and the sides did not (under 6),
+    a background stopped at the canvas's box; all 168 WoobleDex animations with a background or
+    big screen pieces are swept that way at Wailord's zoom (0.49).
   - **Effects that stop at the text box's line:** the cart's colour fade (`P.drawColorEffect`,
     Encore's and Flatter's dimming, through their spotlight's window) covers rows 0 to 112
     only, since the text box hid the rest. A `screen` or `edge` layer whose draws all end on

@@ -64,7 +64,7 @@ local function fakeGraphics()
     local vp = type(q) == "table" and q.getViewport and { q:getViewport() } or nil
     G.log[#G.log + 1] = { op = "draw", target = st.canvas, image = img, args = { ... },
                           blend = st.blend[2], mode = st.blend[1], uniforms = u, vp = vp,
-                          scissor = st.scissor, shader = st.shader }
+                          scissor = st.scissor, shader = st.shader, tx = st.tx, sx = st.sx }
   end
   function G.rectangle(mode, x, y, w, h)
     G.log[#G.log + 1] = { op = "rect", target = st.canvas, args = { mode, x, y, w, h } }
@@ -1637,6 +1637,134 @@ do
   -- a whole background (the canvas's size) still covers the screen as a whole-scene layer
   cur, layers = frame(function() G.draw(wave, G.newQuad(0, 0, 240, 160, 512, 256), 0, 0) end)
   check(layers[1] and layers[1].screen, "a whole background is still a whole-scene layer")
+  -- a plane (WoobleDex's Gen 9 animations: a picture repeated across the screen as copies on a
+  -- grid from its top left, scrolled): the copies together are one whole-scene layer, whatever
+  -- the scroll (alone, none covers the scene)
+  local sheet = canvas("sheet", 1024, 1024)
+  local pq = G.newQuad(10, 20, 240, 160, 1024, 1024)
+  cur, layers = frame(function()
+    G.draw(sheet, pq, -100, 0)
+    G.draw(sheet, pq, 140, 0)
+  end)
+  -- (the scene's layers: those before the UI's seam)
+  local function sceneLayers()
+    local out = {}
+    for _, it in ipairs(cur.items) do
+      if it.kind == "seam" then break end
+      if it.kind == "layer" then out[#out + 1] = it end
+    end
+    return out
+  end
+  layers = sceneLayers()
+  check(#layers == 1 and layers[1].screen, "a plane scrolled sideways: its two copies one whole-scene layer")
+  pq:setViewport(0, 0, 286, 480)
+  cur, layers = frame(function()
+    G.draw(sheet, pq, -41, -388)
+    G.draw(sheet, pq, -41, 92)
+    G.draw(spark, 100, 60)
+  end)
+  layers = sceneLayers()
+  check(#layers == 2 and layers[1].screen and not layers[2].screen,
+    "...and scrolled up (Surf's wave): one whole-scene layer, a sprite drawn next not in it")
+  -- one copy alone (Encore's dimming at 0, 0, its spotlight's window on its target): not a plane
+  pq:setViewport(0, 0, 240, 100)
+  cur, layers = frame(function() G.draw(sheet, pq, 0, 0) end)
+  layers = sceneLayers()
+  check(#layers == 1 and not layers[1].screen and layers[1].edge, "a single picture at the top left stays an edge layer")
+  -- a run's first copy after an edge draw: a layer of its own, which alone becomes whole-scene
+  pq:setViewport(0, 0, 240, 160)
+  cur, layers = frame(function()
+    G.polygon("fill", 0, 50, 240, 40, 240, 112, 0, 112)
+    G.draw(sheet, pq, -100, -30)
+    G.draw(sheet, pq, 140, -30)
+  end)
+  layers = sceneLayers()
+  check(#layers == 2 and layers[1].edge and not layers[1].screen and layers[2].screen,
+    "...a plane after an edge effect: the effect's layer kept, the plane's its own")
+  -- a row of pieces side by side across the scene (WoobleDex's Surf: its wall of water, the
+  -- water and the crest by turns, sharing their foot): carried on to the screen's sides, the
+  -- water repeated, and down from the canvas's foot to the screen's bottom
+  local water, crest = G.newQuad(0, 500, 72, 54, 1024, 1024), G.newQuad(100, 500, 72, 72, 1024, 1024)
+  local k = 180 / 72
+  local function wall()
+    G.draw(sheet, water, -175, 25, 0, k, k)
+    G.draw(sheet, crest, 5, -20, 0, k, k)
+    G.draw(sheet, water, 185, 25, 0, k, k)
+  end
+  local function rowDraws()
+    local out = {}
+    for _, ev in ipairs(G.log) do if ev.op == "draw" and ev.image == sheet then out[#out + 1] = ev end end
+    return out
+  end
+  local function rowOf()
+    for _, it in ipairs(cur.items) do if it.kind == "row" then return it end end
+  end
+  -- (the pieces drawn past the canvas: their span, the crest's places, a foot run on down)
+  local function across()
+    local xl, xr, crestX, down = math.huge, -math.huge, {}, false
+    for _, ev in ipairs(rowDraws()) do
+      xl, xr = math.min(xl, ev.args[2]), math.max(xr, ev.args[2] + ev.vp[3] * ev.args[5])
+      if near(ev.vp[1], 100) and near(ev.vp[4], 72) then crestX[math.floor(ev.args[2] + 0.5)] = true end
+      if near(ev.vp[4], 1) and near(ev.args[3] + ev.args[6], 1080) then down = true end
+    end
+    local places = 0
+    for _ in pairs(crestX) do places = places + 1 end
+    return xl, xr, places, down
+  end
+  cur = frame(function() wall() end)
+  local row = rowOf()
+  local xl, xr, places = across()
+  check(row and row.carryLo and row.carryHi and #row.pieces == 3, "a row of pieces across the scene is recorded")
+  check(xl <= 0 and xr >= 1920, "...carried on to the screen's sides (" .. xl .. " to " .. xr .. ")")
+  check(places == 1, "...the water repeated, its crest (shown once) never")
+  -- the scene raised, the canvas's foot on the screen: the row runs on below it
+  hd.fit.extra = 60
+  cur = frame(function() wall() end)
+  hd.fit.extra = 0
+  local _, _, _, down = across()
+  check(down, "...and a piece reaching the text box's line runs on down to the screen's bottom")
+  -- the crest and one water piece: neither repeats, so each is drawn whole and the row ends there
+  local crest2, water2 = G.newQuad(200, 500, 72, 72, 1024, 1024), G.newQuad(300, 500, 72, 54, 1024, 1024)
+  cur = frame(function()
+    G.draw(sheet, crest2, -85, -20, 0, k, k)
+    G.draw(sheet, water2, 95, 25, 0, k, k)
+  end)
+  row = rowOf()
+  local n = #rowDraws()
+  check(row and not row.carryLo and row.carryHi and n > 0,
+    "a row of a crest and its water: the crest, taller, is its end; the water carries it on (" .. n .. " draws)")
+  -- a move's effect crossing a side (a slash on a giant near the canvas's edge): recorded and
+  -- drawn uncut over the view at the scene's mapping; one wholly off the canvas (parked there to
+  -- hide it) is not
+  local function freeItems()
+    local out = {}
+    for _, it in ipairs(cur.items) do if it.kind == "free" then out[#out + 1] = it end end
+    return out
+  end
+  local slash = canvas("slash", 64, 32)
+  cur = frame(function() G.draw(slash, 200, 40) end)
+  local fr = freeItems()
+  local sd = drawOf(slash)
+  -- (clipped only by the screen, past the canvas's right side, column 240)
+  check(#fr == 1 and sd and sd.scissor and sd.scissor[1] + sd.scissor[3] > sd.tx + 240 * sd.sx + 1,
+    "an effect crossing the canvas's right side is drawn uncut past it")
+  cur = frame(function() G.draw(slash, 225, 40, 0.5, 1, 1, 32, 16) end)
+  check(#freeItems() == 1, "...turned too")
+  cur = frame(function() G.draw(slash, -100, 40) end)
+  check(#freeItems() == 0, "one wholly off the canvas is not drawn")
+  cur = frame(function() G.draw(slash, 100, 40) end)
+  check(#freeItems() == 0, "one inside it stays in its layer")
+  -- a mosaic (pieces that together cover the scene, Seismic Toss's sky): a whole-scene layer
+  -- from the pass after it is seen
+  local left, right = G.newQuad(0, 700, 120, 112, 1024, 1024), G.newQuad(120, 700, 120, 112, 1024, 1024)
+  local function sky()
+    G.draw(sheet, left, 0, 0)
+    G.draw(sheet, right, 120, 0)
+  end
+  cur = frame(sky)
+  cur, layers = frame(sky)
+  layers = sceneLayers()
+  check(#layers == 1 and layers[1].screen, "a mosaic covering the scene: one whole-scene layer")
   -- Fill Screen off: nothing of this
   cur, layers = frame(function()
     G.polygon("fill", 0, 50, 240, 40, 240, 112, 0, 112)
@@ -1645,6 +1773,10 @@ do
   local any = false
   for _, it in ipairs(cur.items) do if it.kind == "wide" or it.edge then any = true end end
   check(not any, "Fill Screen off: no edge layers, no backgrounds across the view")
+  cur = frame(function() wall() end, false)
+  any = false
+  for _, it in ipairs(cur.items) do if it.kind == "row" then any = true end end
+  check(not any, "Fill Screen off: no rows carried on")
 end
 
 -- a band's last solid row, read back from its pixels: nine tenths of the width opaque
