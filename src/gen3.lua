@@ -46,9 +46,10 @@ local Gen3 = {}
 local BACK_SPEC = { side = "player", trainer = true, pinBottom = 112 }
 
 -- the player's HP boxes with no bottom UI drawn under them (Gen3.prepare's noteDrop): lowered
--- by the text box's rows (112-160), their bottom never below BOX_LOW (2 rows above the
--- screen's bottom, as the cart leaves them above the text box). Gen3.boxDrop: this frame's
-Gen3.BOX_DROP, Gen3.BOX_LOW = 48, 158
+-- until their bottom is level with the player's Pokemon's feet (hd.fit.playerFeetUI), never
+-- above where the game draws them, nor lower than BOX_MARGIN rows above the screen's bottom
+-- (the cart leaves them 2 above its text box) or BOX_LOW. Gen3.boxDrop: this frame's, whole rows
+Gen3.BOX_LOW, Gen3.BOX_MARGIN = 158, 2
 Gen3.boxDrop = 0
 
 -- the Pokedex screens and the summary screen, by module name; each is wrapped when it is first
@@ -505,8 +506,9 @@ function Gen3.prepare(Engine, hd)
     end
     -- a battle hiding its bottom UI (Ui.bottomUIVisible: Kanto Gear's GEAR view shows the
     -- commands elsewhere) draws neither the bar nor the cart's text box there: the player's HP
-    -- boxes, and its party's ball row, are drawn lower, in the text box's rows (BOX_DROP, never
-    -- past BOX_LOW), and the fit sees them there. Not while the battle hides its HP boxes too
+    -- boxes, and its party's ball row, are drawn lower, their bottom on the Pokemon's feet as the
+    -- last frame drew them (never past the screen's bottom: BOX_LOW, BOX_MARGIN), and the fit
+    -- sees them there. Not while the battle hides its HP boxes too
     -- (Kanto Gear's FULL view), nor with Battle HD off. Gen3.boxDrop: this frame's, canvas rows
     local okU, Ui = pcall(require, "src.core.game3.battle.ui")
     local okC, Chrome = pcall(require, "src.ui.game3.battle_chrome")
@@ -526,10 +528,14 @@ function Gen3.prepare(Engine, hd)
         base[p] = rows
       end
       local drop = 0
-      if lowered() then
-        drop = math.max(0, math.min(Gen3.BOX_DROP, Gen3.BOX_LOW - (rows and rows[2] or 110)))
+      local feet = tonumber(hd.fit.playerFeetUI)
+      if feet and lowered() then
+        local bottom = rows and rows[2] or 110
+        local low = math.min(Gen3.BOX_LOW, (tonumber(hd.fit.screenBottomUI) or 160) - Gen3.BOX_MARGIN)
+        drop = math.max(0, math.min(math.floor(low - bottom), math.floor(feet - bottom + 0.5)))
       end
       Gen3.boxDrop = drop
+      hd.stats.boxDrop = drop
       if rows then p[2], p[4] = rows[1] + drop, rows[2] + drop end
     end
     if okC and type(Chrome) == "table" and type(Chrome.drawPartyBar) == "function"

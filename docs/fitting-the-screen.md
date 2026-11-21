@@ -31,8 +31,8 @@ screen, which gives the Pokémon more room. Gold, Silver and Crystal keep the ga
 screen.
 
 When KantoGear's GEAR screens take the battle's menus to their own screen, nothing is left at
-the bottom of the battle, so your Pokémon's HP box moves down into that space, upright or
-sideways.
+the bottom of the battle, so your Pokémon's HP box moves down into that space to sit level
+with your Pokémon's feet, upright or sideways, and always stays on the screen.
 
 ## On a phone 📱
 

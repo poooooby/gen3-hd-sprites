@@ -3934,6 +3934,41 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       return cx - fx * k * S, cy - (fy * k + up) * Sy, S * k, Sy * k
     end
     local sx0, sy0, ssx, ssy = zoomed(z, lift)
+    -- the player's Pokemon's feet (the bottom of its art where it rests, hd.prefit, as this
+    -- frame draws it: its scale, its side's drop) and the screen's bottom, in UI canvas rows:
+    -- the adapter stands the player's HP boxes on those feet when no bottom UI is drawn under
+    -- them (src/gen3.lua noteDrop). The lowest of a side's two; nil with none out
+    do
+      local feet
+      if cur.pass == "battle" and cur.hasUI then
+        local dy = fitted and ((cur.shift.playerY or 0) - (cur.shift.playerRaise or 0)) or 0
+        for _, rec in pairs(cur.prefit) do
+          local spec = rec.spec
+          if spec.side == "player" and not spec.trainer and rec.out ~= false then
+            local ok, _, Y, _, hpy, k, tex, quad = pcall(place, rec)
+            if ok and Y then
+              -- (its art's last row, in its frame: else the frame's bottom)
+              local rows = type(spec.art) == "table" and tonumber(spec.art[4])
+              if not rows and quad then
+                local _
+                _, _, _, rows = quad:getViewport()
+              elseif not rows and tex and tex.getHeight then
+                rows = tex:getHeight()
+              end
+              if rows then
+                local y = sy0 + (Y + (rows - hpy) * math.abs(rec.sy * k * rec.tsy) + dy) * ssy
+                local row = (y - uby) / Uy
+                if not feet or row > feet then feet = row end
+              end
+            end
+          end
+        end
+      end
+      fit.playerFeetUI = feet
+      local vb = sceneBox or box
+      fit.screenBottomUI = vb and (vb[2] + vb[4] - uby) / Uy or cur.h
+      self.stats.playerFeetUI, self.stats.screenBottomUI = feet, fit.screenBottomUI
+    end
     -- the far wallpaper does not rise: its rows below the text box's top are not scenery
     -- (the cart hides them), so the text box's line stays its bottom edge
     local bkx, bky, bksx, bksy = zoomed(zb, 0)

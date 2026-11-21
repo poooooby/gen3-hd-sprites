@@ -164,7 +164,8 @@ local function body(game, log)
       name, tostring(reached), w, h, R.vux, R.vuy, R.vuw, R.vuh, tostring(R.cut), ctop, st.fill or -1, st.uiScale or -1,
       st.uiTopDy or 0, st.zoom or -1, st.composites or 0, st.flattened or 0, tostring(st.failed))
       .. "  grow " .. tostring(st.grow) .. " inward " .. tostring(st.inward) .. " shiftE " .. tostring(st.shiftEnemy) .. " shiftP " .. tostring(st.shiftPlayer)
-      .. " scene " .. tostring(st.scene) .. " " .. tostring(st.sceneError) .. " packed " .. tostring(st.packed) .. " shrink " .. tostring(st.worldShrink) .. " rest " .. tostring(st.boxRest))
+      .. " scene " .. tostring(st.scene) .. " " .. tostring(st.sceneError) .. " packed " .. tostring(st.packed) .. " shrink " .. tostring(st.worldShrink) .. " rest " .. tostring(st.boxRest)
+      .. " feetUI " .. tostring(st.playerFeetUI) .. " bottomUI " .. tostring(st.screenBottomUI) .. " boxDrop " .. tostring(st.boxDrop))
     local defB = Map.currentDef()
     log(("%s: at %s %s,%s facing %s moving %s stage %s score %s"):format(name, tostring(defB and (defB.id or defB.name)),
       tostring(Player.cellX), tostring(Player.cellY), tostring(Player.facing), tostring(Player.moving),
