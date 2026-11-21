@@ -665,6 +665,15 @@ battle pass (Battle HD on). FireRed / LeafGreen keep the cart's boxes (`Bar.LAYO
   GEAR / FULL GEAR take the battle's menus to their own screen; its hook hides them), and the
   battle's message is then not drawn either (every Gen 3 game, Oak's voiceover excepted), so
   no text is left floating over the scene. Without a battle pass the game's own boxes draw.
+- **The player's HP boxes lowered:** while `Ui.bottomUIVisible()` is false and
+  `Ui.statusHUDVisible()` is not (GEAR, not FULL GEAR; Battle HD on, any Gen 3 game), each
+  battle frame (`noteDrop` in `Gen3.prepare`) sets `Gen3.boxDrop`: `Gen3.BOX_DROP` (48, the
+  text box's rows), never putting the boxes' bottom below `Gen3.BOX_LOW` (158; Ruby /
+  Sapphire's doubles drop 46). `Healthbox.draw` for battlers 0 and 2 is drawn translated by
+  it (inside the box wrapper, so other mods' badges move too), the player's party ball row
+  (`BattleChrome.drawPartyBar`, not the opponent's) with it, and the fit's player box rect
+  (`fit.ui.player`) moves down by the same rows. A canvas-row move, so the stacked and the
+  wide layouts both show it.
 - **Driver:** `tests/drivers/portrait_battle.lua` with `HD_BAR=1` shoots the first message, the
   menu and the move menu; `HD_PLAYER` / `HD_ENEMY=SPECIES_X:level` the battlers; `HD_FILLOFF=1`
   Fill Screen off; `HD_HIDEBOTTOM=1` the bottom UI hidden as Kanto Gear hides it.

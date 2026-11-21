@@ -45,6 +45,12 @@ local Gen3 = {}
 -- the bar is drawn: Gen3.wrapBar)
 local BACK_SPEC = { side = "player", trainer = true, pinBottom = 112 }
 
+-- the player's HP boxes with no bottom UI drawn under them (Gen3.prepare's noteDrop): lowered
+-- by the text box's rows (112-160), their bottom never below BOX_LOW (2 rows above the
+-- screen's bottom, as the cart leaves them above the text box). Gen3.boxDrop: this frame's
+Gen3.BOX_DROP, Gen3.BOX_LOW = 48, 158
+Gen3.boxDrop = 0
+
 -- the Pokedex screens and the summary screen, by module name; each is wrapped when it is first
 -- seen loaded, and draws in a dex pass
 local DEX_MODULES = { "src.ui.game3.rse.pokedex", "src.ui.game3.pokedex", "src.ui.game3.summary_menu",
@@ -497,12 +503,52 @@ function Gen3.prepare(Engine, hd)
         + ((type(opts) == "table" and tonumber(opts.oy)) or 0)
       return ox, oy
     end
+    -- a battle hiding its bottom UI (Ui.bottomUIVisible: Kanto Gear's GEAR view shows the
+    -- commands elsewhere) draws neither the bar nor the cart's text box there: the player's HP
+    -- boxes, and its party's ball row, are drawn lower, in the text box's rows (BOX_DROP, never
+    -- past BOX_LOW), and the fit sees them there. Not while the battle hides its HP boxes too
+    -- (Kanto Gear's FULL view), nor with Battle HD off. Gen3.boxDrop: this frame's, canvas rows
+    local okU, Ui = pcall(require, "src.core.game3.battle.ui")
+    local okC, Chrome = pcall(require, "src.ui.game3.battle_chrome")
+    local base = setmetatable({}, { __mode = "k" }) -- [a fit's player box rect] = its own rows
+    local function lowered()
+      if not (hd.enabled.battle and okU and type(Ui) == "table") then return false end
+      local okB, bottom = pcall(Ui.bottomUIVisible)
+      if not okB or bottom ~= false then return false end
+      local okS, status = pcall(Ui.statusHUDVisible)
+      return okS and status ~= false
+    end
+    local function noteDrop()
+      local p = hd.layout == "gen3" and hd.fit.ui and hd.fit.ui.player
+      local rows = type(p) == "table" and base[p]
+      if type(p) == "table" and not rows then
+        rows = { p[2], p[4] }
+        base[p] = rows
+      end
+      local drop = 0
+      if lowered() then
+        drop = math.max(0, math.min(Gen3.BOX_DROP, Gen3.BOX_LOW - (rows and rows[2] or 110)))
+      end
+      Gen3.boxDrop = drop
+      if rows then p[2], p[4] = rows[1] + drop, rows[2] + drop end
+    end
+    if okC and type(Chrome) == "table" and type(Chrome.drawPartyBar) == "function"
+        and not ours[Chrome.drawPartyBar] then
+      local drawPartyBar = Chrome.drawPartyBar
+      Chrome.drawPartyBar = function(x, y, balls, ox, isOpponent, ...)
+        if not isOpponent and Gen3.boxDrop ~= 0 and type(y) == "number" then y = y + Gen3.boxDrop end
+        return drawPartyBar(x, y, balls, ox, isOpponent, ...)
+      end
+      ours[Chrome.drawPartyBar] = true
+    end
+
     local function wrapBoxes()
       if not (okH and type(Healthbox) == "table" and type(Healthbox.draw) == "function" and hd.boxBegin) then return end
       if Healthbox.draw == boxDraw then return end
       local inner = Healthbox.draw
-      local function after(began, ok, ...)
+      local function after(began, pushed, ok, ...)
         if began then hd.boxEnd() end
+        if pushed then love.graphics.pop() end
         boxDepth = boxDepth - 1
         if not ok then error((...), 0) end
         return ...
@@ -512,8 +558,14 @@ function Gen3.prepare(Engine, hd)
         local id = side == "enemy" and 1 or side == "player" and 0 or side
         local ox, oy = boxOffsets(side, opts)
         boxDepth = boxDepth + 1
+        -- (the player's boxes, 0 and 2, lowered: noteDrop)
+        local pushed = Gen3.boxDrop ~= 0 and (id == 0 or id == 2)
+        if pushed then
+          love.graphics.push()
+          love.graphics.translate(0, Gen3.boxDrop)
+        end
         local began = hd.boxBegin(id, ox, oy)
-        return after(began, pcall(inner, side, battler, opts, ...))
+        return after(began, pushed, pcall(inner, side, battler, opts, ...))
       end
       Healthbox.draw = boxDraw
       ours[boxDraw] = true
@@ -537,6 +589,7 @@ function Gen3.prepare(Engine, hd)
     if not ours[battleDraw] then
       Battle.draw = function(...)
         pcall(noteDouble)
+        pcall(noteDrop)
         -- (a turn playing, anything but the command menu: Battle Fit only pulls out meanwhile)
         if hd.setTurn then hd.setTurn(Battle._phase ~= nil and Battle._phase ~= "command") end
         pcall(wrapBoxes)

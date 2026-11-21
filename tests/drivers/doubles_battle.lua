@@ -85,6 +85,10 @@ local function body(game, log)
   if not hd then log("FAIL gen3-hd-sprites exports missing"); return end
   -- HD_REALSIZES=off: 3D Sizing off (the 3D world's battlers drawn as in classic battles)
   if os.getenv("HD_REALSIZES") == "off" and hd.setRealSizes then hd.setRealSizes(false) end
+  -- HD_HIDEBOTTOM=1: the battle's bottom UI hidden, as Kanto Gear's GEAR screens hide it
+  if os.getenv("HD_HIDEBOTTOM") == "1" then
+    require("src.core.game3.battle.ui").bottomUIVisible = function() return false end
+  end
   for _, id in ipairs({ "play_nav", "ds_touch" }) do
     loader.modOptions[id] = loader.modOptions[id] or {}
     loader.modOptions[id].display = "off"

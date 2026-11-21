@@ -30,6 +30,10 @@ In Gen 3's classic battles and double battles, the opponents' HP boxes move up t
 screen, which gives the Pokémon more room. Gold, Silver and Crystal keep the game's own framed
 screen.
 
+When KantoGear's GEAR screens take the battle's menus to their own screen, nothing is left at
+the bottom of the battle, so your Pokémon's HP box moves down into that space, upright or
+sideways.
+
 ## On a phone 📱
 
 Held upright, the text box runs full width above the touch controls and the battle grows into
