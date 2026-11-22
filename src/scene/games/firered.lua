@@ -228,18 +228,19 @@ F.trees = {
   cone = { axis = 16, depth = 40, radius = 16, squash = 0.65, tip = 3, skirt = 41 },
   trunk = { rgb(0x41, 0x39, 0x31), rgb(0x73, 0x62, 0x62) },
   ground = { [0x00E] = 0x001, [0x00F] = 0x001, [0x255] = 0x273, [0x25D] = 0x273, [0x0D6] = 0x0E7, [0x0D7] = 0x0E7 },
-  -- Viridian Forest's own tree (its tileset's, Six Island's Pattern Bush's too): 3x3 cells, a tip
-  -- row over the grass (288-28A), a crown row (290-292 in a stack, 2A0-2A2 at its foot, 28E / 2A1
-  -- / 28F alone) and a trunk row (298-29A in a stack, the next tree's crown behind; 2A3-2A5 alone),
-  -- stacked two rows apart. Drawn whole on the upper layer over plain grass, its grass and its
-  -- shadow's rings too (groundColours); 299 is drawn alike as the middle of a stack's top tip row
-  -- (tipToo: no crown row over it). Read off the alone tree in the forest's south (its tip row
-  -- 288-28A): a dome, its flat top drawn on row 0 (seen from above: the apex 6 texels over the
-  -- top row's height, tip -6), the skirt's front edge at row 30 (the leaves' last, over the trunk's
-  -- top at 31), the tree standing at its trunk about column 24 (its foot drawn at row 37, the
-  -- trunk's middle 34), its crown 0.4 of its width in depth (a crown that stood at its shadow's
-  -- middle, row 38, at the General tree's 0.65, stood on a trunk 1.4 tiles tall); the trunk in its
-  -- three colours.
+  -- Viridian Forest's own tree (its tileset's, Six Island's Pattern Bush's too): 3 cells across, a
+  -- crest (its crown's top drawn in the middle cell over its tip row: 281 on the grass, 284 on the
+  -- tall grass, 286 / 287 on the sand, 283 by the gate's wall), a tip row over the grass
+  -- (288-28A), a crown row (290-292 in a stack, 2A0-2A2 at its foot, 28E / 2A1 / 28F alone) and a
+  -- trunk row (298-29A in a stack, the next tree's crown behind; 2A3-2A5 alone), stacked two rows
+  -- apart. Drawn whole on the upper layer over plain grass, its grass and its shadow's rings too
+  -- (groundColours); 299 is drawn alike as the middle of a stack's top tip row (tipToo: no crown
+  -- row over it). Read off the alone tree in the forest's south (54-57; 48 x 64 from its crest
+  -- row's top): a round bush, its top drawn at row 10, its front's lowest leaves at row 46 (over
+  -- the trunk's top), the tree standing at its trunk about column 24 (its foot drawn at row 53,
+  -- the trunk's middle 50). It stands as a solid crown (Trees.solidTree): an ellipsoid 0.7 of its
+  -- width in depth - the next tree of a stack, two rows on, just touching it - so from the GBA's
+  -- view it is the drawing and from the battle's a round bush; the trunk in its three colours.
   -- Three Island's Berry Forest draws the same tree in its own tileset, its leaves golden: the
   -- same species data, its art read off its own tiles.
   forests = {
@@ -248,12 +249,18 @@ F.trees = {
         [0x290] = 0, [0x2A0] = 0, [0x28E] = 0, [0x291] = 1, [0x2A1] = 1, [0x292] = 2, [0x2A2] = 2, [0x28F] = 2,
         [0x298] = 3, [0x2A3] = 3, [0x299] = 4, [0x2A4] = 4, [0x29A] = 5, [0x2A5] = 5,
       },
-      alone = { tip = { 0x288, 0x289, 0x28A }, crown = { 0x28E, 0x2A1, 0x28F }, trunk = { 0x2A3, 0x2A4, 0x2A5 } },
-      cone = { axis = 24, depth = 34, radius = 22, squash = 0.4, tip = -6, skirt = 30, lid = 25 },
+      alone = { crest = { 0x009, 0x281, 0x001 }, tip = { 0x288, 0x289, 0x28A }, crown = { 0x28E, 0x2A1, 0x28F },
+                trunk = { 0x2A3, 0x2A4, 0x2A5 } },
+      cone = { axis = 24, depth = 50, radius = 22, squash = 0.7, tip = 10, skirt = 46, solid = true },
       trunk = { rgb(0x41, 0x39, 0x31), rgb(0x83, 0x6A, 0x52), rgb(0x62, 0x41, 0x4A) },
       groundColours = { rgb(0x73, 0xCD, 0xA4), rgb(0x41, 0xB4, 0x8B), rgb(0x18, 0xA4, 0x6A), rgb(0x39, 0x73, 0x18) },
-      ground = { [0x288] = 0x009, [0x289] = 0x009, [0x28A] = 0x009 },
+      -- (a crest lies as the ground under it)
+      ground = { [0x288] = 0x009, [0x289] = 0x009, [0x28A] = 0x009,
+                 [0x281] = 0x011, [0x283] = 0x065, [0x284] = 0x00D, [0x286] = 0x0E1, [0x287] = 0x0E2 },
       tipToo = { [0x299] = true },
+      -- (the crown row's sides, 28E / 28F, are drawn under the player: their lower leaves on the
+      -- lower layer; the grass under its leaves the plain grass's)
+      leavesBelow = true, leafGround = 0x009,
     },
   },
 }

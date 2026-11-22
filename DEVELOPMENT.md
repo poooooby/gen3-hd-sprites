@@ -1812,8 +1812,9 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
 - **A game's own components (`games/<game>.lua` `components`, `Components.useGame`):** run specs after Hoenn's, keyed by the family's tileset names (`fr:rom082d4b84`, so neither game's are drawn by the other's). Route 23's gate walls (`fr_route23_wall`): `K.Relief` runs of the walls' upper layer, 31 texels of front (the cornice's dark band and the façade, rows 33-63 of its two rows) and the rest the top - the slats and the column ridges; no `block` (a seam copies `height` rows of the one cell south, and 31 > 16), so each run is built whole. The statues before the pillars are `league_statue`'s (the run leaves their cells: each pillar's front ends at its plinth, an alcove). The arches over the gaps are a spec (`route23_arch`, `anywhere`: over grass, water or path): two lintel boxes on the pillars' tops (front z 74, 8 deep: 30-38 and 59-62 high) and an upright card for the struts and flared ends, their faces clear where nothing is drawn. The court's round stones are a prop (`fr_route23_stone`: a squat turned stone, keyed to the route's tileset). Route 23's flat cells 1109 -> about 90 (left: the League gate's roof, cut by the seam; the pedestals' and walls' shadows, flat as drawn). Routes 12 and 13's boardwalks (`fr_boardwalk`, rom_082d4b0c): the decks and the cells under their south edges (308-30B: the dark edge, the pilings, the shade on the water) one run, 6 texels of front (rows 31-36), `hull = 1` joining a north-south walk's planks across their one-texel gaps (left clear); 802 -> 205 flat cells (the rest shores and grass). Saffron's iron railing (`fr_saffron_railing`, rom_082d4b9c): Rustboro's railing recipe - 11 texels (the top rail rows 3-5, the bars to row 13), `hull` 11 so each bar's column is a whole front, `bridge` 3, 319's bars the `flank` of a run down a column; 324 -> 72 flat cells (slopes, signposts, the gatehouses at the seams). Fuchsia's pens (the Safari's tileset, rom_082d4b54): the hedges (`fr_fuchsia_hedge`, 9 texels of front) and the grey panel fence (`fr_fuchsia_fence`, 12; 338 / 339 draw it in their lower layer, so it reads both layers less the grass). **`propAlias`** (`games/<game>.lua`, read by `propMid`): a secondary's own lower-layer drawing of a General prop read as the General's metatile - Fuchsia's pickets 336 / 337 / 33F as 0E7 / 0ED / 0F5 - so their posts stand as the picket props and their ground is the plain grass. **Lower-layer props (`lower` in `Props.OBJECTS`):** found on the raw metatiles' lower layer (`World.subtiles(L, nil, true)`, `Props.find` passing `lower` to its `subtiles`), their art the cell's own lower layer less what the plain ground it is aliased to (`propAlias`) draws alike there; the ground laid under them is that plain ground. The Safari's stakes (`fr_stake`: the General's 340 over 356, palette 1, only ever in the lower layer of 308-30A under a tree's crest; the log post's lathe), the Safari's 308-30A aliased to grass (001).
 - **FireRed's sea rocks (`props.lua`):** `fr_sea_rock` and `fr_sea_rock_pale`, each four General tiles in a square at the corner four metatiles share (as Emerald's sea rock): tiles 420-423 in palette 4 (metatiles 0x110-0x119) and 173/174 over 189/190 in palette 2 (0x1CB-0x1D4). They stand as Mounds on the General's plain water (0x12B), their pale outline the foam. The relief solver's own copy of the objects is unchanged (FireRed's relief bytes stay the same); the rocks' cells are water to it.
 - **A forest's own tree (`trees.forests`):** Viridian Forest's tileset (Six Island's Pattern Bush's
-  too) draws its own tree, 3x3 cells (tip 288-28A, crown 290-292 / 2A0-2A2 / 28E-2A1-28F, trunk
-  298-29A / 2A3-2A5), stacked two rows apart. It stands as the General tree does, as a species of
+  too) draws its own tree, 3 cells across (crest 281 / 284 / 286 / 287 / 283 over the middle of
+  the tip row, laid as the ground under it; tip 288-28A, crown 290-292 / 2A0-2A2 / 28E-2A1-28F,
+  trunk 298-29A / 2A3-2A5), stacked two rows apart. It stands as the General tree does, as a species of
   its own (`Trees.species[k]`, k >= 1; `[0]` the General tree): named by the maps drawn with it
   (`layouts`, resolved to this game's tileset by `Trees.resolveForests` through `layoutCtx`: its
   tilesets are named by ROM address, LeafGreen's apart), its parts numbered from 16
@@ -1822,8 +1823,18 @@ WoobleView's own UI (not a port). The engine has no prompt, progress, action-row
   tileset (`Trees.kantoArt(px, set, k)`; a species whose art can't be read is `failed` and lies
   flat). It draws the whole tree on the upper layer, its grass and shadow too: `groundColours` are
   read as ground, and rows under the skirt (`cone.skirt`) are read as the trunk row is (the
-  drawing: trunk, the cone's cover, or ground). Its crown is a dome whose flat top is drawn on row
-  0: the profile runs on above the drawing's top row to the apex (`tip` -6), seen from above. 299
+  drawing: trunk, the cone's cover, or ground); the crown row's sides (28E / 28F) draw their leaves
+  under the player, so `leavesBelow`, the grass under the leaves `leafGround` 009. Its crown is a
+  **solid** (`cone.solid`, `Trees.solidTree`): a closed ellipsoid, `squash` 0.7 of its width deep
+  (a stack's next tree just touching it), tall enough that at 45 degrees it spans the drawing from
+  its top (`tip`) to its front's lowest leaves (`skirt`): b + sqrt(Rz^2 + b^2) rows. Each point
+  shows the texel the 45-degree view draws there, the back its front mirrored (v = depth +
+  |z - depth| - y), from a 24 x 12 lat-long mesh (each quad's texels its corners'); the crown's
+  rows are filled out to the nearest leaf so no point is bare. The trunk is a box of its card's
+  texels, its foot the drawn foot, as deep as the foot is from the axis, 4 texels into the crown.
+  Under the leaves the ground is the shadow's drawn front turned about the tree's row. The old
+  front-only shell (squash 0.4, its flat `lid` of leaves) read as a box with a brim from the
+  battle's camera, see-through from the side. 299
   is also the middle of a stack's top tip row (`tipToo`: no crown row over it, it lays the tip's
   ground and stands nothing). Lighting finds a wider crown's middle by `crownCol` / `crownRow` /
   `crownW`. Checked at 45 degrees with the scratchpad's `tree_check2.lua` (species k): 0 of 2304

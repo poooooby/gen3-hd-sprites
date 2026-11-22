@@ -538,6 +538,17 @@ local function coneOf(k)
   C.h0 = C.cz + C.s * C.R0 - c.skirt
   C.top = C.cz - c.tip
   C.lid = c.lid
+  if c.solid then
+    -- (a solid crown, `cone.solid`: a closed ellipsoid about (axis, yc, depth), R0 wide, s * R0
+    -- deep and b tall, seen at 45 degrees from its top (drawn at row `tip`) to its front's lowest
+    -- (row `skirt`): b + sqrt(Rz^2 + b^2) rows)
+    local L = c.skirt - c.tip
+    local Rz = C.s * C.R0
+    local b = math.max(4, (L * L - Rz * Rz) / (2 * L))
+    C.solid, C.Rz, C.b = true, Rz, b
+    C.yc = C.cz - c.tip - b
+    C.h0, C.top = C.yc - b, C.yc + b
+  end
   return C
 end
 Trees.kantoCone = coneOf
@@ -563,6 +574,18 @@ end
 --- it is on the cone (not under its skirt nor past its outline).
 function Trees.kantoFront(C, x, v)
   local dx = x - C.ax
+  if C.solid then
+    -- (the ellipsoid's nearest point on the line y = t, z = v + t, else the axis' plane)
+    local k = 1 - (dx / C.R0) ^ 2
+    local ib, iz = 1 / (C.b * C.b), 1 / (C.Rz * C.Rz)
+    local A = ib + iz
+    local B = -2 * C.yc * ib + 2 * (v - C.cz) * iz
+    local K = C.yc * C.yc * ib + (v - C.cz) ^ 2 * iz - k
+    local disc = B * B - 4 * A * K
+    if k <= 0 or disc < 0 then return C.cz - v, C.cz, false end
+    local y = (-B + math.sqrt(disc)) / (2 * A)
+    return y, v + y, true
+  end
   local function at(y)
     local R = coneRadius(C, y)
     local d = R * R - dx * dx
@@ -599,6 +622,10 @@ function Trees.kantoTree(put, x, z, k)
     local y, zz = Trees.kantoFront(C, u, v)
     return { x + u / 16, y / 16, z + zz / 16 }
   end
+  if C.solid then
+    Trees.solidTree(put, x, z, S, C)
+    return
+  end
   local quads = S.quads
   if not quads then
     quads = {}
@@ -628,6 +655,57 @@ function Trees.kantoTree(put, x, z, k)
     put({ x + tr.x0 / 16, y1 / 16, zz }, { x + tr.x1 / 16, y1 / 16, zz },
         { x + tr.x1 / 16, 0, zz }, { x + tr.x0 / 16, 0, zz },
         art.trunkX + tr.x0, ty + tr.top, art.trunkX + tr.x1, ty + tr.foot, "card")
+  end
+end
+
+-- A solid crown's mesh: SOLID_RING quads round, SOLID_BANDS from its foot to its top.
+Trees.SOLID_RING, Trees.SOLID_BANDS = 24, 12
+
+--- A species with a solid crown (`cone.solid`): the crown a closed ellipsoid (Trees.kantoCone),
+--- each point of it showing the texel the 45-degree view draws there - its front as seen, its
+--- back as its front mirrored (v = depth + |z - depth| - y) - so from the GBA's view it is the
+--- drawing and from anywhere else a round crown; the trunk a box of its card's texels, as deep as
+--- it is from the axis to its drawn foot, up into the crown.
+function Trees.solidTree(put, x, z, S, C)
+  local art = S.art
+  local tx, ty = art.texX, art.texY
+  local N, M = Trees.SOLID_RING, Trees.SOLID_BANDS
+  local cos, sin, pi, abs = math.cos, math.sin, math.pi, math.abs
+  -- (each corner in texels and its texel: x east, y up, z south)
+  local ring = {}
+  for j = 0, M do
+    local phi = -pi / 2 + pi * j / M
+    local row = {}
+    for i = 0, N do
+      local th = 2 * pi * i / N
+      local px = C.ax + C.R0 * cos(phi) * cos(th)
+      local py = C.yc + C.b * sin(phi)
+      local pz = C.cz + C.Rz * cos(phi) * sin(th)
+      row[i] = { px, py, pz, px, C.cz + abs(pz - C.cz) - py }
+    end
+    ring[j] = row
+  end
+  local function W(p) return { x + p[1] / 16, p[2] / 16, z + p[3] / 16 } end
+  for j = 0, M - 1 do
+    for i = 0, N - 1 do
+      local a, b, c, d = ring[j + 1][i], ring[j + 1][i + 1], ring[j][i + 1], ring[j][i]
+      -- (the quad's texels: its corners' along each side)
+      local u0, u1 = (a[4] + d[4]) / 2, (b[4] + c[4]) / 2
+      local v0, v1 = (a[5] + b[5]) / 2, (c[5] + d[5]) / 2
+      put(W(a), W(b), W(c), W(d), tx + u0, ty + v0, tx + u1, ty + v1, "card")
+    end
+  end
+  local tr = S.trunkCard
+  if tr then
+    local y1 = (tr.foot - tr.top) / 16
+    local x0, x1 = x + tr.x0 / 16, x + tr.x1 / 16
+    local zf = z + tr.foot / 16
+    local zb = z + math.min(tr.foot - 1, 2 * C.cz - tr.foot) / 16
+    local u0, u1, v0, v1 = art.trunkX + tr.x0, art.trunkX + tr.x1, ty + tr.top, ty + tr.foot
+    put({ x0, y1, zf }, { x1, y1, zf }, { x1, 0, zf }, { x0, 0, zf }, u0, v0, u1, v1, "card")
+    put({ x1, y1, zb }, { x0, y1, zb }, { x0, 0, zb }, { x1, 0, zb }, u0, v0, u1, v1, "card")
+    put({ x0, y1, zb }, { x0, y1, zf }, { x0, 0, zf }, { x0, 0, zb }, u0, v0, u1, v1, "card")
+    put({ x1, y1, zf }, { x1, y1, zb }, { x1, 0, zb }, { x1, 0, zf }, u0, v0, u1, v1, "card")
   end
 end
 
@@ -727,7 +805,8 @@ function Trees.kantoArt(px, set, k)
         if lr and trunkCol[x] and trunkColour[key(lr, lg, lb)] then
           trunk[v * W + x] = { lr, lg, lb }
           tx0, tx1, ttop, tfoot = math.min(tx0, x), math.max(tx1, x + 1), math.min(ttop, v), math.max(tfoot, v + 1)
-        elseif lr and select(3, Trees.kantoFront(C, x + 0.5, v + 0.5)) then
+        elseif lr and (select(3, Trees.kantoFront(C, x + 0.5, v + 0.5)) or (C.solid and leaf(x, v))) then
+          -- (what the crown covers, or - a solid crown's - its leaves drawn past it: not ground)
           crown[v * W + x] = { lr, lg, lb }
           covered[v * W + x] = true
         end
@@ -735,6 +814,27 @@ function Trees.kantoArt(px, set, k)
     end
   end
   for i, c in pairs(crown) do put(tx, i % W, math.floor(i / W), c[1], c[2], c[3], 1); n = n + 1 end
+  if C.solid then
+    -- (a solid crown shows a texel at every point of it: the rows over the skirt filled out, each
+    -- empty texel the nearest leaf's)
+    local fill, frontier = {}, {}
+    for i, c in pairs(crown) do fill[i] = c; frontier[#frontier + 1] = i end
+    while #frontier > 0 do
+      local nextF = {}
+      for _, i in ipairs(frontier) do
+        local x0, v0 = i % W, math.floor(i / W)
+        for _, d in ipairs({ { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } }) do
+          local xx, vv = x0 + d[1], v0 + d[2]
+          local j = vv * W + xx
+          if xx >= 0 and xx < W and vv >= 0 and vv < low and not fill[j] then
+            fill[j] = fill[i]; nextF[#nextF + 1] = j
+            put(tx, xx, vv, fill[i][1], fill[i][2], fill[i][3], 1)
+          end
+        end
+      end
+      frontier = nextF
+    end
+  end
   -- the ground: each row's lower layer, the trunk row's with the cone and the trunk taken off it;
   -- under the tip and crown rows' leaves the grass the tip row draws there (a reader may give a
   -- crown row's lower layer with its leaves)
@@ -751,6 +851,9 @@ function Trees.kantoArt(px, set, k)
         -- (or the species' own grass, where its tip row's lower layer is something else: Four
         -- Island's sapling's tip is drawn over the fence)
         if K.leafGround then r, g, b = px(K.leafGround, 0, x % 16, v % 16) else r, g, b = layer(x, v % 16, 0) end
+        -- (a solid crown's: the shadow's back, its drawn front turned about the tree's row)
+        local mv = math.floor(2 * C.cz - v - 1 + 0.5)
+        if C.solid and bare(x, mv) then r, g, b = drawn(x, mv) end
       end
       if v >= low and (covered[v * W + x] or trunk[v * W + x]) then
         local mv = math.floor(2 * C.cz - v - 1 + 0.5)
@@ -770,7 +873,8 @@ function Trees.kantoArt(px, set, k)
   if k == 0 then Trees.KANTO_TRUNK = nil end
   if tx1 > tx0 then
     -- (it reaches 2 texels into the skirt)
-    local top = math.floor(tfoot - C.h0 - 2)
+    -- (a solid crown's: 4 texels into it)
+    local top = math.floor(tfoot - C.h0 - (C.solid and 4 or 2))
     for x = tx0, tx1 - 1 do
       -- (the column's own topmost trunk texel, carried up)
       local colTop
@@ -778,7 +882,7 @@ function Trees.kantoArt(px, set, k)
       for v = top, H - 1 do
         local c = trunk[v * W + x]
         if not c and colTop and v < colTop then
-          if select(3, Trees.kantoFront(C, x + 0.5, v + 0.5)) then
+          if C.solid or select(3, Trees.kantoFront(C, x + 0.5, v + 0.5)) then
             -- (up the column where the cone hides it: seen at 45 degrees, nothing of it shows)
             c = trunk[colTop * W + x]
           else
