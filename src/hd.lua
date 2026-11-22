@@ -2773,6 +2773,82 @@ function HD.new(G, opts)
     return math.min(xa, xb), math.min(ya, yb), math.max(xa, xb), math.max(ya, yb)
   end
 
+  -- each battle Pokemon's body box as this frame drew it on the window (exports.battlerRect, for
+  -- a mod that draws over a battler from render.hud - Galar Rising's Dynamax cloud): by its side
+  -- ("player" / "enemy") and, in a double battle, by its battler id (0..3) too. Window pixels,
+  -- whatever the fit, the real sizes or the 3D world made of it; the parts of a pic drawn row by
+  -- row joined. Off at each frame's start (Renderer.beginFrame); its tables kept.
+  self.battlerRects = {}
+  -- who is holding the battle's HUD in place (exports.holdHud): owner -> true
+  self.hudHolds, self.hudHeld, self.heldDyTop = {}, 0, nil
+  function self.holdHud(who, on)
+    if who == nil then return end
+    self.hudHolds[who] = on and true or nil
+    local n = 0
+    for _ in pairs(self.hudHolds) do n = n + 1 end
+    self.hudHeld = n
+  end
+  function self.clearBattlerRects()
+    for _, r in pairs(self.battlerRects) do r.on = false end
+  end
+  local function noteRect(key, x0, y0, x1, y1)
+    local r = self.battlerRects[key]
+    if not r then r = {} self.battlerRects[key] = r end
+    if r.on then
+      if x0 < r[1] then r[1] = x0 end
+      if y0 < r[2] then r[2] = y0 end
+      if x1 > r[3] then r[3] = x1 end
+      if y1 > r[4] then r[4] = y1 end
+    else
+      r[1], r[2], r[3], r[4], r.on = x0, y0, x1, y1, true
+    end
+  end
+  -- a battler's tagged draw at window mapping (bx, by, bsx, bsy) - the composite's own for it
+  -- (its box: the tag's body, else its art, else its frame from its top row; canvas px as bodyRect)
+  local function noteBattler(cur, rec, bx, by, bsx, bsy)
+    local spec = rec and rec.spec
+    if not (spec and spec.side and not spec.trainer) then return end
+    local X, Y, hpx, hpy, k, _, quad = place(rec)
+    local b = type(spec.body) == "table" and spec.body or type(spec.art) == "table" and spec.art or nil
+    local b1, b2, b3, b4
+    if b then
+      b1, b2, b3, b4 = b[1], b[2], b[3], b[4]
+    else
+      local qw, qh
+      if quad and quad.getViewport then
+        local _, _, w, h = quad:getViewport()
+        qw, qh = w, h
+      elseif spec.texture or rec.image then
+        local img = spec.texture or rec.image
+        if img.getDimensions then qw, qh = img:getDimensions() end
+      end
+      if not qw then return end
+      b1, b2, b3, b4 = 0, tonumber(spec.top) or 0, qw, qh
+    end
+    local sx, sy = rec.sx * k * rec.tsx, rec.sy * k * rec.tsy
+    local a, c = X + (b1 - hpx) * sx, X + (b3 - hpx) * sx
+    local bb, d = Y + (b2 - hpy) * sy, Y + (b4 - hpy) * sy
+    local x0, x1 = bx + a * bsx, bx + c * bsx
+    local y0, y1 = by + bb * bsy, by + d * bsy
+    if x1 < x0 then x0, x1 = x1, x0 end
+    if y1 < y0 then y0, y1 = y1, y0 end
+    noteRect(spec.side, x0, y0, x1, y1)
+    -- (a double battle: its battler id from the battle's resting places, the nearest of its side
+    -- with the same Pokemon)
+    local prefit = cur and cur.prefit
+    if not prefit then return end
+    local X = (place(rec))
+    local best, bestD = nil, math.huge
+    for id, pr in pairs(prefit) do
+      if type(id) == "number" and pr.spec and pr.spec.side == spec.side and sameMon(pr.spec, spec) then
+        local dd = math.abs((place(pr)) - X)
+        if dd < bestD then best, bestD = id, dd end
+      end
+    end
+    if best ~= nil then noteRect(best, x0, y0, x1, y1) end
+  end
+  self.noteBattler = noteBattler
+
   local function overlap(a0, a1, b0, b1) return math.max(0, math.min(a1, b1) - math.max(a0, b0)) end
 
   -- how much of the rectangle (canvas px, unzoomed), seen at zoom z raised by lift, is under
@@ -4034,6 +4110,17 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     else
       fit.boxDy = nil
     end
+    -- (a mod holding the HUD - a Pokemon drawn giant for a while, Galar Rising's Dynamax: the
+    -- camera still pulls back for it, the foe's HP box stays where it was; let go, it eases on
+    -- from there)
+    if self.hudHeld > 0 then
+      if self.heldDyTop == nil then self.heldDyTop = dyTop end
+      dyTop = self.heldDyTop
+    elseif self.heldDyTop ~= nil then
+      if fit.anchor then fit.anchor = self.heldDyTop end
+      if fit.boxDy then fit.boxDy = self.heldDyTop end
+      self.heldDyTop = nil
+    end
     -- the UI over the scene, in the scene's canvas pixels: shrunk about the line by the
     -- ratio of their scales; the enemy's HP box moved with the top band; the screen's top
     fit.uiK = U / S
@@ -4291,6 +4378,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           end
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
           local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy + fit.sceneUp * Uy) or nil
+          -- (where its body lands on the window this frame: exports.battlerRect)
+          noteBattler(cur, item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy)
           tagDraw(item.rec, cur, blit, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, sceneBox, pin)
         elseif byLayer then
           -- (the enemy's HUD's layer moved whole; the rest where it is)

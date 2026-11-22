@@ -270,7 +270,10 @@ function Engine.install(hd)
       Renderer.beginFrame = function(self, transparent, ...)
         -- (the Renderer's beginFrame returns nothing: no results table each frame)
         beginFrame(self, transparent, ...)
-        if not transparent then hd.uiLive = false end            -- (exports.uiMap: this frame's)
+        if not transparent then
+          hd.uiLive = false                                       -- (exports.uiMap: this frame's)
+          if hd.clearBattlerRects then hd.clearBattlerRects() end -- (exports.battlerRect: likewise)
+        end
         if not transparent and not Engine.presentingUi and hd.enabled.screen and Engine.fullScreen then
           local okS, full = pcall(Engine.fullScreen)
           if okS and full then

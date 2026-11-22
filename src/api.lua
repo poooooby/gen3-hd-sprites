@@ -70,12 +70,23 @@
 --                         else map.y; clip to map.box (or topBox / lowBox by band), {x, y, w, h}.
 --                         The Renderer may blit the UI canvas again in the same frame: the
 --                         first is the one placed, the rest are taken as done.
+--   battlerRect(key)      a battle Pokemon's body box as this frame drew it on the window: x0, y0,
+--                         x1, y1 (window px) | nil when it wasn't drawn through WoobleView this
+--                         frame (no Battle Fit, a pass flattened, a Fill Screen card). key: its
+--                         side ("player" / "enemy"), or in a double battle its battler id (0..3).
+--                         Whatever the fit, 3D Sizing or the 3D world made of it. Valid from the
+--                         battle's blit until the next frame begins (render.hud included).
+--   holdHud(who, on)      hold the battle's HUD where it is (Fill Screen: the foe's HP box) while
+--                         `who` (any key of the caller's) holds it - a Pokemon drawn giant for a
+--                         while (Galar Rising's Dynamax): the camera still pulls back for it, the
+--                         box stays; let go by every holder, it eases on from there.
 
 return function(mod, hd, state)
   local exports = {}
   exports.version = 2
   exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true,
-                       shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true }
+                       shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true,
+                       battlerRect = true, holdHud = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end
@@ -300,6 +311,12 @@ return function(mod, hd, state)
     return hd.scene and hd.scene.snapshot and hd.scene.snapshot(w, h) or nil
   end
   exports.uiMap = function() return hd.uiLive == true and hd.uiMap or nil end
+  exports.holdHud = function(who, on) if hd.holdHud then hd.holdHud(who, on) end end
+  exports.battlerRect = function(key)
+    local r = hd.battlerRects and hd.battlerRects[key]
+    if not (r and r.on) then return nil end
+    return r[1], r[2], r[3], r[4]
+  end
   exports.sceneZoom = function()
     if not exports.fitEnabled() then return 1 end
     return hd.fit.z
