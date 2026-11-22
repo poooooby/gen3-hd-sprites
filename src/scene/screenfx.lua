@@ -41,18 +41,18 @@ local function smooth(t) t = clamp01(t); return t * t * (3 - 2 * t) end
 
 --- BattleCamera's intro values at glide progress u (0..1), `frames` since the battle began, the
 --- share `travel` of the glide the flight: { flight (the crane's arc), speed (smootherstep's
---- slope over its peak), impact (the landing), bars, time }.
-function ScreenFx.intro(u, frames, travel)
+--- slope over its peak), impact (the landing), bars, time } (out: a kept table filled instead).
+function ScreenFx.intro(u, frames, travel, out)
   local p = clamp01(u / travel)
   local q = clamp01((u - travel) / (1 - travel))
   local inside = p > 0 and p < 1
-  return {
-    flight = inside and sin(p * pi) or 0,
-    speed = inside and 16 * p * p * (1 - p) * (1 - p) or 0,
-    impact = (q > 0 and q < 1) and exp(-5 * q) * (1 - q) or 0,
-    bars = smooth(frames / ScreenFx.BARS_IN) * (1 - smooth((q - 0.35) / 0.65)),
-    time = frames,
-  }
+  out = out or {}
+  out.flight = inside and sin(p * pi) or 0
+  out.speed = inside and 16 * p * p * (1 - p) * (1 - p) or 0
+  out.impact = (q > 0 and q < 1) and exp(-5 * q) * (1 - q) or 0
+  out.bars = smooth(frames / ScreenFx.BARS_IN) * (1 - smooth((q - 0.35) / 0.65))
+  out.time = frames
+  return out
 end
 
 -- a canvas of ours, kept between frames
@@ -96,14 +96,19 @@ end
 -- a band of the copy drawn over the canvas half a pixel off, its alpha from `edge` at one end
 -- of the band to none at the other
 local tapMesh
+-- (its four corners, kept: filled each tap)
+local tapVerts = { { 0, 0, 0, 0, 1, 1, 1, 1 }, { 0, 0, 0, 0, 1, 1, 1, 1 }, { 0, 0, 0, 0, 1, 1, 1, 1 },
+                   { 0, 0, 0, 0, 1, 1, 1, 1 } }
+local function corner(c, x, y, u, v, a) c[1], c[2], c[3], c[4], c[8] = x, y, u, v, a end
 local function tap(G, copy, w, h, y0, y1, d, aTop, aBottom)
   local cw, ch = copy:getWidth(), copy:getHeight()
   local du, dv = d / cw, d / ch
   local v0, v1 = y0 / h + dv, y1 / h + dv
-  local verts = {
-    { 0, y0, du, v0, 1, 1, 1, aTop }, { w, y0, 1 + du, v0, 1, 1, 1, aTop },
-    { w, y1, 1 + du, v1, 1, 1, 1, aBottom }, { 0, y1, du, v1, 1, 1, 1, aBottom },
-  }
+  local verts = tapVerts
+  corner(verts[1], 0, y0, du, v0, aTop)
+  corner(verts[2], w, y0, 1 + du, v0, aTop)
+  corner(verts[3], w, y1, 1 + du, v1, aBottom)
+  corner(verts[4], 0, y1, du, v1, aBottom)
   if not tapMesh then
     tapMesh = G.newMesh(verts, "fan", "stream")
   else
@@ -157,11 +162,15 @@ local function shr(h, s) return floor(h / 2 ^ s) end
 
 -- a rectangle with a colour at each corner: top left, top right, bottom left, bottom right
 local rectMesh
+local rectVerts = { { 0, 0, 0, 0, 1, 1, 1, 1 }, { 0, 0, 0, 0, 1, 1, 1, 1 }, { 0, 0, 0, 0, 1, 1, 1, 1 },
+                    { 0, 0, 0, 0, 1, 1, 1, 1 } }
+local function tint(v, x, y, c) v[1], v[2], v[5], v[6], v[7], v[8] = x, y, c[1], c[2], c[3], c[4] end
 local function rect(G, x, y, w, h, tl, tr, bl, br)
-  local verts = {
-    { x, y, 0, 0, tl[1], tl[2], tl[3], tl[4] }, { x + w, y, 0, 0, tr[1], tr[2], tr[3], tr[4] },
-    { x + w, y + h, 0, 0, br[1], br[2], br[3], br[4] }, { x, y + h, 0, 0, bl[1], bl[2], bl[3], bl[4] },
-  }
+  local verts = rectVerts
+  tint(verts[1], x, y, tl)
+  tint(verts[2], x + w, y, tr)
+  tint(verts[3], x + w, y + h, br)
+  tint(verts[4], x, y + h, bl)
   if not rectMesh then
     rectMesh = G.newMesh(verts, "fan", "stream")
   else

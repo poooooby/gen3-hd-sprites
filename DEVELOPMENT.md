@@ -1559,6 +1559,18 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   the battlers' shadows, ours under them (the shadows are stage items).
 - `Render.after` runs all of it in their order: fog banks, sand dust, motes and rays, weather
   particles, then bloom prepare, diorama, zoom blur, bloom compose, lines and vignette, flash.
+- **The scene's frame makes no garbage** (2026-11-21; about 8 KB a frame before, with the JIT
+  off). Each frame's tables are kept and filled again: `hazeFor`'s light (`Light.light(o, out)`
+  clears a kept light's frame fields first; sand, ash and fog still mix a new one), weather state,
+  cycle, sky colours, moon, dapple planes and fog range; the pose, projection and view rows
+  (`Camera.pose`, `glide`, `screenProjection`, `viewRows` take tables to fill); `ScreenFx.intro`'s
+  result (the scene's `introKept`), the tap's and rect's four vertices; the shader's grade and
+  dapple range, and `Render.after`'s options (`afterO`). The shader wrapper copies what it is sent
+  (src/hd.lua trackShaders), so a kept table is safe to send. The scene's `req` keeps a module
+  once it loads (the sandbox's `require` allocates on every call), and the dev stats' strings
+  (`sceneHaze`, `sceneWeather`, `sceneTime`) are formatted only when their values change.
+  Measured with a throwaway driver: the GC stopped over 300 settled frames, `core.update` run by
+  hand, and a line hook that charges each rise in `collectgarbage("count")` to the line before it.
 
 ### The 3D cache and the first-run prompt (`src/prompt.lua`)
 

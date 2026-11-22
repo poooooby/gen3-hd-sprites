@@ -118,9 +118,16 @@ return function(deps)
 
   local INDOOR_KINDS = { indoor = true, building = true, cave = true, underground = true, secret_base = true }
 
+  -- (kept once loaded: the sandbox's require allocates on every call, and the frame's draw asks)
+  local reqKept = {}
   local function req(name)
-    local ok, m = pcall(require, name)
-    return ok and type(m) == "table" and m or nil
+    local m = reqKept[name]
+    if m then return m end
+    local ok
+    ok, m = pcall(require, name)
+    m = ok and type(m) == "table" and m or nil
+    reqKept[name] = m
+    return m
   end
 
   -- the engine's map, read through what cells.lua asks of it
@@ -4962,6 +4969,26 @@ return function(deps)
   -- the light for a pose (src/scene/light.lua: Emerald 3DS's, by the game's weather as it is
   -- this frame, as SetGrade sets it each frame): the haze's colour, the render's fog, the sky
   -- behind, the grade (nil without light.lua: no grade, WoobleView's old haze)
+  -- (the frame's tables, kept between frames: the light and what it is made of; the draw reads
+  -- them the same frame)
+  local frameLight, frameState, frameArgs, frameCycle = {}, {}, {}, {}
+  local frameSky, frameTop, frameSunset, frameSkyOut, frameRange = {}, {}, {}, {}, {}
+  local frameMoon, frameDU, frameDV = {}, {}, {}
+  local DEFAULT_SUN = { dx = 0.85, dz = 0.55 }
+  -- (the dev stats' strings, made again only when what they say changes)
+  local statKey = {}
+  local function statIf(name, ...)
+    local k = statKey[name]
+    local n = select("#", ...)
+    local same = k ~= nil
+    if same then for i = 1, n do if k[i] ~= select(i, ...) then same = false; break end end end
+    if same then return end
+    k = k or {}
+    for i = 1, n do k[i] = select(i, ...) end
+    statKey[name] = k
+    return true
+  end
+
   local function hazeFor(s, pose)
     if not Light then return s.haze, s.fog, nil, nil end
     local state, weather
@@ -4980,12 +5007,15 @@ return function(deps)
       if weather then
         local drops = FW and type(FW._rainSprites) == "table" and #FW._rainSprites or 0
         local up = weather ~= 0
-        state = { currWeather = weather, curRainSpriteIndex = math.min(drops, 24), currBlendEVA = up and 16 or 0,
-                  ashSpritesCreated = up, sandstormSpritesCreated = up, fogHSpritesCreated = weather == 6,
-                  fogDSpritesCreated = weather == 9 }
+        state = frameState
+        state.currWeather, state.curRainSpriteIndex, state.currBlendEVA = weather, math.min(drops, 24), up and 16 or 0
+        state.ashSpritesCreated, state.sandstormSpritesCreated = up, up
+        state.fogHSpritesCreated, state.fogDSpritesCreated = weather == 6, weather == 9
       end
     end
-    local light = Light.light({ indoor = s.walled, weather = weather, state = state, cave = s.cave })
+    local args = frameArgs
+    args.indoor, args.weather, args.state, args.cave = s.walled, weather, state, s.cave
+    local light = Light.light(args, frameLight)
     -- (the time of day outdoors, Emerald 3DS's cycle: by the game's clock, or WoobleDex's,
     -- Scene.timeOfDay -> the minute of the day, nil for none; never indoors or in a cave)
     local sky = s.fill or s.haze
@@ -4994,29 +5024,37 @@ return function(deps)
     local top
     if outdoor then
       local d, k = Scene.SKY_DEEP, Scene.SKY_DEPTH
-      top = { sky[1] + (d[1] - sky[1]) * k, sky[2] + (d[2] - sky[2]) * k, sky[3] + (d[3] - sky[3]) * k }
+      top = frameTop
+      top[1], top[2], top[3] = sky[1] + (d[1] - sky[1]) * k, sky[2] + (d[2] - sky[2]) * k, sky[3] + (d[3] - sky[3]) * k
     end
     -- (Scene.timeOverride: dev, a minute of the day pinned, tests/drivers/scene_battle.lua)
     if (Scene.timeOverride or Scene.timeOfDay) and not s.walled and not s.cave then
       local okT, minute = true, Scene.timeOverride
       if not minute then okT, minute = pcall(Scene.timeOfDay) end
       if okT and type(minute) == "number" then
-        local cycle = Light.cycle(minute)
+        local cycle = Light.cycle(minute, frameCycle)
+        light.moon = frameMoon
         Light.dayNight(light, cycle)
-        if sky then sky = Light.sky(sky, cycle) end
+        if sky then sky = Light.sky(sky, cycle, frameSky) end
         if top then
-          top = Light.sky(top, cycle)
+          -- (top is frameTop: tinted in place, read whole before it is written)
+          local r, g, b = top[1], top[2], top[3]
+          frameSunset[1], frameSunset[2], frameSunset[3] = r, g, b
+          top = Light.sky(frameSunset, cycle, frameTop)
           local night = 1 - Scene.SKY_NIGHT * (Light.moon(cycle) or 0)
           top[1], top[2], top[3] = top[1] * night, top[2] * night, top[3] * night
           -- (a sunset: the horizon warm, the sky over it dusky)
           local glow = Scene.sunset(minute)
           if glow > 0 then
             local a, b, ka, kb = Scene.SUNSET, Scene.DUSK, Scene.SUNSET_GLOW * glow, Scene.DUSK_GLOW * glow
-            sky = { sky[1] + (a[1] - sky[1]) * ka, sky[2] + (a[2] - sky[2]) * ka, sky[3] + (a[3] - sky[3]) * ka }
+            local o = frameSunset
+            o[1], o[2], o[3] = sky[1] + (a[1] - sky[1]) * ka, sky[2] + (a[2] - sky[2]) * ka, sky[3] + (a[3] - sky[3]) * ka
+            sky = o
             for c = 1, 3 do top[c] = top[c] + (b[c] - top[c]) * kb end
           end
         end
-        hd.stats.sceneTime = ("%02d:%02d"):format(math.floor(minute / 60) % 24, math.floor(minute % 60))
+        local hh, mm = math.floor(minute / 60) % 24, math.floor(minute % 60)
+        if statIf("time", hh, mm) then hd.stats.sceneTime = ("%02d:%02d"):format(hh, mm) end
       end
     end
     -- (the sun's light in the air: src/scene/sunfx.lua; the landing's burst of bloom)
@@ -5032,7 +5070,9 @@ return function(deps)
         local f = Scene.SKY_DULL
         for c = 1, 3 do top[c] = top[c] + (sky[c] - top[c]) * f end
       end
-      sky = { sky[1], sky[2], sky[3], top = top, horizon = true }
+      local o = frameSkyOut
+      o[1], o[2], o[3], o.top, o.horizon = sky[1], sky[2], sky[3], top, true
+      sky = o
     end
     if not s.walled then
       light.fogDensity = Light.fogDensity(state)
@@ -5045,12 +5085,15 @@ return function(deps)
     -- (CtrVoxel_DrawsSand: the world blows the sandstorm itself, src/gen3.lua drops the battle's
     -- sandstorm picture)
     s.drawsSand = light.weather == "sand" and (light.weatherAmount or 0) > 0 and Render.Weather ~= nil
-    hd.stats.sceneWeather = ("%s %.2f, fog %.2f, bolt %.2f"):format(light.weather or "none",
-      light.weatherAmount or 0, light.fogDensity or 0, light.lightning or 0)
+    if statIf("weather", light.weather or "none", light.weatherAmount or 0, light.fogDensity or 0, light.lightning or 0) then
+      hd.stats.sceneWeather = ("%s %.2f, fog %.2f, bolt %.2f"):format(light.weather or "none",
+        light.weatherAmount or 0, light.fogDensity or 0, light.lightning or 0)
+    end
     -- (the shot: the entrance's effects and the diorama's blur, src/scene/screenfx.lua)
     local F = Render.ScreenFx
     if F then
-      light.intro = F.intro(s.progress or 1, s.frames or 0, Camera.TRAVEL)
+      s.introKept = s.introKept or {}
+      light.intro = F.intro(s.progress or 1, s.frames or 0, Camera.TRAVEL, s.introKept)
       light.diorama = Scene.blur or 0
       s.intro = light.intro
     end
@@ -5058,11 +5101,13 @@ return function(deps)
     light.dappleImage = dappleImage()
     if light.dappleImage then
       local H = s.frameH or 0
-      light.dappleU, light.dappleV = Light.dapplePlanes(Lighting and Lighting.SUN or { dx = 0.85, dz = 0.55 },
-        love.timer.getTime(), s.ox, H, s.oz + H)
+      light.dappleU, light.dappleV = Light.dapplePlanes(Lighting and Lighting.SUN or DEFAULT_SUN,
+        love.timer.getTime(), s.ox, H, s.oz + H, frameDU, frameDV)
     end
-    hd.stats.sceneHaze = ("%s %.2f from %.2f over %.2f"):format(Light.class(weather), light.haze, light.start, light.ramp)
-    return light.rgb, Light.range(light, pose.dist), sky, light
+    if statIf("haze", Light.class(weather), light.haze, light.start, light.ramp) then
+      hd.stats.sceneHaze = ("%s %.2f from %.2f over %.2f"):format(Light.class(weather), light.haze, light.start, light.ramp)
+    end
+    return light.rgb, Light.range(light, pose.dist, frameRange), sky, light
   end
 
   --- (dev: the Scene Workshop) The last scene from any pose, w x h screen pixels at k screen
@@ -5130,8 +5175,10 @@ return function(deps)
     local shx, shy = rec.tx + (rec.x or 0) * rec.tsx, rec.ty + (rec.y or 0) * rec.tsy
     local x, y, w, h = box[1], box[2], box[3], box[4]
     local u0, v0 = (x - bx) / bsx - shx, (y - by) / bsy - shy
-    local proj, depth = Camera.screenProjection(u0, v0, bsx, bsy)
-    local pose = Camera.glide(s.from, s.to, s.progress)
+    -- (the frame's projection and pose in the scene's kept tables)
+    s.projKept, s.depthKept, s.poseKept = s.projKept or {}, s.depthKept or {}, s.poseKept or {}
+    local proj, depth = Camera.screenProjection(u0, v0, bsx, bsy, s.projKept, s.depthKept)
+    local pose = Camera.glide(s.from, s.to, s.progress, s.poseKept)
     local haze, fog, sky, light = hazeFor(s, pose)
     -- (the world shows beside the text box when the UI's box is narrower than the view: the
     -- vignette runs on down there, src/scene/screenfx.lua)

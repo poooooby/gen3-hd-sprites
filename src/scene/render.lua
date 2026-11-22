@@ -866,6 +866,11 @@ local function drawGradient(G, w, h, sky, hy)
   G.draw(gradient)
 end
 
+-- (the frame's tables, kept between frames: the shader copies what it is sent, and Render.after's
+-- effects read them the same frame)
+local drawPose, drawView, drawGrade, drawDapple, afterO = {}, {}, {}, {}, { eye = {}, forward = {}, right = {}, up = {} }
+local ONE3, DEFAULT_SUN = { 1, 1, 1 }, { dx = 0.85, dz = 0.55 }
+
 function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h, sky, light)
   local sh = Render.shader(G)
   if not (sh and scene.meshes) then return nil end
@@ -876,7 +881,7 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
     target:setFilter("linear", "linear")
     targetW, targetH = w, h
   end
-  local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist, pose.ty, pose.yaw)
+  local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist, pose.ty, pose.yaw, drawPose)
   G.push("all")
   G.setCanvas({ target, depth = true })
   G.origin()
@@ -895,7 +900,7 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   G.setBlendMode("alpha", "alphamultiply")
   G.setColor(1, 1, 1, 1)
   G.setShader(sh)
-  sh:send("uView", "row", Camera.viewRows(p))
+  sh:send("uView", "row", Camera.viewRows(p, drawView))
   sh:send("uProj", proj)
   sh:send("uDepth", depth)
   sh:send("uRise", math.max(0.001, rise or 1))
@@ -903,11 +908,12 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   sh:send("uSky", sky)
   sh:send("uFog", fog)
   sh:send("uHideFlat", (rise or 1) > Render.HIDE_AT and 1 or 0)
-  sh:send("uSunTint", light and light.sun or { 1, 1, 1 })
-  sh:send("uShadeTint", light and light.shade or { 1, 1, 1 })
+  sh:send("uSunTint", light and light.sun or ONE3)
+  sh:send("uShadeTint", light and light.shade or ONE3)
   sh:send("uMoon", light and light.moon or ZERO3)
   local low = Render.SHADE_LOW
-  sh:send("uGrade", { 1 / (1 - low), -low / (1 - low) })
+  drawGrade[1], drawGrade[2] = 1 / (1 - low), -low / (1 - low)
+  sh:send("uGrade", drawGrade)
   -- the sun dapples (src/scene/light.lua: off where their light has none to speak of)
   local dap = light and light.dappleImage and light.dappleHigh - light.dappleLow > 0.01
   if dap then
@@ -915,7 +921,8 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
     sh:send("uDappleU", light.dappleU)
     sh:send("uDappleV", light.dappleV)
   end
-  sh:send("uDappleRange", { light and light.dappleLow or 1, light and light.dappleHigh or 1, dap and 1 or 0 })
+  drawDapple[1], drawDapple[2], drawDapple[3] = light and light.dappleLow or 1, light and light.dappleHigh or 1, dap and 1 or 0
+  sh:send("uDappleRange", drawDapple)
   local sat = light and Render.SATURATION or 0
   local sent
   for _, m in ipairs(scene.meshes) do
@@ -938,10 +945,12 @@ end
 --- `introLow` (true: the vignette runs to the canvas's foot).
 function Render.after(G, Camera, target, p, proj, depth, haze, fog, w, h, light)
   local ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz = Camera.basis(p)
-  local o = { light = light, Camera = Camera, pose = p, view = Camera.viewRows(p), proj = proj, depth = depth,
-    sun = light.sunDir or { dx = 0.85, dz = 0.55 }, seconds = light.seconds or 0, w = w, h = h,
-    fog = fog, haze = haze, eye = { ex, ey, ez }, forward = { fx, fy, fz }, right = { rx, 0, rz },
-    up = { ux, uy, uz } }
+  local o = afterO
+  o.light, o.Camera, o.pose, o.view, o.proj, o.depth = light, Camera, p, Camera.viewRows(p, drawView), proj, depth
+  o.sun, o.seconds, o.w, o.h, o.fog, o.haze = light.sunDir or DEFAULT_SUN, light.seconds or 0, w, h, fog, haze
+  local e, f, r, u = o.eye, o.forward, o.right, o.up
+  e[1], e[2], e[3], f[1], f[2], f[3] = ex, ey, ez, fx, fy, fz
+  r[1], r[2], r[3], u[1], u[2], u[3] = rx, 0, rz, ux, uy, uz
   local W, S, F = Render.Weather, Render.SunFx, Render.ScreenFx
   if W then
     local fogAmount = light.fogDensity or 0

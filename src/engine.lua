@@ -224,6 +224,12 @@ function Engine.install(hd)
     end
 
     if not ours[endFrame] then
+      -- (endFrame's results passed through, no table each frame)
+      local function afterEnd(...)
+        hd.endFrame()
+        Engine.wrapDex(hd)
+        return ...
+      end
       Renderer.endFrame = function(self, ...)
         if hd.capturing() and not hd.capturing("field") then hd.endPass() end
         for base, cur in pairs(hd.done) do
@@ -232,10 +238,7 @@ function Engine.install(hd)
                 and not self.uprightActive)
           if not willBlit then hd.flatten(cur) end
         end
-        local results = { endFrame(self, ...) }
-        hd.endFrame()
-        Engine.wrapDex(hd)
-        return unpack(results)
+        return afterEnd(endFrame(self, ...))
       end
       ours[Renderer.endFrame] = true
     end
@@ -262,14 +265,16 @@ function Engine.install(hd)
     end
 
     if not ours[beginWorldPass] then
-      Renderer.beginWorldPass = function(self, ...)
-        local results = { beginWorldPass(self, ...) }
+      local function afterWorld(self, ...)
         local busy = (Tilt.active and Tilt.active()) or (Engine.fieldBusy and Engine.fieldBusy())
         if not busy then
           local ok, err = pcall(hd.beginPass, "field", self.worldCanvas)
           if not ok then hd.fail("field pass: " .. tostring(err)) end
         end
-        return unpack(results)
+        return ...
+      end
+      Renderer.beginWorldPass = function(self, ...)
+        return afterWorld(self, beginWorldPass(self, ...))
       end
       ours[Renderer.beginWorldPass] = true
     end

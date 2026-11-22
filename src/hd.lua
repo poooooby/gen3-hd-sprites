@@ -2198,14 +2198,18 @@ function HD.new(G, opts)
   --- (a double battle's battler id); the side by default.
   --- present: false while it is not out (before its send-out, after its faint): sized, but the
   --- 3D world's single battles frame only the Pokemon out on the field.
+  -- (each key's record kept between passes: the pass's fit and composite read it the same frame)
+  local prefitKept = {}
   function self.prefit(side, image, x, y, key, present)
     local cur = self.cur
     local spec = image ~= nil and self.tags[image]
     if not (cur and spec and type(x) == "number" and type(y) == "number") then return end
-    cur.prefit[key or side] = {
-      spec = spec, image = image, x = x, y = y, r = 0, sx = 1, sy = 1, ox = 32, oy = 32,
-      tx = 0, ty = 0, tsx = 1, tsy = 1, rest = true, out = present ~= false,
-    }
+    local k = key or side
+    local r = prefitKept[k]
+    if not r then r = {}; prefitKept[k] = r end
+    r.spec, r.image, r.x, r.y, r.r, r.sx, r.sy, r.ox, r.oy = spec, image, x, y, 0, 1, 1, 32, 32
+    r.tx, r.ty, r.tsx, r.tsy, r.rest, r.out = 0, 0, 1, 1, true, present ~= false
+    cur.prefit[k] = r
     if cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
   end
 
@@ -2790,6 +2794,9 @@ function HD.new(G, opts)
   -- back in only after the target has stayed nearer for holdFrames)
   -- the same Pokemon on each side (and the same screen) as when the foe's HP box was placed
   local function sameOut(a, b) return (a == nil and b == nil) or (a ~= nil and b ~= nil and sameMon(a, b)) end
+  -- (fitStep's own lists, kept between frames and emptied each: read only inside it)
+  local fitReported, fitSeen, fitHeads, headRows = {}, {}, {}, {}
+  local function emptied(t) for k in pairs(t) do t[k] = nil end return t end
   local function fitStep(cur)
     local fit = self.fit
     -- (the 3D world's single battles, sized: the camera frames what is out on the field. It
@@ -2798,7 +2805,7 @@ function HD.new(G, opts)
     -- and goes back to its own zoom for the opposing trainer's last words)
     local live = tuned() and not fit.double
     local outE, outP = false, false
-    local reported = {}
+    local reported = emptied(fitReported)
     for _, rec in pairs(cur.prefit) do
       reported[rec.spec.side or ""] = true
       if rec.out ~= false then
@@ -2862,7 +2869,7 @@ function HD.new(G, opts)
       end
     end
     local top, backs = math.huge, {}
-    local seen = {}
+    local seen = emptied(fitSeen)
     -- each side's art where it rests (canvas px, unshifted, unzoomed): its frame across, the
     -- enemy's feet (its pic box's bottom), the top of the player's body (else of its art)
     local eL, eR, eB = math.huge, -math.huge, -math.huge
@@ -2870,7 +2877,7 @@ function HD.new(G, opts)
     -- (and their art alone, the platforms left out: how wide the Pokemon themselves are)
     local aeL, aeR, apL, apR = math.huge, -math.huge, math.huge, -math.huge
     -- (and each battler's own: across, its top, its side; the heads the foe's HP box must clear)
-    local heads = {}
+    local heads = emptied(fitHeads)
     local aimE, aimP
     local function take(rec)
       local spec = rec.spec
@@ -2886,7 +2893,11 @@ function HD.new(G, opts)
         local u0, u1 = a, b
         if not rec.inAnim then u0, u1 = a + d - cur.shift[sd], b + d - cur.shift[sd] end
         local _, feetY = place(rec)
-        heads[#heads + 1] = { u0, u1, artTop(rec), sd, feetY }
+        local n = #heads + 1
+        local row = headRows[n]
+        if not row then row = {}; headRows[n] = row end
+        row[1], row[2], row[3], row[4], row[5] = u0, u1, artTop(rec), sd, feetY
+        heads[n] = row
         -- (each side's body: the middle of its art where it rests, what its moves are aimed at)
         if not spec.trainer and feetY then
           if sd == "enemy" then aimE = (artTop(rec) + feetY) / 2 else aimP = (artTop(rec) + feetY) / 2 end
@@ -3046,11 +3057,11 @@ function HD.new(G, opts)
           end
           return 1
         end
-        local lifts = { enemy = lift("enemy"), player = lift("player") }
+        local liftE, liftP = lift("enemy"), lift("player")
         local tall, foeTall, low = 0, 0, nil
         for _, h in ipairs(heads) do
           if h[5] and h[5] > h[3] then
-            local ht = (h[5] - h[3]) / (lifts[h[4]] or 1)
+            local ht = (h[5] - h[3]) / ((h[4] == "enemy" and liftE or liftP) or 1)
             tall = math.max(tall, ht)
             if h[4] == "enemy" then foeTall = math.max(foeTall, ht) end
           end

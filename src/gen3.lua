@@ -179,13 +179,16 @@ function Gen3.wrapFit(Engine, hd)
 
   local ballDraw = BallOpen.draw
   if not ours[ballDraw] then
-    BallOpen.draw = function(...)
-      local results = { ballDraw(...) }
+    -- (the draw's results passed through, no table each call)
+    local function afterBall(...)
       if fitting() then
         local ok, err = pcall(hd.seam, "ui")
         if not ok then hd.fail("seam: " .. tostring(err)) end
       end
-      return unpack(results)
+      return ...
+    end
+    BallOpen.draw = function(...)
+      return afterBall(ballDraw(...))
     end
     ours[BallOpen.draw] = true
   end
@@ -200,15 +203,17 @@ function Gen3.wrapFit(Engine, hd)
       and AnimCoords.SINGLES[0] and AnimCoords.SINGLES[1] then
     local drawParticles = Anim.drawParticles
     if not ours[drawParticles] then
+      local function afterParticles(setY, wasY, ...)
+        if setY then setY(wasY) end
+        hd.inAnim = false
+        return ...
+      end
       Anim.drawParticles = function(...)
         -- (hd.beginPass clears it too, should a draw here ever throw)
         hd.inAnim = true
         local setY = Engine.doublesY
         local wasY = setY and setY(true)
-        local results = { drawParticles(...) }
-        if setY then setY(wasY) end
-        hd.inAnim = false
-        return unpack(results)
+        return afterParticles(setY, wasY, drawParticles(...))
       end
       ours[Anim.drawParticles] = true
     end
@@ -334,6 +339,8 @@ function Gen3.wrapFit(Engine, hd)
         enemy = { x = home.enemyMon or 176, y = EM and EM.y or 40 },
         player = { x = home.playerMon or 72, y = PM and PM.y or 80 },
       }
+      -- (the spot handed to battlerSpriteCenter, kept: it reads it there and then)
+      local spotArg = {}
       Engine.prefit = function()
         local B = BattleMod
         local st = B and B._st
@@ -367,7 +374,8 @@ function Gen3.wrapFit(Engine, hd)
                   entry = Pokemon.backPic and Pokemon.backPic(picSp, nil, shiny)
                 end
                 if entry and entry.image then
-                  local cx, cy = Ui.battlerSpriteCenter(id, sp, { x = h.x, y = h.y }, nil, false)
+                  spotArg.x, spotArg.y = h.x, h.y
+                  local cx, cy = Ui.battlerSpriteCenter(id, sp, spotArg, nil, false)
                   hd.prefit(id % 2 == 1 and "enemy" or "player", entry.image, cx, cy, id)
                 end
               end
@@ -395,7 +403,8 @@ function Gen3.wrapFit(Engine, hd)
               entry = Pokemon.backPic and Pokemon.backPic(picSp, nil, shiny)
             end
             if entry and entry.image then
-              local cx, cy = Ui.battlerSpriteCenter(side, sp, { x = spot.x, y = spot.y }, nil, false)
+              spotArg.x, spotArg.y = spot.x, spot.y
+              local cx, cy = Ui.battlerSpriteCenter(side, sp, spotArg, nil, false)
               hd.prefit(side, entry.image, cx, cy, nil, out)
             end
           end

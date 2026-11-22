@@ -35,10 +35,13 @@ Camera.FIELD_DIST = 5 / tan(Camera.FOV / 2)
 
 --- A pose: { tx, tz, pitch, dist, ty, yaw } (ty: the target's height, 0 when not given; on lifted
 --- ground its tz is as far south again, src/scene/relief.lua; yaw: radians the view turns east of
---- north, 0 when not given - the battle always looks north; the dev shots turn).
-function Camera.pose(tx, tz, pitch, dist, ty, yaw)
-  return { tx = tx, tz = tz, pitch = pitch or Camera.STAGE_PITCH, dist = dist or Camera.STAGE_DIST, ty = ty or 0,
-           yaw = yaw or 0 }
+--- north, 0 when not given - the battle always looks north; the dev shots turn). out: a kept
+--- table filled instead of a new one.
+function Camera.pose(tx, tz, pitch, dist, ty, yaw, out)
+  out = out or {}
+  out.tx, out.tz, out.pitch, out.dist = tx, tz, pitch or Camera.STAGE_PITCH, dist or Camera.STAGE_DIST
+  out.ty, out.yaw = ty or 0, yaw or 0
+  return out
 end
 
 --- The eye, and the view's right, up and forward vectors: ex, ey, ez, rx, rz, ux, uy, uz, fx,
@@ -81,26 +84,34 @@ function Camera.ground(p, u, v, h)
   return ex + dx * t, ez + dz * t
 end
 
---- The view matrix as four rows (world point -> right, up, depth, 1), for a shader.
-function Camera.viewRows(p)
+--- The view matrix as four rows (world point -> right, up, depth, 1), for a shader (out: four
+--- kept rows filled instead).
+local function row4(r, a, b, c, d)
+  if not r then return { a, b, c, d } end
+  r[1], r[2], r[3], r[4] = a, b, c, d
+  return r
+end
+function Camera.viewRows(p, out)
   local ex, ey, ez, rx, rz, ux, uy, uz, fx, fy, fz = Camera.basis(p)
-  return {
-    { rx, 0, rz, -(ex * rx + ez * rz) },
-    { ux, uy, uz, -(ex * ux + ey * uy + ez * uz) },
-    { fx, fy, fz, -(ex * fx + ey * fy + ez * fz) },
-    { 0, 0, 0, 1 },
-  }
+  out = out or {}
+  out[1] = row4(out[1], rx, 0, rz, -(ex * rx + ez * rz))
+  out[2] = row4(out[2], ux, uy, uz, -(ex * ux + ey * uy + ez * uz))
+  out[3] = row4(out[3], fx, fy, fz, -(ex * fx + ey * fy + ez * fz))
+  out[4] = row4(out[4], 0, 0, 0, 1)
+  return out
 end
 
 --- The shader's projection for a screen rectangle: the canvas-space rectangle starting at
 --- (u0, v0) drawn kx, ky screen pixels to a canvas pixel. Returns { kx * F, kx * (CX - u0),
 --- ky * F, ky * (CY - v0) } (a screen pixel times depth is linear in the view coordinates, so
 --- the GPU interpolates the ground perspective-correct), and the depth's a, b (clip z = a * depth
---- + b, depth NEAR..FAR to -1..1).
-function Camera.screenProjection(u0, v0, kx, ky)
+--- + b, depth NEAR..FAR to -1..1). (outP, outD: kept tables filled instead)
+function Camera.screenProjection(u0, v0, kx, ky, outP, outD)
   local F, n, f = Camera.F, Camera.NEAR, Camera.FAR
-  return { kx * F, kx * (Camera.CX - u0), ky * F, ky * (Camera.CY - v0) },
-         { (f + n) / (f - n), -2 * f * n / (f - n) }
+  local P, D = outP or {}, outD or {}
+  P[1], P[2], P[3], P[4] = kx * F, kx * (Camera.CX - u0), ky * F, ky * (Camera.CY - v0)
+  D[1], D[2] = (f + n) / (f - n), -2 * f * n / (f - n)
+  return P, D
 end
 
 local function lerp(a, b, t) return a + (b - a) * t end
@@ -112,22 +123,22 @@ Camera.PITCH_MAX = rad(89)
 
 --- The entrance glide at progress t (0..1): from the field's pose to the stage's. It travels the
 --- first 78% (smootherstep, the pitch rising on an arc), then lands: a push in and out and a
---- small settling quake.
-function Camera.glide(from, to, t)
+--- small settling quake. (out: a kept pose filled instead of a new one)
+function Camera.glide(from, to, t, out)
   t = math.max(0, math.min(1, t or 1))
-  if t >= 1 then return Camera.pose(to.tx, to.tz, to.pitch, to.dist, to.ty, to.yaw) end
+  if t >= 1 then return Camera.pose(to.tx, to.tz, to.pitch, to.dist, to.ty, to.yaw, out) end
   if t < Camera.TRAVEL then
     local q = smoother(t / Camera.TRAVEL)
     local pitch = lerp(from.pitch, to.pitch, q) + Camera.CRANE * sin(pi * q)
     -- (the arc never tips past straight down, nor below where the glide started)
     return Camera.pose(lerp(from.tx, to.tx, q), lerp(from.tz, to.tz, q),
       math.min(math.max(Camera.PITCH_MAX, from.pitch), pitch), lerp(from.dist, to.dist, q),
-      lerp(from.ty or 0, to.ty or 0, q))
+      lerp(from.ty or 0, to.ty or 0, q), nil, out)
   end
   local q = (t - Camera.TRAVEL) / (1 - Camera.TRAVEL)
   local dist = to.dist * (1 - 0.16 * exp(-6 * q) * sin(3 * pi * q))
   local quake = 0.07 * exp(-7 * q)
-  return Camera.pose(to.tx + quake * sin(q * 37), to.tz + quake * cos(q * 29), to.pitch, dist, to.ty)
+  return Camera.pose(to.tx + quake * sin(q * 37), to.tz + quake * cos(q * 29), to.pitch, dist, to.ty, nil, out)
 end
 
 return Camera

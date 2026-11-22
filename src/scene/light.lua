@@ -121,13 +121,31 @@ end
 --- haze, dapples, rays, bloom or motes), weather (the game's current weather id), state (its
 --- weather state, for the amounts), cave (MAP_TYPE_UNDERGROUND) }. Returns { sun, shade, rgb
 --- (the haze's colour), haze, start, ramp, dappleLow, dappleHigh, rays, bloom, motes }.
-function Light.light(o)
-  local light = { sun = { 1.00, 0.99, 0.95 }, shade = { 0.93, 0.97, 1.05 }, haze = Light.HAZE_MAX,
-                  dappleLow = 0.96, dappleHigh = 1.04, rays = 0.11, bloom = 0.07, motes = 0.85,
-                  rgb = { Light.HAZE_COLOUR[1], Light.HAZE_COLOUR[2], Light.HAZE_COLOUR[3] },
-                  start = Light.HAZE_START, ramp = Light.HAZE_RAMP }
+-- (a light's own fields: the rest - the frame's, src/scene/init.lua - cleared from a kept table)
+local BASE = { sun = true, shade = true, rgb = true, haze = true, dappleLow = true, dappleHigh = true, rays = true,
+               bloom = true, motes = true, start = true, ramp = true }
+-- a colour set in place (t), or a new one
+local function set3(t, a, b, c)
+  if not t then return { a, b, c } end
+  t[1], t[2], t[3] = a, b, c
+  return t
+end
+
+--- (out: a table of the caller's, kept between frames, filled instead of a new one - its
+--- colours too; the weathers mixed from two lights, sand, ash and fog, return a new one)
+function Light.light(o, out)
+  local light = out or {}
+  if out then
+    for k in pairs(out) do if not BASE[k] then out[k] = nil end end
+  end
+  light.sun = set3(light.sun, 1.00, 0.99, 0.95)
+  light.shade = set3(light.shade, 0.93, 0.97, 1.05)
+  light.rgb = set3(light.rgb, Light.HAZE_COLOUR[1], Light.HAZE_COLOUR[2], Light.HAZE_COLOUR[3])
+  light.haze, light.dappleLow, light.dappleHigh = Light.HAZE_MAX, 0.96, 1.04
+  light.rays, light.bloom, light.motes = 0.11, 0.07, 0.85
+  light.start, light.ramp = Light.HAZE_START, Light.HAZE_RAMP
   if o.indoor then
-    light.sun, light.shade = { 1, 1, 1 }, { 1, 1, 1 }
+    light.sun, light.shade = set3(light.sun, 1, 1, 1), set3(light.shade, 1, 1, 1)
     light.haze, light.dappleLow, light.dappleHigh = 0, 1, 1
     light.rays, light.bloom, light.motes = 0, 0, 0
     return light
@@ -135,16 +153,16 @@ function Light.light(o)
   local S = o.state
   local class = Light.class(o.weather)
   if class == "sun" then
-    light.sun = { 1.04, 1.01, 0.93 }
+    light.sun = set3(light.sun, 1.04, 1.01, 0.93)
     light.haze, light.dappleLow, light.dappleHigh = 0.12, 0.94, 1.07
     light.rays, light.bloom, light.motes = 0.14, 0.10, 1.00
   elseif class == "rain" then
     -- overcast: no sun to break into patches, rays or glinting dust; the air grey with rain,
     -- the distance goes sooner, colder; a bolt lights the world cold white for a moment
-    light.sun, light.shade = { 0.81, 0.88, 0.98 }, { 0.82, 0.89, 1.00 }
+    light.sun, light.shade = set3(light.sun, 0.81, 0.88, 0.98), set3(light.shade, 0.82, 0.89, 1.00)
     light.dappleLow, light.dappleHigh = 1.0, 1.0
     light.rays, light.bloom, light.motes = 0, 0.08, 0
-    light.rgb = { 0.62, 0.68, 0.76 }
+    light.rgb = set3(light.rgb, 0.62, 0.68, 0.76)
     light.haze = 0.30 + 0.18 * Light.amount(S)
     light.start = 0.85
     local bolt = Light.lightning(S)
@@ -176,11 +194,11 @@ function Light.light(o)
     light = Light.fog(light, o.cave, Light.fogDensity(S))
   elseif class == "particles" then
     -- the weather's own snow fills the air instead
-    light.sun = { 0.93, 0.92, 0.88 }
+    light.sun = set3(light.sun, 0.93, 0.92, 0.88)
     light.haze, light.dappleLow, light.dappleHigh = 0.36, 0.92, 1.03
     light.rays, light.bloom, light.motes = 0, 0.12, 0
   elseif class == "shade" then
-    light.sun = { 0.92, 0.95, 0.98 }
+    light.sun = set3(light.sun, 0.92, 0.95, 0.98)
     light.haze, light.dappleLow, light.dappleHigh = 0.25, 0.92, 1.03
     light.rays, light.bloom, light.motes = 0, 0.12, 0.40
   end
@@ -206,21 +224,26 @@ Light.CYCLE = {
 Light.MOON_RGB = { 70 / 255, 92 / 255, 136 / 255 }
 Light.MOON = 0.06
 
---- CtrDayNight_At: the cycle at a minute of the day (0-1440): { rgb, daylight, glow }.
-function Light.cycle(minute)
+--- CtrDayNight_At: the cycle at a minute of the day (0-1440): { rgb, daylight, glow } (out: a
+--- kept table filled instead).
+function Light.cycle(minute, out)
   local K = Light.CYCLE
   local m = (tonumber(minute) or 720) % 1440
+  out = out or {}
   for i = 2, #K do
     if m < K[i][1] then
       local a, b = K[i - 1], K[i]
       local t = (m - a[1]) / (b[1] - a[1])
       t = t * t * (3 - 2 * t)
-      return { rgb = { a[2][1] + (b[2][1] - a[2][1]) * t, a[2][2] + (b[2][2] - a[2][2]) * t,
-                       a[2][3] + (b[2][3] - a[2][3]) * t },
-               daylight = a[3] + (b[3] - a[3]) * t, glow = a[4] + (b[4] - a[4]) * t }
+      out.rgb = set3(out.rgb, a[2][1] + (b[2][1] - a[2][1]) * t, a[2][2] + (b[2][2] - a[2][2]) * t,
+                     a[2][3] + (b[2][3] - a[2][3]) * t)
+      out.daylight, out.glow = a[3] + (b[3] - a[3]) * t, a[4] + (b[4] - a[4]) * t
+      return out
     end
   end
-  return { rgb = { K[1][2][1], K[1][2][2], K[1][2][3] }, daylight = K[1][3], glow = K[1][4] }
+  out.rgb = set3(out.rgb, K[1][2][1], K[1][2][2], K[1][2][3])
+  out.daylight, out.glow = K[1][3], K[1][4]
+  return out
 end
 
 --- CtrDayNight_Moonlight (no fade): how much moonlight the cycle has, 0..0.06.
@@ -247,15 +270,16 @@ function Light.dayNight(light, cycle)
   light.motes = light.motes * cycle.daylight
   light.dappleLow = 1 + (light.dappleLow - 1) * cycle.daylight
   light.dappleHigh = 1 + (light.dappleHigh - 1) * cycle.daylight
-  light.moon = { Light.MOON_RGB[1] * moon, Light.MOON_RGB[2] * moon, Light.MOON_RGB[3] * moon }
+  light.moon = set3(light.moon, Light.MOON_RGB[1] * moon, Light.MOON_RGB[2] * moon, Light.MOON_RGB[3] * moon)
   light.cycle = cycle
   return light
 end
 
---- The sky behind the world at that time of day: the backdrop's colour as the haze is tinted.
-function Light.sky(sky, cycle)
+--- The sky behind the world at that time of day: the backdrop's colour as the haze is tinted
+--- (out: a kept table filled instead, never `sky` itself).
+function Light.sky(sky, cycle, out)
   local moon = Light.moon(cycle)
-  local out = {}
+  out = out or {}
   for c = 1, 3 do
     local h = sky[c] * cycle.rgb[c]
     out[c] = h + (Light.MOON_RGB[c] - h) * moon
@@ -264,10 +288,10 @@ function Light.sky(sky, cycle)
 end
 
 --- SetGrade's fog for an eye that far from its target (tiles, along the line of sight): the
---- render's { start, end, max } in view depth.
-function Light.range(light, eye)
+--- render's { start, end, max } in view depth (out: a kept table filled instead).
+function Light.range(light, eye, out)
   local s = eye * light.start
-  return { s, s + eye * light.ramp, light.haze }
+  return set3(out, s, s + eye * light.ramp, light.haze)
 end
 
 --- One 8-bit channel (the engine's 5-bit colour, c5 * 255 / 31) graded: voxel_grade.c's Channel.
@@ -377,14 +401,15 @@ end
 --- DappleFrame and DappleUniforms for a mesh whose point (x, y, z) stands at (x + ox, y + oy,
 --- z + oz) in the world, `seconds` into the drift: the pattern's coordinates as two planes,
 --- u = U[1] x + U[2] y + U[3] z + U[4] (and V), U[4] and V[4] wrapped to a tile of the pattern.
-function Light.dapplePlanes(sun, seconds, ox, oy, oz)
+--- (U, V: kept tables filled instead)
+function Light.dapplePlanes(sun, seconds, ox, oy, oz, U, V)
   local DX, DZ = sun.dx, sun.dz
   local len = math.sqrt(DX * DX + DZ * DZ)
   local c, s = DX / len, DZ / len
   local su, sv = 1 / Light.DAPPLE_PERIOD, 1 / (Light.DAPPLE_PERIOD * Light.DAPPLE_STRETCH)
   local drift = (seconds * Light.DAPPLE_DRIFT) % Light.DAPPLE_PERIOD
-  local U = { c * su, (c * DX + s * DZ) * su, s * su }
-  local V = { -s * sv, (c * DZ - s * DX) * sv, c * sv }
+  U = set3(U, c * su, (c * DX + s * DZ) * su, s * su)
+  V = set3(V, -s * sv, (c * DZ - s * DX) * sv, c * sv)
   local u0 = U[1] * ox + U[2] * oy + U[3] * oz - drift * su
   local v0 = V[1] * ox + V[2] * oy + V[3] * oz
   U[4], V[4] = u0 - math.floor(u0), v0 - math.floor(v0)
