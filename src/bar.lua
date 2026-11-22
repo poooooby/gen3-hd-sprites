@@ -1,10 +1,13 @@
--- Gen 3's battle bar (Ruby, Sapphire, Emerald): the cart's text box and its action / move
--- menus redrawn as one bar across the bottom of the screen, smooth at the screen's
--- resolution, three quarters of the cart's height (36 rows, from canvas row 124 down).
+-- Gen 3's battle bar (Ruby, Sapphire, Emerald, FireRed, LeafGreen): the cart's text box and its
+-- action / move menus redrawn as one bar across the bottom of the screen, smooth at the screen's
+-- resolution, three quarters of the cart's height (36 rows, from canvas row 124 down). The same
+-- bar wherever the game shows its battle text box: a catch's Pokedex page and nickname prompt,
+-- an evolution, an egg hatching.
 --
 -- The look is the cart's, modernised in the way of Emerald 3DS's HD text box (its frame,
--- edge and panel gradients): the message panel red-framed and teal, the menus white with
--- the purple-grey frame, without the cart's dark outer border. The panels sit side by side,
+-- edge and panel gradients): Hoenn's message panel red-framed and teal, its menus white with
+-- the purple-grey frame; Kanto's message panel gold-framed and deep blue, its menus white with
+-- the violet frame; without the cart's dark outer border. The panels sit side by side,
 -- joined, the menu's anchored to the screen's right edge. The text and cursors stay the
 -- game's own, drawn into a layer of their own (hd.bar) and moved into the bar.
 --
@@ -29,6 +32,8 @@ Bar.CURSOR_PAD = 2
 Bar.LAYOUT = {
   emerald = { dy = 4, split = { menu = 120, moves = 160 } },
   rs = { dy = 6, split = { menu = 136, moves = 176 } },
+  -- (FireRed / LeafGreen: their own panels' colours, kinds)
+  frlg = { dy = 5, split = { menu = 120, moves = 156 }, kinds = { message = "frlgMessage", menu = "frlgMenu" } },
 }
 
 local function rgb(hex)
@@ -50,6 +55,23 @@ Bar.KINDS = {
     line = { rgb("e6dfe6"), rgb("d6cfd8") },
     panel = { rgb("ffffff"), rgb("faf9fb"), rgb("eeebf1") },
     shade = rgb("5a5070"), shadeA = 0.14,
+    side = 3, seam = 2, topF = 1.5, botF = 1.5, lineW = 1,
+  },
+  -- FireRed / LeafGreen's: the message box's gold frame (cart cead4a), light inner line (e6dee6)
+  -- and deep blue panel (29526b); the menus' violet frame (6b5a73, its foot 4a3a73), pale line
+  -- (ded6de) and white panel
+  frlgMessage = {
+    frame = { rgb("e2c35e"), rgb("cead4a"), rgb("a8873a") }, rim = rgb("fff1b8"),
+    line = { rgb("eee8ee"), rgb("d8d0da") },
+    panel = { rgb("356582"), rgb("29526b"), rgb("214559") },
+    shade = rgb("0e2433"), shadeA = 0.30,
+    side = 4, seam = 2, topF = 1.5, botF = 1.5, lineW = 1,
+  },
+  frlgMenu = {
+    frame = { rgb("82738c"), rgb("6b5a73"), rgb("4a3a73") }, rim = rgb("b5a9d6"),
+    line = { rgb("ebe5eb"), rgb("ded6de") },
+    panel = { rgb("ffffff"), rgb("faf9fb"), rgb("ecebe8") },
+    shade = rgb("4a3a73"), shadeA = 0.14,
     side = 3, seam = 2, topF = 1.5, botF = 1.5, lineW = 1,
   },
 }
@@ -187,15 +209,21 @@ function Bar.splitX(split, x, sx, extraR)
   return math.floor(x + split * sx + extraR + 0.5)
 end
 
+-- a layout's panel kind for "message" / "menu" (its own colours: FireRed / LeafGreen's)
+local function kindOf(L, kind)
+  return L.kinds and L.kinds[kind] or kind
+end
+Bar.kindOf = kindOf
+
 --- The panels for a panel mode ("none": the message; "menu": the prompt and the action menu;
 --- "moves": the move names and their PP / type), as { kind, x0, x1, leftRound, rightRound }
 --- in screen px, from the view's left (l) to its right (r).
 function Bar.panels(L, mode, l, r, x, sx, extraR)
   local split = L.split[mode]
-  if not split then return { { "message", l, r, true, true } } end
+  if not split then return { { kindOf(L, "message"), l, r, true, true } } end
   local d = Bar.splitX(split, x, sx, extraR)
-  local left = mode == "moves" and "menu" or "message"
-  return { { left, l, d, true, false }, { "menu", d, r, false, true } }
+  local left = kindOf(L, mode == "moves" and "menu" or "message")
+  return { { left, l, d, true, false }, { kindOf(L, "menu"), d, r, false, true } }
 end
 
 local function drawPanel(kind, x0, x1, lr, rr, top, s)
@@ -219,14 +247,15 @@ function Bar.paint(a, ctx)
   local l, r = math.floor(ctx.l + 0.5), math.floor(ctx.r + 0.5)
   love.graphics.setColor(1, 1, 1, 1)
   love.graphics.setBlendMode("alpha", "alphamultiply")
-  local split = a.layout.split[a.mode]
+  local L = a.layout
+  local split = L.split[a.mode]
   if not split then
-    drawPanel("message", l, r, true, true, top, s)
+    drawPanel(kindOf(L, "message"), l, r, true, true, top, s)
     return
   end
   local d = Bar.splitX(split, ctx.x, ctx.sx, ctx.extraR or 0)
-  drawPanel(a.mode == "moves" and "menu" or "message", l, d, true, false, top, s)
-  drawPanel("menu", d, r, false, true, top, s)
+  drawPanel(kindOf(L, a.mode == "moves" and "menu" or "message"), l, d, true, false, top, s)
+  drawPanel(kindOf(L, "menu"), d, r, false, true, top, s)
 end
 
 return Bar

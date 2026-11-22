@@ -27,7 +27,8 @@ With **Fill Screen** on, battles, menus, the Pokédex, the summary, the bag and 
 screen shape without black bars, while the text box and HP bars stay sharp.
 
 In Gen 3's classic battles and double battles, the opponents' HP boxes move up to the top of the
-screen, which gives the Pokémon more room. Gold, Silver and Crystal keep the game's own framed
+screen, which gives the Pokémon more room. In a double battle they leave room above for
+WoobleDex's stat chips beside them. Gold, Silver and Crystal keep the game's own framed
 screen.
 
 When KantoGear's GEAR screens take the battle's menus to their own screen, nothing is left at
@@ -42,12 +43,15 @@ top edge, whatever the Pokémon are doing.
 
 ## A modern battle text box 💬
 
-In Ruby, Sapphire and Emerald, **Battle Textbox** redraws the battle's text box and its FIGHT /
-BAG and move menus as one smooth bar across the bottom of the screen, in the game's own colours:
-the red-framed teal message box and the white menus, joined side by side.
+In Ruby, Sapphire, Emerald, FireRed and LeafGreen, **Battle Textbox** redraws the battle's text
+box and its FIGHT / BAG and move menus as one smooth bar across the bottom of the screen, in the
+game's own colours, joined side by side: in Hoenn the red-framed teal message box and white
+menus, in Kanto the gold-framed blue message box and white menus with their violet frames.
 
 - The bar spans the whole width of any screen, with your text on the left and the menu on the
   right.
 - It's a quarter shorter than the game's own box, so more of the battle shows above it.
+- The same bar carries the words after a catch (the Pokédex page and the nickname question),
+  when a Pokémon evolves and when an egg hatches.
 - When KantoGear's GEAR screens take over the battle's menus, the
   bar and the battle's text step aside.

@@ -128,6 +128,12 @@ function HD.new(G, opts)
       -- (Steelix) keeping its height. (Metres at a metre a tile: tuned at half a metre, as 1.5,
       -- 2.5, 2.25 and 3, the giants came out half as tall when the tile went back to a metre)
       heightKnee = 3, heightMax = 5, heightMaxFoe = 4.5, widthMax = 6,
+      -- ... and a Pokemon another mod draws giant for a while (exports.giant: Galar Rising's
+      -- Dynamax, a Gigantamax form) grows toward giantHeight metres: the tallest Pokemon's,
+      -- Eternatus aside (Celesteela, its art's standing height in the sprite mods' measure),
+      -- under the same soft ceiling (and indoors the same ceiling) as any, never smaller than it
+      -- stands itself: as tall as the tallest Pokemon there stands, not the anime's 100 ft
+      giantHeight = 10.05,
       -- ... in a double battle, four sharing the screen: the soft ceiling from heightKneeDouble
       -- toward heightMaxDouble, and each no wider than its spot allows: Gen 3's four battler
       -- columns (doubleSpots, canvas px: the player's 32 and 90, the foes' 152 and 200) spread
@@ -265,6 +271,9 @@ function HD.new(G, opts)
       -- doublesSlack: rows a UI draw may cross the split and still not count as crossing it (an HP
       -- box is drawn on an image taller than the box: the empty rows meet those of the next one)
       double = false, doublesGap = 4, doublesShiftMax = 16, doublesSlack = 4, sceneUp = 0,
+      -- ... and the foes' band moved up (Fill Screen) keeps its row chipRowsDouble on the screen, not
+      -- only the upper box's top: WoobleDex's stat chips stand beside the foes' boxes from it
+      chipRowsDouble = 0,
       -- a whole screen filling the screen (compositeCard): beyond the picture, the picture blurred
       -- and dimmed to cardDim (cardBlur), or its edge pixels continued outward; with the blur, the
       -- picture's rim fades into it over cardFeather game pixels
@@ -784,7 +793,11 @@ function HD.new(G, opts)
     local cur = self.cur
     if not (covers and self.fit.fill and cur.pass == "battle" and cur.segment == "ui") then return end
     local _, _, _, a = real.getColor()
-    if a >= 0.99 then cur.uiCovers = true end
+    if a >= 0.99 and not cur.uiCovers then
+      cur.uiCovers = true
+      -- (from this item on: what the UI drew before it is under it - a bar painted before it too)
+      cur.coverAt = #cur.items + 1
+    end
   end
   local function uiFill()
     local cur = self.cur
@@ -1069,6 +1082,29 @@ function HD.new(G, opts)
   -- worldShadow[side]: the share of the scene's shadow under that side its Pokemon's body spans.
   local worldMons = {}
   self.worldShadow = {}
+  -- the soft ceiling on a height (metres) for a battler of `side`: true to size up to heightKnee,
+  -- eased toward heightMax (a foe's heightMaxFoe; a double battle's own pair) and never past it;
+  -- none with sizeMode "accurate" in singles
+  local function softCeiling(height, side)
+    local fit = self.fit
+    local double = fit.double
+    local cap, knee0 = tonumber(fit.heightMax), tonumber(fit.heightKnee)
+    if double then
+      cap, knee0 = tonumber(fit.heightMaxDouble), tonumber(fit.heightKneeDouble)
+    elseif side ~= "player" and tonumber(fit.heightMaxFoe) then
+      cap = math.min(cap or math.huge, tonumber(fit.heightMaxFoe))
+    end
+    if fit.sizeMode == "accurate" and not double then cap = nil end
+    if cap and cap > 0 and height > math.min(knee0 or cap, cap) then
+      local kn = math.min(knee0 or cap, cap)
+      if kn >= cap then
+        height = cap
+      else
+        height = kn + (cap - kn) * (1 - math.exp(-(height - kn) / (cap - kn)))
+      end
+    end
+    return height
+  end
   local function worldSize(spec, image, lpx, lpy, hpx, hpy, sx, sy, X, Y, rest)
     local scene, S = self.worldScene, self.scene
     if not (scene and type(S) == "table" and type(S.groundScale) == "function") then return nil end
@@ -1119,23 +1155,9 @@ function HD.new(G, opts)
     -- (the tallest: capped at heightMax, a foe's at heightMaxFoe; the widest at widthMax, its
     -- art box's width in metres at that height)
     local double = self.fit.double
-    local cap, knee0 = tonumber(self.fit.heightMax), tonumber(self.fit.heightKnee)
-    if double then
-      cap, knee0 = tonumber(self.fit.heightMaxDouble), tonumber(self.fit.heightKneeDouble)
-    elseif spec.side ~= "player" and tonumber(self.fit.heightMaxFoe) then
-      cap = math.min(cap or math.huge, tonumber(self.fit.heightMaxFoe))
-    end
     local mode = self.fit.sizeMode
     local accurate = mode == "accurate" and not double
-    if accurate then cap = nil end
-    if cap and cap > 0 and height > math.min(knee0 or cap, cap) then
-      local kn = math.min(knee0 or cap, cap)
-      if kn >= cap then
-        height = cap
-      else
-        height = kn + (cap - kn) * (1 - math.exp(-(height - kn) / (cap - kn)))
-      end
-    end
+    height = softCeiling(height, spec.side)
     local wcap = not double and not accurate and tonumber(self.fit.widthMax)
     local wx0, wx1 = type(art) == "table" and tonumber(art[1]), type(art) == "table" and tonumber(art[3])
     if wcap and wcap > 0 and wx0 and wx1 and wx1 > wx0 then
@@ -1231,6 +1253,109 @@ function HD.new(G, opts)
     return k
   end
   self._worldMons = worldMons
+
+  -- Pokemon another mod draws giant for a while (exports.giant: Galar Rising's Dynamax), by battler
+  -- id (0..3; singles: 0 the player's, 1 the foe's): how the battle draws it now - scale (over its
+  -- own draw), dx / dy (canvas px its centre moves), the picture in its place (a Gigantamax form's:
+  -- tagged, its pivot at its feet) and grow (0..1, how far grown). The fit takes each where it
+  -- rests at that size (hd.prefit), whatever a move does to it meanwhile, so the camera pulls back
+  -- for it from its first frame to its last and never for a frame less. In the 3D world with 3D
+  -- Sizing it stands toward fit.giantHeight as it grows (giantSize). Off when a battle starts.
+  -- own: its own picture's tag, as the battle reports it (its height, its size before it grew)
+  self.giants = {}
+  function self.setGiant(id, info)
+    id = tonumber(id)
+    if id == nil then return end
+    local g = self.giants[id]
+    if type(info) ~= "table" then
+      if g then g.on = false end
+      return
+    end
+    if not g then
+      g = {}
+      self.giants[id] = g
+    end
+    g.on = true
+    g.scale = tonumber(info.scale) or 1
+    g.dx, g.dy = tonumber(info.dx) or 0, tonumber(info.dy) or 0
+    g.image = info.image
+    g.grow = math.max(0, math.min(1, tonumber(info.grow) or 1))
+  end
+  local function giantsOff()
+    for _, g in pairs(self.giants) do g.on, g.own, g.ownRec, g.restRec = false, nil, nil, nil end
+  end
+  self.giantsOff = giantsOff
+  -- the giant a tagged draw is (its Gigantamax picture's tag, or its own picture's while it grows)
+  local function giantOf(spec)
+    for _, g in pairs(self.giants) do
+      if g.on then
+        if g.image ~= nil then
+          if self.tags[g.image] == spec then return g end
+        else
+          local own = g.own or (g.ownRec and g.ownRec.spec)
+          if own and spec.side == own.side and sameMon(own, spec) then return g end
+        end
+      end
+    end
+    return nil
+  end
+  self.giantOf = giantOf
+  -- a giant's size in the 3D world (the k place() takes, over the draw's own scale): its art from
+  -- its own height where it stands (worldSize's, floors and all) toward giantHeight's (softCeiling,
+  -- indoors under the ceiling, Minimal's curve), by grow, evenly in proportion; no taller than
+  -- the camera shows at its furthest zoom from where its feet stand
+  local function giantSize(g, spec, hpy, X, Y)
+    local scene, S, fit = self.worldScene, self.scene, self.fit
+    if not (scene and type(S) == "table" and type(S.groundScale) == "function") then return nil end
+    local own = g.own
+    local ownH = own and tonumber(own.height)
+    if not (ownH and ownH > 0) then return nil end
+    local art = spec.art
+    local atop = type(art) == "table" and tonumber(art[2]) or tonumber(spec.top)
+    local feet = hpy
+    if type(spec.body) == "table" and tonumber(spec.body[4]) and spec.texture == nil then
+      feet = math.max(feet, tonumber(spec.body[4]))
+    end
+    if not atop or feet - atop <= 0 then return nil end
+    local ok, ppt = pcall(S.groundScale, scene, X, Y)
+    if not (ok and type(ppt) == "number" and ppt > 0) then return nil end
+    local mpt = tonumber(S.METRES_PER_TILE) or 1
+    local function metres(h)
+      h = softCeiling(h, spec.side)
+      local knee, ceiling = tonumber(fit.indoorKnee), tonumber(fit.indoorCeiling)
+      if scene.indoor and knee and ceiling and ceiling > knee and h > knee then
+        h = knee + (ceiling - knee) * (1 - math.exp(-(h - knee) / (ceiling - knee)))
+      end
+      if fit.sizeMode == "minimal" and not fit.double then
+        local mid, pw = tonumber(fit.minimalMid) or 1, tonumber(fit.minimalPow) or 1
+        if mid > 0 and pw > 0 then h = mid * (h / mid) ^ pw end
+      end
+      return h
+    end
+    local ownPx
+    for i = 1, #worldMons do
+      local w = worldMons[i]
+      if w.px and w.of.side == own.side and sameMon(w.of, own) then ownPx = w.px break end
+    end
+    ownPx = ownPx or metres(ownH) / mpt * ppt
+    local bigPx = math.max(ownPx, metres(tonumber(fit.giantHeight) or ownH) / mpt * ppt)
+    local px = ownPx * (bigPx / ownPx) ^ (g.grow or 1)
+    local z = math.max(fit.zMin or 1, 1e-3)
+    local fy = fit.focus[2]
+    local line = fit.topY or 0
+    if fit.headBox and fit.boxBottom and spec.side == "player" and not fit.double then
+      line = math.max(line, fy + (fit.boxBottom + fit.headGap + (fit.sceneUp or 0) - fy) * (fit.uiK or 1))
+    end
+    local most = Y - (fy - (fy - line) / z)
+    if most > 0 then px = math.min(px, most) end
+    local kTot = px / (feet - atop)
+    -- (the side's shadow spans its body at that size)
+    local b, sh = spec.body, type(S.SHADOW) == "table" and S.SHADOW[spec.side]
+    if type(b) == "table" and b[3] and b[1] and sh and sh[3] and sh[3] > 0 then
+      self.worldShadow[spec.side] = math.max(0.1, (b[3] - b[1]) * kTot / (2 * sh[3]))
+    end
+    return kTot / ((g.scale and g.scale > 0) and g.scale or 1)
+  end
 
   --- (a double battle in the 3D world) how far the doubles spread moves the battler resting on
   --- the spot nearest canvas column x (spec: its tag, whose resting column, as the engine
@@ -1872,6 +1997,28 @@ function HD.new(G, opts)
     return true
   end
 
+  -- a wash over the battle's field drawn with its UI (a fill across the whole width from the
+  -- top down to the text box's line, not to the canvas's bottom: Galar Rising's red flash on a
+  -- Max Move): with Fill Screen it is recorded once (a "wash" item, drawn over the field across
+  -- the view) instead of drawn in the UI's box. In the UI it crossed the split row, and the
+  -- foe's HP box, moved up with the rows above it, fell back to the cart's place while it showed
+  local function fieldWash(mode, x, y, w, h)
+    local cur = self.cur
+    if mode ~= "fill" or real.getShader() ~= nil then return false end
+    if not coversScene(x, y, w, h) or (lastBottom or cur.h) >= cur.h - 0.5 then return false end
+    local blend, alphaMode = real.getBlendMode()
+    if blend ~= "alpha" then return false end
+    local item = newItem("wash")
+    item.bottom = lastBottom
+    item.r, item.g, item.b, item.a = real.getColor()
+    item.premultiplied = alphaMode == "premultiplied"
+    cur.items[#cur.items + 1] = item
+    -- what the UI draws after it goes to a layer above it
+    cur.pending = true
+    cur.open = nil
+    return true
+  end
+
   local function wrapPrimitive(name)
     return function(...)
       if self.cur and onPass() then
@@ -1887,6 +2034,7 @@ function HD.new(G, opts)
           if not kind and self.fit.fill and primitiveEdge(name, ...) then kind = "edge" end
           scene = kind ~= nil
         end
+        if name == "rectangle" and uiFill() and fieldWash(...) then return end
         if name == "rectangle" and uiFill() then
           local mode, x, y, w, h = ...
           local screen = mode == "fill" and coversScene(x, y, w, h, self.cur.h)
@@ -2052,6 +2200,7 @@ function HD.new(G, opts)
     c.layerSet, c.items = kept.layerSet or {}, kept.items or {}
     c.w, c.h, c.layerCount, c.splits = base:getWidth(), base:getHeight(), 0, 0
     c.cap, c.pending, c.segment, c.hasUI = self.caps[pass] or 8, false, "scene", false
+    c.cardUi, c.coverAt = false, nil
     -- a screen over the field with Pokedex & Summary HD off: its Pokemon are drawn as tagged
     -- images usually are outside a pass (the screen still fills the screen)
     c.plain = pass == "screen" and not self.enabled.dex
@@ -2125,11 +2274,13 @@ function HD.new(G, opts)
   --- px), the view's left and right (l, r) and the UI's margins beside it (extraL, extraR); a
   --- pass put back the low-res way calls it at the canvas's own scale. hide (canvas row): what
   --- the UI drew before it is cut off there (the rows a panel drawn in its place covered).
-  --- Returns false (nothing recorded) outside a pass's UI.
-  function self.paint(fn, a, hide)
+  --- runTo (canvas row): on a whole screen with the battle's text box (cardUi, Fill Screen), the
+  --- picture's row above `hide` runs on down to it across the screen (a bar shorter than the
+  --- panel it replaces). Returns false (nothing recorded) outside a pass's UI.
+  function self.paint(fn, a, hide, runTo)
     local cur = self.cur
-    if not (cur and cur.segment == "ui" and onPass()) then return false end
-    cur.items[#cur.items + 1] = { kind = "paint", fn = fn, a = a, hide = hide }
+    if not (cur and (cur.segment == "ui" or cur.cardUi) and onPass()) then return false end
+    cur.items[#cur.items + 1] = { kind = "paint", fn = fn, a = a, hide = hide, runTo = runTo }
     cur.pending = true
     return true
   end
@@ -2140,11 +2291,18 @@ function HD.new(G, opts)
   --- its left one (nil: all of it left) }); nil ends it. Returns false outside a pass's UI.
   function self.bar(spec)
     local cur = self.cur
-    if not (cur and cur.segment == "ui") then return false end
+    if not (cur and (cur.segment == "ui" or cur.cardUi)) then return false end
     if cur.barSpec == spec then return true end
     cur.barSpec = spec
     cur.pending = true
     return true
+  end
+
+  --- This pass is a whole screen showing the battle's text box without a battle's UI (a catch's
+  --- Pokedex page, an evolution): its paint and bar layers are drawn as a battle's UI's are, the
+  --- bar across the screen (with Fill Screen, over its whole picture: compositeCard).
+  function self.cardUi()
+    if self.cur then self.cur.cardUi = true end
   end
 
   --- Draw the battle's wallpaper: recorded, then drawn at window resolution, wrapped so the
@@ -2303,14 +2461,35 @@ function HD.new(G, opts)
   local prefitKept = {}
   function self.prefit(side, image, x, y, key, present)
     local cur = self.cur
+    -- (a Pokemon drawn giant for a while, exports.giant: where it rests at that size, its form's
+    -- picture in its place; its own picture's tag kept for its height)
+    local g = self.giants[key or (side == "player" and 0 or 1)]
+    local gs = 1
+    if g and g.on and type(x) == "number" and type(y) == "number" then
+      local own = image ~= nil and self.tags[image]
+      -- (its height, for its size in the 3D world)
+      if own and speciesTag(own) then g.own = own end
+      if own and own.side ~= nil and not own.trainer then
+        -- (its own picture where it rests: the giant's feet are put on its feet)
+        local o = g.ownRec
+        if not o then o = {}; g.ownRec = o end
+        o.spec, o.image, o.x, o.y, o.r, o.sx, o.sy, o.ox, o.oy = own, image, x, y, 0, 1, 1, 32, 32
+        o.tx, o.ty, o.tsx, o.tsy, o.rest, o.noGiant = 0, 0, 1, 1, true, true
+      else
+        g.ownRec = nil
+      end
+      if g.image ~= nil and self.tags[g.image] then image = g.image end
+      x, y, gs = x + g.dx, y + g.dy, g.scale
+    end
     local spec = image ~= nil and self.tags[image]
     if not (cur and spec and type(x) == "number" and type(y) == "number") then return end
     local k = key or side
     local r = prefitKept[k]
     if not r then r = {}; prefitKept[k] = r end
-    r.spec, r.image, r.x, r.y, r.r, r.sx, r.sy, r.ox, r.oy = spec, image, x, y, 0, 1, 1, 32, 32
+    r.spec, r.image, r.x, r.y, r.r, r.sx, r.sy, r.ox, r.oy = spec, image, x, y, 0, gs, gs, 32, 32
     r.tx, r.ty, r.tsx, r.tsy, r.rest, r.out = 0, 0, 1, 1, true, present ~= false
     cur.prefit[k] = r
+    if g and g.on then g.restRec, g.fixStale = r, true end
     if cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
   end
 
@@ -2332,6 +2511,7 @@ function HD.new(G, opts)
       if self.fit.idle > 2 then
         self.pair = {}
         self.playerIn = false
+        giantsOff()
         for i = #worldMons, 1, -1 do worldMons[i] = nil end
         self.worldShadow.enemy, self.worldShadow.player = nil, nil
       end
@@ -2417,7 +2597,8 @@ function HD.new(G, opts)
 
   -- where a tagged draw stands: the point in pass-canvas pixels where its HD pivot goes
   -- (X, Y), that pivot in the HD frame (hpx, hpy), its size k, the texture and quad
-  local function place(rec)
+  -- raw: only where its pivot stands (X, Y), a giant's feet not yet put on its own's
+  local function place(rec, raw)
     local spec = rec.spec
     local tex = spec.texture or rec.image
     local quad = spec.texture and spec.quad or viewOf(rec)
@@ -2459,13 +2640,30 @@ function HD.new(G, opts)
     local cs, sn = math.cos(rec.r), math.sin(rec.r)
     local px = rec.x + dx * cs - dy * sn
     local py = rec.y + dx * sn + dy * cs
+    -- (a giant, exports.giant: moved so that its feet - its tag's pivot - stand where its own
+    -- picture's stand at rest, whatever offsets the mod drawing it gave it: grown or in its
+    -- Gigantamax form it stays on the same spot of the ground; worked out once a frame)
+    local g = not raw and not rec.noGiant and spec.side ~= nil and not spec.trainer and giantOf(spec) or nil
+    if g and g.restRec and g.ownRec then
+      if g.fixStale then
+        g.fixStale = false
+        local ox, oy = place(g.ownRec, true)
+        local gx, gy = place(g.restRec, true)
+        g.fixX, g.fixY = ox - gx, oy - gy
+      end
+      px, py = px + (g.fixX or 0), py + (g.fixY or 0)
+    end
     local X, Y = rec.tx + px * rec.tsx, rec.ty + py * rec.tsy
+    if raw then return X, Y end
     local k = (qp and qp[3]) or spec.scale or 1
     if not qp then
-      -- (in the 3D world: at its scale, where it stands; else its own size, unless too big)
-      local w = tuned() and self.fit.enabled and speciesTag(spec)
-        and not (self.fit.double and self.fit.doublesOwnSize)
-        and worldSize(spec, rec.image, lpx, lpy, hpx, hpy, rec.sx, rec.sy, X, Y, rec.rest)
+      -- (in the 3D world: at its scale, where it stands - a giant toward the tallest's; else its
+      -- own size, unless too big)
+      local world = tuned() and self.fit.enabled and not (self.fit.double and self.fit.doublesOwnSize)
+      local w = world and g and giantSize(g, spec, hpy, X, Y)
+      if not w then
+        w = world and speciesTag(spec) and worldSize(spec, rec.image, lpx, lpy, hpx, hpy, rec.sx, rec.sy, X, Y, rec.rest)
+      end
       k = w or ownSize(spec, rec.image, k, lpx, lpy, hpx, hpy, rec.sx, rec.sy)
     end
     -- (cut: {x0, y0, x1, y1} in the HD texture's pixels)
@@ -2890,13 +3088,22 @@ function HD.new(G, opts)
     local zFront = math.max(fit.zMin, fitZoom(top))
     if #backs == 0 then return zFront, 0 end
     local limit = topLimit()
+    local fx = fit.focus[1]
     local function fits(z, lift)
       for _, r in ipairs(backs) do
         -- the back where the player side's drop puts it
         local v = playerDrop(z, lift)
         local y0 = fy + (r[2] + v - fy) * z - lift
         local t = r.top and (fy + (r.top + v - fy) * z - lift) or y0
-        if y0 < limit or t < limit then return false end
+        -- (a giant, exports.giant: its head under the foe's HP box too, where it stands under
+        -- the box's columns - the cart's own sizes may reach behind it, a giant's would hide)
+        local lim = limit
+        if r.giant then
+          local e = uiEnemy()
+          local x0, x1 = fx + (r[1] - fx) * z, fx + (r[3] - fx) * z
+          if x1 > e[1] and x0 < e[3] then lim = math.max(lim, e[4] + (fit.headGap or 0) * (fit.uiK or 1)) end
+        end
+        if y0 < lim or t < lim then return false end
       end
       return true
     end
@@ -2924,7 +3131,8 @@ function HD.new(G, opts)
     local parts = { string.format("%.2f|%.3f|%.4f|%.2f|%.2f|%.2f|%s|%s", top, fit.zMin, fit.uiK or 1,
       fit.topY or 0, fit.uiTopDy or 0, fit.sceneUp or 0, tostring(fit.doubleArt), tostring(self.worldScene ~= nil)) }
     for _, r in ipairs(backs) do
-      parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f", r[1], r[2], r[3], r[4], r.top or 0)
+      parts[#parts + 1] = string.format("%.2f,%.2f,%.2f,%.2f,%.2f%s", r[1], r[2], r[3], r[4], r.top or 0,
+        r.giant and "g" or "")
     end
     local key = table.concat(parts, ";")
     local hit = solved[key]
@@ -3009,6 +3217,7 @@ function HD.new(G, opts)
       F.apL, F.apR = math.min(F.apL, a), math.max(F.apR, b)
       if spec.body then
         local r = { bodyRect(rec) }
+        r.giant = giantOf(spec) ~= nil
         F.pT = math.min(F.pT, r[2])
         -- where the side shift puts it (only its x: which UI it is under)
         r[1], r[3] = r[1] + d, r[3] + d
@@ -3078,6 +3287,11 @@ function HD.new(G, opts)
           if not sameOut(k.mons[id], rec.spec) then fresh = true break end
         end
         if live and hold then fresh = false end
+      end
+      -- (the HUD held - a Pokemon drawn giant for a while: the box stays, the camera pulls
+      -- back for the giant under it; its own picture back, nothing new is out)
+      if fresh and k and fit.boxBottom and self.hudHeld > 0 and fit.idle <= 2 and k.screen == screen then
+        fresh = false
       end
       if fresh then
         fit.boxBottom = nil
@@ -3814,6 +4028,95 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     end
   end
 
+  -- a card's state for its rim and bar (compositeCard's, set each call; read by cardRim / cardBar)
+  local cardState = {}
+  -- the picture's rim fades into the backdrop: the backdrop again, opaque at an edge with a gap
+  -- beside it and gone cardFeather game pixels in (once a card: before a bar, which runs on past
+  -- the picture's sides unfaded, else after everything)
+  local function cardRim()
+    local cs = cardState
+    if cs.done then return end
+    cs.done = true
+    local F, soft = self.fit.cardFeather, cs.soft
+    if not (soft and F > 0) then return end
+    if featherShader == nil then
+      local ok, sh = pcall(G.newShader, FEATHER_SRC)
+      featherShader = ok and sh or false
+    end
+    if not featherShader then return end
+    local send = shaderReal.send or featherShader.send
+    local sdx, sdy, sdw, sdh = cs.sdx, cs.sdy, cs.sdw, cs.sdh
+    featherRect[1] = cs.ubx > cs.vx and (cs.ubx - sdx) / sdw or -1
+    featherRect[2] = cs.uby > cs.vy and (cs.uby - sdy) / sdh or -1
+    featherRect[3] = cs.x1 < cs.vr and (cs.x1 - sdx) / sdw or 2
+    featherRect[4] = cs.y1 < cs.vb and (cs.y1 - sdy) / sdh or 2
+    featherSize[1], featherSize[2] = F * cs.U / sdw, F * cs.Uy / sdh
+    send(featherShader, "rect", featherRect)
+    send(featherShader, "feather", featherSize)
+    real.setScissor()
+    real.setShader(featherShader)
+    real.setBlendMode("alpha", "premultiplied")
+    local d = self.fit.cardDim
+    real.setColor(d, d, d, 1)
+    drawPlain(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), cs.box)
+    real.setShader()
+  end
+  -- the bar (hd.paint) across the screen at the picture's rows - the picture's last row above it
+  -- run on down to it across the screen (the cart's text box began rows higher) - and what is
+  -- drawn into it (hd.bar) moved down into it: its left part to the screen's left edge, the rest
+  -- after its split to the right one, as a battle's
+  local function cardBar(item)
+    local cs = cardState
+    cardRim()
+    real.setShader()
+    local ubx, uby, U, Uy = cs.ubx, cs.uby, cs.U, cs.Uy
+    local vx, vy, vw, vh, vr, vb = cs.vx, cs.vy, cs.vw, cs.vh, cs.vr, cs.vb
+    if item.kind == "paint" then
+      if item.hide and item.runTo and item.runTo > item.hide then
+        local src = cs.flat or flattenCard(cs.cur, cs.blit)
+        cs.flat = src
+        if src then
+          real.setColor(1, 1, 1, 1)
+          real.setBlendMode("alpha", "premultiplied")
+          local o = cutScratch
+          o[1], o[2], o[3], o[4] = vx, uby + item.hide * Uy, vw, (item.runTo - item.hide) * Uy
+          runDown(src, ubx, uby, U, Uy, item.hide, o)
+        end
+      end
+      real.setColor(1, 1, 1, 1)
+      real.setBlendMode("alpha", "alphamultiply")
+      scissorOver(vx, vy, vw, vh)
+      local c = paintCtx
+      c.x, c.y, c.sx, c.sy = ubx, uby, U, Uy
+      c.l, c.r, c.extraL, c.extraR = vx, vr, cs.extraL, cs.extraR
+      local ok, err = pcall(item.fn, item.a, c)
+      if not ok then self.stats.paintError = tostring(err) end
+    else
+      real.setScissor()
+      real.setColor(1, 1, 1, 1)
+      real.setBlendMode("alpha", "premultiplied")
+      local b, cur = item.bar, cs.cur
+      local c, kk = item.canvas, 1
+      if cs.k > 1 then c, kk = sharpen(item.canvas, cur.w, cur.h, cs.k) end
+      local y0 = math.max(uby + b.top * Uy, vy)
+      local yb = math.min(uby + b.bottom * Uy, vb)
+      local oy = uby + b.dy * Uy
+      if yb > y0 then
+        local extraL, extraR = cs.extraL, cs.extraR
+        local cut = b.split and (ubx - extraL + b.split * U) or vr
+        local o = cutScratch
+        o[1], o[2], o[3], o[4] = vx, y0, cut - vx, yb - y0
+        cs.blit(c, ubx - extraL, oy, U / kk, Uy / kk, o, kk)
+        if b.split then
+          local d = ubx + b.split * U + extraR
+          o[1], o[2], o[3], o[4] = d, y0, vr - d, yb - y0
+          cs.blit(c, ubx + extraR, oy, U / kk, Uy / kk, o, kk)
+        end
+      end
+    end
+    real.setScissor()
+    real.setBlendMode("alpha", "alphamultiply")
+  end
   local function compositeCard(cur, blit, bsx, bsy, view)
     -- the camera keeps its place behind the screen
     if cur.hasUI then fitStep(cur) end
@@ -3851,9 +4154,9 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- clip is cut to whole pixels, so each gap's clip reaches over the picture's edge pixel
     -- (ceil / floor): a screen pixel the picture covers less than half of is the gap's, and the
     -- picture, drawn after, covers the rest
-    local soft, sdx, sdy, sdw, sdh
+    local soft, sdx, sdy, sdw, sdh, flat
     if ubx > vx or x1 < vr or uby > vy or y1 < vb then
-      local flat = flattenCard(cur, blit)
+      flat = flattenCard(cur, blit)
       -- the picture blurred, dimmed and grown to cover the whole screen behind it
       soft = self.fit.cardBlur and blurCard(flat, cur.w, cur.h)
       if soft then
@@ -3889,11 +4192,22 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         blit(flat, vx, y1 - (cur.h - 1) * g, sw, g, { vx, floor(y1), vw, vb - floor(y1) })
       end
     end
+    -- (the rim's feather and the bar's state: cardRim / cardBar)
+    local cs = cardState
+    cs.done, cs.cur, cs.blit, cs.soft, cs.flat, cs.box, cs.k = false, cur, blit, soft, flat, box, k
+    cs.sdx, cs.sdy, cs.sdw, cs.sdh = sdx, sdy, sdw, sdh
+    cs.ubx, cs.uby, cs.U, cs.Uy, cs.x1, cs.y1 = ubx, uby, U, Uy, x1, y1
+    cs.vx, cs.vy, cs.vw, cs.vh, cs.vr, cs.vb = vx, vy, vw, vh, vr, vb
+    cs.extraL, cs.extraR = math.max(0, ubx - vx), math.max(0, vr - x1)
     local inScene, hidden = true, cur.uiCovers
     if not hidden then picture(cur.base) end
-    for _, item in ipairs(cur.items) do
+    local coverAt = cur.coverAt
+    for i, item in ipairs(cur.items) do
       if item.kind == "seam" then
         if item.name == "ui" then inScene = false end
+      elseif item.kind == "paint" or (item.canvas and item.bar) then
+        -- (not under a whole screen the UI drew over it after: it ran on past that screen's sides)
+        if not (coverAt and i < coverAt) then cardBar(item) end
       elseif not (inScene and hidden) then
         scissorOver(box[1], box[2], box[3], box[4])
         if item.kind == "hd" then
@@ -3915,6 +4229,12 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           real.setColor(c[1], c[2], c[3], c[4])
           real.rectangle("fill", ubx, uby, cur.w * U, item.top * Uy)
           real.rectangle("fill", ubx, uby + item.bottom * Uy, cur.w * U, (cur.h - item.bottom) * Uy)
+        elseif item.kind == "wash" then
+          real.setShader()
+          real.setBlendMode("alpha", item.premultiplied and "premultiplied" or "alphamultiply")
+          real.setColor(item.r, item.g, item.b, item.a)
+          real.rectangle("fill", ubx, uby, cur.w * U, item.bottom * Uy)
+          real.setBlendMode("alpha", "alphamultiply")
         elseif item.canvas then
           real.setScissor()
           real.setShader()
@@ -3924,32 +4244,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         end
       end
     end
-    -- the picture's rim fades into the backdrop: the backdrop again, opaque at an edge with a gap
-    -- beside it and gone cardFeather game pixels in
-    local F = self.fit.cardFeather
-    if soft and F > 0 then
-      if featherShader == nil then
-        local ok, sh = pcall(G.newShader, FEATHER_SRC)
-        featherShader = ok and sh or false
-      end
-      if featherShader then
-        local send = shaderReal.send or featherShader.send
-        featherRect[1] = ubx > vx and (ubx - sdx) / sdw or -1
-        featherRect[2] = uby > vy and (uby - sdy) / sdh or -1
-        featherRect[3] = x1 < vr and (x1 - sdx) / sdw or 2
-        featherRect[4] = y1 < vb and (y1 - sdy) / sdh or 2
-        featherSize[1], featherSize[2] = F * U / sdw, F * Uy / sdh
-        send(featherShader, "rect", featherRect)
-        send(featherShader, "feather", featherSize)
-        real.setScissor()
-        real.setShader(featherShader)
-        real.setBlendMode("alpha", "premultiplied")
-        local d = self.fit.cardDim
-        real.setColor(d, d, d, 1)
-        drawPlain(soft, sdx, sdy, sdw / soft:getWidth(), sdh / soft:getHeight(), box)
-        real.setShader()
-      end
-    end
+    cardRim()
+    cs.cur, cs.blit, cs.soft, cs.flat = nil, nil, nil, nil
     real.pop()
     restoreShaders()
     self.stats.composites = self.stats.composites + 1
@@ -3990,6 +4286,11 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     local sceneBox, uiBox = box, box
     local filling = fitted and fit.fill and view ~= nil
     local stacked, dyTop, top = false, 0, nil
+    -- the top band's highest row that must stay on the screen when it is moved up: the enemy's HP
+    -- box's top, or in a double battle the band's own (fit.chipRowsDouble: WoobleDex's stat chips
+    -- stand in columns beside the foes' boxes from the band's first row, above the upper box)
+    local bandTop = fit.ui.enemy[2]
+    if fit.double and tonumber(fit.chipRowsDouble) then bandTop = math.min(bandTop, fit.chipRowsDouble) end
     fit.wantW = nil
     fit.sceneUp = 0
     if filling then
@@ -4057,7 +4358,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         -- eased to the scene's top between turns (fit.anchor, UI px); set afresh each battle
         do
           local sceneTop = math.max(top, cy - fy * Sy)
-          local want = math.min(0, (sceneTop - uby) / Uy + fit.stackGap - fit.ui.enemy[2])
+          local want = math.min(0, (sceneTop - uby) / Uy + fit.stackGap - bandTop)
           local a = fit.anchor
           if not a or fit.idle > 2 then
             a = want
@@ -4066,7 +4367,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
             a = want > a and math.min(want, a + step) or math.max(want, a - step)
           end
           fit.anchor = a
-          dyTop = math.min(0, round2(math.max(a, (top - uby) / Uy - fit.ui.enemy[2])))
+          dyTop = math.min(0, round2(math.max(a, (top - uby) / Uy - bandTop)))
         end
       else
         -- wider: the UI keeps the Renderer's scale, docked to the bottom; the scene grows about
@@ -4088,7 +4389,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- under it. Fill Screen off keeps the game's own frame
     local raised = filling and not stacked and type(fit.topGap) == "number"
     if raised then
-      dyTop = math.min(dyTop, round2((top - uby) / Uy + fit.topGap - fit.ui.enemy[2]))
+      dyTop = math.min(dyTop, round2((top - uby) / Uy + fit.topGap - bandTop))
     end
     -- the 3D world filling the screen: the foe's HP box (both, in a double battle) over the
     -- highest head
@@ -4113,10 +4414,13 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- (a mod holding the HUD - a Pokemon drawn giant for a while, Galar Rising's Dynamax: the
     -- camera still pulls back for it, the foe's HP box stays where it was; let go, it eases on
     -- from there)
-    if self.hudHeld > 0 then
+    -- (the frame it is let go it still stands there - else it jumped to where the anchor had
+    -- eased meanwhile for a frame - and eases on from the next)
+    if self.hudHeld > 0 and filling then
       if self.heldDyTop == nil then self.heldDyTop = dyTop end
       dyTop = self.heldDyTop
     elseif self.heldDyTop ~= nil then
+      if filling then dyTop = self.heldDyTop end
       if fit.anchor then fit.anchor = self.heldDyTop end
       if fit.boxDy then fit.boxDy = self.heldDyTop end
       self.heldDyTop = nil
@@ -4255,8 +4559,20 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     real.push("all")
     for i, item in ipairs(cur.items) do
       if item.kind == "paint" then
-        if not inScene then
+        if not inScene or cur.cardUi then
           real.setShader()
+          -- (a whole screen with the battle's text box: its picture's row above the panel's run
+          -- on down to the bar, as compositeCard does)
+          if cur.cardUi and item.hide and item.runTo and item.runTo > item.hide then
+            local src = flattenCard(cur, blit)
+            if src then
+              real.setColor(1, 1, 1, 1)
+              real.setBlendMode("alpha", "premultiplied")
+              local o = cutScratch
+              o[1], o[2], o[3], o[4] = barView[1], uby + item.hide * Uy, barView[3], (item.runTo - item.hide) * Uy
+              runDown(src, ubx, uby, U, Uy, item.hide, o)
+            end
+          end
           real.setColor(1, 1, 1, 1)
           real.setBlendMode("alpha", "alphamultiply")
           scissorOver(barView[1], barView[2], barView[3], barView[4])
@@ -4275,6 +4591,21 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         elseif item.name == "uiTopEnd" then
           inTop = false
         end
+      elseif item.kind == "wash" then
+        -- (a wash over the field: from the view's top down to the text box's line on the screen
+        -- when it reaches the cart's, else to its own row there, across the view)
+        real.setShader()
+        real.setBlendMode("alpha", item.premultiplied and "premultiplied" or "alphamultiply")
+        real.setColor(item.r, item.g, item.b, item.a)
+        local v = sceneBox or uiBox or clipTo
+        local row = item.bottom
+        if math.abs(row - fy) < 0.5 and fit.ui and fit.ui.text then row = math.max(row, fit.ui.text[2]) end
+        local b = math.min(v[2] + v[4], uby + row * Uy)
+        scissorOver(v[1], v[2], v[3], v[4])
+        if b > v[2] then real.rectangle("fill", v[1], v[2], v[3], b - v[2]) end
+        real.setScissor()
+        real.setBlendMode("alpha", "alphamultiply")
+        real.setColor(1, 1, 1, 1)
       elseif item.kind == "win0" then
         real.setShader()
         real.setBlendMode("alpha", "alphamultiply")
@@ -4402,7 +4733,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         real.setShader()
         real.setColor(1, 1, 1, 1)
         real.setBlendMode("alpha", "premultiplied")
-        if item.bar and not inScene then
+        if item.bar and (not inScene or cur.cardUi) then
           -- drawn for the bar (hd.bar): moved down into it, the part left of its split to the
           -- screen's left (the UI's left margin), the rest to its right
           local b = item.bar
@@ -4567,6 +4898,14 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         c.x, c.y, c.sx, c.sy, c.l, c.r, c.extraL, c.extraR = 0, 0, 1, 1, 0, cur.w, 0, 0
         local ok, err = pcall(item.fn, item.a, c)
         if not ok then self.stats.paintError = tostring(err) end
+      elseif item.kind == "wash" and real.rectangle then
+        -- a wash over the field, the cart's way
+        real.setShader()
+        real.setBlendMode("alpha", item.premultiplied and "premultiplied" or "alphamultiply")
+        real.setColor(item.r, item.g, item.b, item.a)
+        real.rectangle("fill", 0, 0, cur.w, item.bottom)
+        real.setBlendMode("alpha", "alphamultiply")
+        real.setColor(1, 1, 1, 1)
       elseif item.kind == "win0" and real.rectangle then
         -- the intro's black bars, the cart's way
         real.setShader()

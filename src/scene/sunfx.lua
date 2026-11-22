@@ -166,7 +166,14 @@ local function rays(G, dapple, strength, seconds, w, h)
 end
 
 -- the sunlit dust (DrawMotes): soft diamonds turned to the camera, in a wrapped box round its target
-local moteMesh
+-- (its vertices kept and filled in place each frame: twelve a mote, four triangles round its
+-- middle; the mesh's format made once)
+local moteMesh, moteVerts
+local MOTE_FMT = { { "VertexPosition", "float", 3 }, { "VertexTexCoord", "float", 2 }, { "VertexColor", "float", 4 } }
+local function moteVert(verts, n, x, y, z, a)
+  local v = verts[n]
+  v[1], v[2], v[3], v[9] = x, y, z, a
+end
 local function motes(G, Camera, p, view, proj, depth, strength, sun, seconds)
   local sh = shader(G, "motes", MOTES)
   if not sh or strength <= 0 then return end
@@ -177,7 +184,12 @@ local function motes(G, Camera, p, view, proj, depth, strength, sun, seconds)
   local S = SunFx.MOTE_SIZE
   rx, rz, ux, uy, uz = rx * S, rz * S, ux * S, uy * S, uz * S
   local ox, oz = floor(p.tx), floor(p.tz)
-  local verts = {}
+  local verts = moteVerts
+  if not verts or #verts ~= SunFx.MOTES * 12 then
+    verts = {}
+    for i = 1, SunFx.MOTES * 12 do verts[i] = { 0, 0, 0, 0, 0, 1, 1, 1, 0 } end
+    moteVerts = verts
+  end
   local R = SunFx.moteRandom
   for i = 0, SunFx.MOTES - 1 do
     local phase = R(i, 1) * 6.2832
@@ -187,16 +199,28 @@ local function motes(G, Camera, p, view, proj, depth, strength, sun, seconds)
     local z = oz + wrap(wz - oz + SunFx.MOTE_HALF_Z, 2 * SunFx.MOTE_HALF_Z) - SunFx.MOTE_HALF_Z
     local y = (p.ty or 0) + SunFx.MOTE_LOW + (SunFx.MOTE_HIGH - SunFx.MOTE_LOW) * R(i, 5) + 0.15 * sin(seconds * 0.7 + phase)
     local glint = 0.55 + 0.45 * sin(seconds * (1.1 + R(i, 6)) + phase * 2)
-    local c = { x, y, z, 0, 0, 1, 1, 1, glint }
-    local up = { x + ux, y + uy, z + uz, 0, 0, 1, 1, 1, 0 }
-    local right = { x + rx, y, z + rz, 0, 0, 1, 1, 1, 0 }
-    local down = { x - ux, y - uy, z - uz, 0, 0, 1, 1, 1, 0 }
-    local left = { x - rx, y, z - rz, 0, 0, 1, 1, 1, 0 }
-    for _, v in ipairs({ c, up, right, c, right, down, c, down, left, c, left, up }) do verts[#verts + 1] = v end
+    -- (the middle, then up, right, down, left round it: c up right, c right down, c down left,
+    -- c left up)
+    local n = i * 12
+    local upX, upY, upZ = x + ux, y + uy, z + uz
+    local rtX, rtZ = x + rx, z + rz
+    local dnX, dnY, dnZ = x - ux, y - uy, z - uz
+    local ltX, ltZ = x - rx, z - rz
+    moteVert(verts, n + 1, x, y, z, glint)
+    moteVert(verts, n + 2, upX, upY, upZ, 0)
+    moteVert(verts, n + 3, rtX, y, rtZ, 0)
+    moteVert(verts, n + 4, x, y, z, glint)
+    moteVert(verts, n + 5, rtX, y, rtZ, 0)
+    moteVert(verts, n + 6, dnX, dnY, dnZ, 0)
+    moteVert(verts, n + 7, x, y, z, glint)
+    moteVert(verts, n + 8, dnX, dnY, dnZ, 0)
+    moteVert(verts, n + 9, ltX, y, ltZ, 0)
+    moteVert(verts, n + 10, x, y, z, glint)
+    moteVert(verts, n + 11, ltX, y, ltZ, 0)
+    moteVert(verts, n + 12, upX, upY, upZ, 0)
   end
-  local fmt = { { "VertexPosition", "float", 3 }, { "VertexTexCoord", "float", 2 }, { "VertexColor", "float", 4 } }
   if not moteMesh then
-    moteMesh = G.newMesh(fmt, verts, "triangles", "stream")
+    moteMesh = G.newMesh(MOTE_FMT, verts, "triangles", "stream")
   else
     moteMesh:setVertices(verts)
   end

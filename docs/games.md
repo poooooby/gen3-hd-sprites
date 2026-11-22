@@ -9,7 +9,7 @@ WoobleView is made for the Gen 3 games, and brings what it can to the older ones
 | Sharp battle and Pokédex Pokémon | ✅ | ✅ | ✅ | ✅ |
 | Sharp overworld Pokémon (from supported mods) | ✅ | ✅ | ✅ | ✅ |
 | Fill Screen | ✅ | ✅ | ✅ | – |
-| Modern battle text box | – | ✅ | – | – |
+| Modern battle text box | ✅ | ✅ | – | – |
 | 3D battles | ✅ | ✅ | – | – |
 
 - **Gold, Silver and Crystal** keep the game's own framed battle screen, so their battles look

@@ -647,12 +647,15 @@ function Gen3.prepare(Engine, hd)
   end
 end
 
---- The battle bar (src/bar.lua; Ruby, Sapphire, Emerald, Battle Text Box on: hd.barEnabled):
+--- The battle bar (src/bar.lua; every Gen 3 game, Battle Text Box on: hd.barEnabled):
 --- the cart's text box and menu frames replaced by the bar, painted at the screen's resolution
 --- (hd.paint) where the battle draws its panel, and what the battle draws on it (the prompt,
 --- the menus, the cursors, its message) moved into it (hd.bar). Nothing is drawn when the
 --- battle hides its bottom UI (Ui.bottomUIVisible: Kanto Gear's GEAR screens take it), or
---- without a battle pass (Battle HD off): the game's own boxes then.
+--- without a battle pass (Battle HD off): the game's own boxes then. The screens that show the
+--- battle's text box without its UI - a catch's Pokedex page and nickname prompt (in the battle
+--- pass), an evolution and an egg hatching (a screen pass) - have the bar too (hd.cardUi: their
+--- whole picture fills the screen, the bar across it).
 --
 --   BattleChrome.drawPanel        the text box's art (src/ui/game3/battle_chrome.lua): the
 --                                 bar painted instead, and its text window opened
@@ -691,9 +694,21 @@ function Gen3.wrapBar(Engine, hd)
     local ok, v = pcall(Ui.bottomUIVisible)
     return not ok or v ~= false
   end
-  -- the bar for this game, wanted (Battle Text Box on, Battle HD on, a battle pass)
+  -- (the screens over the field that draw the battle's text box: an evolution, an egg hatching)
+  local okE, Evo = pcall(require, "src.ui.game3.evolution_scene")
+  local okH, Hatch = pcall(require, "src.ui.game3.egg_hatch")
+  local function panelScreen()
+    if not hd.capturing("screen") then return false end
+    if okE and type(Evo) == "table" and Evo.open then return true end
+    if okH and type(Hatch) == "table" and (Hatch.open or Hatch._open or (type(Hatch.isOpen) == "function" and Hatch.isOpen())) then
+      return true
+    end
+    return false
+  end
+  -- the bar for this game, wanted (Battle Text Box on, Battle HD on, a battle pass or a screen
+  -- with the battle's text box)
   local function wanted()
-    return hd.barEnabled ~= false and hd.enabled.battle and hd.capturing("battle")
+    return hd.barEnabled ~= false and hd.enabled.battle and (hd.capturing("battle") or panelScreen())
       and Bar.LAYOUT[layoutName() or ""] ~= nil
   end
   Gen3.barWanted = wanted
@@ -706,11 +721,16 @@ function Gen3.wrapBar(Engine, hd)
   if not ours[drawPanel] then
     Chrome.drawPanel = function(mode, ...)
       local name = layoutName()
-      if wanted() and shown() then
+      if wanted() and (shown() or panelScreen()) then
         mode = specs[name][mode] and mode or "none"
-        if hd.paint(Bar.paint, args[name][mode], 112) then
+        -- (a whole screen with the battle's text box: no UI of a battle - a catch's Pokedex page,
+        -- an evolution - the bar across its picture)
+        if not (hd.cur and hd.cur.hasUI) then hd.cardUi() end
+        if hd.paint(Bar.paint, args[name][mode], 112, Bar.TOP) then
           barPass = hd.cur and hd.cur.serial
-          windowOpen = hd.bar(specs[name][mode])
+          -- (a whole screen's only text in the bar is its message, which opens its own window:
+          -- what it draws after the panel - a catch's YES / NO - stays where it is)
+          if hd.cur and hd.cur.hasUI then windowOpen = hd.bar(specs[name][mode]) else windowOpen = false end
           return
         end
       end
@@ -759,7 +779,7 @@ function Gen3.wrapBar(Engine, hd)
       -- a battle hiding its bottom UI (Kanto Gear's GEAR screens show its text instead): its
       -- message is not drawn either (Oak's voiceover is not the battle's)
       if Message._frame ~= "voiceover" and (Message._frame == "battle" or hd.capturing("battle"))
-          and not shown() then
+          and not shown() and not panelScreen() then
         return
       end
       local cur = hd.cur

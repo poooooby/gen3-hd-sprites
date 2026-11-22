@@ -478,7 +478,11 @@ already covers the view.
   box, as the stacked arrangement moves it (`dyTop`, `banded`; `noteUi` records it for `uiMap`).
   The fit sees it there (`fit.uiTopDy`), so the player's Pokémon has the rows it left. Not on a
   frame whose UI crosses the split (the straddle guard), not with Fill Screen off
-  (the game's own frame).
+  (the game's own frame). In a double battle the band's row `fit.chipRowsDouble` (0) is what
+  stays on the screen (`bandTop` in the composite, the raised and the stacked placings both),
+  not the upper box's top (row 5): WoobleDex's stat chips stand in columns beside the foes'
+  boxes from the band's first row, and with the boxes raised to the screen's top a column's
+  first chip was cut off. Always, chips or none, so the boxes never jump when a stat changes.
 - **Gen 2's intro slide** (`drawSliding` in `src/gen2.lua`): the game slides its halves in the
   way the cart's scroll does (`BattleAnimView:presentSlide`: bands blitted row by row, shifted,
   the back pic over them from the right), inside its 160-px panel. With Fill Screen the panel is
@@ -641,28 +645,44 @@ If `BattleChrome.drawTerrain`, `BattleChrome.terrain` or `BallOpen.draw` is miss
 
 ## Battle text box (Gen 3: `src/bar.lua`)
 
-Ruby, Sapphire and Emerald, option `battle_textbox` (`hd.barEnabled`, default on), with a
-battle pass (Battle HD on). FireRed / LeafGreen keep the cart's boxes (`Bar.LAYOUT` has no
-`frlg`).
+Every Gen 3 game, option `battle_textbox` (`hd.barEnabled`, default on), with a battle pass
+(Battle HD on), and on the screens that draw the battle's text box without a battle's UI: a
+catch's Pokedex page and nickname prompt (the battle pass's `Ui._caughtDexScene` branch), an
+evolution (`evolution_scene.lua`) and an egg hatching (`egg_hatch.lua`), both screen passes.
 
 - **The bar:** canvas rows 124 to 160 (`Bar.TOP`, `Bar.BOTTOM`: 36 rows, three quarters of
   the cart's 48 from row 112), across the view's whole width. Panels by panel mode: `none`
   one message panel; `menu` the message panel to the action menu's; `moves` two menu panels.
   The menus' panel starts at the cart's frame column (`Bar.LAYOUT[...].split`: Emerald 120 /
-  160, Ruby and Sapphire 136 / 176) moved right with the UI's right margin, so it keeps its
-  width and ends on the screen's right edge (`Bar.splitX`).
+  160, Ruby and Sapphire 136 / 176, FireRed and LeafGreen 120 / 156) moved right with the UI's
+  right margin, so it keeps its width and ends on the screen's right edge (`Bar.splitX`).
 - **The look:** `Bar.pixel` (signed distances, straight alpha): a frame (gradient, a light
   rim at its top), a line inside it, the panel (gradient, an inner shadow under its top), a
-  soft shadow cast up onto the scene. Message: red frame, grey line, teal panel; menus:
-  purple-grey frame, light line, white panel (the cart's colours, Emerald 3DS's HD text box's
-  layering). Ends on the screen's edge are rounded, ends where two panels join square and
+  soft shadow cast up onto the scene. Hoenn's message: red frame, grey line, teal panel; its
+  menus: purple-grey frame, light line, white panel. Kanto's (`LAYOUT.frlg.kinds`: `frlgMessage`,
+  `frlgMenu`, sampled off the cart): gold frame (cead4a), pale line, deep blue panel (29526b);
+  violet frame (6b5a73 to 4a3a73), pale line, white panel. The cart's colours, Emerald 3DS's HD
+  text box's layering. Ends on the screen's edge are rounded, ends where two panels join square and
   thinner. Each panel is drawn from three cached pieces per scale: its left end, one middle
   column stretched, its right end (the left one mirrored); `Bar.reset` drops them.
-- **`hd.paint(fn, a, hide)`:** an item the composite runs at the screen's resolution in the
-  pass's order (over the UI drawn before it, under what comes after), told where the UI is
+- **`hd.paint(fn, a, hide, runTo)`:** an item the composite runs at the screen's resolution in
+  the pass's order (over the UI drawn before it, under what comes after), told where the UI is
   (`x, y, sx, sy`), the view's sides (`l, r`) and the UI's margins (`extraL, extraR`). `hide`
   (row 112): the UI's layers before it are cut off there, as the cart's text box hid them (the
-  bottom of the player's HP box art). A flattened pass calls it at 1x.
+  bottom of the player's HP box art). `runTo` (`Bar.TOP`): on a card-UI pass, the picture's row
+  above `hide` runs on down to it across the view (the cart's black rows 112 to 124 under an
+  evolution's starburst). A flattened pass calls it at 1x.
+- **Card screens (`hd.cardUi()`):** a pass with no `ui` seam that draws the battle's panel
+  (`hasUI` false: the caught-dex scene, an evolution, a hatching) is marked card-UI, and
+  `hd.paint` / `hd.bar` take it as UI. With Fill Screen it goes through `compositeCard` (the
+  picture fitted, the rest blurred): its paint and bar layers are drawn in order (`cardBar`,
+  over a kept `cardState`, no closures), across the whole view at the picture's rows, the rim's
+  feather (`cardRim`) drawn once just before the bar, which runs on past the picture's sides
+  unfaded. A paint or bar layer before a draw that covered the whole UI (`cur.coverAt`, set
+  with `uiCovers`: the Pokedex registration page over the battle) is left out, else its ends
+  showed beside that page. The panel's own text window is closed straight away on these
+  passes: their only text in the bar is the message (its own window), and the catch's YES / NO
+  drawn after the panel stays where it is.
 - **`hd.bar(spec)`:** what the pass draws until `hd.bar(nil)` goes into layers marked with
   `spec` (`top, bottom, dy, split`). The composite blits such a layer `dy` rows down (Emerald
   4, Ruby and Sapphire 6: the two lines centred in the bar), clipped to the bar's rows; left
@@ -696,6 +716,10 @@ battle pass (Battle HD on). FireRed / LeafGreen keep the cart's boxes (`Bar.LAYO
 - **Driver:** `tests/drivers/portrait_battle.lua` with `HD_BAR=1` shoots the first message, the
   menu and the move menu; `HD_PLAYER` / `HD_ENEMY=SPECIES_X:level` the battlers; `HD_FILLOFF=1`
   Fill Screen off; `HD_HIDEBOTTOM=1` the bottom UI hidden as Kanto Gear hides it.
+  `tests/drivers/bar_screens.lua` shoots every place the bar shows in one run, on any Gen 3
+  game: a wild battle's command and move menus, a Master Ball catch (its Gotcha, the Pokedex
+  registration, the Pokedex page, the nickname prompt) and an evolution (`HD_FILL=off`,
+  `HD_SIZE=WxH`).
 
 ## Battle Scene (Gen 3)
 
@@ -2081,7 +2105,7 @@ end
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true, battlerRect = true, holdHud = true, giant = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `realSizes()` / `setRealSizes(on)` (Real
 Sizes: `fit.worldSizes`), `sizeMode()` / `setSizeMode(m)` (3D Sizing's choice: `"off"`, `"minimal"`,
@@ -2101,6 +2125,46 @@ upright battle's top band, moved up), else `y`; clip to `box` (or `topBox` / `lo
 each `{x, y, w, h}`. The Renderer may blit the UI canvas again in the same frame (a docked text
 box apart): the first is the one placed, the rest are taken as done. Tags are weak: an image that is freed drops its tag. Keep the tagged
 image itself a real low-res picture: it is what shows whenever a frame falls back.
+
+**A Pokemon drawn giant for a while** (Galar Rising's Dynamax, `max_raids` `src/dmax_ui.lua`):
+
+- `battlerRect(key)`: a battler's body box as this frame drew it on the window (`x0, y0, x1, y1`,
+  or nil when not drawn through WoobleView); key its side, or in a double battle its battler id.
+  Recorded by `noteBattler` in the composite, off at each frame's start.
+- `holdHud(who, on)`: while any holder holds it, the foe's HP box stays where it was (`heldDyTop`)
+  and its place over the heads is not worked out again (fitStep's `fresh`); the camera still
+  pulls back under it. Let go, the box stands there that frame too (no jump to where the anchor
+  eased meanwhile) and eases on from the next.
+- `giant(id, info)`: how the battle draws battler `id` giant now: `scale` over its own draw,
+  `dx`, `dy` its centre's move (canvas px), `image` the picture in its place (a Gigantamax
+  form's: tagged, its `lowPivot` at its feet), `grow` 0..1; nil when it is back to its size.
+  Called each frame it is drawn so, before the battle's draw (a table the caller keeps).
+  `hd.giants[id]`, off at each battle's start (`giantsOff`). Then:
+  - **The fit sees it as it rests at that size** (`hd.prefit`: the record's scale, centre and
+    picture), so whatever a move does to it (a G-Max move's look hides it, swells it) the camera
+    and the HP box never go back to its own size for a frame.
+  - **Its feet stay on its own picture's**: `place` moves every draw of it (its rest record and
+    the battle's draws) by the difference between where its own picture's pivot rests and where
+    the giant's does (`g.fixX / fixY`, worked out once a frame), whatever offsets the mod gives.
+  - **Classic battles:** its head kept under the foe's HP box where it stands under the box's
+    columns (`fitSolveRaw`, backs marked `giant`), where other backs may reach behind the box.
+  - **The 3D world, 3D Sizing on:** `giantSize` stands it from its own height (worldSize's, floors
+    and all) toward `fit.giantHeight` (10.05 m: Celesteela's standing height in the sprite mods'
+    measure, the tallest after Eternatus) by `grow`, through the same soft ceiling as any
+    (`softCeiling`, worldSize's own), indoors under the ceiling, Minimal's curve; never smaller
+    than it stands, no taller than the camera shows at its furthest zoom from its feet, under
+    the foe's HP box placed over the heads. Its shadow spans its body at that size.
+- **A wash over the field** drawn with the UI (`fieldWash`: a fill across the whole width from
+  the top to the text box's line, not the canvas's bottom; Galar Rising's red flash on a Max
+  Move) is a `wash` item with Fill Screen, drawn over the view from its top to the text box's
+  line on the screen. In the UI it crossed the split row (`uiStraddle`), and the foe's HP box,
+  moved up with the top band, fell back to the cart's place for as long as it showed.
+- **Driver:** `tests/drivers/dynamax_battle.lua` (Galar Rising and WoobleDex in mods/): a Gym
+  Leader's battle, the lead Dynamaxed on turn 1 (`HD_GMAX=0` a plain Dynamax, `HD_PLAYER`,
+  `HD_DOUBLE=1`, `HD_SCENE=on`, `HD_SIZEMODE`, `HD_SIZE`), the camera and the foe's HP box logged
+  every frame with a shot whenever the box moves while a giant is out. `HD_FOEGIANT=1`: the foe
+  full grown through `giant` alone. `HD_CHIPS=n` (`HD_CHIPS_MINE`, no Dynamax): each foe's stats
+  changed for WoobleDex's stat chips, one shot.
 
 ## Tests
 

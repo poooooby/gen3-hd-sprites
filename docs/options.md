@@ -20,7 +20,7 @@ it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 |---|---|---|---|
 | **Battle Fit** | On / Off | On | Pokémon at your sprite mod's own size, with one too big for its space shrunk just enough to fit. The camera pulls back if anything still doesn't fit. Off: your sprite mod's own sizes. Needs Battle HD. |
 | **Fill Screen** | On / Off | On | Battles and full screens fill your screen in any shape. Needs Battle Fit. Not in Gold, Silver and Crystal. |
-| **Battle Textbox** | On / Off | On | Ruby, Sapphire and Emerald: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter. Off: the game's own boxes. Needs Battle HD. |
+| **Battle Textbox** | On / Off | On | Ruby, Sapphire, Emerald, FireRed and LeafGreen: the battle's text box and menus redrawn as one sharp bar across the bottom, a quarter shorter, in each game's colours; the same bar after a catch, an evolution and an egg hatching. Off: the game's own boxes. Needs Battle HD. |
 
 More in [Fitting battles to your screen](fitting-the-screen.md).
 

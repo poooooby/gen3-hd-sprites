@@ -46,8 +46,9 @@ the edges of your screen. Turn on **Fill Screen** and battles, menus, the Pokéd
 the bag and the intro fill any screen shape. On a phone held upright, the battle fills the space
 above the text box and the touch controls.
 
-In Ruby, Sapphire and Emerald, the battle's text box and menus become one sharp, modern bar
-across the bottom of the screen, in the game's own colours.
+In every Gen 3 game, the battle's text box and menus become one sharp, modern bar across the
+bottom of the screen, in the game's own colours, and the same bar shows after a catch, when a
+Pokémon evolves and when an egg hatches.
 
 ➡️ [More about fitting battles to your screen](docs/fitting-the-screen.md)
 
@@ -74,7 +75,7 @@ Everything is on by default except the 3D battles, which you can turn on wheneve
 | **Battle HD** | On | Sharp Pokémon in battle. |
 | **Battle Fit** | On | Pokémon at your sprite mod's sizes, never cut off. |
 | **Fill Screen** | On | Battles and full screens fill your screen. |
-| **Battle Textbox** | On | The modern text box (Ruby, Sapphire, Emerald). |
+| **Battle Textbox** | On | The modern battle text box (Gen 3 games). |
 | **Battle Scene** | Classic | Overworld: battles in the 3D world. |
 | **3D Sizing** | Medium | How true to life the sizes are in 3D battles. |
 | **Build / Clear 3D Cache** | – | Build the 3D world now, or delete it. |
@@ -102,7 +103,10 @@ Everything is on by default except the 3D battles, which you can turn on wheneve
   and at their true sizes.
 - [WoobleDex](https://github.com/poooooby/national_dex_gen3): its move animations play in full,
   filling your whole screen, in 3D battles too. 3D battles also follow its clock and its Day &
-  Night setting.
+  Night setting, and its stat chips stay on screen beside the HP boxes.
+- [Galar Rising](https://github.com/poooooby/max-raids): a Dynamaxed Pokémon gets the room it
+  needs, its feet where they stood, with the opponent's HP box held steady until it shrinks
+  back. In 3D battles it grows as tall as the tallest Pokémon stands there.
 
 ## 📌 Good to Know
 

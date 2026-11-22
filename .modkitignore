@@ -45,3 +45,5 @@ tests/drivers/trainer_battle.lua
 tests/drivers/ess_scene.lua
 docs/battle-3d.png
 docs/ws-blur.png
+tests/drivers/dynamax_battle.lua
+tests/drivers/bar_screens.lua

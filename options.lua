@@ -26,7 +26,7 @@ return {
     label = "Battle Textbox",
     type = "toggle",
     default = true,
-    description = "Ruby, Sapphire and Emerald: the battle's text box and its FIGHT / BAG and move menus redrawn as one sharp bar across the bottom of the screen, a quarter shorter than the game's, so more of the battle shows. The game's colours, its red and teal message box and white menus, smoothed and joined. Off: the game's own boxes. Needs Battle HD.",
+    description = "Ruby, Sapphire, Emerald, FireRed and LeafGreen: the battle's text box and its FIGHT / BAG and move menus redrawn as one sharp bar across the bottom of the screen, a quarter shorter than the game's, so more of the battle shows. Each game's own colours (Hoenn's red and teal message box, Kanto's gold and blue one, white menus), smoothed and joined. The same bar after a catch, when a Pokemon evolves and when an egg hatches. Off: the game's own boxes. Needs Battle HD.",
   },
   {
     key = "battle_scene",

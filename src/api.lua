@@ -80,13 +80,22 @@
 --                         `who` (any key of the caller's) holds it - a Pokemon drawn giant for a
 --                         while (Galar Rising's Dynamax): the camera still pulls back for it, the
 --                         box stays; let go by every holder, it eases on from there.
+--   giant(id, info)       a battle Pokemon drawn giant for a while (Galar Rising's Dynamax), by
+--                         battler id (0..3; singles 0 the player's, 1 the foe's); info = { scale =
+--                         its draw's scale over its own, dx =, dy = canvas px its centre moves, image
+--                         = the picture drawn in its place (a Gigantamax form's: tagged, its lowPivot
+--                         at its feet) or nil, grow = 0..1 how far grown }, read each call (a table
+--                         the caller may keep and reuse); nil: back to its own size. Battle Fit
+--                         frames it where it rests at that size, whatever a move does to it; in the
+--                         3D world with 3D Sizing it stands toward the tallest Pokemon's height as
+--                         it grows. Call it each frame it is drawn so (before the battle's draw).
 
 return function(mod, hd, state)
   local exports = {}
   exports.version = 2
   exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true,
                        shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true,
-                       battlerRect = true, holdHud = true }
+                       battlerRect = true, holdHud = true, giant = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end
@@ -312,6 +321,7 @@ return function(mod, hd, state)
   end
   exports.uiMap = function() return hd.uiLive == true and hd.uiMap or nil end
   exports.holdHud = function(who, on) if hd.holdHud then hd.holdHud(who, on) end end
+  exports.giant = function(id, info) if hd.setGiant then hd.setGiant(id, info) end end
   exports.battlerRect = function(key)
     local r = hd.battlerRects and hd.battlerRects[key]
     if not (r and r.on) then return nil end

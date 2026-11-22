@@ -1517,6 +1517,26 @@ do
   local after = frame(true)
   check(before < 1 and near(before, after), "the camera is framed for a Pokemon before it is sent out ("
     .. string.format("%.3f, then %.3f", before, after) .. ")")
+  -- a giant (exports.giant: Galar Rising's Dynamax, 1.5x about its feet): the camera pulls back
+  -- for it where it rests at that size, drawn this frame or not (a G-Max move's look hides it),
+  -- its feet on its own's; let go, the camera comes back in (between turns)
+  local own = after
+  hd.setGiant(1, { scale = 1.5, dx = 0, dy = -32 * 0.5, grow = 1 })
+  local function settle(drawFoe)
+    local z
+    for _ = 1, 120 do z = frame(drawFoe) end
+    return z
+  end
+  local giant = settle(true)
+  local hidden = frame(false)
+  local g = hd.giants[1]
+  check(giant < own - 0.05 and near(hidden, giant), "a giant: the camera pulls back for it, and holds while it is "
+    .. "hidden (" .. string.format("%.3f, giant %.3f, hidden %.3f", own, giant, hidden) .. ")")
+  check(g and math.abs(g.fixX or 9) < 1e-6 and math.abs(g.fixY or 9) < 1.01,
+    "...its feet where its own stand (" .. tostring(g and g.fixX) .. ", " .. tostring(g and g.fixY) .. ")")
+  hd.setGiant(1, nil)
+  local back = settle(true)
+  check(near(back, own), "...let go, the camera back in (" .. string.format("%.3f", back) .. ")")
 end
 
 -- a double battle's foes, each reported by its battler id: both count (the later report does
@@ -2116,6 +2136,11 @@ local function stackedFrame(opts)
   if opts.topSeam then hd.seam("uiTopEnd") end
   G.rectangle("fill", 0, 112, 240, 48)                -- the text box
   if opts.straddle then G.rectangle("fill", 150, 8, 90, 96) end   -- a level-up window
+  if opts.wash then                                   -- a red flash over the field (Max Move)
+    G.setColor(1, 0.1, 0.3, 0.3)
+    G.rectangle("fill", 0, 0, 240, 112)
+    G.setColor(1, 1, 1, 1)
+  end
   hd.endPass()
   local blits = {}
   G.log = {}
@@ -2141,6 +2166,11 @@ do
     .. ", bands " .. top .. "/" .. low .. ")")
   local hd2 = stackedFrame({ view = view, straddle = true })
   check(hd2.stats.uiTopDy == 0, "...not on a frame whose UI crosses the split (drawn whole)")
+  -- a wash over the field drawn with the UI (Galar Rising's red flash on a Max Move): a wash item
+  -- over the view, not a draw across the split - the box stays raised
+  local hd3 = stackedFrame({ view = view, wash = true })
+  check(hd3.stats.uiTopDy == -124, "a wash over the field with the UI: the enemy's HP box stays raised ("
+    .. tostring(hd3.stats.uiTopDy) .. ")")
   -- the enemy's HUD drawn as a layer of its own (hd.seam "uiTop"): that layer moves up whole and
   -- the rest stays, so a draw across the split row (stat chips rising from the player's box)
   -- moves nothing back (it had dropped the enemy's box over the player's Pokemon)
@@ -2306,7 +2336,21 @@ end
 do
   local Bar = dofile("src/bar.lua")
   check(Bar.TOP == 124 and Bar.BOTTOM - Bar.TOP == 36, "bar: three quarters of the cart's 48 rows")
-  check(Bar.layout("emerald") and Bar.layout("rs") and not Bar.layout("frlg"), "bar: Ruby, Sapphire and Emerald only")
+  check(Bar.layout("emerald") and Bar.layout("rs") and Bar.layout("frlg"), "bar: every Gen 3 layout")
+  -- FireRed / LeafGreen: their own panels - gold-framed deep blue messages, violet-framed white menus
+  local PF = Bar.panels(Bar.LAYOUT.frlg, "moves", 0, 1920, 480, 4, 480)
+  check(PF[1][1] == "frlgMenu" and PF[2][1] == "frlgMenu" and PF[1][3] == 480 + 156 * 4 + 480,
+    "bar: FireRed's move names and PP panels its own white ones, split at its PP box")
+  PF = Bar.panels(Bar.LAYOUT.frlg, "none", 0, 960, 0, 4, 0)
+  check(#PF == 1 and PF[1][1] == "frlgMessage", "bar: FireRed's message panel its own")
+  do
+    local r, g, b, a = Bar.pixel("frlgMessage", 20, 18, 1e4, true, 0.1)
+    check(a > 0.99 and b > r + 0.2 and b > g, "bar: FireRed's message panel deep blue")
+    r, g, b = Bar.pixel("frlgMessage", 1.5, 18, 1e4, true, 0.1)
+    check(r > b + 0.3 and g > b + 0.2, "bar: its frame gold")
+    r, g, b = Bar.pixel("frlgMenu", 1, 18, 1e4, true, 0.1)
+    check(b > g and r < 0.6, "bar: FireRed's menu frame violet")
+  end
   local P = Bar.panels(Bar.LAYOUT.emerald, "menu", 0, 1920, 480, 4, 480)
   check(#P == 2 and P[1][1] == "message" and P[1][3] == 1440 and P[2][1] == "menu" and P[2][2] == 1440
     and P[2][3] == 1920 and P[1][4] and not P[1][5] and not P[2][4] and P[2][5],
@@ -2581,14 +2625,16 @@ do
   hd.composite(base, function() end, 0, 900, 4.5, 4.5, nil, { 0, 0, 1080, 2400, bottom = 1500 })
   hd.endFrame()
   check(near(hd.stats.sceneUp, 54) and near(hd.stats.uiScale, 4.5), "doubles upright: the scene stands above the player's boxes")
-  -- ... and the foes' boxes stackGap (2) UI px under the scene's top, not pinned to the screen's
-  -- (the UI docked at 1500 - 160 x 4.5 = 780; the scene's line sceneUp rows above the text box's)
+  -- ... and the foes' band stackGap (2) UI px under the scene's top - its first row, where
+  -- WoobleDex's stat chips may stand above the upper box (chipRowsDouble) - not pinned to the
+  -- screen's (the UI docked at 1500 - 160 x 4.5 = 780; the scene's line sceneUp rows above the
+  -- text box's)
   do
     local cy = 780 + (112 - hd.stats.sceneUp) * 4.5
     local sceneTop = math.max(0, cy - 112 * 4.5 * hd.stats.grow)
-    local boxTop = 780 + (enemy[2] + hd.fit.uiTopDy) * 4.5
+    local boxTop = 780 + (math.min(enemy[2], hd.fit.chipRowsDouble) + hd.fit.uiTopDy) * 4.5
     check(sceneTop > 2 * 4.5 and math.abs(boxTop - (sceneTop + 2 * 4.5)) < 1,
-      "doubles upright: the foes' boxes just under the scene's top (" .. tostring(boxTop) .. ", scene "
+      "doubles upright: the foes' band just under the scene's top (" .. tostring(boxTop) .. ", scene "
       .. tostring(sceneTop) .. ")")
   end
   G.setCanvas(base)
