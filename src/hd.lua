@@ -491,6 +491,76 @@ function HD.new(G, opts)
   --   "screen": whole-scene draws, composited without Battle Fit's zoom, covering the screen
   --   "edge": a move's effect anchored to the canvas's sides (Fake Out's curtains, Encore's
   --     dimming), zoomed with the scene, its edge pixels run on out to the screen's sides
+  -- The frame's records and items, from two pools taken in turn a frame (self.endFrame swaps
+  -- them): a pass's are read by its composite or flatten the frame it is drawn (a field pass
+  -- ends with the world pass, the others by the frame's end) - so a pool is filled again only
+  -- the frame after next. A record keeps its colour, blend and uniforms tables; an item is
+  -- emptied. Past POOL_MAX in a frame (the frame never ends: no Renderer), new tables.
+  local POOL_MAX = 4096
+  local recPools, itemPools = { { n = 0 }, { n = 0 } }, { { n = 0 }, { n = 0 } }
+  local poolTurn = 1
+  local function pooledRec()
+    local p = recPools[poolTurn]
+    if p.n >= POOL_MAX then return { color = {}, blend = {} } end
+    local n = p.n + 1
+    p.n = n
+    local t = p[n]
+    if not t then t = { color = {}, blend = {} }; p[n] = t end
+    return t
+  end
+  local function newItem(kind)
+    local p = itemPools[poolTurn]
+    local t
+    if p.n >= POOL_MAX then
+      t = {}
+    else
+      local n = p.n + 1
+      p.n = n
+      t = p[n]
+      if t then
+        for k in pairs(t) do t[k] = nil end
+      else
+        t = {}
+        p[n] = t
+      end
+    end
+    t.kind = kind
+    return t
+  end
+  -- (and the passes: by kind, several a frame; told apart by their serial, never by the table
+  -- - a pass's table is another of its kind's the frame after next)
+  local passPools = { {}, {} }
+  local passSerial = 0
+  local function poolsTurn()
+    poolTurn = 3 - poolTurn
+    recPools[poolTurn].n, itemPools[poolTurn].n = 0, 0
+    for _, list in pairs(passPools[poolTurn]) do list.n = 0 end
+  end
+  local function clearT(t)
+    if t then for k in pairs(t) do t[k] = nil end end
+    return t
+  end
+  -- a pass's table for this frame, emptied; its lists (layerSet, items, prefit, sides, shift)
+  -- kept emptied in `kept` for beginPass to hand back
+  local function pooledPass(pass)
+    local pools = passPools[poolTurn]
+    local list = pools[pass]
+    if not list then list = { n = 0 }; pools[pass] = list end
+    if list.n >= 64 then return {} end
+    local n = list.n + 1
+    list.n = n
+    local t = list[n]
+    if not t then t = { kept = {} }; list[n] = t; return t end
+    local kept = t.kept
+    kept.layerSet, kept.items, kept.prefit = clearT(t.layerSet), clearT(t.items), clearT(t.prefit)
+    kept.sides, kept.shift = clearT(t.sides or kept.sides), t.shift or kept.shift
+    clearT(t)
+    t.kept = kept
+    return t
+  end
+  -- (a draw nothing tags: its record's spec, shared - specs are only read)
+  local NO_SPEC = {}
+
   local function openLayer(open)
     local cur = self.cur
     local drawing = onPass()
@@ -500,8 +570,8 @@ function HD.new(G, opts)
     local layer = getLayer(cur.w, cur.h, cur.layerCount)
     cur.layerSet[layer] = true
     cur.current = layer
-    local item = { kind = "layer", canvas = layer, screen = open == "screen", edge = open == "edge",
-                   bar = cur.barSpec, box = cur.boxId }
+    local item = newItem("layer")
+    item.canvas, item.screen, item.edge, item.bar, item.box = layer, open == "screen", open == "edge", cur.barSpec, cur.boxId
     cur.items[#cur.items + 1] = item
     cur.openItem = item
     if open == "edge" then self.stats.edge = (self.stats.edge or 0) + 1 end
@@ -748,14 +818,24 @@ function HD.new(G, opts)
     local cr, cg, cb, ca = real.getColor()
     local bm, am = real.getBlendMode()
     local shader = real.getShader()
+    local t = pooledRec()
     local uniforms
     if shader and sent[shader] then
-      uniforms = {}
+      uniforms = t.unis
+      if uniforms then
+        for k in pairs(uniforms) do uniforms[k] = nil end
+      else
+        uniforms = {}
+        t.unis = uniforms
+      end
       -- (held by this draw: the next send of each makes a new record)
       for name, v in pairs(sent[shader]) do
         v.shared = true
         uniforms[name] = v
       end
+    elseif t.unis then
+      -- (a pooled record's last uniforms let go: the sends it held are free to be reused)
+      for k in pairs(t.unis) do t.unis[k] = nil end
     end
     -- (the quad's viewport as drawn: the engine may move it before the composite)
     local qx, qy, qw, qh, qsw, qsh
@@ -763,12 +843,14 @@ function HD.new(G, opts)
       qx, qy, qw, qh = quad:getViewport()
       if quad.getTextureDimensions then qsw, qsh = quad:getTextureDimensions() end
     end
-    return {
-      spec = spec, image = image, quad = quad, qx = qx, qy = qy, qw = qw, qh = qh, qsw = qsw, qsh = qsh,
-      x = x, y = y or 0, r = r or 0, sx = sx or 1, sy = sy or (sx or 1), ox = ox or 0, oy = oy or 0,
-      tx = t0x, ty = t0y, tsx = t1x - t0x, tsy = t2y - t0y,
-      color = { cr, cg, cb, ca }, shader = shader, uniforms = uniforms, blend = { bm, am },
-    }
+    t.spec, t.image, t.quad, t.qx, t.qy, t.qw, t.qh, t.qsw, t.qsh = spec, image, quad, qx, qy, qw, qh, qsw, qsh
+    t.x, t.y, t.r, t.sx, t.sy, t.ox, t.oy = x, y or 0, r or 0, sx or 1, sy or (sx or 1), ox or 0, oy or 0
+    t.tx, t.ty, t.tsx, t.tsy = t0x, t0y, t1x - t0x, t2y - t0y
+    local col, bl = t.color, t.blend
+    col[1], col[2], col[3], col[4] = cr, cg, cb, ca
+    bl[1], bl[2] = bm, am
+    t.shader, t.uniforms, t.inAnim = shader, uniforms, nil
+    return t
   end
 
   -- a recorded draw's quad with the viewport it was drawn through. The engine may move a quad
@@ -1306,7 +1388,7 @@ function HD.new(G, opts)
     local cur = self.cur
     if not edgeBounds(x0, y0, x1, y1, false) then return nil end
     if y0 <= 0.5 and y1 >= cur.h - 0.5 then return nil end
-    local rec = record(image, {}, a, b, c, d, e, f, g, h)
+    local rec = record(image, NO_SPEC, a, b, c, d, e, f, g, h)
     if not rec then return nil end
     local qx, qy, qw, qh = a:getViewport()
     -- (bottom: it reaches the text box's line, below which the cart's text box hid the rest)
@@ -1443,7 +1525,7 @@ function HD.new(G, opts)
       return byImage ~= nil and byImage[piece.qx .. ":" .. piece.qy .. ":" .. piece.qw .. ":" .. piece.qh] == true
     end
     local carryLo, carryHi = repeats(pieces[1]), repeats(pieces[last + 1])
-    local rec = record(image, {}, a, b, c, d, e, f, g, h)
+    local rec = record(image, NO_SPEC, a, b, c, d, e, f, g, h)
     if not rec then return end
     cur.items[#cur.items + 1] = { kind = "row", rec = rec, pieces = pieces, lo = lo, hi = hi, w = w,
                                   cw = cur.w, ch = cur.h, line = self.fit.focus[2], carryLo = carryLo,
@@ -1567,9 +1649,10 @@ function HD.new(G, opts)
       if not (self.inAnim and x1 > -cur.w and x0 < 2 * cur.w and y1 > -cur.h and y0 < 2 * cur.h) then return false end
     end
     if x0 >= -0.5 and y0 >= -0.5 and x1 <= cur.w + 0.5 and y1 <= cur.h + 0.5 then return false end
-    local rec = record(image, {}, a, ...)
+    local rec = record(image, NO_SPEC, a, ...)
     if not rec then return false end
-    local item = { kind = "free", rec = rec }
+    local item = newItem("free")
+    item.rec = rec
     if isQuad(a) then item.qx, item.qy, item.qw, item.qh = a:getViewport() end
     cur.items[#cur.items + 1] = item
     cur.freeN = (cur.freeN or 0) + 1
@@ -1691,7 +1774,9 @@ function HD.new(G, opts)
           end
           -- tagged draws with nothing drawn between them share one split
           if not cur.pending then cur.splits = cur.splits + 1 end
-          cur.items[#cur.items + 1] = { kind = "hd", rec = rec }
+          local item = newItem("hd")
+          item.rec = rec
+          cur.items[#cur.items + 1] = item
           cur.pending = true
           cur.open = nil
           self.stats.splits = self.stats.splits + 1
@@ -1958,23 +2043,29 @@ function HD.new(G, opts)
     -- could never be composited, so the game draws its own way
     if self.canCapture and not self.canCapture() then return false end
     if not (self.installed and self.enabled[pass] and base and base.getWidth) then return false end
-    self.cur = {
-      pass = pass, base = base, current = base, layerSet = {}, items = {},
-      w = base:getWidth(), h = base:getHeight(), layerCount = 0, splits = 0,
-      cap = self.caps[pass] or 8, pending = false,
-      segment = "scene", hasUI = false,
-      -- a screen over the field with Pokedex & Summary HD off: its Pokemon are drawn as tagged
-      -- images usually are outside a pass (the screen still fills the screen)
-      plain = pass == "screen" and not self.enabled.dex,
-      prefit = {},
-      -- each side's battler sized by its species, this pass (self.pair at its end)
-      sides = pass == "battle" and {} or nil,
-      -- the side shift this frame is drawn with (the engine's move coordinates use the same)
-      shift = { enemy = self.fit.shift.enemy, player = self.fit.shift.player,
-                playerY = self.fit.shift.playerY, playerRaise = self.fit.shift.playerRaise },
-      -- (the doubles spread the engine's coordinates were moved by for this frame)
-      spread = self.fit.spread or 1,
-    }
+    -- (a pooled table, and its lists: pooledPass; `serial` tells passes apart)
+    local c = pooledPass(pass)
+    local kept = c.kept or {}
+    passSerial = passSerial + 1
+    c.serial = passSerial
+    c.pass, c.base, c.current = pass, base, base
+    c.layerSet, c.items = kept.layerSet or {}, kept.items or {}
+    c.w, c.h, c.layerCount, c.splits = base:getWidth(), base:getHeight(), 0, 0
+    c.cap, c.pending, c.segment, c.hasUI = self.caps[pass] or 8, false, "scene", false
+    -- a screen over the field with Pokedex & Summary HD off: its Pokemon are drawn as tagged
+    -- images usually are outside a pass (the screen still fills the screen)
+    c.plain = pass == "screen" and not self.enabled.dex
+    c.prefit = kept.prefit or {}
+    -- each side's battler sized by its species, this pass (self.pair at its end)
+    if pass == "battle" then c.sides = kept.sides or {} end
+    -- the side shift this frame is drawn with (the engine's move coordinates use the same)
+    local sh = kept.shift or {}
+    sh.enemy, sh.player = self.fit.shift.enemy, self.fit.shift.player
+    sh.playerY, sh.playerRaise = self.fit.shift.playerY, self.fit.shift.playerRaise
+    c.shift = sh
+    -- (the doubles spread the engine's coordinates were moved by for this frame)
+    c.spread = self.fit.spread or 1
+    self.cur = c
     -- (the mosaics seen covering the scene last battle pass are this one's whole-scene pieces)
     if pass == "battle" then self.mosaicNow, self.mosaicNext = self.mosaicNext, nil end
     return true
@@ -1986,7 +2077,9 @@ function HD.new(G, opts)
   function self.seam(name)
     local cur = self.cur
     if not cur then return end
-    cur.items[#cur.items + 1] = { kind = "seam", name = name }
+    local item = newItem("seam")
+    item.name = name
+    cur.items[#cur.items + 1] = item
     if name == "ui" then
       cur.segment = "ui"
       cur.hasUI = true
@@ -2059,9 +2152,11 @@ function HD.new(G, opts)
   function self.backdrop(image, x, y)
     local cur = self.cur
     if not (cur and onPass()) then return real.draw(image, x, y) end
-    local rec = record(image, {}, x, y)
+    local rec = record(image, NO_SPEC, x, y)
     if not rec then return real.draw(image, x, y) end
-    cur.items[#cur.items + 1] = { kind = "backdrop", rec = rec }
+    local item = newItem("backdrop")
+    item.rec = rec
+    cur.items[#cur.items + 1] = item
     cur.backdropImage = image
     cur.pending = true
     cur.open = nil
@@ -2077,9 +2172,11 @@ function HD.new(G, opts)
   function self.world(image, scene, x, y)
     local cur = self.cur
     if not (cur and onPass() and self.sceneRenderer) then return false end
-    local rec = record(image, {}, x or 0, y or 0)
+    local rec = record(image, NO_SPEC, x or 0, y or 0)
     if not rec then return false end
-    cur.items[#cur.items + 1] = { kind = "world", rec = rec, scene = scene }
+    local item = newItem("world")
+    item.rec, item.scene = rec, scene
+    cur.items[#cur.items + 1] = item
     -- (the battlers stand in it at its scale: worldSize)
     cur.world = scene
     cur.backdropImage = image
@@ -2113,9 +2210,11 @@ function HD.new(G, opts)
   function self.band(image, x, y)
     local cur = self.cur
     if not (cur and onPass()) then return real.draw(image, x, y) end
-    local rec = record(image, {}, x, y)
+    local rec = record(image, NO_SPEC, x, y)
     if not rec then return real.draw(image, x, y) end
-    cur.items[#cur.items + 1] = { kind = "band", rec = rec, fill = self.solidRow(image) }
+    local item = newItem("band")
+    item.rec, item.fill = rec, self.solidRow(image)
+    cur.items[#cur.items + 1] = item
     cur.pending = true
     cur.open = nil
   end
@@ -2178,9 +2277,11 @@ function HD.new(G, opts)
   function self.drawStage(image, x, y, side)
     local cur = self.cur
     if side and cur and onPass() and self.fit.enabled and cur.pass == "battle" then
-      local rec = record(image, {}, x, y)
+      local rec = record(image, NO_SPEC, x, y)
       if rec then
-        cur.items[#cur.items + 1] = { kind = "stage", rec = rec, side = side }
+        local item = newItem("stage")
+        item.rec, item.side = rec, side
+        cur.items[#cur.items + 1] = item
         cur.pending = true
         cur.open = nil
         return
@@ -2797,6 +2898,59 @@ function HD.new(G, opts)
   -- (fitStep's own lists, kept between frames and emptied each: read only inside it)
   local fitReported, fitSeen, fitHeads, headRows = {}, {}, {}, {}
   local function emptied(t) for k in pairs(t) do t[k] = nil end return t end
+  -- a battler taken into fitStep's sums (F: takeF, its state this frame) - one function, not a
+  -- closure each frame
+  local takeF = {}
+  local function takeRec(F, rec)
+    local cur, fit = F.cur, self.fit
+    local spec = rec.spec
+    if spec.side then F.seen[spec.side] = true end
+    local d = (not rec.inAnim and cur.shift[spec.side == "player" and "player" or "enemy"]) or 0
+    local a, b = artSpan(rec)
+    if spec.side and not spec.trainer then
+      local sx = spreadDx((place(rec)), spec)
+      a, b = a + sx, b + sx
+    end
+    if spec.side then
+      local sd = spec.side == "player" and "player" or "enemy"
+      local u0, u1 = a, b
+      if not rec.inAnim then u0, u1 = a + d - cur.shift[sd], b + d - cur.shift[sd] end
+      local _, feetY = place(rec)
+      local heads = F.heads
+      local n = #heads + 1
+      local row = headRows[n]
+      if not row then row = {}; headRows[n] = row end
+      row[1], row[2], row[3], row[4], row[5] = u0, u1, artTop(rec), sd, feetY
+      heads[n] = row
+      -- (each side's body: the middle of its art where it rests, what its moves are aimed at)
+      if not spec.trainer and feetY then
+        if sd == "enemy" then F.aimE = (artTop(rec) + feetY) / 2 else F.aimP = (artTop(rec) + feetY) / 2 end
+      end
+    end
+    if spec.side == "player" then
+      if not rec.inAnim then a, b = a + d - cur.shift.player, b + d - cur.shift.player end
+      F.pL, F.pR = math.min(F.pL, a), math.max(F.pR, b)
+      F.apL, F.apR = math.min(F.apL, a), math.max(F.apR, b)
+      if spec.body then
+        local r = { bodyRect(rec) }
+        F.pT = math.min(F.pT, r[2])
+        -- where the side shift puts it (only its x: which UI it is under)
+        r[1], r[3] = r[1] + d, r[3] + d
+        if spec.top then r.top = artTop(rec) end
+        F.backs[#F.backs + 1] = r
+      else
+        F.pT = math.min(F.pT, artTop(rec))
+      end
+    else
+      if not rec.inAnim then a, b = a + d - cur.shift.enemy, b + d - cur.shift.enemy end
+      F.eL, F.eR = math.min(F.eL, a), math.max(F.eR, b)
+      F.aeL, F.aeR = math.min(F.aeL, a), math.max(F.aeR, b)
+      -- its feet: where the cart's pic box ends (a frame's own bottom may be empty margin)
+      F.eB = fit.feetY
+      local t = artTop(rec)
+      if t < F.top then F.top = t end
+    end
+  end
   local function fitStep(cur)
     local fit = self.fit
     -- (the 3D world's single battles, sized: the camera frames what is out on the field. It
@@ -2868,87 +3022,44 @@ function HD.new(G, opts)
         fit.spread = want > sp and math.min(want, sp + step) or math.max(want, sp - step)
       end
     end
-    local top, backs = math.huge, {}
-    local seen = emptied(fitSeen)
     -- each side's art where it rests (canvas px, unshifted, unzoomed): its frame across, the
-    -- enemy's feet (its pic box's bottom), the top of the player's body (else of its art)
-    local eL, eR, eB = math.huge, -math.huge, -math.huge
-    local pL, pR, pT = math.huge, -math.huge, math.huge
-    -- (and their art alone, the platforms left out: how wide the Pokemon themselves are)
-    local aeL, aeR, apL, apR = math.huge, -math.huge, math.huge, -math.huge
-    -- (and each battler's own: across, its top, its side; the heads the foe's HP box must clear)
-    local heads = emptied(fitHeads)
-    local aimE, aimP
-    local function take(rec)
-      local spec = rec.spec
-      if spec.side then seen[spec.side] = true end
-      local d = (not rec.inAnim and cur.shift[spec.side == "player" and "player" or "enemy"]) or 0
-      local a, b = artSpan(rec)
-      if spec.side and not spec.trainer then
-        local sx = spreadDx((place(rec)), spec)
-        a, b = a + sx, b + sx
-      end
-      if spec.side then
-        local sd = spec.side == "player" and "player" or "enemy"
-        local u0, u1 = a, b
-        if not rec.inAnim then u0, u1 = a + d - cur.shift[sd], b + d - cur.shift[sd] end
-        local _, feetY = place(rec)
-        local n = #heads + 1
-        local row = headRows[n]
-        if not row then row = {}; headRows[n] = row end
-        row[1], row[2], row[3], row[4], row[5] = u0, u1, artTop(rec), sd, feetY
-        heads[n] = row
-        -- (each side's body: the middle of its art where it rests, what its moves are aimed at)
-        if not spec.trainer and feetY then
-          if sd == "enemy" then aimE = (artTop(rec) + feetY) / 2 else aimP = (artTop(rec) + feetY) / 2 end
-        end
-      end
-      if spec.side == "player" then
-        if not rec.inAnim then a, b = a + d - cur.shift.player, b + d - cur.shift.player end
-        pL, pR = math.min(pL, a), math.max(pR, b)
-        apL, apR = math.min(apL, a), math.max(apR, b)
-        if spec.body then
-          local r = { bodyRect(rec) }
-          pT = math.min(pT, r[2])
-          -- where the side shift puts it (only its x: which UI it is under)
-          r[1], r[3] = r[1] + d, r[3] + d
-          if spec.top then r.top = artTop(rec) end
-          backs[#backs + 1] = r
-        else
-          pT = math.min(pT, artTop(rec))
-        end
-      else
-        if not rec.inAnim then a, b = a + d - cur.shift.enemy, b + d - cur.shift.enemy end
-        eL, eR = math.min(eL, a), math.max(eR, b)
-        aeL, aeR = math.min(aeL, a), math.max(aeR, b)
-        -- its feet: where the cart's pic box ends (a frame's own bottom may be empty margin)
-        eB = fit.feetY
-        local t = artTop(rec)
-        if t < top then top = t end
-      end
-    end
+    -- enemy's feet (its pic box's bottom), the top of the player's body (else of its art); and
+    -- their art alone, the platforms left out (how wide the Pokemon themselves are); and each
+    -- battler's own: across, its top, its side (the heads the foe's HP box must clear) - summed
+    -- in takeF by takeRec
+    local F = takeF
+    F.cur, F.top, F.backs, F.seen, F.heads = cur, math.huge, {}, emptied(fitSeen), emptied(fitHeads)
+    F.eL, F.eR, F.eB = math.huge, -math.huge, -math.huge
+    F.pL, F.pR, F.pT = math.huge, -math.huge, math.huge
+    F.aeL, F.aeR, F.apL, F.apR = math.huge, -math.huge, math.huge, -math.huge
+    F.aimE, F.aimP = nil, nil
     -- a battler the engine reported (hd.prefit) is fitted where it rests, drawn yet or not:
     -- its send-out jump, a lunge or a shake never moves the camera
     -- (a side reported by any of its battlers is fitted by those alone)
     -- (live: one not out is not framed, its side's drawn art neither: its send-out grows it)
     local preE, preP = false, false
     for _, rec in pairs(cur.prefit) do
-      if not (live and rec.out == false) then take(rec) end
+      if not (live and rec.out == false) then takeRec(F, rec) end
       if rec.spec.side == "enemy" then preE = true elseif rec.spec.side == "player" then preP = true end
     end
     -- the platforms count as each side's art: the scene never crops them
     if fit.wantW and fit.pads then
       local pe, pp = fit.pads.enemy, fit.pads.player
-      eL, eR = math.min(eL, pe[1]), math.max(eR, pe[2])
-      pL, pR = math.min(pL, pp[1]), math.max(pR, pp[2])
+      F.eL, F.eR = math.min(F.eL, pe[1]), math.max(F.eR, pe[2])
+      F.pL, F.pR = math.min(F.pL, pp[1]), math.max(F.pR, pp[2])
     end
     for _, item in ipairs(cur.items) do
       if item.kind == "seam" and item.name == "ui" then break end
       local spec = item.kind == "hd" and item.rec.spec
       if spec and not spec.trainer and not (spec.side == "enemy" and preE or spec.side == "player" and preP) then
-        take(item.rec)
+        takeRec(F, item.rec)
       end
     end
+    local top, backs, seen, heads = F.top, F.backs, F.seen, F.heads
+    local eL, eR, eB, pL, pR, pT = F.eL, F.eR, F.eB, F.pL, F.pR, F.pT
+    local aeL, aeR, apL, apR = F.aeL, F.aeR, F.apL, F.apR
+    local aimE, aimP = F.aimE, F.aimP
+    F.cur, F.backs = nil, nil
     if fit.idle > 2 then fit.doubleArt = false end
     if seen.enemy then fit.doubleArt = true end
     -- the 3D world's single battles: a move aimed at the middle of each side's art as drawn
@@ -3270,10 +3381,19 @@ function HD.new(G, opts)
   end
 
   -- a rect {x, y, w, h} clipped to another
-  local function clipRect(x, y, w, h, v)
+  -- (out: a kept rect filled instead of a new one)
+  local function clipRect(x, y, w, h, v, out)
     local x0, y0 = math.max(x, v[1]), math.max(y, v[2])
     local x1, y1 = math.min(x + w, v[1] + v[3]), math.min(y + h, v[2] + v[4])
-    return { x0, y0, math.max(0, x1 - x0), math.max(0, y1 - y0) }
+    out = out or {}
+    out[1], out[2], out[3], out[4] = x0, y0, math.max(0, x1 - x0), math.max(0, y1 - y0)
+    return out
+  end
+  -- the composite's rects, kept between frames (read only while it runs: noteUi copies what it
+  -- keeps), and its helpers as plain functions, not closures made each frame
+  local compScene, compUi, compCanvas, compTop, compLow, compTopAll = {}, {}, {}, {}, {}, {}
+  local function scissorBox(b)
+    if b then scissorOver(b[1], b[2], b[3], b[4]) else real.setScissor() end
   end
 
   -- the UI at a scale that is not a whole number, kept sharp and even: drawn pixel for pixel
@@ -3608,7 +3728,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
   -- self.uiMap, for this pass
   local function noteUi(cur, x, y, sx, sy, box, split, topY, topBox, lowBox)
     local map = self.uiMap
-    map.cur, map.x, map.y, map.sx, map.sy = cur, x, y, sx, sy
+    map.cur, map.serial, map.x, map.y, map.sx, map.sy = cur, cur.serial, x, y, sx, sy
     copyRect(map.box, box)
     map.banded = topBox ~= nil
     if topBox then
@@ -3883,8 +4003,9 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         local f = math.max(1, math.min(fH, fW))
         S, Sy = bsx * f, bsy * f
       end
-      sceneBox = { vx, vy, vw, vh }
-      uiBox = clipRect(ubx, uby, cur.w * U, cur.h * Uy, sceneBox)
+      sceneBox = compScene
+      sceneBox[1], sceneBox[2], sceneBox[3], sceneBox[4] = vx, vy, vw, vh
+      uiBox = clipRect(ubx, uby, cur.w * U, cur.h * Uy, sceneBox, compUi)
     end
     -- the enemy's HP box (a double battle's foes' two, moved up as one) raised to fit.topGap UI
     -- px under the screen's top when the battle fills a wide screen, so the Pokemon have the rows
@@ -3941,10 +4062,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
       zb = math.max(zb, (cy - sceneBox[2]) / (fy * Sy))
     end
     -- canvas pixels -> screen, zoomed by k about the focus and raised by `up` canvas pixels
-    local function zoomed(k, up)
-      return cx - fx * k * S, cy - (fy * k + up) * Sy, S * k, Sy * k
-    end
-    local sx0, sy0, ssx, ssy = zoomed(z, lift)
+    local sx0, sy0, ssx, ssy = cx - fx * z * S, cy - (fy * z + lift) * Sy, S * z, Sy * z
     -- the player's Pokemon's feet (the bottom of its art where it rests, hd.prefit, as this
     -- frame draws it: its scale, its side's drop) and the screen's bottom, in UI canvas rows:
     -- the adapter stands the player's HP boxes on those feet when no bottom UI is drawn under
@@ -3982,9 +4100,11 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     end
     -- the far wallpaper does not rise: its rows below the text box's top are not scenery
     -- (the cart hides them), so the text box's line stays its bottom edge
-    local bkx, bky, bksx, bksy = zoomed(zb, 0)
+    local bkx, bky, bksx, bksy = cx - fx * zb * S, cy - fy * zb * Sy, S * zb, Sy * zb
     -- the screen rect a wallpaper covers (canvas size at scale 1)
-    local cover = filling and sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
+    local canvasBox = compCanvas
+    canvasBox[1], canvasBox[2], canvasBox[3], canvasBox[4] = bx, by, cur.w * bsx, cur.h * bsy
+    local cover = filling and sceneBox or canvasBox
     -- the stacked UI in two bands (one when a draw crosses the split this frame)
     local split = fit.split
     -- centred when nothing is below: the sky over the HP box and the ground under the text
@@ -4010,12 +4130,12 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     local topBy = uby + dyTop * Uy
     local topBox, lowBox
     -- (unfilled: the Renderer's clip, else its letterbox)
-    local clipTo = sceneBox or { bx, by, cur.w * bsx, cur.h * bsy }
+    local clipTo = sceneBox or canvasBox
     local topAll
     if banded then
-      topBox = clipRect(ubx, topBy, cur.w * U, split * Uy, clipTo)
-      lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, clipTo)
-      if topLayer then topAll = clipRect(ubx, topBy, cur.w * U, cur.h * Uy, clipTo) end
+      topBox = clipRect(ubx, topBy, cur.w * U, split * Uy, clipTo, compTop)
+      lowBox = clipRect(ubx, uby + split * Uy, cur.w * U, (cur.h - split) * Uy, clipTo, compLow)
+      if topLayer then topAll = clipRect(ubx, topBy, cur.w * U, cur.h * Uy, clipTo, compTopAll) end
     end
     local byLayer = banded and topLayer
     local k = filling and U ~= math.floor(U) and math.ceil(U) or 1
@@ -4024,9 +4144,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     self.stats.fill = S / bsx
     self.stats.uiScale = U
     self.stats.uiTopDy = banded and dyTop or 0
-    local function scissor(b)
-      if b then scissorOver(b[1], b[2], b[3], b[4]) else real.setScissor() end
-    end
+    local scissor = scissorBox
     local inScene = true
     local inTop = false
     local worldShown
@@ -4128,7 +4246,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
             -- down to the view's bottom, so beside a text box that no longer spans the screen it
             -- still covers the field; any other (speed lines) is hidden below that line, as the
             -- cart's text box (the whole screen's width) hides it
-            local gx, gy = zoomed(z, 0)
+            local gx, gy = cx - fx * z * S, cy - fy * z * Sy
             local v = sceneBox or cover
             if not item.fill then
               real.setScissor(v[1], v[2], v[3], math.max(0, math.min(v[4], cy - v[2])))
@@ -4407,7 +4525,9 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
   --- The frame is over: anything still waiting for a blit that never came is dropped
   --- (it was flattened when that could be known in time).
   function self.endFrame()
-    self.done = {}
+    -- (emptied, not made anew: a frame's passes are let go here)
+    for k in pairs(self.done) do self.done[k] = nil end
+    poolsTurn()
     self.recover()
     -- frames since a battle was last fitted: a gap means the next battle starts afresh
     self.fit.idle = self.fit.idle + 1

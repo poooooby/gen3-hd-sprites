@@ -609,6 +609,20 @@ already covers the view.
 - The outward side shift keeps its `shiftMax` cap: effects are still drawn in the 240-px
   canvas. The stacked layout's inward slide needs no cap.
 
+**Frame-scoped tables.** A pass's table, its records and its items come from pools that two
+frames take in turn (`pooledPass`, `pooledRec`, `newItem`; `hd.endFrame` swaps them): a pass is
+composited or flattened the frame it is drawn (a field pass ends with the world pass), so a pool
+is filled again only the frame after next. A record keeps its `color`, `blend` and uniforms
+tables; an item is emptied; an untagged draw's record shares one empty spec (`NO_SPEC`: specs
+are only read). So **passes are told apart by `cur.serial`, never by the table**: `uiMap.serial`
+(set with `uiMap.cur` by `noteUi`) is compared in src/engine.lua and src/gen2.lua, and the
+battle bar's pass in src/gen3.lua is its serial. The composite's blit is one function over a
+kept state (`bs`), its box, view and rects kept tables (`clipRect(..., out)`), and fitStep's
+battlers are summed by `takeRec` into `takeF`, not a closure. Measured with the JIT off and the
+GC stopped (2026-11-22): battle with the 3D scene 57 -> 36 KB a frame in all, of which about
+29 is the engine's and other mods'; WoobleView's own code about 3 KB (fitStep's other closures,
+`backs`, `fitSolve`'s memo key), the field's under 0.5.
+
 **Safety.** Every engine hook calls into this mod under `pcall`. An error goes to
 `hd.fail(err)`: it is logged with its count ("failure n of 3"), any pass in flight is flattened
 back into its canvas, and nothing is captured for `hd.retryAfter` (2 s); then `hd.recover`

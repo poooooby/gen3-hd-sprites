@@ -697,8 +697,10 @@ function Gen3.wrapBar(Engine, hd)
       and Bar.LAYOUT[layoutName() or ""] ~= nil
   end
   Gen3.barWanted = wanted
-  -- the pass the bar was painted in (its text windows belong to it), the window open
+  -- the pass the bar was painted in (its text windows belong to it: by its serial - a pass's
+  -- table is reused the frame after next), the window open
   local barPass, windowOpen = nil, false
+  local function inBarPass(cur) return cur ~= nil and barPass ~= nil and cur.serial == barPass end
 
   local drawPanel = Chrome.drawPanel
   if not ours[drawPanel] then
@@ -707,7 +709,7 @@ function Gen3.wrapBar(Engine, hd)
       if wanted() and shown() then
         mode = specs[name][mode] and mode or "none"
         if hd.paint(Bar.paint, args[name][mode], 112) then
-          barPass = hd.cur
+          barPass = hd.cur and hd.cur.serial
           windowOpen = hd.bar(specs[name][mode])
           return
         end
@@ -719,7 +721,7 @@ function Gen3.wrapBar(Engine, hd)
   local drawMenuFrames = Chrome.drawMenuFrames
   if type(drawMenuFrames) == "function" and not ours[drawMenuFrames] then
     Chrome.drawMenuFrames = function(...)
-      if barPass ~= nil and barPass == hd.cur then return end
+      if inBarPass(hd.cur) then return end
       return drawMenuFrames(...)
     end
     ours[Chrome.drawMenuFrames] = true
@@ -761,7 +763,7 @@ function Gen3.wrapBar(Engine, hd)
         return
       end
       local cur = hd.cur
-      if cur ~= nil and barPass == cur then
+      if inBarPass(cur) then
         local name = layoutName()
         if name and specs[name] and hd.bar(specs[name].none) then return closed(draw(...)) end
       end

@@ -133,6 +133,35 @@ function Engine.install(hd)
     if not okG then error("love.graphics has no " .. tostring(missing), 0) end
 
     if not ours[blitCanvas] then
+      -- the composite's blit, one function: what it draws through is this blit's (bs, set before
+      -- each composite - a closure, its box and view made each frame were garbage)
+      local bs, boxKept, viewKept = {}, {}, {}
+      -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
+      -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels; zk:
+      -- the canvas's pixels per game pixel, for the UI drawn larger to scale it sharply)
+      -- Through zones (Red's SGB palettes) the shader maps each pixel's shade to a colour and
+      -- keeps its alpha, un-premultiplied: a layer of ours (mostly clear) is blitted with
+      -- plain alpha blending there, or each clear pixel would add the zone's darkest colour
+      local function blit(c, obx, oby, osx, osy, obox, zk)
+        local sx, sy, ox, oy = bs.sx, bs.sy, bs.ox, bs.oy
+        local kx, ky = (osx or sx) / sx * (zk or 1), (osy or sy) / sy * (zk or 1)
+        local b1, b2, b3, b4
+        if obox then
+          b1, b2, b3, b4 = obox[1], obox[2], obox[3], obox[4]
+        else
+          b1, b2, b3, b4 = bs.boxX, bs.boxY, bs.boxW, bs.boxH
+          if b1 then b1, b2 = b1 - ox, b2 - oy end
+        end
+        local mode, alpha
+        if bs.zoned then
+          mode, alpha = love.graphics.getBlendMode()
+          if alpha == "premultiplied" then love.graphics.setBlendMode(mode, "alphamultiply") end
+        end
+        blitCanvas(bs.self, c, osx or sx, osy or sy, bs.zoneList, bs.zsx and bs.zsx * kx, bs.zsy and bs.zsy * ky,
+                   (obx or bs.bx) - (obx and 0 or ox), (oby or bs.by) - (oby and 0 or oy),
+                   b1, b2, b3, b4, bs.dpiX, bs.dpiY)
+        if alpha == "premultiplied" then love.graphics.setBlendMode(mode, alpha) end
+      end
       Renderer.blitCanvas = function(self, canvas, sx, sy, zoneList, zsx, zsy, bx, by,
                                      boxX, boxY, boxW, boxH, dpiX, dpiY)
         if hd.done[canvas] then
@@ -152,29 +181,15 @@ function Engine.install(hd)
             love.graphics.setScissor()
             love.graphics.clear(0, 0, 0, 0)
           end
-          -- the Renderer's own blit; Battle Fit's zoomed scene passes its own origin and scale
-          -- (a zone list's scales follow the blit's, so an SGB zone stays on its pixels; zk:
-          -- the canvas's pixels per game pixel, for the UI drawn larger to scale it sharply)
-          -- Through zones (Red's SGB palettes) the shader maps each pixel's shade to a colour and
-          -- keeps its alpha, un-premultiplied: a layer of ours (mostly clear) is blitted with
-          -- plain alpha blending there, or each clear pixel would add the zone's darkest colour
-          local zoned = zoneList ~= nil and zoneList[1] ~= nil
-          local function blit(c, obx, oby, osx, osy, obox, zk)
-            local kx, ky = (osx or sx) / sx * (zk or 1), (osy or sy) / sy * (zk or 1)
-            local b = obox or { boxX, boxY, boxW, boxH }
-            local b1, b2 = b[1], b[2]
-            if not obox and b1 then b1, b2 = b1 - ox, b2 - oy end
-            local mode, alpha
-            if zoned then
-              mode, alpha = love.graphics.getBlendMode()
-              if alpha == "premultiplied" then love.graphics.setBlendMode(mode, "alphamultiply") end
-            end
-            blitCanvas(self, c, osx or sx, osy or sy, zoneList, zsx and zsx * kx, zsy and zsy * ky,
-                       (obx or bx) - (obx and 0 or ox), (oby or by) - (oby and 0 or oy),
-                       b1, b2, b[3], b[4], dpiX, dpiY)
-            if alpha == "premultiplied" then love.graphics.setBlendMode(mode, alpha) end
+          bs.self, bs.sx, bs.sy, bs.zoneList, bs.zsx, bs.zsy = self, sx, sy, zoneList, zsx, zsy
+          bs.bx, bs.by, bs.ox, bs.oy, bs.dpiX, bs.dpiY = bx, by, ox, oy, dpiX, dpiY
+          bs.boxX, bs.boxY, bs.boxW, bs.boxH = boxX, boxY, boxW, boxH
+          bs.zoned = zoneList ~= nil and zoneList[1] ~= nil
+          local box
+          if boxX then
+            box = boxKept
+            box[1], box[2], box[3], box[4] = boxX - ox, boxY - oy, boxW, boxH
           end
-          local box = boxX and { boxX - ox, boxY - oy, boxW, boxH } or nil
           -- the whole screen area (Battle Fit's fill): the Renderer's view rect (inside a
           -- cutout, a touch skin's or a layout mod's game area, that rectangle), with the rows
           -- the battle may use: below the notch, above on-screen touch controls
@@ -182,7 +197,9 @@ function Engine.install(hd)
           if hd.fit.fill and canvas == self.canvas and self.frameRects then
             local okR, R = pcall(self.frameRects, self)
             if okR and type(R) == "table" and R.vuw then
-              view = { R.vux, R.vuy, R.vuw, R.vuh }
+              view = viewKept
+              view[1], view[2], view[3], view[4] = R.vux, R.vuy, R.vuw, R.vuh
+              view.top, view.bottom = nil, nil
               if not R.cut then view.top, view.bottom = Engine.usableRows(R.vuy, R.vuh, R.vuw) end
             end
           end
@@ -205,8 +222,10 @@ function Engine.install(hd)
           end
           -- what the game draws over the UI canvas after blitting it, placed where the filled
           -- screen put the UI (Engine.overUi: the adapter's)
-          if ok and handled and canvas == self.canvas and hd.uiMap.cur == cur then hd.uiLive = true end
-          if ok and handled and Engine.overUi and canvas == self.canvas and hd.uiMap.cur == cur then
+          -- (by serial: a pass's table is reused the frame after next, src/hd.lua pooledPass)
+          local thisUi = cur ~= nil and hd.uiMap.cur == cur and hd.uiMap.serial == cur.serial
+          if ok and handled and canvas == self.canvas and thisUi then hd.uiLive = true end
+          if ok and handled and Engine.overUi and canvas == self.canvas and thisUi then
             local okO, errO = pcall(Engine.overUi, self, hd.uiMap)
             if not okO then hd.fail("over the UI: " .. tostring(errO)) end
           end

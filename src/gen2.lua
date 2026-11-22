@@ -365,7 +365,7 @@ function Gen2.prepare(Engine, hd)
     if okC and done and fills then filledFrame = frame end
     -- a filled screen: where its UI went (a state drawn over the battle goes there too: over a
     -- WIDE battle, where the game puts it, the 160-wide panel's place in the middle of its 304)
-    if okC and done and cur and hd.uiMap.cur == cur and gameDraw and battleDraw then
+    if okC and done and cur and hd.uiMap.cur == cur and hd.uiMap.serial == cur.serial and gameDraw and battleDraw then
       local m = hd.uiMap
       local dx = (cw - 160) / 2
       shown.battle, shown.frame, shown.x, shown.y, shown.sx, shown.sy = battle, frame, m.x + dx * m.sx, m.y,
