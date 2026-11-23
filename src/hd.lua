@@ -1289,6 +1289,19 @@ function HD.new(G, opts)
     g.image = info.image
     g.grow = math.max(0, math.min(1, tonumber(info.grow) or 1))
   end
+  --- How much of the 3D world's wide step outward (fitStep) each side takes, enemy and player,
+  --- 0..1: none for a giant (exports.giant: Galar Rising's Dynamax - it keeps its own spot of the
+  --- ground, the camera pulled back for its whole width), and none, easing out over the first
+  --- degrees, while the Battle Camera's view is turned (look.still, src/scene/orbit.lua: the step
+  --- is the battle canvas's, not the world's, and would slide it off its spot)
+  function self.wideStep()
+    local s = self.worldScene
+    local L = type(s) == "table" and s.look
+    local still = (L and tonumber(L.still)) or 1
+    local e = giantLive(self.giants[1]) and 0 or still
+    local p = giantLive(self.giants[0]) and 0 or still
+    return e, p
+  end
   function self.giantsOff()
     for _, g in pairs(self.giants) do g.on, g.own, g.ownRec, g.restRec = false, nil, nil, nil end
   end
@@ -3530,9 +3543,12 @@ vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
       end
       -- (singles: a side's outer edge, the player's left, the foe's right, is left to the wide
       -- step outward, which keeps most of it on the screen: the camera pulled back for a wide
-      -- one's whole width only to have it stepped half off again)
+      -- one's whole width only to have it stepped half off again. A side with no step - a giant,
+      -- or the Battle Camera's view turned: wideStep - has its whole width fitted)
       if sized and not fit.double and tonumber(fit.wideLine) then
-        zt = math.max(fit.zMin, math.min(zt, across(eL, math.min(eR, fx)), across(math.max(pL, fx), pR)))
+        local sE, sP = self.wideStep()
+        zt = math.max(fit.zMin, math.min(zt, across(eL, sE >= 1 and math.min(eR, fx) or eR),
+          across(sP >= 1 and math.max(pL, fx) or pL, pR)))
       else
         zt = math.max(fit.zMin, math.min(zt, across(eL, eR), across(pL, pR)))
       end
@@ -3782,18 +3798,19 @@ vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
       local vl0, vr0 = fit.viewL or 0, fit.viewR or 240
       local W, z = vr0 - vl0, math.max(fit.z, 1e-3)
       local keep = math.max(0, math.min(1, tonumber(fit.wideKeep) or 1))
-      if seen.player and apL < apR then
+      local sE, sP = self.wideStep()
+      if seen.player and apL < apR and sP > 0 then
         local over = fx + (apR - fx) * z - (vl0 + line * W)
         -- (its art's point keep of its width in from its right edge on the screen's left edge)
         local most = fx + (apR - keep * (apR - apL) - fx) * z - vl0
         local s = math.min(over, most)
-        if s > 0 then fit.shift.player = round2(-s / z) end
+        if s > 0 then fit.shift.player = round2(-s / z * sP) end
       end
-      if seen.enemy and aeL < aeR then
+      if seen.enemy and aeL < aeR and sE > 0 then
         local over = (vr0 - line * W) - (fx + (aeL - fx) * z)
         local most = vr0 - (fx + (aeL + keep * (aeR - aeL) - fx) * z)
         local s = math.min(over, most)
-        if s > 0 then fit.shift.enemy = round2(s / z) end
+        if s > 0 then fit.shift.enemy = round2(s / z * sE) end
       end
     end
     self.stats.inward = inward

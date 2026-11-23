@@ -173,7 +173,9 @@ local function body(game, log)
     shots = shots + 1
     local name = ("cam%02d_%s_%s"):format(shots, yaw, pitch):gsub("-", "m")
     U.shot(game, ("%s/%s.png"):format(dir, name))
-    log(name, look(), "| occluded", tostring(hd.stats().occluded), "error", tostring(hd.stats().occError))
+    local st = hd.stats()
+    log(name, look(), "| occluded", tostring(st.occluded), "error", tostring(st.occError),
+      "| side shift player", tostring(st.shiftPlayer), "enemy", tostring(st.shiftEnemy), "zoom", tostring(st.zoom))
   end
   turn(0, 30)
   -- the stick held: as far as it lets the view go each way

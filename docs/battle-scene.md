@@ -63,7 +63,8 @@ only as far as it needs to keep every one of them in view.
   It returns to its usual view for the trainer's last words.
 - **Wide Pokémon:** A wide Pokémon steps back toward its own side of the screen, partly out of
   view, rather than reaching across the middle and covering its opponent. Most of it always
-  stays in view.
+  stays in view. A Dynamaxed Pokémon keeps its own spot instead, the camera pulling back for its
+  whole width, and while you've turned the view every Pokémon stays on its own spot.
 
 ## Look around 🎮
 

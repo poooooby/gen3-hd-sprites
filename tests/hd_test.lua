@@ -795,7 +795,7 @@ do
     o = o or {}
     G.setCanvas(base)
     hd.beginPass("battle", base)
-    local okW = hd.world(wall, { to = {} }, 0, 0)
+    local okW = hd.world(wall, { to = {}, look = o.look }, 0, 0)
     hd.drawStage(shadow, 0, 0, "enemy")
     G.draw(pic, 176, 40 + (o.dy or 0), 0, o.s or 1, o.s or 1, 32, 32)
     if o.pic2 then G.draw(pic2, 208, 36, 0, 1, 1, 32, 32) end
@@ -867,6 +867,30 @@ do
     frame()
     check(hd.stats.shiftEnemy == 0 and hd.stats.shiftPlayer == 0, "world: ...not in a double battle")
     hd.fit.double = false
+    -- ... nor a giant (exports.giant: Galar Rising's Dynamax), which keeps its own spot, the
+    -- camera pulled back for its whole width instead; the other side still steps
+    local zStep = hd.stats.zoom
+    for _ = 1, 60 do
+      hd.setGiant(1, { scale = 1, dx = 0, dy = 0, grow = 1 })
+      frame()
+    end
+    check(hd.stats.shiftEnemy == 0 and hd.stats.shiftPlayer < 0,
+      "world: ...not a giant foe, which keeps its spot (the player's back still steps)")
+    check(hd.stats.zoom <= zStep + 1e-9, ("world: ...the camera no nearer for it (%.3f from %.3f)")
+      :format(hd.stats.zoom, zStep))
+    hd.setGiant(1, nil)
+    for _ = 1, 3 do frame() end
+    -- ... and, easing out, not while the Battle Camera's view is turned (look.still)
+    local full = hd.stats.shiftEnemy
+    local look = { still = 0.5, on = true, feet = {}, frame = 0 }
+    for _ = 1, 60 do frame({ look = look }) end
+    local half = hd.stats.shiftEnemy
+    look.still = 0
+    for _ = 1, 60 do frame({ look = look }) end
+    check(half > 0 and half < full and hd.stats.shiftEnemy == 0 and hd.stats.shiftPlayer == 0,
+      ("world: ...eased out as the Battle Camera's view turns (%.2f, half way %.2f, then none: %s %s)"):format(full,
+      half, tostring(hd.stats.shiftEnemy), tostring(hd.stats.shiftPlayer)))
+    frame()
     hd.fit.wideLine = nil
     frame()
   end

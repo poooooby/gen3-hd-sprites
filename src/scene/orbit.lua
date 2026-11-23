@@ -40,6 +40,9 @@ Orbit.ZOOM_STEP = 0.9                      -- each notch of the wheel in (out: i
 Orbit.KEEP = 0.6                           -- zoomed in, the share of each battler's box kept in view
 Orbit.FAR = 3.2                            -- the farthest the camera ever stands, times the battle's distance
 Orbit.ZOOM_RATE = 0.9                      -- the left stick's zoom at full tilt (log of the zoom a second)
+-- how far from rest the view may be before the battle canvas's own sideways steps (hd's wide step
+-- outward) have eased all the way out: look.still, 1 at rest, 0 past this much turn, tilt or zoom
+Orbit.STILL_TURN, Orbit.STILL_ZOOM = rad(8), 0.15
 Orbit.SNAP = 1e-4                          -- radians (and dolly) close enough to rest to be at it
 
 -- set by the scene (src/scene/init.lua): the camera, the stage's ray checks, the canvas's feet
@@ -97,7 +100,7 @@ function Orbit.look(s)
   local p0 = s.to and s.to.pitch or (Orbit.Camera and Orbit.Camera.STAGE_PITCH) or rad(30)
   L = {
     yaw = 0, pitch = p0, eyaw = 0, epitch = p0, m = 1, em = 1, p0 = p0, zoom = 1, ezoom = 1,
-    feet = {}, frame = 0, t = nil, on = false, flat = 1, double = false,
+    feet = {}, frame = 0, t = nil, on = false, flat = 1, double = false, still = 1,
     pose = {}, test = {}, mid = { 0, 0 }, uv = { player = { 0, 0 }, enemy = { 0, 0 } },
   }
   s.look = L
@@ -437,6 +440,10 @@ function Orbit.step(s, now, allowed)
   local k = 1 - exp(-Orbit.EASE * dt)
   L.eyaw, L.epitch, L.ezoom = ease(L.eyaw, L.yaw, k), ease(L.epitch, L.pitch, k), ease(L.ezoom, L.zoom, k)
   local rest = L.eyaw == 0 and L.epitch == L.p0 and L.ezoom == 1
+  -- (how still the view is: the canvas's sideways steps ease out as it turns - they would slide a
+  -- battler off its spot of the ground, src/hd.lua's wide step)
+  L.still = rest and 1 or max(0, 1 - abs(L.eyaw) / Orbit.STILL_TURN - abs(L.epitch - L.p0) / Orbit.STILL_TURN
+    - abs(L.ezoom - 1) / Orbit.STILL_ZOOM)
   L.m = rest and 1 or Orbit.dolly(s, L.eyaw, L.epitch, L.ezoom)
   L.em = ease(L.em, L.m, 1 - exp(-Orbit.DOLLY_EASE * dt))
   L.on = not (rest and L.em == 1)
