@@ -106,7 +106,7 @@ Everything is on by default except the 3D battles, which you can turn on wheneve
   Night setting, and its stat chips stay on screen beside the HP boxes.
 - [Galar Rising](https://github.com/poooooby/max-raids): a Dynamaxed Pokémon gets the room it
   needs, its feet where they stood, with the opponent's HP box held steady until it shrinks
-  back. In 3D battles it grows as tall as the tallest Pokémon stands there.
+  back. In 3D battles it grows as tall as the tallest Pokémon.
 
 ## 📌 Good to Know
 

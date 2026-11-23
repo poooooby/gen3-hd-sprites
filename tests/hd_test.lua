@@ -1501,7 +1501,9 @@ do
   local foe, page = canvas("foe", 64, 64), canvas("atlas", 4096, 4096)
   hd.tag(foe, { texture = page, quad = quad(0, 0, 100, 200), pivot = { 50, 200 }, lowPivot = { 32, 64 },
                 top = 52, side = "enemy" })
+  local giantInfo   -- (exports.giant's report, made each frame as a mod makes it)
   local function frame(drawFoe)
+    if giantInfo then hd.setGiant(1, giantInfo) end
     G.setCanvas(base)
     hd.beginPass("battle", base)
     hd.backdrop(wall, 0, 0)
@@ -1521,7 +1523,7 @@ do
   -- for it where it rests at that size, drawn this frame or not (a G-Max move's look hides it),
   -- its feet on its own's; let go, the camera comes back in (between turns)
   local own = after
-  hd.setGiant(1, { scale = 1.5, dx = 0, dy = -32 * 0.5, grow = 1 })
+  giantInfo = { scale = 1.5, dx = 0, dy = -32 * 0.5, grow = 1 }
   local function settle(drawFoe)
     local z
     for _ = 1, 120 do z = frame(drawFoe) end
@@ -1535,8 +1537,16 @@ do
   check(g and math.abs(g.fixX or 9) < 1e-6 and math.abs(g.fixY or 9) < 1.01,
     "...its feet where its own stand (" .. tostring(g and g.fixX) .. ", " .. tostring(g and g.fixY) .. ")")
   hd.setGiant(1, nil)
+  giantInfo = nil
   local back = settle(true)
   check(near(back, own), "...let go, the camera back in (" .. string.format("%.3f", back) .. ")")
+  -- (one its mod stops telling of without a nil - its record gone - is off two frames on)
+  giantInfo = { scale = 1.5, dx = 0, dy = -32 * 0.5, grow = 1 }
+  settle(true)
+  giantInfo = nil
+  frame(true)
+  frame(true)
+  check(not hd.giantLive(hd.giants[1]), "...and one no longer told of is off by the frame after next")
 end
 
 -- a double battle's foes, each reported by its battler id: both count (the later report does

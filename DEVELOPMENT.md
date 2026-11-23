@@ -2138,8 +2138,12 @@ image itself a real low-res picture: it is what shows whenever a frame falls bac
 - `giant(id, info)`: how the battle draws battler `id` giant now: `scale` over its own draw,
   `dx`, `dy` its centre's move (canvas px), `image` the picture in its place (a Gigantamax
   form's: tagged, its `lowPivot` at its feet), `grow` 0..1; nil when it is back to its size.
-  Called each frame it is drawn so, before the battle's draw (a table the caller keeps).
-  `hd.giants[id]`, off at each battle's start (`giantsOff`). Then:
+  Called each frame it is drawn so, before the battle's draw (a table the caller keeps): one not
+  told of this frame or the last is off (`giantLive`, `hd.giantTick` each `endFrame`), so a mod
+  that drops its record without a nil leaves nothing behind. `hd.giants[id]`, off at each
+  battle's start (`giantsOff`). First told of already a quarter grown (a foe grown under Galar
+  Rising's full-screen scene), the camera jumps out to it (`giantNew`) instead of easing, which
+  left its head over the screen's top for a few frames. Then:
   - **The fit sees it as it rests at that size** (`hd.prefit`: the record's scale, centre and
     picture), so whatever a move does to it (a G-Max move's look hides it, swells it) the camera
     and the HP box never go back to its own size for a frame.
@@ -2150,10 +2154,12 @@ image itself a real low-res picture: it is what shows whenever a frame falls bac
     columns (`fitSolveRaw`, backs marked `giant`), where other backs may reach behind the box.
   - **The 3D world, 3D Sizing on:** `giantSize` stands it from its own height (worldSize's, floors
     and all) toward `fit.giantHeight` (10.05 m: Celesteela's standing height in the sprite mods'
-    measure, the tallest after Eternatus) by `grow`, through the same soft ceiling as any
-    (`softCeiling`, worldSize's own), indoors under the ceiling, Minimal's curve; never smaller
-    than it stands, no taller than the camera shows at its furthest zoom from its feet, under
-    the foe's HP box placed over the heads. Its shadow spans its body at that size.
+    measure, the tallest after Eternatus) by `grow`, through the player's soft ceiling for either
+    side (`softCeiling(h, "player")`) and no room's ceiling (a foe's lower cap and a room's 3 m
+    left a G-Max Lapras indoors hardly bigger than itself), Minimal's curve; at least
+    `fit.giantMin` (1.5) times its own size, no taller than the camera shows at its furthest
+    zoom from its feet, under the foe's HP box placed over the heads. Its shadow spans its body
+    at that size.
 - **A wash over the field** drawn with the UI (`fieldWash`: a fill across the whole width from
   the top to the text box's line, not the canvas's bottom; Galar Rising's red flash on a Max
   Move) is a `wash` item with Fill Screen, drawn over the view from its top to the text box's

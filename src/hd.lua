@@ -131,9 +131,9 @@ function HD.new(G, opts)
       -- ... and a Pokemon another mod draws giant for a while (exports.giant: Galar Rising's
       -- Dynamax, a Gigantamax form) grows toward giantHeight metres: the tallest Pokemon's,
       -- Eternatus aside (Celesteela, its art's standing height in the sprite mods' measure),
-      -- under the same soft ceiling (and indoors the same ceiling) as any, never smaller than it
-      -- stands itself: as tall as the tallest Pokemon there stands, not the anime's 100 ft
-      giantHeight = 10.05,
+      -- under the player's soft ceiling (a foe's too; no room's ceiling): as tall as the tallest
+      -- Pokemon stands outdoors, not the anime's 100 ft; and at least giantMin times its own size
+      giantHeight = 10.05, giantMin = 1.5,
       -- ... in a double battle, four sharing the screen: the soft ceiling from heightKneeDouble
       -- toward heightMaxDouble, and each no wider than its spot allows: Gen 3's four battler
       -- columns (doubleSpots, canvas px: the player's 32 and 90, the foes' 152 and 200) spread
@@ -1263,6 +1263,12 @@ function HD.new(G, opts)
   -- Sizing it stands toward fit.giantHeight as it grows (giantSize). Off when a battle starts.
   -- own: its own picture's tag, as the battle reports it (its height, its size before it grew)
   self.giants = {}
+  -- (a giant counts only while it is told each frame: one the mod stopped telling of - its record
+  -- gone without a nil - is off by the frame after next; giantTick counts frames, hd.endFrame)
+  self.giantTicks = 0
+  function self.giantTick() self.giantTicks = self.giantTicks + 1 end
+  local function giantLive(g) return g ~= nil and g.on and self.giantTicks - (g.seen or -9) <= 1 end
+  self.giantLive = giantLive
   function self.setGiant(id, info)
     id = tonumber(id)
     if id == nil then return end
@@ -1275,20 +1281,21 @@ function HD.new(G, opts)
       g = {}
       self.giants[id] = g
     end
-    g.on = true
+    -- (newly on, already grown past a quarter: the camera jumps out for it, fitStep's giantNew)
+    if not giantLive(g) and (tonumber(info.grow) or 1) > 0.25 then self.giantNew = 2 end
+    g.on, g.seen = true, self.giantTicks
     g.scale = tonumber(info.scale) or 1
     g.dx, g.dy = tonumber(info.dx) or 0, tonumber(info.dy) or 0
     g.image = info.image
     g.grow = math.max(0, math.min(1, tonumber(info.grow) or 1))
   end
-  local function giantsOff()
+  function self.giantsOff()
     for _, g in pairs(self.giants) do g.on, g.own, g.ownRec, g.restRec = false, nil, nil, nil end
   end
-  self.giantsOff = giantsOff
   -- the giant a tagged draw is (its Gigantamax picture's tag, or its own picture's while it grows)
   local function giantOf(spec)
     for _, g in pairs(self.giants) do
-      if g.on then
+      if giantLive(g) then
         if g.image ~= nil then
           if self.tags[g.image] == spec then return g end
         else
@@ -1320,10 +1327,12 @@ function HD.new(G, opts)
     local ok, ppt = pcall(S.groundScale, scene, X, Y)
     if not (ok and type(ppt) == "number" and ppt > 0) then return nil end
     local mpt = tonumber(S.METRES_PER_TILE) or 1
-    local function metres(h)
-      h = softCeiling(h, spec.side)
+    -- (its own: as worldSize has it; the giant's: the player's ceiling for either side and no
+    -- room's ceiling - a foe's lower one and a room's 3 m left it hardly bigger than itself)
+    local function metres(h, giant)
+      h = softCeiling(h, giant and "player" or spec.side)
       local knee, ceiling = tonumber(fit.indoorKnee), tonumber(fit.indoorCeiling)
-      if scene.indoor and knee and ceiling and ceiling > knee and h > knee then
+      if not giant and scene.indoor and knee and ceiling and ceiling > knee and h > knee then
         h = knee + (ceiling - knee) * (1 - math.exp(-(h - knee) / (ceiling - knee)))
       end
       if fit.sizeMode == "minimal" and not fit.double then
@@ -1338,7 +1347,7 @@ function HD.new(G, opts)
       if w.px and w.of.side == own.side and sameMon(w.of, own) then ownPx = w.px break end
     end
     ownPx = ownPx or metres(ownH) / mpt * ppt
-    local bigPx = math.max(ownPx, metres(tonumber(fit.giantHeight) or ownH) / mpt * ppt)
+    local bigPx = math.max(ownPx * (tonumber(fit.giantMin) or 1), metres(tonumber(fit.giantHeight) or ownH, true) / mpt * ppt)
     local px = ownPx * (bigPx / ownPx) ^ (g.grow or 1)
     local z = math.max(fit.zMin or 1, 1e-3)
     local fy = fit.focus[2]
@@ -2465,7 +2474,7 @@ function HD.new(G, opts)
     -- picture in its place; its own picture's tag kept for its height)
     local g = self.giants[key or (side == "player" and 0 or 1)]
     local gs = 1
-    if g and g.on and type(x) == "number" and type(y) == "number" then
+    if giantLive(g) and type(x) == "number" and type(y) == "number" then
       local own = image ~= nil and self.tags[image]
       -- (its height, for its size in the 3D world)
       if own and speciesTag(own) then g.own = own end
@@ -2489,7 +2498,7 @@ function HD.new(G, opts)
     r.spec, r.image, r.x, r.y, r.r, r.sx, r.sy, r.ox, r.oy = spec, image, x, y, 0, gs, gs, 32, 32
     r.tx, r.ty, r.tsx, r.tsy, r.rest, r.out = 0, 0, 1, 1, true, present ~= false
     cur.prefit[k] = r
-    if g and g.on then g.restRec, g.fixStale = r, true end
+    if giantLive(g) then g.restRec, g.fixStale = r, true end
     if cur.sides and speciesTag(spec) then cur.sides[spec.side] = spec end
   end
 
@@ -2511,7 +2520,7 @@ function HD.new(G, opts)
       if self.fit.idle > 2 then
         self.pair = {}
         self.playerIn = false
-        giantsOff()
+        self.giantsOff()
         for i = #worldMons, 1, -1 do worldMons[i] = nil end
         self.worldShadow.enemy, self.worldShadow.player = nil, nil
       end
@@ -3552,12 +3561,19 @@ function HD.new(G, opts)
       zt, et = fit.target, fit.extraTarget or et
     end
     fit.target, fit.extraTarget = zt, et
+    if self.giantNew then self.giantNew = self.giantNew - 1 if self.giantNew <= 0 then self.giantNew = nil end end
     if fit.idle > 2 then
       -- a new battle: start where it should be (live: at the camera's own zoom, moving as the
       -- Pokemon come out), unshifted until its intro is over
       if live then fit.z, fit.extra = 1, 0 else fit.z, fit.extra = zt, et end
       fit.hold = 0
       fit.shift.enemy, fit.shift.player = 0, 0
+    elseif self.giantNew and (zt < fit.z or et > fit.extra) then
+      -- (a giant first reported already grown - Galar Rising's foe, grown under its full-screen
+      -- scene: the camera is where it must be from its first frame, else its head ran off the
+      -- screen's top while the camera eased out)
+      fit.z, fit.extra = math.min(fit.z, zt), math.max(fit.extra, et)
+      fit.hold = 0
     else
       local outward = zt < fit.z or et > fit.extra
       local inward = zt > fit.z or et < fit.extra
@@ -4956,6 +4972,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     -- (emptied, not made anew: a frame's passes are let go here)
     for k in pairs(self.done) do self.done[k] = nil end
     poolsTurn()
+    self.giantTick()
     self.recover()
     -- frames since a battle was last fitted: a gap means the next battle starts afresh
     self.fit.idle = self.fit.idle + 1

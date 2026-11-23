@@ -55,9 +55,10 @@ only as far as it needs to keep every one of them in view.
   giant, then adjusts again when yours comes out. It comes in close when every Pokémon on the
   field is small, and a little closer for a small opponent. One too big even for the widest view
   is shrunk just enough to fit.
-- **Dynamax:** With [Galar Rising](https://github.com/poooooby/max-raids), a Dynamaxed Pokémon
-  grows as tall as the tallest Pokémon stands in that battle (Eternatus aside), on the same spot,
-  and the camera pulls back with it. When it shrinks back, the camera comes back in.
+- **Dynamax:** With [Galar Rising](https://github.com/poooooby/max-raids), a Dynamaxed Pokémon,
+  yours or your opponent's, grows as tall as the tallest Pokémon stands outdoors (Eternatus
+  aside), indoors too, and always at least half again its own size, on the same spot. The camera
+  pulls back with it, and comes back in when it shrinks back.
 - **Between Pokémon:** When a Pokémon faints, the camera holds still until the next one is out.
   It returns to its usual view for the trainer's last words.
 - **Wide Pokémon:** A wide Pokémon steps back toward its own side of the screen, partly out of
