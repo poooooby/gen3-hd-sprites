@@ -12,6 +12,12 @@
 -- their size (src/hd.lua's composite), their shadows under it, the move animations aimed there
 -- (src/gen3.lua shiftCoords). At rest every one of those is exactly what it was without it.
 --
+-- A Pokemon drawn giant (Galar Rising's Dynamax, exports.giant) is given room in the world: its
+-- anchor moves away from the other side along the line between them, GIANT_SPREAD tiles at its
+-- full growth (Orbit.giant), eased; it stands there at every angle, its shadow, its move effects
+-- and what stands in front of it with it. The camera still turns about the middle of where they
+-- stood.
+--
 -- Kept in view: the camera pulls back (dolly, up to DOLLY_MAX times its distance) until both
 -- sides' boxes lie inside the view; a turn that would have one battler cover too much of
 -- another (OVERLAP), or a tree, a wall or a model stand in front of most of one (src/scene/
@@ -43,6 +49,8 @@ Orbit.ZOOM_RATE = 0.9                      -- the left stick's zoom at full tilt
 -- how far from rest the view may be before the battle canvas's own sideways steps (hd's wide step
 -- outward) have eased all the way out: look.still, 1 at rest, 0 past this much turn, tilt or zoom
 Orbit.STILL_TURN, Orbit.STILL_ZOOM = rad(8), 0.15
+Orbit.GIANT_SPREAD = 1.2                   -- tiles a giant stands further from the other side
+Orbit.GIANT_EASE = 3                       -- how fast it steps there and back (1/s)
 Orbit.SNAP = 1e-4                          -- radians (and dolly) close enough to rest to be at it
 
 -- set by the scene (src/scene/init.lua): the camera, the stage's ray checks, the canvas's feet
@@ -118,9 +126,11 @@ function Orbit.foot(s, key, side, u, v, virtual)
     L.feet[key] = f
   end
   local C, to = Orbit.Camera, s.to
-  if f.u0 ~= u or f.v0 ~= v or f.x == nil then
+  if f.u0 ~= u or f.v0 ~= v or f.bx == nil then
     local ty = to.ty or 0
     local x, z = C.ground(to, u, v, ty)
+    -- (its ground where it rests: bx, bz; x, z where it stands, a giant moved off it)
+    f.bx, f.bz = x, z
     f.x, f.z = x, z
     f.u0, f.v0 = u, v
     f.d0 = nil
@@ -130,8 +140,17 @@ function Orbit.foot(s, key, side, u, v, virtual)
     end
   end
   f.side, f.virtual, f.frame = side, virtual == true, L.frame + 1
+  -- (no room asked for unless Orbit.giant says so this frame)
+  f.pushWant = 0
   if f.u == nil then f.u, f.v = u, v end
   return f
+end
+
+--- The battler at anchor `key` is drawn giant this frame, `amount` of the way grown (0..1): it
+--- stands up to GIANT_SPREAD tiles further from the other side (called after Orbit.foot).
+function Orbit.giant(s, key, amount)
+  local f = Orbit.look(s).feet[key]
+  if f and not f.virtual then f.pushWant = Orbit.GIANT_SPREAD * max(0, min(1, tonumber(amount) or 1)) end
 end
 
 -- the rig turned by yaw and tilted to pitch, its distance times m, into out
@@ -400,8 +419,29 @@ function Orbit.step(s, now, allowed)
   L.t = now
   -- (the middle of the two sides: the singles' anchors, there in a double battle too)
   local fe, fp = L.feet.enemy, L.feet.player
-  local mid = fe and fp and fe.x and fp.x and fe.frame == L.frame and fp.frame == L.frame
-  if mid then L.mid[1], L.mid[2] = (fe.x + fp.x) / 2, (fe.z + fp.z) / 2 end
+  local mid = fe and fp and fe.bx and fp.bx and fe.frame == L.frame and fp.frame == L.frame
+  if mid then L.mid[1], L.mid[2] = (fe.bx + fp.bx) / 2, (fe.bz + fp.bz) / 2 end
+  -- (a giant's room: each anchor eased toward the push asked for, away from the other side along
+  -- the line between the sides' resting ground)
+  local pushed = false
+  if mid then
+    local dx, dz = fp.bx - fe.bx, fp.bz - fe.bz
+    local len = math.sqrt(dx * dx + dz * dz)
+    if len > 1e-6 then dx, dz = dx / len, dz / len end
+    local kp = 1 - exp(-Orbit.GIANT_EASE * dt)
+    for _, f in pairs(L.feet) do
+      if f.frame == L.frame and f.bx then
+        local want = (allowed and Orbit.Camera and f.pushWant) or 0
+        local p = (f.push or 0) + (want - (f.push or 0)) * kp
+        if abs(want - p) < 1e-3 then p = want end
+        f.push = p
+        local sgn = f.side == "player" and 1 or -1
+        f.x, f.z = f.bx + dx * sgn * p, f.bz + dz * sgn * p
+        if p ~= 0 then pushed = true end
+      end
+    end
+  end
+  L.pushed = pushed
   local live = allowed and Orbit.enabled and Orbit.Camera ~= nil and mid and true or false
   if live then
     local dyaw, dpitch, notches, re = input(dt)
@@ -444,9 +484,9 @@ function Orbit.step(s, now, allowed)
   -- battler off its spot of the ground, src/hd.lua's wide step)
   L.still = rest and 1 or max(0, 1 - abs(L.eyaw) / Orbit.STILL_TURN - abs(L.epitch - L.p0) / Orbit.STILL_TURN
     - abs(L.ezoom - 1) / Orbit.STILL_ZOOM)
-  L.m = rest and 1 or Orbit.dolly(s, L.eyaw, L.epitch, L.ezoom)
+  L.m = (rest and not pushed) and 1 or Orbit.dolly(s, L.eyaw, L.epitch, L.ezoom)
   L.em = ease(L.em, L.m, 1 - exp(-Orbit.DOLLY_EASE * dt))
-  L.on = not (rest and L.em == 1)
+  L.on = not (rest and L.em == 1 and not pushed)
   L.live = live
   if live then Orbit.lastLive = now end
   local ty = s.to.ty or 0

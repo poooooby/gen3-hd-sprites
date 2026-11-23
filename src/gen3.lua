@@ -303,6 +303,19 @@ function Gen3.wrapFit(Engine, hd)
         end
       end
       Orbit.look(s).double = double
+      -- (a Pokemon drawn giant, exports.giant - Galar Rising's Dynamax: given room in the world)
+      local G = hd.giants
+      if type(G) == "table" and hd.giantLive then
+        if double then
+          for id = 0, 3 do
+            local g = G[id]
+            if hd.giantLive(g) then Orbit.giant(s, id, g.grow or 1) end
+          end
+        else
+          if hd.giantLive(G[0]) then Orbit.giant(s, "player", G[0].grow or 1) end
+          if hd.giantLive(G[1]) then Orbit.giant(s, "enemy", G[1].grow or 1) end
+        end
+      end
       -- (only with the battlers drawn by a sprite mod: the game's own stay where it draws them)
       local pair = hd.pair
       local tagged = type(pair) == "table" and (pair.enemy ~= nil or pair.player ~= nil)

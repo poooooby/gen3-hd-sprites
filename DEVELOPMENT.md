@@ -1659,7 +1659,12 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   outward** (fitStep's `wideLine` / `wideKeep`) is the battle canvas's, not the world's: it eases
   out as the view turns (`look.still`, 1 at rest, 0 past `STILL_TURN` / `STILL_ZOOM`) and a giant
   (exports.giant) never takes it (`hd.wideStep`), the zoom then fitting that side's whole width;
-  else a stepped battler slid off its spot of the ground. **Occlusion:**
+  else a stepped battler slid off its spot of the ground. **Giants' room:** instead a giant's
+  anchor moves in the world (`Orbit.giant`, from `Engine.lookStep`: `hd.giants`' grow), away from
+  the other side along the line between the sides' resting ground (`f.bx, f.bz` the rest, `f.x,
+  f.z` where it stands), `GIANT_SPREAD` (1.2) tiles at full growth, eased (`GIANT_EASE`); the
+  middle the camera turns about stays the rest's. A push turns `look.on` on at rest too (the
+  affine places it, the dolly keeps it in view). **Occlusion:**
   `Render.draw` renders into a readable `depth24` canvas where the GPU has one (`Render.depth`;
   else the old unreadable buffer and no occlusion); `Scene.render` keeps it on the scene
   (`s.depthTex`, its screen rectangle `s.depthAt`, the depth terms `s.depthAB`). hd's composite

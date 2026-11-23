@@ -10,7 +10,9 @@
 -- CAM_DOUBLE=1: a double trainer battle instead (Gina & Mia; the player's Swampert and
 -- Blaziken), its four battlers turned with the view. CAM_DYNAMAX=1 (Galar Rising installed): a
 -- Gym Leader's battle (CAM_LEADER, default Flannery), the player's Charizard (Gigantamax Factor)
--- Dynamaxed on the first turn, then the shots with the giant on the field. Logs the look at each shot. Run from the
+-- Dynamaxed on the first turn, then the shots with the giant on the field; CAM_DYNAMAX=both: her
+-- party cut to one Lapras (Gigantamaxing), which Dynamaxes as the first turn begins (Charizard
+-- uses Growl), then Charizard Dynamaxes too - the shots with both giants on the field. Logs the look at each shot. Run from the
 -- engine root:
 --   SHOT_DIR=<dir> POKEPORT_GAME=emerald POKEPORT_VERSION=emerald \
 --   POKEPORT_DRIVER=mods/gen3-hd-sprites/tests/drivers/battle_camera.lua love .
@@ -106,7 +108,16 @@ local function body(game, log)
   if dynamax then
     local Trainers = require("src.core.game3.scripting.trainers")
     local tid = C.require(C, "trainers", env("CAM_LEADER") or "TRAINER_FLANNERY_1")
-    ok, err = BattleBridge.start(Runtime._mod, game, Trainers.foeFromId(tid), { wild = false, trainerId = tid })
+    local foe = Trainers.foeFromId(tid)
+    if env("CAM_DYNAMAX") == "both" then
+      local ace = foe.party[#foe.party]
+      ace.species = speciesOf("SPECIES_LAPRAS")
+      ace.moves = { C.require(C, "moves", "MOVE_ICE_BEAM"), C.require(C, "moves", "MOVE_BODY_SLAM"),
+        C.require(C, "moves", "MOVE_PROTECT"), C.require(C, "moves", "MOVE_GROWL") }
+      foe.party = { ace }
+      foe.species, foe.level, foe.moves = ace.species, ace.level, ace.moves
+    end
+    ok, err = BattleBridge.start(Runtime._mod, game, foe, { wild = false, trainerId = tid })
   elseif double then
     local Trainers = require("src.core.game3.scripting.trainers")
     local foe = Trainers.foeFromId(C.require(C, "trainers", "TRAINER_GINA_AND_MIA_1"))
@@ -127,6 +138,25 @@ local function body(game, log)
     local st = Battle.getState()
     for _, m in ipairs(st.foeParty or {}) do m.maxHp, m.hp = 999, 999 end
     if st.enemy and st.enemy.mon then st.enemy.mon.maxHp, st.enemy.mon.hp = 999, 999 end
+    local function atCommand()
+      return Battle.isActive() and Battle._phase == "command" and Ui._mode == "menu" and not Anim.busy()
+    end
+    if env("CAM_DYNAMAX") == "both" then
+      -- (the first turn: Growl, and her ace Dynamaxes as it begins)
+      U.tap(game, "a")
+      U.wait(20)
+      U.tap(game, "down")
+      U.wait(8)
+      U.tap(game, "a")
+      local foeGrown = waitFor(function()
+        if Ui.dialogPending and Ui.dialogPending() then U.tap(game, "a") end
+        local v = Dm.vis[1]
+        return v ~= nil and (v.k or 1) > 1.3 and atCommand()
+      end, 6000)
+      log("her giant on the field:", tostring(foeGrown), "drawn x", tostring(Dm.vis[1] and Dm.vis[1].k))
+      if st.enemy and st.enemy.mon then st.enemy.mon.hp = st.enemy.mon.maxHp end
+      U.wait(30)
+    end
     U.tap(game, "a")
     U.wait(20)
     U.tap(game, "r")
@@ -138,7 +168,8 @@ local function body(game, log)
       local v = Dm.vis[0]
       return v ~= nil and (v.k or 1) > 1.45 and Battle._phase == "command" and Ui._mode == "menu" and not Anim.busy()
     end, 6000)
-    log("giant on the field:", tostring(grown), "drawn x", tostring(Dm.vis[0] and Dm.vis[0].k))
+    log("giant on the field:", tostring(grown), "drawn x", tostring(Dm.vis[0] and Dm.vis[0].k),
+      "| hers", tostring(Dm.vis[1] and Dm.vis[1].k))
     U.wait(30)
   end
   local sc = Scene.current(Battle._st)
@@ -164,6 +195,9 @@ local function body(game, log)
     L.yaw, L.pitch = math.rad(yaw), math.rad(pitch)
     U.wait(90)
   end
+  -- CAM_OLD_STEP=1: every side takes the wide step outward, a giant too, turned or not (as before
+  -- hd.wideStep), to compare
+  if env("CAM_OLD_STEP") then core.wideStep = function() return 1, 1 end end
   -- CAM_OCC_BIAS: how far in front of a battler's feet the world must stand to draw over it
   if env("CAM_OCC_BIAS") then core.OCC_BIAS = tonumber(env("CAM_OCC_BIAS")) end
   local shots = 0

@@ -2410,6 +2410,46 @@ do
   Orbit.readPad, Orbit.enabled = nil, false
 end
 
+-- the Battle Camera's giants: a Pokemon drawn giant (Galar Rising's Dynamax) given room in the
+-- world, its anchor eased away from the other side, still on its ground; back when it shrinks
+do
+  local Orbit = dofile("src/scene/orbit.lua")
+  local FEET = { enemy = { 176, 70 }, player = { 72, 114 } }
+  local SPRITES = { enemy = { 144, 8, 208, 72 }, player = { 40, 48, 104, 112 } }
+  Orbit.Camera, Orbit.Stage, Orbit.FEET, Orbit.SPRITES = Camera, Stage, FEET, SPRITES
+  Orbit.enabled = true
+  Orbit.readPad = function() return 0, 0, false, 0 end
+  local t = 900
+  local s = { to = Camera.pose(20.5, 30.5), progress = 1 }
+  local function frame(gP, gE)
+    Orbit.foot(s, "enemy", "enemy", 176, 70)
+    Orbit.foot(s, "player", "player", 72, 114)
+    if gP then Orbit.giant(s, "player", gP) end
+    if gE then Orbit.giant(s, "enemy", gE) end
+    t = t + 1 / 60
+    return Orbit.step(s, t, true)
+  end
+  local L = frame()
+  local fe, fp = L.feet.enemy, L.feet.player
+  local function apart() return math.sqrt((fe.x - fp.x) ^ 2 + (fe.z - fp.z) ^ 2) end
+  local d0 = apart()
+  check(not L.on and not L.pushed, "giants: none, the battle at rest")
+  for _ = 1, 240 do L = frame(1, 1) end
+  check(near(apart(), d0 + 2 * Orbit.GIANT_SPREAD, 1e-3) and L.on and L.pushed,
+    ("both giant: each stands %.1f tiles further from the other (%.2f -> %.2f)"):format(Orbit.GIANT_SPREAD, d0, apart()))
+  local gx, gz = Camera.ground(L.pose, fp.u, fp.v, 0)
+  check(near(gx, fp.x, 1e-6) and near(gz, fp.z, 1e-6), "... drawn on its own ground there")
+  check(fp.u < 72 and fe.u > 176, "... the player's giant toward the left, the foe's toward the right")
+  check(near(L.mid[1], (fe.bx + fp.bx) / 2, 1e-9), "... the camera still turns about where they stood")
+  for _ = 1, 240 do L = frame(1, nil) end
+  check(near(apart(), d0 + Orbit.GIANT_SPREAD, 1e-3), "one giant: only it stands further off")
+  L = frame(0.5, nil)
+  check(apart() > d0 and apart() < d0 + Orbit.GIANT_SPREAD, "... eased as it grows and shrinks")
+  for _ = 1, 400 do L = frame() end
+  check(near(apart(), d0, 1e-9) and not L.on and fp.u == 72, "shrunk: back on its own spot, the battle at rest exactly")
+  Orbit.readPad, Orbit.enabled = nil, false
+end
+
 -- the Battle Camera's zoom: the mouse wheel and the left stick's up and down; zoomed in no
 -- nearer than keeps most of each battler in view, out no farther than FAR
 do
