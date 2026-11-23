@@ -1595,6 +1595,19 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   to their 400 across first, so a large window averages as their screen does. `bloomPrepare`
   takes the glow from the world as it stands, `bloomCompose` adds it after the blurs (their
   order); `air` is the motes and rays.
+- `battle_weather.lua` (WoobleView's own): the battle's weather over the field's while a battle
+  is up. `BW.read` takes the engine's `Rules.weather.kind(st.weather)` (RAIN / SUN / SAND / HAIL)
+  and WoobleDex's `exports.battle.terrainOf(st)` (main.lua hands it in as `BW.terrainOf`);
+  `BW.frame` eases each in and out over `FADE` (1.2 s; a new kind waits for the old one to go),
+  kept on the scene (`s.battleWx`, afresh for each battle state). In `hazeFor`: rain and sand
+  are drawn as the field's own ids (`BW.fieldFor`: a route's rain of the same kind kept, its
+  storm's bolts too, the amount at least the battle's); sun is `W.SUNNY` plus `Light.battle`'s
+  harsh glare; hail clears the field's weather for `Light.battle`'s cold light and
+  `Weather.KINDS.hail` (short thick pellets, slower than rain). None of it indoors. The terrain:
+  `light.terrain` / `terrainGlow` (breathing, `BW.glow`), drawn by the world shader as a glow
+  round the line between the battlers' feet (`Scene.FEET` cast onto the ground at the pose's
+  height, `uTerrainSeg`), within `TERRAIN_RADIUS` tiles of it and about the ground's height.
+  Per-frame only: in the cache guard's FRESH list.
 - `weather.lua`: the weather in the scene (MakeFog/DrawBanks, MakeWeather/DrawWeather and
   voxel_weather.v.pica as a GLSL shader). Rain, sand and ash: 768 streaks or 512 flakes built once,
   each at a fixed place in a box round the camera (24 x 8.5 x 28 tiles for rain), three groups of
@@ -2135,7 +2148,7 @@ Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: 
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
 texture itself), `isActive()`, `enabled(pass)` (false while it is down, or steps aside from that
 pass: OmniUI), `setEnabled(pass, on)`, `cap(pass)`,
-`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true, battlerRect = true, holdHud = true, giant = true }`),
+`setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true, battlerRect = true, holdHud = true, giant = true, battleWeather = true, barTop = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `realSizes()` / `setRealSizes(on)` (Real
 Sizes: `fit.worldSizes`), `sizeMode()` / `setSizeMode(m)` (3D Sizing's choice: `"off"`, `"minimal"`,
@@ -2158,6 +2171,13 @@ image itself a real low-res picture: it is what shows whenever a frame falls bac
 
 **A Pokemon drawn giant for a while** (Galar Rising's Dynamax, `max_raids` `src/dmax_ui.lua`):
 
+- `barTop()`: `Bar.TOP` (124) when the bar was painted this frame or the last (`hd.barDrawn` /
+  `hd.barRow`, set in gen3's `drawPanel`), else nil: where a mod's own battle overlay that
+  clipped at the cart's text box (row 112) stops instead. `features.barTop`.
+- `battleWeatherDrawn()`: true when `Scene.render` drew the battle's world this frame or the last
+  (`Scene.drawnFrame` against `hd.frames`, counted in `endFrame`) with Battle Scene on: its
+  weather and terrain are in it (`src/scene/battle_weather.lua`), so a mod with a 2D weather
+  overlay of its own (Galar Rising's) leaves it off. `features.battleWeather`.
 - `battlerRect(key)`: a battler's body box as this frame drew it on the window (`x0, y0, x1, y1`,
   or nil when not drawn through WoobleView); key its side, or in a double battle its battler id.
   Recorded by `noteBattler` in the composite, off at each frame's start.

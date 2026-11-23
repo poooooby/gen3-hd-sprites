@@ -129,6 +129,8 @@ return function(deps)
     reqKept[name] = m
     return m
   end
+  -- (the battle's own weather and terrain: src/scene/battle_weather.lua, asking through req)
+  if deps.BattleWeather then deps.BattleWeather.req = req end
 
   -- the engine's map, read through what cells.lua asks of it
   -- the stand-in for the map the player is on (Scene.STAND_IN), as engineEnv takes it, and where
@@ -5013,9 +5015,20 @@ return function(deps)
         state.fogHSpritesCreated, state.fogDSpritesCreated = weather == 6, weather == 9
       end
     end
+    -- the battle's own weather over the field's, and its terrain (src/scene/battle_weather.lua):
+    -- no weather indoors, as the field's; the terrain anywhere
+    local BW = deps.BattleWeather
+    local bwx, bAmount, terrain, tAmount
+    if BW then
+      bwx, bAmount, terrain, tAmount = BW.frame(s, love.timer.getTime())
+      if bwx and bAmount > 0 and not s.walled then
+        weather, state = BW.fieldFor(bwx, bAmount, weather, state, Light)
+      end
+    end
     local args = frameArgs
     args.indoor, args.weather, args.state, args.cave = s.walled, weather, state, s.cave
     local light = Light.light(args, frameLight)
+    if (bwx == "sun" or bwx == "hail") and not s.walled then Light.battle(light, bwx, bAmount) end
     -- (the time of day outdoors, Emerald 3DS's cycle: by the game's clock, or WoobleDex's,
     -- Scene.timeOfDay -> the minute of the day, nil for none; never indoors or in a cave)
     local sky = s.fill or s.haze
@@ -5066,7 +5079,8 @@ return function(deps)
     local class = Light.class(weather)
     if top then
       -- (an overcast sky: its gradient flattened toward the horizon's colour)
-      if class == "rain" or class == "sand" or class == "ash" or (light.fogDensity or Light.fogDensity(state) or 0) > 0 then
+      if class == "rain" or class == "sand" or class == "ash" or bwx == "hail"
+          or (light.fogDensity or Light.fogDensity(state) or 0) > 0 then
         local f = Scene.SKY_DULL
         for c = 1, 3 do top[c] = top[c] + (sky[c] - top[c]) * f end
       end
@@ -5081,7 +5095,12 @@ return function(deps)
         light.weather, light.weatherAmount = class, Light.amount(state)
         light.lightning = Light.lightning(state)
       end
+      if bwx == "hail" and bAmount > 0 then light.weather, light.weatherAmount = "hail", bAmount end
     end
+    -- (the terrain's glow on the ground between the battlers' feet, src/scene/render.lua)
+    light.terrain, light.terrainFeet = terrain, Scene.FEET
+    light.terrainGlow = terrain and BW.glow(tAmount, love.timer.getTime()) or 0
+    light.terrainRadius = BW and BW.TERRAIN_RADIUS or nil
     -- (CtrVoxel_DrawsSand: the world blows the sandstorm itself, src/gen3.lua drops the battle's
     -- sandstorm picture)
     s.drawsSand = light.weather == "sand" and (light.weatherAmount or 0) > 0 and Render.Weather ~= nil
@@ -5188,6 +5207,8 @@ return function(deps)
     end
     local c = Render.draw(G, Camera, s, pose, proj, depth, smooth(s.progress), haze, fog, w, h, sky, light)
     if not c then return nil end
+    -- (the battle's weather and terrain drawn in the world this frame: exports.battleWeatherDrawn)
+    Scene.drawnFrame = hd.frames or 0
     -- (indoors: the room's fill, from its first frame, for every frame after)
     if s.indoor and s.fill == nil then s.fill = roomFill(c) or false end
     return c, x, y

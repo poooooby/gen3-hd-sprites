@@ -106,6 +106,8 @@ return function(mod)
     SunFx = loadSibling(mod, "src/scene/sunfx.lua"),
     -- (optional: the rain, sand, ash and fog in the scene)
     Weather = loadSibling(mod, "src/scene/weather.lua"),
+    -- (optional: the battle's own weather and WoobleDex's terrains in the scene)
+    BattleWeather = loadSibling(mod, "src/scene/battle_weather.lua", true),
     -- (optional: the diorama's blur and the entrance's effects)
     ScreenFx = loadSibling(mod, "src/scene/screenfx.lua"),
     -- (optional: without it trees stand as cut-outs too)
@@ -131,6 +133,15 @@ return function(mod)
         Tune.put(file, loadSibling(mod, "src/scene/games/" .. file .. "_tune.lua", true))
       end
       sceneDeps.Tune = Tune
+    end
+  end
+  -- (the battle's terrain: WoobleDex's exports.battle.terrainOf, version 1, while it runs)
+  if type(sceneDeps.BattleWeather) == "table" then
+    sceneDeps.BattleWeather.terrainOf = function(st)
+      local found = mod:find("national_dex_gen3")
+      local b = found and type(found.exports) == "table" and found.exports.battle
+      if type(b) ~= "table" or type(b.terrainOf) ~= "function" then return nil end
+      return b.terrainOf(st)
     end
   end
   local specsOf = loadSibling(mod, "src/scene/models/specs.lua")

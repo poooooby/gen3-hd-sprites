@@ -68,6 +68,13 @@ Weather.KINDS = {
     { velocity = { -17.0, -0.3, 0.6 }, width = 0.024, length = 1.60, alpha = 0.75 },
     { velocity = { -9.5, 0.4, 1.6 }, width = 0.040, length = 0.60, alpha = 0.85 },
   } },
+  -- (WoobleView's own: a battle's hail, src/scene/battle_weather.lua) icy pellets, short and
+  -- thick, falling heavier and slower than rain with a little drift
+  hail = { box = { 24, 8.5, 28 }, low = -3.0, colour = rgb(0xF4, 0xFA, 0xFF), alpha = 1.00, groups = {
+    { velocity = { -0.9, -7.5, 0.30 }, width = 0.090, length = 0.26, alpha = 1.00 },
+    { velocity = { -0.6, -6.4, 0.20 }, width = 0.072, length = 0.20, alpha = 0.90 },
+    { velocity = { -0.4, -5.2, 0.15 }, width = 0.055, length = 0.15, alpha = 0.75 },
+  } },
   -- soft pale flakes drifting down, each layer on its own breeze; large and light enough to
   -- read against the grey ground
   ash = { box = { 24, 8.0, 28 }, low = -2.0, colour = rgb(0xEA, 0xE6, 0xE2), alpha = 1.00, groups = {

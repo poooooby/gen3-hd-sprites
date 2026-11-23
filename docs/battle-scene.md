@@ -80,6 +80,14 @@ however far the camera pulls back.
 ## Light, weather and time ☀️🌙
 
 - **Weather:** Sunlight, shadows, rain, sand, ash and fog fill the scene.
+- **The battle's own weather:** When a move or an Ability changes the weather (Rain Dance,
+  Drizzle, Sunny Day, Drought, Sandstorm, Hail, or Galar Rising's Max Moves), the world changes
+  with it: rain pours, a sandstorm sweeps the ground, a harsh sun bakes everything warm and
+  bright, and hail falls as heavy ice under a cold grey sky. It eases in and out, and when it ends
+  the route's own weather comes back.
+- **Terrain:** With [WoobleDex](https://github.com/poooooby/national_dex_gen3), Electric, Grassy,
+  Misty and Psychic Terrain glow on the ground between the battlers in yellow, green, pink or
+  violet, breathing slowly while they last.
 - **Time of day:** With **Time of Day** on, outdoor battles are lit by the clock: a warm morning,
   the plain day, an orange evening and a blue, moonlit night, easing from one to the next, under
   a sky that deepens overhead with the hour and glows warm at sunset.

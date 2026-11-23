@@ -4980,6 +4980,8 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     poolsTurn()
     self.giantTick()
     if self.asideTick then self.asideTick() end
+    -- (frames counted: the scene's drawnFrame, exports.battleWeatherDrawn)
+    self.frames = (self.frames or 0) + 1
     self.recover()
     -- frames since a battle was last fitted: a gap means the next battle starts afresh
     self.fit.idle = self.fit.idle + 1

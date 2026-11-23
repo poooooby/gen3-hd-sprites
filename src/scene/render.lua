@@ -45,6 +45,7 @@ varying float vDepth;
 varying vec3 vTint;
 varying vec2 vDapple;
 varying float vFade;
+varying vec3 vWorld;
 #ifdef VERTEX
 uniform mat4 uView;
 uniform vec4 uProj;
@@ -60,6 +61,7 @@ vec4 position(mat4 transform_projection, vec4 vertex_position) {
   vFade = VertexFade;
   vec4 q = vertex_position;
   q.y *= uRise;
+  vWorld = q.xyz;
   // (the sun dapples' pattern, laid from above along the sun: src/scene/light.lua)
   vDapple = vec2(dot(uDappleU.xyz, q.xyz) + uDappleU.w, dot(uDappleV.xyz, q.xyz) + uDappleV.w);
   vec4 c = uView * q;
@@ -84,6 +86,12 @@ uniform Image uDapple;
 uniform vec3 uDappleRange;
 uniform vec3 uSky;
 uniform vec3 uMoon;
+// (a battle's terrain, src/scene/battle_weather.lua: a glow on the ground round the line between
+// the battlers' feet - uTerrainSeg their xz, uTerrain its colour and strength, uTerrainAt the
+// ground's height and the glow's reach)
+uniform vec4 uTerrainSeg;
+uniform vec4 uTerrain;
+uniform vec2 uTerrainAt;
 vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
   // (a standing cell's own ground copy, marked by its alpha: gone once the cards stand)
   if (color.a < 0.75 && uHideFlat > 0.5) discard;
@@ -100,6 +108,13 @@ vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
   if (uDappleRange.z > 0.5) lit *= mix(uDappleRange.x, uDappleRange.y, Texel(uDapple, vDapple).r);
   // (the night's moonlight, added to everything lit: Emerald 3DS's multiply-add, ctr_voxel.c)
   lit += uMoon;
+  if (uTerrain.w > 0.0) {
+    vec2 a = uTerrainSeg.xy, ab = uTerrainSeg.zw - uTerrainSeg.xy, d = vWorld.xz - a;
+    float along = clamp(dot(d, ab) / max(dot(ab, ab), 0.0001), 0.0, 1.0);
+    float r = length(d - ab * along) / uTerrainAt.y;
+    float g = (1.0 - smoothstep(0.35, 1.0, r)) * (1.0 - smoothstep(0.5, 1.5, abs(vWorld.y - uTerrainAt.x))) * uTerrain.w;
+    lit = mix(lit, lit * (0.45 + 1.0 * uTerrain.rgb), 0.8 * g) + uTerrain.rgb * (0.40 * g);
+  }
   float f = clamp((vDepth - uFog.x) / (uFog.y - uFog.x), 0.0, 1.0) * uFog.z;
   return vec4(mix(mix(lit, uHaze, f), uSky, vFade), 1.0);
 }
@@ -869,6 +884,8 @@ end
 -- (the frame's tables, kept between frames: the shader copies what it is sent, and Render.after's
 -- effects read them the same frame)
 local drawPose, drawView, drawGrade, drawDapple, afterO = {}, {}, {}, {}, { eye = {}, forward = {}, right = {}, up = {} }
+-- (the terrain glow's uniforms, kept: src/scene/battle_weather.lua)
+local drawTerrainSeg, drawTerrain, drawTerrainAt = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 1.9 }
 local ONE3, DEFAULT_SUN = { 1, 1, 1 }, { dx = 0.85, dz = 0.55 }
 
 function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h, sky, light)
@@ -923,6 +940,26 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   end
   drawDapple[1], drawDapple[2], drawDapple[3] = light and light.dappleLow or 1, light and light.dappleHigh or 1, dap and 1 or 0
   sh:send("uDappleRange", drawDapple)
+  -- (a battle's terrain glowing between the battlers' feet, cast onto the ground through the pose)
+  local glow, seg = light and light.terrain and light.terrainGlow or 0, drawTerrainSeg
+  if glow > 0 and light.terrainFeet then
+    local fp, fe = light.terrainFeet.player, light.terrainFeet.enemy
+    local gy = p.ty or 0
+    local px, pz = Camera.ground(p, fp[1], fp[2], gy)
+    local ex, ez = Camera.ground(p, fe[1], fe[2], gy)
+    if px and ex then
+      seg[1], seg[2], seg[3], seg[4] = px, pz, ex, ez
+      local c = light.terrain
+      drawTerrain[1], drawTerrain[2], drawTerrain[3], drawTerrain[4] = c[1], c[2], c[3], glow
+      drawTerrainAt[1], drawTerrainAt[2] = gy, light.terrainRadius or 1.9
+    else
+      glow = 0
+    end
+  end
+  if glow <= 0 then drawTerrain[4] = 0 end
+  sh:send("uTerrainSeg", seg)
+  sh:send("uTerrain", drawTerrain)
+  sh:send("uTerrainAt", drawTerrainAt)
   local sat = light and Render.SATURATION or 0
   local sent
   for _, m in ipairs(scene.meshes) do

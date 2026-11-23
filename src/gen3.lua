@@ -732,6 +732,8 @@ function Gen3.wrapBar(Engine, hd)
         if not (hd.cur and hd.cur.hasUI) then hd.cardUi() end
         if hd.paint(Bar.paint, args[name][mode], 112, Bar.TOP) then
           barPass = hd.cur and hd.cur.serial
+          -- (the frame it was drawn and its top row: exports.barTop)
+          hd.barDrawn, hd.barRow = hd.frames or 0, Bar.TOP
           -- (a whole screen's only text in the bar is its message, which opens its own window:
           -- what it draws after the panel - a catch's YES / NO - stays where it is)
           if hd.cur and hd.cur.hasUI then windowOpen = hd.bar(specs[name][mode]) else windowOpen = false end

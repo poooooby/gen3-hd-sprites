@@ -89,13 +89,22 @@
 --                         frames it where it rests at that size, whatever a move does to it; in the
 --                         3D world with 3D Sizing it stands toward the tallest Pokemon's height as
 --                         it grows. Call it each frame it is drawn so (before the battle's draw).
+--   battleWeatherDrawn()  true when the 3D battle scene drew the battle's own weather and terrain
+--                         this frame or the last (Battle Scene on, a battle up, its world drawn:
+--                         rain, sun, sandstorm, hail; WoobleDex's terrains). A mod that draws its
+--                         own weather over battles (Galar Rising's) stands down then. Also
+--                         features.battleWeather.
+--   barTop()              the UI canvas row where the Battle Text Box's bar starts (124) on a
+--                         frame it was drawn (this frame or the last), else nil (no bar: the
+--                         cart's text box at row 112, or none). features.barTop.
 
 return function(mod, hd, state)
   local exports = {}
   exports.version = 2
   exports.features = { quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true,
                        shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true,
-                       battlerRect = true, holdHud = true, giant = true }
+                       battlerRect = true, holdHud = true, giant = true, battleWeather = true,
+                       barTop = true }
   exports.tag = function(image, spec) return hd.tag(image, spec) end
   exports.untag = function(image) return hd.untag(image) end
   exports.tagOf = function(image) return hd.tagOf(image) end
@@ -329,6 +338,23 @@ return function(mod, hd, state)
   exports.uiMap = function() return hd.uiLive == true and hd.uiMap or nil end
   exports.holdHud = function(who, on) if hd.holdHud then hd.holdHud(who, on) end end
   exports.giant = function(id, info) if hd.setGiant then hd.setGiant(id, info) end end
+  -- whether the 3D battle scene drew the battle's own weather and terrain this frame or the last
+  -- (Battle Scene on, a battle up, the world drawn: src/scene/battle_weather.lua) - a mod that
+  -- draws its own weather over battles stands down then
+  -- the UI canvas row (of its 240 x 160, as uiMap maps it) where the Battle Text Box's bar
+  -- starts, on a frame it was drawn (this frame or the last); nil when no bar was drawn (Battle
+  -- Text Box off, the bottom UI hidden, no battle pass, OmniUI's battle). A mod clipping its own
+  -- picture at the text box's top (the cart's row 112) clips there instead.
+  exports.barTop = function()
+    local f = hd.barDrawn
+    if f ~= nil and f >= (hd.frames or 0) - 1 then return hd.barRow end
+    return nil
+  end
+  exports.battleWeatherDrawn = function()
+    local S = hd.scene
+    local f = S and S.drawnFrame
+    return S ~= nil and S.enabled == true and f ~= nil and f >= (hd.frames or 0) - 1
+  end
   exports.battlerRect = function(key)
     local r = hd.battlerRects and hd.battlerRects[key]
     if not (r and r.on) then return nil end

@@ -98,6 +98,29 @@ function Light.mix(a, b, t)
   return out
 end
 
+-- WoobleView's own (not Emerald 3DS's): a battle's sun (Sunny Day, Drought, a Max Flare) is a
+-- harsh, warm glare, brighter than a sunny route's; its hail a cold grey under the clouds, the
+-- distance whitened by the ice (src/scene/battle_weather.lua)
+Light.BATTLE = {
+  sun = { sun = { 1.24, 1.07, 0.80 }, shade = { 1.04, 0.97, 0.86 }, rgb = { 1.00, 0.86, 0.64 }, haze = 0.26,
+          start = 0.95, ramp = 0.60, dappleLow = 0.88, dappleHigh = 1.16, rays = 0.30, bloom = 0.26, motes = 1.00 },
+  hail = { sun = { 0.84, 0.90, 1.00 }, shade = { 0.80, 0.88, 1.02 }, rgb = { 0.80, 0.86, 0.94 }, haze = 0.40,
+           start = 0.80, ramp = 0.80, dappleLow = 1.00, dappleHigh = 1.00, rays = 0, bloom = 0.10, motes = 0 },
+}
+
+--- The battle's sun or hail laid over `light` by `amount` (0..1), in place.
+function Light.battle(light, kind, amount)
+  local b = Light.BATTLE[kind]
+  if not (b and light and amount and amount > 0) then return light end
+  local t = math.min(amount, 1)
+  for _, k in ipairs(SCALARS) do light[k] = light[k] + (b[k] - light[k]) * t end
+  for _, k in ipairs(COLOURS) do
+    local c = light[k]
+    for i = 1, 3 do c[i] = c[i] + (b[k][i] - c[i]) * t end
+  end
+  return light
+end
+
 --- FogLight: the game's fog, a pale veil outdoors, cold and dim under the ground with the
 --- distance sinking into a blue-black; come in with the fog's own blend.
 function Light.fog(clear, cave, density)

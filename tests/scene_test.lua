@@ -2085,7 +2085,7 @@ do
   -- (only what a cache is built from: the camera, the light, the weather, the screen effects, the
   -- drawing and the workshop's tuning are read fresh every session)
   local FRESH = { camera = true, stage = true, render = true, light = true, lighting = true, sunfx = true,
-                  weather = true, screenfx = true, tune = true, cache = true, trees = true }
+                  weather = true, screenfx = true, tune = true, cache = true, trees = true, battle_weather = true }
   local h, n = 2166136261, 0
   table.sort(files)
   for _, path in ipairs(files) do
@@ -2179,6 +2179,64 @@ do
   check(C.allowed(), "clock: ... on, the time of day")
   local m = C.read("device")
   check(type(m) == "number" and m >= 0 and m < 1440, "clock: a minute of the day (" .. tostring(m) .. ")")
+end
+
+-- the battle's own weather and terrain (src/scene/battle_weather.lua)
+do
+  local BW = dofile("src/scene/battle_weather.lua")
+  local L = dofile("src/scene/light.lua")
+  local Wx = dofile("src/scene/weather.lua")
+  local W = L.WEATHER
+  -- easing: in over FADE seconds, a new kind waits for the old one to go
+  local k, a = BW.ease(nil, 0, "rain", BW.FADE / 2)
+  check(k == "rain" and near(a, 0.5), "a battle's rain comes in over its fade")
+  k, a = BW.ease("rain", 1, "sun", BW.FADE / 4)
+  check(k == "rain" and near(a, 0.75), "a new weather waits while the old one goes")
+  k, a = BW.ease("rain", 0.1, "sun", BW.FADE / 4)
+  check(k == "sun" and a == 0, "... then takes its place")
+  k, a = BW.ease("sun", 0.5, nil, BW.FADE)
+  check(k == "sun" and a == 0 or k == nil, "a weather gone fades out")
+  -- the field ids the battle's weather is drawn as
+  local id, st = BW.fieldFor("rain", 0.5, nil, nil, L)
+  check(id == W.RAIN and L.class(id) == "rain" and near(L.amount(st), 0.5), "battle rain: the field's rain at its amount")
+  local storm = { currWeather = W.RAIN_THUNDERSTORM, curRainSpriteIndex = 24, colorMapIndex = 19 }
+  id, st = BW.fieldFor("rain", 0.2, W.RAIN_THUNDERSTORM, storm, L)
+  check(id == W.RAIN_THUNDERSTORM and near(L.amount(st), 1) and L.lightning(st) == 1,
+    "battle rain in a thunderstorm keeps the storm, its drops and its bolts")
+  id, st = BW.fieldFor("sand", 1, W.RAIN, { currWeather = W.RAIN, curRainSpriteIndex = 24 }, L)
+  check(id == W.SANDSTORM and near(L.amount(st), 1), "battle sand over a rainy route: the sandstorm")
+  id = BW.fieldFor("sun", 1, W.RAIN, { currWeather = W.RAIN }, L)
+  check(L.class(id) == "sun", "battle sun clears the route's rain")
+  check(BW.fieldFor("hail", 1, W.RAIN, nil, L) == nil, "battle hail: nothing of the field's")
+  -- the sun's and hail's light
+  local clear = L.light({ weather = W.SUNNY })
+  local hot = L.battle(L.light({ weather = W.SUNNY }), "sun", 1)
+  check(hot.sun[1] > clear.sun[1] and hot.rays > clear.rays and hot.bloom > clear.bloom, "battle sun: harsher than a sunny route")
+  local cold = L.battle(L.light({}), "hail", 1)
+  check(cold.sun[3] > cold.sun[1] and cold.rays == 0 and cold.haze > clear.haze, "hail: a cold grey light")
+  check(Wx.KINDS.hail and Wx.KINDS.hail.groups[1].velocity[2] > Wx.KINDS.rain.groups[1].velocity[2]
+    and Wx.KINDS.hail.groups[1].width > Wx.KINDS.rain.groups[1].width, "hail falls slower and thicker than rain")
+  -- read from the battle's state, WoobleDex's terrain, eased on the scene
+  local battleSt = { weather = "SUNNY" }
+  local mods = {
+    ["src.core.game3.battle"] = { isActive = function() return true end, _st = battleSt },
+    ["src.core.game3.battle.rules"] = { weather = { kind = function(w)
+      return ({ SUNNY = "SUN", RAINY = "RAIN", SANDSTORM = "SAND", HAIL = "HAIL" })[w] end } },
+  }
+  BW.req = function(name) return mods[name] end
+  BW.terrainOf = function(st) return st == battleSt and "GRASSY" or nil end
+  local s = {}
+  local wk, wa, tc, ta = BW.frame(s, 10)
+  check(wk == "sun" and wa == 0 and tc == BW.TERRAIN.GRASSY and ta == 0, "a battle's sun and Grassy Terrain read")
+  wk, wa, tc, ta = BW.frame(s, 10.6)
+  check(near(wa, 0.1 / BW.FADE) and near(ta, 0.1 / BW.FADE), "... coming in (a frame's step at most a tenth of a second)")
+  for t = 11, 13, 0.05 do wk, wa, tc, ta = BW.frame(s, t) end
+  check(wa == 1 and ta == 1, "... in full")
+  check(BW.glow(1, 0) > 0 and BW.glow(1, BW.BREATH / 4) > BW.glow(1, 3 * BW.BREATH / 4), "the terrain's glow breathes")
+  mods["src.core.game3.battle"].isActive = function() return false end
+  for t = 13, 16, 0.05 do wk, wa, tc, ta = BW.frame(s, t) end
+  check(wa == 0 and ta == 0, "the battle over: they fade out")
+  BW.req, BW.terrainOf = nil, nil
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))
