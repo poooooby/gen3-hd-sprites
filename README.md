@@ -107,6 +107,9 @@ Everything is on by default except the 3D battles, which you can turn on wheneve
 - [Galar Rising](https://github.com/poooooby/max-raids): a Dynamaxed Pokémon gets the room it
   needs, its feet where they stood, with the opponent's HP box held steady until it shrinks
   back. In 3D battles it grows as tall as the tallest Pokémon.
+- [OmniUI](https://github.com/1Jamie/omni_ui): on every screen OmniUI redraws in its own style,
+  battles included, WoobleView steps aside and lets it show that screen its way. Everywhere else,
+  WoobleView works as usual.
 
 ## 📌 Good to Know
 

@@ -2969,5 +2969,51 @@ do
   check(okAll, "each row draws only its own strip of the HD frame, where the row was")
 end
 
+-- OmniUI draws the screen (src/omni.lua): WoobleView steps aside from it, never from the field
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 240, 160)
+  local kind = "battle"
+  local loaded = package.loaded["mods.omni_ui.core.ModernOverlay"]
+  package.loaded["mods.omni_ui.core.ModernOverlay"] = { getActiveScreen = function() return kind end }
+  local opts = {}
+  local fakeMod = { game = { mods = { modOptions = { omni_ui = opts } } }, find = function() return {} end }
+  local Omni = dofile("src/omni.lua")(fakeMod)
+  hd.aside, hd.asideTick = Omni.aside, Omni.tick
+  G.setCanvas(base)
+  check(hd.beginPass("battle", base) == false, "no battle pass on a battle OmniUI draws")
+  check(hd.stats.aside == "battle", "the step aside is noted")
+  check(hd.beginPass("field", base) == true, "the field pass goes on under OmniUI's menus")
+  hd.endPass()
+  hd.endFrame()
+  -- an evolution with OmniUI's message box over it, then the box gone: the screen stays
+  -- stepped aside while it keeps coming
+  kind = "dialogue"
+  check(hd.beginPass("screen", base) == false, "no screen pass under OmniUI's message box")
+  hd.endFrame()
+  kind = nil
+  check(hd.beginPass("screen", base) == false, "a screen OmniUI claimed last frame stays stepped aside")
+  hd.endFrame()
+  check(hd.beginPass("screen", base) == false, "... frame after frame while it is shown")
+  hd.endFrame()
+  hd.endFrame()
+  check(hd.beginPass("screen", base) == true, "once that screen stops coming, WoobleView takes the next one")
+  hd.endPass()
+  hd.endFrame()
+  -- its MODERN HIGH-RES UI off, or OmniUI not running: nothing steps aside
+  kind, opts.overlay = "battle", false
+  check(hd.beginPass("battle", base) == true, "OmniUI's overlay off: the battle is WoobleView's")
+  hd.endPass()
+  hd.endFrame()
+  opts.overlay = nil
+  fakeMod.find = function() return nil end
+  check(hd.beginPass("battle", base) == true, "OmniUI not running: the battle is WoobleView's")
+  hd.endPass()
+  hd.endFrame()
+  package.loaded["mods.omni_ui.core.ModernOverlay"] = loaded
+end
+
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

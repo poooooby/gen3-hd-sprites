@@ -2200,6 +2200,11 @@ function HD.new(G, opts)
     -- could never be composited, so the game draws its own way
     if self.canCapture and not self.canCapture() then return false end
     if not (self.installed and self.enabled[pass] and base and base.getWidth) then return false end
+    -- a screen another UI mod draws (OmniUI: src/omni.lua): the game draws it its own way
+    if self.aside and self.aside(pass) then
+      self.stats.aside = pass
+      return false
+    end
     -- (a pooled table, and its lists: pooledPass; `serial` tells passes apart)
     local c = pooledPass(pass)
     local kept = c.kept or {}
@@ -2548,6 +2553,7 @@ function HD.new(G, opts)
   function self.beginDirect(pass)
     if self.direct or self.cur or self.down() then return false end
     if not (self.installed and self.enabled[pass]) then return false end
+    if self.aside and self.aside(pass) then return false end
     self.direct = pass
     return true
   end
@@ -4973,6 +4979,7 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
     for k in pairs(self.done) do self.done[k] = nil end
     poolsTurn()
     self.giantTick()
+    if self.asideTick then self.asideTick() end
     self.recover()
     -- frames since a battle was last fitted: a gap means the next battle starts afresh
     self.fit.idle = self.fit.idle + 1

@@ -31,6 +31,11 @@ screen, which gives the Pokémon more room. In a double battle they leave room a
 WoobleDex's stat chips beside them. Gold, Silver and Crystal keep the game's own framed
 screen.
 
+With [OmniUI](https://github.com/1Jamie/omni_ui)'s modern UI on, the battles, menus and other
+screens it redraws are left to it: there WoobleView doesn't fit, fill or move anything, and 3D
+battles show the classic battle. Turn OmniUI's MODERN HIGH-RES UI off and WoobleView takes them
+back.
+
 When KantoGear's GEAR screens take the battle's menus to their own screen, nothing is left at
 the bottom of the battle, so your Pokémon's HP box moves down into that space to sit level
 with your Pokémon's feet, upright or sideways, and always stays on the screen.

@@ -136,7 +136,7 @@ function Gen3.wrapFit(Engine, hd)
     local function noSandPicture(t, vm, ...)
       local r = loadSand(t, vm, ...)
       -- (run in the game's update, outside the draw pass: the scene's own flag, set as it draws)
-      if type(t) == "table" and t._bg1key == "SANDSTORM" and hd.fit.enabled and Engine.Scene
+      if type(t) == "table" and t._bg1key == "SANDSTORM" and hd.fit.enabled and not Engine.asideNow and Engine.Scene
           and Engine.Scene.enabled and Engine.Scene.drawsSand and okBM and type(BattleMod) == "table"
           and Engine.Scene.drawsSand(BattleMod._st) then
         t.draw, t._bg1key = nil, nil
@@ -266,13 +266,14 @@ function Gen3.wrapFit(Engine, hd)
         return was
       end
     end
+    -- (not on a battle another UI mod draws: Engine.asideNow, set as each battle frame begins)
     local function on(Battle)
       local st = Battle._st
-      return hd.fit.enabled and st ~= nil and not st.double
+      return hd.fit.enabled and not Engine.asideNow and st ~= nil and not st.double
     end
     local function onDouble(Battle)
       local st = Battle._st
-      return hd.fit.enabled and st ~= nil and st.double == true
+      return hd.fit.enabled and not Engine.asideNow and st ~= nil and st.double == true
     end
     Engine.shiftOn = on
     --- Before each battle frame: the engine's battler coordinates (move animations, the
@@ -607,6 +608,9 @@ function Gen3.prepare(Engine, hd)
         pcall(noteDrop)
         -- (a turn playing, anything but the command menu: Battle Fit only pulls out meanwhile)
         if hd.setTurn then hd.setTurn(Battle._phase ~= nil and Battle._phase ~= "command") end
+        -- (a battle OmniUI draws: the game's own, no shift either - src/omni.lua)
+        local okA, aside = pcall(function() return hd.aside and hd.enabled.battle and hd.aside("battle") end)
+        Engine.asideNow = okA and aside == true
         pcall(wrapBoxes)
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())

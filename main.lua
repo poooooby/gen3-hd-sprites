@@ -66,6 +66,14 @@ return function(mod)
 
   local hd = HD.new(love.graphics, { log = mod.log })
   local state = { active = false }
+  -- the screens OmniUI draws, where WoobleView steps aside (src/omni.lua; optional)
+  do
+    local omniOf = loadSibling(mod, "src/omni.lua", true)
+    local okO, Omni = pcall(function() return type(omniOf) == "function" and omniOf(mod) or nil end)
+    if okO and type(Omni) == "table" then
+      hd.aside, hd.asideTick = Omni.aside, Omni.tick
+    end
+  end
 
   -- optional: Battle Scene (Gen 3's battles over the overworld in 2.5D, src/scene/)
   local SceneInit = loadSibling(mod, "src/scene/init.lua")

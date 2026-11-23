@@ -425,9 +425,14 @@ function Gen2.prepare(Engine, hd)
       end
       ours[Game2.paintBattleSurround] = true
     end
+    -- a battle OmniUI draws (src/omni.lua): the game presents it its own way
+    local function asideBattle()
+      local ok, v = pcall(function() return hd.aside and hd.aside("battle") end)
+      return ok and v == true
+    end
     if not ours[drawWidescreen] then
       BattleState.drawWidescreen = function(self, winW, winH, ...)
-        if self:wideLayout() or not hd.enabled.battle or hd.down() or not paperOk(self) then
+        if self:wideLayout() or not hd.enabled.battle or hd.down() or not paperOk(self) or asideBattle() then
           return drawWidescreen(self, winW, winH, ...)
         end
         local ok, err = pcall(present, self, winW, winH)
@@ -441,7 +446,7 @@ function Gen2.prepare(Engine, hd)
     if wideDraw and not ours[wideDraw] then
       WideBattle.draw = function(battle, winW, winH, ...)
         local okD, docked = pcall(WideBattle.docked, battle)
-        if not hd.enabled.battle or hd.down() or not okD or docked or not paperOk(battle) then
+        if not hd.enabled.battle or hd.down() or not okD or docked or not paperOk(battle) or asideBattle() then
           return wideDraw(battle, winW, winH, ...)
         end
         local ok, err = pcall(present, battle, winW, winH, true)

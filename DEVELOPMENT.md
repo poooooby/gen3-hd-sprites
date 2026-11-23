@@ -61,6 +61,30 @@ under the screen showed there (a white line beside Gen 2's panel with Battle Fit
 `scissorOver` goes out to whole units, and one more on a fractional DPI. A sprite's own clip
 (Gen 1's UI sprites) stays a plain scissor.
 
+## Other UI mods: OmniUI (`src/omni.lua`)
+
+On a screen OmniUI (mod id `omni_ui`) draws, WoobleView steps aside: `hd.beginPass` and
+`hd.beginDirect` decline every pass but the field's when `hd.aside(pass)` says so, so there is
+no Battle Fit, Fill Screen, Battle Text Box, Battle Scene or HD pass on it, and the game draws it
+its own way under OmniUI's picture. Gen 3's battle frame sets `Engine.asideNow` before it shifts
+the battlers' coordinates (`Engine.shiftOn` and the doubles shift read it), and Gen 2's battle
+presenters fall back to the game's own draw.
+
+- **Which screen:** OmniUI's own `ModernOverlay.getActiveScreen(game)`: any kind it returns (nil
+  when it yields the screen). Asked once a frame (`hd.asideTick` from `hd.endFrame`), only while
+  `mod:find("omni_ui")` finds it running and its `overlay` option (MODERN HIGH-RES UI) is on.
+  Reached with `require("mods.omni_ui.core.ModernOverlay")`, which hands back OmniUI's loaded
+  copy: a mod's sandboxed `package.loaded` doesn't list another mod's modules.
+- **Held per pass:** a pass OmniUI claimed stays declined while that pass comes every frame
+  (OmniUI's message box over an evolution comes and goes; the screen would switch between
+  filled and not with it), and is WoobleView's again after a frame without it.
+- **Not the field:** OmniUI only lays its menus and dialogue over it.
+- OmniUI's public API (menu items, option rows, summary tabs, render hooks) has nothing
+  WoobleView needs, and no way to ask where its battle cards are.
+
+Tests: `hd_test` (no pass on a screen OmniUI draws, the field's goes on, the hold, overlay off /
+OmniUI not running).
+
 ## Generations
 
 `src/engine.lua` wraps the Renderer's seams, which the generations that draw through the
