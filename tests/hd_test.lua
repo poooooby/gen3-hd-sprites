@@ -2987,6 +2987,10 @@ do
   check(hd.stats.aside == "battle", "the step aside is noted")
   check(hd.beginPass("field", base) == true, "the field pass goes on under OmniUI's menus")
   hd.endPass()
+  local mod = {}
+  assert(loadfile("src/api.lua"))()(mod, hd, { active = true })
+  check(mod.exports.enabled("battle") == false and mod.exports.isActive() == true,
+    "...and the exports say the battle is off meanwhile (a sprite mod hands over its plain sprites)")
   hd.endFrame()
   -- an evolution with OmniUI's message box over it, then the box gone: the screen stays
   -- stepped aside while it keeps coming
@@ -3005,6 +3009,7 @@ do
   -- its MODERN HIGH-RES UI off, or OmniUI not running: nothing steps aside
   kind, opts.overlay = "battle", false
   check(hd.beginPass("battle", base) == true, "OmniUI's overlay off: the battle is WoobleView's")
+  check(mod.exports.enabled("battle") == true, "...and the exports say it is on")
   hd.endPass()
   hd.endFrame()
   opts.overlay = nil

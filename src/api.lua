@@ -102,7 +102,13 @@ return function(mod, hd, state)
   -- (off while it is down after a failure, hd.down: a sprite mod then draws its own plain
   -- sprites, not the stand-ins it leaves for this mod to draw over)
   exports.isActive = function() return state.active == true and not hd.down() end
-  exports.enabled = function(pass) return state.active == true and hd.enabled[pass] == true and not hd.down() end
+  -- (and off for a pass it steps aside from, a screen OmniUI draws (src/omni.lua): there the game
+  -- draws the sprite mod's pic itself, so it hands over its plain sprite, not a stand-in)
+  exports.enabled = function(pass)
+    if not (state.active == true and hd.enabled[pass] == true and not hd.down()) then return false end
+    local ok, aside = pcall(function() return hd.aside ~= nil and hd.aside(pass) end)
+    return not (ok and aside == true)
+  end
   exports.setEnabled = function(pass, on)
     if hd.enabled[pass] ~= nil then hd.enabled[pass] = on and true or false end
   end

@@ -79,6 +79,9 @@ presenters fall back to the game's own draw.
   (OmniUI's message box over an evolution comes and goes; the screen would switch between
   filled and not with it), and is WoobleView's again after a frame without it.
 - **Not the field:** OmniUI only lays its menus and dialogue over it.
+- **Sprite mods told too:** the export `enabled(pass)` is false for a pass WoobleView steps aside
+  from, so a sprite mod hands the game its plain sprite there, not a stand-in nobody draws over
+  (WoobleSpritePack's 64x64 battle stand-in clipped a big back such as Charizard's).
 - OmniUI's public API (menu items, option rows, summary tabs, render hooks) has nothing
   WoobleView needs, and no way to ask where its battle cards are.
 
@@ -2128,7 +2131,8 @@ end
 
 Also `untag(image)`, `tagOf(image)` (the spec an image was tagged with, or nil: a mod that
 draws a tagged pic outside the battle, field and Pokédex passes can draw the full-resolution
-texture itself), `isActive()`, `enabled(pass)`, `setEnabled(pass, on)`, `cap(pass)`,
+texture itself), `isActive()`, `enabled(pass)` (false while it is down, or steps aside from that
+pass: OmniUI), `setEnabled(pass, on)`, `cap(pass)`,
 `setCap(pass, n)`, `features` (`{ quadPivots = true, dex = true, battleFit = true, tagOf = true, flip = true, shades = true, uiMap = true, speciesSize = true, shadow = true, frame = true, battlerRect = true, holdHud = true, giant = true }`),
 `fitEnabled()`, `setFit(on)` (the old `"off"` / `"fit"` / `"tall"` still work), `fillEnabled()`, `setFill(on)`,
 `sceneEnabled()` / `setScene(on)` (Battle Scene: OVERWORLD), `realSizes()` / `setRealSizes(on)` (Real
