@@ -82,6 +82,8 @@ presenters fall back to the game's own draw.
 - **Sprite mods told too:** the export `enabled(pass)` is false for a pass WoobleView steps aside
   from, so a sprite mod hands the game its plain sprite there, not a stand-in nobody draws over
   (WoobleSpritePack's 64x64 battle stand-in clipped a big back such as Charizard's).
+  It peeks (`Omni.peek`, `hd.asidePeek`), never asks: a sprite mod may call it every frame on any
+  screen, and asks would keep a claimed pass held after OmniUI lets it go.
 - OmniUI's public API (menu items, option rows, summary tabs, render hooks) has nothing
   WoobleView needs, and no way to ask where its battle cards are.
 

@@ -106,7 +106,8 @@ return function(mod, hd, state)
   -- draws the sprite mod's pic itself, so it hands over its plain sprite, not a stand-in)
   exports.enabled = function(pass)
     if not (state.active == true and hd.enabled[pass] == true and not hd.down()) then return false end
-    local ok, aside = pcall(function() return hd.aside ~= nil and hd.aside(pass) end)
+    -- (peeked, not asked: asking would keep a claimed pass held, src/omni.lua)
+    local ok, aside = pcall(function() return hd.asidePeek ~= nil and hd.asidePeek(pass) end)
     return not (ok and aside == true)
   end
   exports.setEnabled = function(pass, on)

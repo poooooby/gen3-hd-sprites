@@ -71,7 +71,7 @@ return function(mod)
     local omniOf = loadSibling(mod, "src/omni.lua", true)
     local okO, Omni = pcall(function() return type(omniOf) == "function" and omniOf(mod) or nil end)
     if okO and type(Omni) == "table" then
-      hd.aside, hd.asideTick = Omni.aside, Omni.tick
+      hd.aside, hd.asideTick, hd.asidePeek = Omni.aside, Omni.tick, Omni.peek
     end
   end
 

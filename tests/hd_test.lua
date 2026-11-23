@@ -2981,7 +2981,7 @@ do
   local opts = {}
   local fakeMod = { game = { mods = { modOptions = { omni_ui = opts } } }, find = function() return {} end }
   local Omni = dofile("src/omni.lua")(fakeMod)
-  hd.aside, hd.asideTick = Omni.aside, Omni.tick
+  hd.aside, hd.asideTick, hd.asidePeek = Omni.aside, Omni.tick, Omni.peek
   G.setCanvas(base)
   check(hd.beginPass("battle", base) == false, "no battle pass on a battle OmniUI draws")
   check(hd.stats.aside == "battle", "the step aside is noted")
@@ -3015,6 +3015,44 @@ do
   opts.overlay = nil
   fakeMod.find = function() return nil end
   check(hd.beginPass("battle", base) == true, "OmniUI not running: the battle is WoobleView's")
+  hd.endPass()
+  hd.endFrame()
+  package.loaded["mods.omni_ui.core.ModernOverlay"] = loaded
+end
+
+-- a sprite mod asking the exports (enabled) never changes when WoobleView steps aside: OmniUI
+-- claims the battle, then lets it go while the sprite mod keeps asking every frame (its live
+-- pics) and no battle pass comes for a while; the next battle is WoobleView's
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  hd.install()
+  local base = canvas("ui", 240, 160)
+  local kind = "battle"
+  local loaded = package.loaded["mods.omni_ui.core.ModernOverlay"]
+  package.loaded["mods.omni_ui.core.ModernOverlay"] = { getActiveScreen = function() return kind end }
+  local opts = {}
+  local fakeMod = { game = { mods = { modOptions = { omni_ui = opts } } }, find = function() return {} end }
+  local Omni = dofile("src/omni.lua")(fakeMod)
+  hd.aside, hd.asideTick, hd.asidePeek = Omni.aside, Omni.tick, Omni.peek
+  local mod = {}
+  assert(loadfile("src/api.lua"))()(mod, hd, { active = true })
+  G.setCanvas(base)
+  check(mod.exports.enabled("battle") == false, "a sprite mod asking first: off while OmniUI draws the battle")
+  check(hd.beginPass("battle", base) == false, "...and WoobleView steps aside from it the same frame")
+  hd.endFrame()
+  -- OmniUI's overlay switched off; the sprite mod asks every frame, no battle pass meanwhile
+  opts.overlay = false
+  check(mod.exports.enabled("battle") == false,
+    "...the frame after, still off: held as WoobleView itself would hold it (src/omni.lua)")
+  hd.endFrame()
+  local onAll = true
+  for _ = 1, 5 do
+    if mod.exports.enabled("battle") ~= true then onAll = false end
+    hd.endFrame()
+  end
+  check(onAll, "...then on again for the sprite mod, frame after frame")
+  check(hd.beginPass("battle", base) == true, "...and the next battle is WoobleView's (the asking held nothing)")
   hd.endPass()
   hd.endFrame()
   package.loaded["mods.omni_ui.core.ModernOverlay"] = loaded

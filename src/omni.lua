@@ -62,6 +62,16 @@ return function(mod)
     return held[pass]
   end
 
+  --- What Omni.aside(pass) answers this frame, without counting as asked: for the exports
+  --- (enabled), which a sprite mod may ask every frame on any screen. Recorded, those asks would
+  --- keep a claimed pass held after OmniUI lets it go.
+  function Omni.peek(pass)
+    if pass == "field" or pass == nil then return false end
+    if lastAsked[pass] == frame then return held[pass] == true end
+    local was = lastAsked[pass] == frame - 1 and held[pass] == true
+    return Omni.kind() ~= nil or was
+  end
+
   --- A frame is over (hd.endFrame).
   function Omni.tick()
     frame = frame + 1
