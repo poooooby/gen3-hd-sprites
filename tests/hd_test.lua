@@ -3058,5 +3058,31 @@ do
   package.loaded["mods.omni_ui.core.ModernOverlay"] = loaded
 end
 
+-- the Battle Camera (src/scene/orbit.lua): the anchor a battler stands on while the 3D world's
+-- view is turned - none at rest; its side's own in singles, the nearest spot in a double battle
+do
+  local G = fakeGraphics()
+  local hd = HD.new(G)
+  check(hd.lookFoot("enemy") == nil, "Battle Camera: no 3D world, no anchor")
+  local fe = { side = "enemy", frame = 3, u0 = 176, v0 = 70, u = 190, v = 80, r = 1.2 }
+  local look = { on = false, frame = 3, feet = { enemy = fe } }
+  hd.worldScene = { look = look }
+  check(hd.lookFoot("enemy") == nil, "... the view at rest: drawn as without it")
+  look.on = true
+  check(hd.lookFoot("enemy") == fe and hd.lookFoot("player") == nil, "... turned: its side's anchor")
+  fe.frame = 2
+  check(hd.lookFoot("enemy") == nil, "... an anchor not given this frame is not used")
+  fe.frame = 3
+  local a = { side = "enemy", frame = 3, u0 = 200, v0 = 70, u = 210, v = 80, r = 1 }
+  local b = { side = "enemy", frame = 3, u0 = 152, v0 = 62, u = 160, v = 70, r = 1 }
+  look.double, look.feet[1], look.feet[3] = true, a, b
+  check(hd.lookFoot("enemy", 198) == a and hd.lookFoot("enemy", 150) == b and hd.lookFoot("enemy") == fe,
+    "... a double battle: the nearest of its side's spots (the side's own for its shadow)")
+  -- (what of the world stands in front of a battler drawn over it: only with the world's depth)
+  check(hd.occBegin(5, 0, 0, 100, 100) == false, "occlusion: none without the world's depth (drawn as ever)")
+  hd.worldScene = nil
+  check(hd.occBegin(5, 0, 0, 100, 100) == false, "... nor without a 3D world")
+end
+
 print(string.format("%d/%d checks passed (gen3-hd-sprites core)", passed, passed + failed))
 os.exit(failed == 0 and 0 or 1)

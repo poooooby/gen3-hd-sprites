@@ -52,7 +52,8 @@ return function(mod)
   -- (Fill Screen is not Gold, Silver and Crystal's: their battles stay in the game's own frame)
   if type(schema) == "table" and Engine.generation() < 3 then
     local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
-                       scene_cache = true, battle_textbox = true, scene_daytime = true, scene_sizes = true }
+                       scene_cache = true, battle_textbox = true, scene_daytime = true, scene_sizes = true,
+                       battle_camera = true }
     if Engine.generation() == 2 then gen3Only.fill_screen = true end
     local kept = {}
     for _, row in ipairs(schema) do
@@ -108,6 +109,8 @@ return function(mod)
     Weather = loadSibling(mod, "src/scene/weather.lua"),
     -- (optional: the battle's own weather and WoobleDex's terrains in the scene)
     BattleWeather = loadSibling(mod, "src/scene/battle_weather.lua", true),
+    -- (optional: the Battle Camera, the 3D battle's view turned by the player)
+    Orbit = loadSibling(mod, "src/scene/orbit.lua", true),
     -- (optional: the diorama's blur and the entrance's effects)
     ScreenFx = loadSibling(mod, "src/scene/screenfx.lua"),
     -- (optional: without it trees stand as cut-outs too)
@@ -392,6 +395,8 @@ return function(mod)
       Engine.Scene.blur = option("scene_blur", true) ~= false and 1 or 0
       -- (the time of day the scene is lit by: src/clock.lua, the game's clock or WoobleDex's)
       Engine.Scene.timeOfDay = Clock and option("scene_daytime", true) ~= false and Clock.minute or nil
+      -- (the Battle Camera: the right stick or a right-mouse drag turns the 3D battle's view)
+      if Engine.Scene.Orbit then Engine.Scene.Orbit.enabled = option("battle_camera", true) ~= false end
     end
   end
 
@@ -419,6 +424,29 @@ return function(mod)
       -- cache does not hold yet)
       pcall(Engine.Scene.warm, ev.mapId)
       if Engine.Scene.cacheModels and Engine.Scene.warmAll then pcall(Engine.Scene.warmAll) end
+    end)
+  end
+  -- the Battle Camera's mouse: a right-button drag over a 3D battle turns its view, the wheel zooms
+  -- it (src/scene/orbit.lua)
+  if Engine.Scene and Engine.Scene.Orbit and mod.hooks and mod.hooks.wrap then
+    local Orbit = Engine.Scene.Orbit
+    mod.hooks:wrap("input.pointer", function(next, g, ev)
+      local okO, ours = pcall(Orbit.pointer, ev, love.timer and love.timer.getTime() or 0)
+      if okO and ours then return true end
+      return next(g, ev)
+    end)
+    -- (the left stick's up and down zoom the view meanwhile, off the game's menus: Orbit.gateSticks)
+    mod.hooks:wrap("core.update", function(next, g, dt)
+      next(g, dt)
+      local now = love.timer and love.timer.getTime() or 0
+      local okL, live = pcall(Orbit.liveAt, now)
+      pcall(Orbit.gateSticks, type(g) == "table" and g.input, okL and live and Orbit.enabled)
+    end)
+    -- (and its wheel zooms the view; elsewhere the window's own zoom)
+    mod.hooks:wrap("input.wheel", function(next, g, dy)
+      local okO, ours = pcall(Orbit.wheel, dy, love.timer and love.timer.getTime() or 0)
+      if okO and ours then return true end
+      return next(g, dy)
     end)
   end
   if reliefRun then

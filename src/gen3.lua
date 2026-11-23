@@ -240,6 +240,7 @@ function Gen3.wrapFit(Engine, hd)
     home.enemyMon = home.enemyMon or (EM and EM.x)
     home.playerMon = home.playerMon or (PM and PM.x)
     home.playerMonY = home.playerMonY or (PM and PM.y)
+    home.enemyMonY = home.enemyMonY or (EM and EM.y)
     -- a double battle's own table: its battlers are drawn on these too, so hd puts a tagged one
     -- back on its unshifted spot when it records it (hd's wrapped draw) and shifts it as usual.
     -- Their rows are the unshifted ones while the battle draws them (Engine.doublesY false): the
@@ -251,6 +252,9 @@ function Gen3.wrapFit(Engine, hd)
       for id = 0, 3 do home.doubles[id] = D[id] and { x = D[id].x, y = D[id].y } or nil end
     end
     local doublesDy, yShifted = 0, true
+    -- (each double battler's column as shifted and spread, and how far the Battle Camera's turned
+    -- view moves its spot: moves read them, the battle draws on the column alone)
+    local doublesX, lookDx, lookDy = {}, { [0] = 0, 0, 0, 0 }, { [0] = 0, 0, 0, 0 }
     if D then
       --- Put the battlers' rows on the shifted or the unshifted spots; returns the previous state.
       Engine.doublesY = function(shifted)
@@ -259,12 +263,59 @@ function Gen3.wrapFit(Engine, hd)
         for id = 0, 3 do
           local h = home.doubles[id]
           if h then
-            local y = h.y + ((shifted and id % 2 == 0) and doublesDy or 0)
+            local y = h.y + ((shifted and id % 2 == 0) and doublesDy or 0) + (shifted and lookDy[id] or 0)
             D[id].y, D[id][2] = y, y
+            local x = doublesX[id]
+            if x then
+              x = x + (shifted and lookDx[id] or 0)
+              D[id].x, D[id][1] = x, x
+            end
           end
         end
         return was
       end
+    end
+    -- the Battle Camera (src/scene/orbit.lua): each battler's anchor given and the view stepped,
+    -- once each battle frame before the coordinates below are set; Engine.lookNow the look while
+    -- the view is turned (nil at rest)
+    Engine.lookStep = function(Battle)
+      Engine.lookNow = nil
+      local Scene = Engine.Scene
+      local Orbit = Scene and Scene.Orbit
+      if not (Orbit and Scene.enabled and hd.fit.enabled and not Engine.asideNow) then return end
+      local st = Battle._st
+      local s = type(st) == "table" and Scene.current(st)
+      if not (s and s.to) then return end
+      local F = Scene.FEET
+      local double = st.double == true
+      -- (the sides' singles feet: in a double battle only the middle between them)
+      Orbit.foot(s, "enemy", "enemy", F.enemy[1], F.enemy[2], double)
+      Orbit.foot(s, "player", "player", F.player[1], F.player[2], double)
+      if double and home.doubles then
+        for id = 0, 3 do
+          local h = home.doubles[id]
+          if h then
+            local side = id % 2 == 1 and "enemy" or "player"
+            local sx = hd.spreadDx and hd.spreadDx(h.x) or 0
+            local hy = side == "enemy" and (home.enemyY or 40) or (home.playerY or 80)
+            Orbit.foot(s, id, side, h.x + sx, F[side][2] + (h.y - hy))
+          end
+        end
+      end
+      Orbit.look(s).double = double
+      -- (only with the battlers drawn by a sprite mod: the game's own stay where it draws them)
+      local pair = hd.pair
+      local tagged = type(pair) == "table" and (pair.enemy ~= nil or pair.player ~= nil)
+      local now = love.timer and love.timer.getTime() or 0
+      local L = Orbit.step(s, now, tagged and s.progress >= 1)
+      if L.on then Engine.lookNow = L end
+    end
+    -- (a point x, y of the battler at anchor `key`, where the turned view puts it)
+    local function looked(key, x, y)
+      local L = Engine.lookNow
+      local f = L and L.feet[key]
+      if not (f and f.frame == L.frame and f.u) then return x, y end
+      return f.u + (x - f.u0) * f.r, f.v + (y - f.v0) * f.r
     end
     -- (not on a battle another UI mod draws: Engine.asideNow, set as each battle frame begins)
     local function on(Battle)
@@ -285,16 +336,18 @@ function Gen3.wrapFit(Engine, hd)
       local py = on(Battle) and fit.shift.playerY or 0
       -- the Pokemon's own spot: a small back stands raised above its pad
       local pm = py - (on(Battle) and fit.shift.playerRaise or 0)
-      place(S[1], home.enemy + e)
-      place(S[0], home.player + p)
-      -- (the 3D world: the foe's moves aimed at its body as drawn, hd's fit.aimEnemy)
+      -- (the 3D world: the foe's moves aimed at its body as drawn, hd's fit.aimEnemy; and the
+      -- player's, at its body as drawn; each where the Battle Camera's turned view puts it)
       local ey = (on(Battle) and fit.aimEnemy) or home.enemyY
-      if ey then S[1].y, S[1][2] = ey, ey end
-      if home.playerY then
-        -- (the 3D world: the player's moves too, at its body as drawn)
-        local py0 = (on(Battle) and fit.aimPlayer) or (home.playerY + pm)
-        S[0].y, S[0][2] = py0, py0
-      end
+      local ex
+      ex, ey = looked("enemy", home.enemy + e, ey or 40)
+      place(S[1], ex)
+      if home.enemyY then S[1].y, S[1][2] = ey, ey end
+      local py0 = home.playerY and ((on(Battle) and fit.aimPlayer) or (home.playerY + pm)) or 80
+      local px
+      px, py0 = looked("player", home.player + p, py0)
+      place(S[0], px)
+      if home.playerY then S[0].y, S[0][2] = py0, py0 end
       -- (the line the moves run along, player to foe: where hd grows their pieces, a giant's end
       -- the bigger)
       if on(Battle) and (fit.fxEnemy or 1) + (fit.fxPlayer or 1) > 2.002 then
@@ -304,9 +357,10 @@ function Gen3.wrapFit(Engine, hd)
       else
         fit.fxLine = nil
       end
-      if EM and home.enemyMon then EM.x = home.enemyMon + e end
-      if PM and home.playerMon then PM.x = home.playerMon + p end
-      if PM and home.playerMonY then PM.y = home.playerMonY + pm end
+      if EM and home.enemyMon then EM.x, EM.y = looked("enemy", home.enemyMon + e, home.enemyMonY or EM.y) end
+      if PM and home.playerMon then
+        PM.x, PM.y = looked("player", home.playerMon + p, (home.playerMonY or PM.y) + (home.playerMonY and pm or 0))
+      end
       local two = D and onDouble(Battle)
       local de = two and fit.shift.enemy or 0
       local dp = two and fit.shift.player or 0
@@ -316,7 +370,15 @@ function Gen3.wrapFit(Engine, hd)
           local h = home.doubles[id]
           -- (and its spot spread apart, the 3D world's doubles: hd.spreadDx)
           local sx = two and hd.spreadDx and hd.spreadDx(h and h.x or 0) or 0
-          if h then place(D[id], h.x + (id % 2 == 0 and dp or de) + sx) end
+          if h then
+            local x = h.x + (id % 2 == 0 and dp or de) + sx
+            doublesX[id] = x
+            place(D[id], x)
+            -- (the Battle Camera: how far the turned view moves its spot, its shifted row's)
+            local y = h.y + (id % 2 == 0 and two and (fit.shift.playerY - (fit.shift.playerRaise or 0)) or 0)
+            local lx, ly = looked(id, x, y)
+            lookDx[id], lookDy[id] = lx - x, ly - y
+          end
         end
         Engine.doublesY(true)
       end
@@ -612,6 +674,10 @@ function Gen3.prepare(Engine, hd)
         local okA, aside = pcall(function() return hd.aside and hd.enabled.battle and hd.aside("battle") end)
         Engine.asideNow = okA and aside == true
         pcall(wrapBoxes)
+        if Engine.lookStep then
+          local okL, errL = pcall(Engine.lookStep, Battle)
+          if not okL then hd.stats.lookError = tostring(errL) end
+        end
         if Engine.shiftCoords then pcall(Engine.shiftCoords, Battle) end
         local ok, err = pcall(hd.beginPass, "battle", love.graphics.getCanvas())
         if not ok then hd.fail("battle pass: " .. tostring(err)) end

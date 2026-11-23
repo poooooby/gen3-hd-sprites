@@ -1608,6 +1608,64 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   round the line between the battlers' feet (`Scene.FEET` cast onto the ground at the pose's
   height, `uTerrainSeg`), within `TERRAIN_RADIUS` tiles of it and about the ground's height.
   Per-frame only: in the cache guard's FRESH list.
+- `orbit.lua` (WoobleView's own): the Battle Camera, the 3D battle's view turned by the player
+  (the Battle Camera option, `Orbit.enabled`). **Anchors:** each battler's rest canvas foot
+  (`Scene.FEET[side]`; in a double battle each id's `AnimCoords.DOUBLES` spot with the 3D spread,
+  its row's foot, the sides' singles feet given too as `virtual`, only for the middle) is cast
+  onto the stage's ground through `s.to` (`Orbit.foot`, called by src/gen3.lua's
+  `Engine.lookStep` at the start of each battle frame, before `shiftCoords`). **The rig:**
+  `Orbit.step` turns the whole settled pose about the upright through the middle of the two
+  sides' anchors (target `T + (R - I)(T - M)`, exactly `s.to` at yaw 0), yaw within `YAW_MAX`
+  (45°), pitch within `PITCH_MIN..PITCH_MAX` (10°-75°), eased (`EASE`), snapped to rest within
+  `SNAP`; then projects each anchor (`f.u, f.v`, and `f.r`: its rest depth over its depth now).
+  `look.on` is false at rest, and then nothing anywhere differs from no camera at all. **Input:**
+  the right stick polled (`Orbit.readPad`: every gamepad's `rightx` / `righty`, the largest;
+  `DEADZONE`, `RATE` radians a second; R3's press edge recentres), never consumed, so
+  `input.gamepad` stays unwrapped and a CONTROLS binding of `rightstick_*` still works; and a
+  right-mouse drag through `input.pointer` (main.lua; `Orbit.pointer`, claimed only within
+  0.25 s of a frame that let the camera turn, `Orbit.liveAt`; a right double-click recentres).
+  **Zoom:** the mouse wheel (`input.wheel`, `Orbit.wheel`: claimed over a live 3D battle, so the
+  window's own zoom, the chain's last step, does not run) and the left stick's up and down
+  (`ZOOM_RATE`, counted as wheel notches) set `look.zoom` (`ZOOM_MIN..ZOOM_MAX` times the
+  distance `Orbit.fit` keeps them in view at; `Orbit.dolly`: out no farther than `FAR`, in no
+  nearer than keeps `KEEP` of each battler's box in view, a notch past that not saved up).
+  Meanwhile `Orbit.gateSticks` (main.lua's `core.update`) takes the left stick's default up and
+  down (`input.effectiveStickBindings`: `leftstick_up/down`, `lsup/lsdown`) off the game's menus
+  and gives them back after; a press already made is released by its source, a stick the player
+  bound in CONTROLS (`padBindings`) is untouched, `input.gamepad` stays unwrapped. The drivers skip
+  `core.update`: checked in `scene_test`. Only after the
+  entrance (`progress >= 1`), with the battlers drawn by a sprite mod (`hd.pair` has a side; the
+  game's own low-res battlers cannot move) and not while OmniUI has the battle. **Kept in
+  view:** `Orbit.fit` bisects the dolly (1..`DOLLY_MAX` times the distance) until every battler's
+  box (its body as last drawn, kept on its anchor by hd's composite, `f.body`; else
+  `Scene.SPRITES` moved to its foot) lies inside the canvas over the text box (`VIEW`) or no
+  further out than it stood at rest. `Orbit.badness` scores a pose: a nearer battler of the other
+  side covering more than `OVERLAP` of a farther one's box, plus one for each battler `Stage.seen`
+  finds mostly hidden (`Stage.hidden`: the lines to its middle and a quarter up both crossed;
+  trees, walls, models: the stage search's own ray checks). A move is taken whole,
+  else its turn alone, else its tilt alone, whichever scores no worse than where it is. **Drawn:**
+  `Scene.render` draws the world from `look.pose` while `look.on`; the terrain's glow takes the
+  projected feet (`look.uv`). hd's composite draws a battler record (not a move animation's copy,
+  not a trainer pinned to the text box) through the affine `ox = sx0 + (u + (d - u0) r) ssx`,
+  `sx = r ssx` about its anchor (`hd.lookFoot`: its side's, or the nearest of its side's spots in
+  a double battle), so every offset the engine gives it (lunges, shakes, the faint, a flyer's
+  height, the send-out) moves and scales with it; `noteBattler` gets the same mapping
+  (`exports.battlerRect` stays true). The shadows the same way about their middle, their height
+  times `sin(pitch) / sin(30°)` (`look.flat`). `shiftCoords` moves `AnimCoords.SINGLES`,
+  `Anim.ENEMY_MON` / `PLAYER_MON` and each double spot by the same mapping, so a move's effects
+  fly between the battlers where they stand; a double spot's offset only on its shifted state
+  (`Engine.doublesY(true)`: moves read it, the battle draws on the column alone, hd takes the
+  side shift and spread back off a record). Full-screen effects stay flat. **Occlusion:**
+  `Render.draw` renders into a readable `depth24` canvas where the GPU has one (`Render.depth`;
+  else the old unreadable buffer and no occlusion); `Scene.render` keeps it on the scene
+  (`s.depthTex`, its screen rectangle `s.depthAt`, the depth terms `s.depthAB`). hd's composite
+  draws each anchored battler record and each shadow into a layer of its own (`hd.occBegin`, only
+  its box and as much again round it cleared; its colour, shader and blend as ever), then onto the
+  screen through `OCC_GLSL` (`hd.occEnd`): each pixel's world depth `b / (z - a)` from the depth
+  texture, left out where it stands nearer than the anchor's view depth (`f.d`) by more than
+  `OCC_BIAS` (0.75 tiles: the ground just before the feet never cuts them), faded over
+  `OCC_SOFT`. At rest too (the stage search keeps the view clear, so rarely anything). Kept tables only
+  (the look, its anchors, poses and boxes; loops, no closures). In the cache guard's FRESH list.
 - `weather.lua`: the weather in the scene (MakeFog/DrawBanks, MakeWeather/DrawWeather and
   voxel_weather.v.pica as a GLSL shader). Rain, sand and ash: 768 streaks or 512 flakes built once,
   each at a fixed place in a box round the camera (24 x 8.5 x 28 tiles for rain), three groups of
@@ -2232,14 +2290,17 @@ Boy games: `gen1_battle.lua` (with `GEN1_INTRO_SHOT`, `GEN1_COLORS` and `GEN1_FI
 `dex_gb.lua` (the Pokédex and summary in each colour mode, HD on and off). Battle Scene:
 `luajit tests/scene_test.lua` (camera, cells, stage search, vertices, trees, the building kernel,
 specs and placement, look-alike cells, solids, component runs, fences, kits, signs, relief and its
-last passes), `luajit tests/roles_test.lua` (the cell roles) and the drivers
+last passes, the Battle Camera), `luajit tests/roles_test.lua` (the cell roles) and the drivers
 `scene_battle.lua` (`SCENE_SPOTS`, `SCENE_FITS` for the settled battle with Battle Fit on and off, `SCENE_LOOK` for shots aimed elsewhere, each also saved as the
 scene alone through the test hooks `exports._sceneLook` / `_sceneShot`; it logs every placed
 model with its cell, every component run with its triangles, every sign (cell, metatile, head),
 the relief's lifted cells and layouts (`sceneRelief`) and the build time phase by phase
 (`scenePhases`);
 `SCENE_DUMP` for collision codes, `SCENE_SELFTEST` for the
-renderer on a synthetic field), `bridge_dump.lua` (the Cycling Road's triangles, its sliced build
+renderer on a synthetic field), `battle_camera.lua` (the Battle Camera: `CAM` yaw:pitch shots, a
+held stick each way, a move each way at `CAM_MOVE_YAW`, the zoom, the option off; `CAM_DOUBLE=1` a
+double battle, `CAM_DYNAMAX=1` a Gym Leader's battle with the player's Charizard Dynamaxed (Galar
+Rising installed), `CAM_OCC_BIAS` the occlusion's bias; logs each battler's projected foot, scale, body box and the pose's badness), `bridge_dump.lua` (the Cycling Road's triangles, its sliced build
 and its cache read; see `models/bridge.lua` above), `room_dump.lua` (the rooms' pieces; see
 `models/interiors.lua` above) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
 `voxel_cells.py` prints them, to diff). The relief is checked against Emerald 3DS's own scripts

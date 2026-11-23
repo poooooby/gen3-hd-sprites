@@ -32,6 +32,9 @@ return function(deps)
   local hd = deps.hd
 
   local Scene = { enabled = false, Camera = Camera, Stage = Stage, Tune = deps.Tune, Trees = deps.Trees, Relief = deps.Relief }
+  -- (optional: src/scene/orbit.lua, the Battle Camera: the view turned by the player)
+  local Orbit = deps.Orbit
+  Scene.Orbit = Orbit
 
   -- love.graphics as it really is (the functions WoobleView wraps, unwrapped)
   local G = setmetatable({}, { __index = function(_, k) return hd.real[k] or love.graphics[k] end })
@@ -45,6 +48,7 @@ return function(deps)
   Scene.SPRITES = { enemy = { 144, 8, 208, 72 }, player = { 40, 48, 104, 112 } }
   Scene.SHADOW = { enemy = { 176, 70, 26, 6 }, player = { 72, 115, 32, 7 } }
   Scene.SHADOW_ALPHA = 0.42
+  if Orbit then Orbit.Camera, Orbit.Stage, Orbit.FEET, Orbit.SPRITES = Camera, Stage, Scene.FEET, Scene.SPRITES end
   -- (without src/scene/light.lua: the haze from 14 to 48 tiles, 0.9 at most, indoors 6 to 22)
   Scene.FOG = { outdoor = { 14, 48, 0.9 }, indoor = { 6, 22, 1 } }
   -- the sky behind the world (Emerald 3DS clears to the battle's backdrop colour: the wallpaper's
@@ -5098,7 +5102,8 @@ return function(deps)
       if bwx == "hail" and bAmount > 0 then light.weather, light.weatherAmount = "hail", bAmount end
     end
     -- (the terrain's glow on the ground between the battlers' feet, src/scene/render.lua)
-    light.terrain, light.terrainFeet = terrain, Scene.FEET
+    -- (the battlers' feet where the view shows them: turned by the Battle Camera, src/scene/orbit.lua)
+    light.terrain, light.terrainFeet = terrain, (s.look and s.look.on and s.look.uv) or Scene.FEET
     light.terrainGlow = terrain and BW.glow(tAmount, love.timer.getTime()) or 0
     light.terrainRadius = BW and BW.TERRAIN_RADIUS or nil
     -- (CtrVoxel_DrawsSand: the world blows the sandstorm itself, src/gen3.lua drops the battle's
@@ -5197,7 +5202,10 @@ return function(deps)
     -- (the frame's projection and pose in the scene's kept tables)
     s.projKept, s.depthKept, s.poseKept = s.projKept or {}, s.depthKept or {}, s.poseKept or {}
     local proj, depth = Camera.screenProjection(u0, v0, bsx, bsy, s.projKept, s.depthKept)
-    local pose = Camera.glide(s.from, s.to, s.progress, s.poseKept)
+    -- (turned by the player: the Battle Camera, src/scene/orbit.lua, stepped as the battle drew)
+    local look = s.look
+    local pose = (look and look.on and s.progress >= 1) and look.pose
+      or Camera.glide(s.from, s.to, s.progress, s.poseKept)
     local haze, fog, sky, light = hazeFor(s, pose)
     -- (the world shows beside the text box when the UI's box is narrower than the view: the
     -- vignette runs on down there, src/scene/screenfx.lua)
@@ -5209,6 +5217,12 @@ return function(deps)
     if not c then return nil end
     -- (the battle's weather and terrain drawn in the world this frame: exports.battleWeatherDrawn)
     Scene.drawnFrame = hd.frames or 0
+    -- (and its depth, where the GPU keeps it readable: src/hd.lua draws what of the world stands
+    -- in front of a battler over it - the canvas's rectangle on the screen, the depth's terms)
+    s.depthTex = Render.depth
+    local at = s.depthAt or {}
+    at[1], at[2], at[3], at[4] = x, y, math.max(1, math.ceil(w)), math.max(1, math.ceil(h))
+    s.depthAt, s.depthAB = at, depth
     -- (indoors: the room's fill, from its first frame, for every frame after)
     if s.indoor and s.fill == nil then s.fill = roomFill(c) or false end
     return c, x, y

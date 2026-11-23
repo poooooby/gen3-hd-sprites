@@ -18,6 +18,7 @@ tests/drivers/screens_gb.lua
 tests/drivers/dex_gb.lua
 tests/scene_test.lua
 tests/drivers/scene_battle.lua
+tests/drivers/battle_camera.lua
 tools/pack_trees.py
 tests/roles_test.lua
 tests/drivers/roles_dump.lua

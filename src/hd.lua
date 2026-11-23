@@ -1388,6 +1388,122 @@ function HD.new(G, opts)
   end
   self.spreadDx = spreadDx
 
+  --- (the Battle Camera, src/scene/orbit.lua) The anchor a battler of `side` drawn at canvas
+  --- column x (its resting one, spread included) stands on while the 3D world's view is turned
+  --- (its rest foot u0, v0; where the view puts it, u, v; and its scale r), or nil at rest. A
+  --- double battle's: its side's nearest spot; nil x, or a single battle: its side's own.
+  --- `any`: at rest too.
+  function self.lookFoot(side, x, any)
+    local s = self.worldScene
+    local L = type(s) == "table" and s.look
+    if not (L and (L.on or any) and side and type(L.feet) == "table") then return nil end
+    if L.double and x then
+      local best, bd = nil, math.huge
+      for id = 0, 3 do
+        local f = L.feet[id]
+        if f and f.side == side and f.frame == L.frame and f.u then
+          local dd = math.abs(f.u0 - x)
+          if dd < bd then best, bd = f, dd end
+        end
+      end
+      if best then return best, L end
+    end
+    local f = L.feet[side]
+    if f and f.frame == L.frame and f.u then return f, L end
+    return nil
+  end
+
+  -- (the Battle Camera, src/scene/orbit.lua: what of the 3D world stands in front of a battler's
+  -- feet draws over it. The world's depth is kept readable where the GPU can, src/scene/render.lua;
+  -- a battler - or its shadow - is drawn into a layer of its own as ever (its colour, shader and
+  -- blend untouched), then onto the screen through a shader that leaves out each pixel where the
+  -- world stands nearer than its feet by more than OCC_BIAS tiles (so the ground just before its
+  -- feet never cuts them), fading over OCC_SOFT. Without a readable depth: drawn as ever)
+  self.occ = { w = 0, h = 0, at = { 0, 0, 0, 0 }, foot = { 0, 0 } }
+  self.OCC_BIAS, self.OCC_SOFT = 0.75, 0.35
+  self.OCC_GLSL = [[
+uniform Image uDepthTex;
+uniform vec4 uDepthAt;
+uniform vec2 uAB;
+uniform vec2 uFoot;
+vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
+  vec4 c = Texel(tex, tc) * color;
+  vec2 d = (sc - uDepthAt.xy) / uDepthAt.zw;
+  if (d.x < 0.0 || d.y < 0.0 || d.x > 1.0 || d.y > 1.0) return c;
+  float z = Texel(uDepthTex, d).r * 2.0 - 1.0;
+  float w = uAB.y / (z - uAB.x);
+  return c * smoothstep(uFoot.x - uFoot.y, uFoot.x, w);
+}
+]]
+  --- Start drawing a battler (or its shadow) whose feet stand at view depth `depth` into the
+  --- occlusion layer, within x0, y0 .. x1, y1 (window units: only that much is cleared and put on
+  --- the screen); false (nothing changed) when the world's depth cannot be read.
+  function self.occBegin(depth, x0, y0, x1, y1)
+    local s = self.worldScene
+    local O = self.occ
+    local tex = type(s) == "table" and s.depthTex
+    if not (tex and depth and s.depthAt and s.depthAB and real.newCanvas and real.newShader)
+        or O.shader == false then
+      return false
+    end
+    if not O.shader then
+      local ok, sh = pcall(real.newShader, self.OCC_GLSL)
+      O.shader = ok and sh or false
+      if not ok then self.stats.occError = tostring(sh) return false end
+    end
+    local tgt = real.getCanvas()
+    local W, H, dpi
+    if tgt then
+      W, H, dpi = tgt:getWidth(), tgt:getHeight(), tgt.getDPIScale and tgt:getDPIScale() or 1
+    else
+      W, H, dpi = real.getWidth(), real.getHeight(), real.getDPIScale and real.getDPIScale() or 1
+    end
+    if not O.canvas or O.w ~= W or O.h ~= H or O.dpi ~= dpi then
+      if O.canvas and O.canvas.release then pcall(O.canvas.release, O.canvas) end
+      O.canvas = real.newCanvas(W, H, { dpiscale = dpi })
+      O.w, O.h, O.dpi = W, H, dpi
+      O.quad = nil
+    end
+    x0, y0 = math.max(0, math.floor(x0)), math.max(0, math.floor(y0))
+    x1, y1 = math.min(W, math.ceil(x1)), math.min(H, math.ceil(y1))
+    if x1 <= x0 or y1 <= y0 then return false end
+    O.tex, O.depth = tex, depth
+    O.x0, O.y0, O.x1, O.y1 = x0, y0, x1, y1
+    real.push("all")
+    real.setCanvas(O.canvas)
+    local a, b, c, e = real.getScissor()
+    real.setScissor(x0, y0, x1 - x0, y1 - y0)
+    real.clear(0, 0, 0, 0)
+    if a then real.setScissor(a, b, c, e) else real.setScissor() end
+    return true
+  end
+  --- Finish it: the layer onto the screen within its box, the world in front of the feet left
+  --- out of it.
+  function self.occEnd()
+    local O = self.occ
+    real.pop()
+    local x0, y0, x1, y1 = O.x0, O.y0, O.x1, O.y1
+    local s = self.worldScene
+    local at, k = s.depthAt, O.dpi or 1
+    O.at[1], O.at[2], O.at[3], O.at[4] = at[1] * k, at[2] * k, at[3] * k, at[4] * k
+    O.foot[1], O.foot[2] = O.depth - self.OCC_BIAS, self.OCC_SOFT
+    real.push("all")
+    real.origin()
+    real.setScissor()
+    real.setShader(O.shader)
+    O.shader:send("uDepthTex", O.tex)
+    O.shader:send("uDepthAt", O.at)
+    O.shader:send("uAB", s.depthAB)
+    O.shader:send("uFoot", O.foot)
+    real.setColor(1, 1, 1, 1)
+    real.setBlendMode("alpha", "premultiplied")
+    if not O.quad then O.quad = real.newQuad(0, 0, 1, 1, O.w, O.h) end
+    O.quad:setViewport(x0, y0, x1 - x0, y1 - y0, O.w, O.h)
+    real.draw(O.canvas, O.quad, x0, y0)
+    real.pop()
+    self.stats.occluded = (self.stats.occluded or 0) + 1
+  end
+
   -- a tag's contact shadow (spec.shadow), under a frame whose pivot is drawn at (px, py) turned
   -- by r and scaled by (fsx, fsy) (the frame's final scale, flip included): its offsets and
   -- width are in the frame's pixels, so it follows the frame's size and mirroring
@@ -2118,6 +2234,10 @@ function HD.new(G, opts)
     end
     -- optional: the wallpaper is drawn wrapped through a quad of our own
     if type(G.newQuad) == "function" then real.newQuad = G.newQuad end
+    -- optional: the Battle Camera's occlusion layer (hd.occBegin)
+    for _, name in ipairs({ "newShader", "getScissor", "getWidth", "getHeight", "getDPIScale" }) do
+      if type(G[name]) == "function" then real[name] = G[name] end
+    end
     -- optional: each recorded draw replays with the shader uniforms it was drawn with
     if type(G.newShader) == "function" and not shaderMethods then pcall(trackShaders) end
     G.draw = wrappedDraw
@@ -3046,10 +3166,13 @@ function HD.new(G, opts)
     if x1 < x0 then x0, x1 = x1, x0 end
     if y1 < y0 then y0, y1 = y1, y0 end
     noteRect(spec.side, x0, y0, x1, y1)
+    -- (its body's box on the canvas as the record draws it, returned: the Battle Camera's)
+    if c < a then a, c = c, a end
+    if d < bb then bb, d = d, bb end
     -- (a double battle: its battler id from the battle's resting places, the nearest of its side
     -- with the same Pokemon)
     local prefit = cur and cur.prefit
-    if not prefit then return end
+    if not prefit then return a, bb, c, d end
     local X = (place(rec))
     local best, bestD = nil, math.huge
     for id, pr in pairs(prefit) do
@@ -3059,6 +3182,7 @@ function HD.new(G, opts)
       end
     end
     if best ~= nil then noteRect(best, x0, y0, x1, y1) end
+    return a, bb, c, d
   end
   self.noteBattler = noteBattler
 
@@ -4699,8 +4823,11 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
         elseif item.kind == "stage" then
           local d = (fitted and cur.shift[item.side]) or 0
           local dy = (fitted and item.side == "player" and cur.shift.playerY) or 0
-          -- (in the 3D world: the scene's shadow scaled about its middle to the Pokemon's body)
-          local k = tuned() and self.worldShadow[item.side]
+          -- (in the 3D world: the scene's shadow scaled about its middle to the Pokemon's body;
+          -- the Battle Camera's turned view puts it under its side's anchor, flattened or
+          -- rounded by the tilt)
+          local look = self.lookFoot(item.side)
+          local k = (tuned() and self.worldShadow[item.side]) or (look and 1)
           local sh = k and type(self.scene) == "table" and type(self.scene.SHADOW) == "table"
             and self.scene.SHADOW[item.side]
           if sh then
@@ -4708,7 +4835,23 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
             local r = item.rec
             local mx = r.tx + (r.x + sh[1] * r.sx) * r.tsx
             local my = r.ty + (r.y + sh[2] * r.sy) * r.tsy
-            imageDraw(r, sx0 + (d + mx * (1 - k)) * ssx, sy0 + (dy + my * (1 - k)) * ssy, ssx * k, ssy * k)
+            local kx, ky, cx, cy = k, k, mx + d, my + dy
+            if look then
+              local L = self.worldScene.look
+              cx, cy = look.u + (cx - look.u0) * look.r, look.v + (cy - look.v0) * look.r
+              kx, ky = k * look.r, k * look.r * (L.flat or 1)
+            end
+            -- (what of the world stands in front of its side's feet over it)
+            local anchor = self.lookFoot(item.side, nil, true)
+            local occ = false
+            if anchor and anchor.d then
+              local hx = sh[3] * math.abs(r.sx * r.tsx) * kx * 1.6 * ssx
+              local hy = sh[4] * math.abs(r.sy * r.tsy) * ky * 2.5 * ssy
+              local px, py = sx0 + cx * ssx, sy0 + cy * ssy
+              occ = self.occBegin(anchor.d, px - hx, py - hy, px + hx, py + hy)
+            end
+            imageDraw(r, sx0 + (cx - mx * kx) * ssx, sy0 + (cy - my * ky) * ssy, ssx * kx, ssy * ky)
+            if occ then self.occEnd() end
           else
             imageDraw(item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy)
           end
@@ -4731,9 +4874,40 @@ vec4 effect(vec4 c, Image t, vec2 tc, vec2 sc) {
           end
           -- pinBottom (canvas y): the text box's line, under the unzoomed mapping
           local pin = fitted and spec.pinBottom and (cy + (spec.pinBottom - fy) * Sy + fit.sceneUp * Uy) or nil
+          local bx, by, bsx, bsy = sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy
+          -- (the Battle Camera's turned view: drawn about where its anchor stands, as much bigger
+          -- as it stands nearer; a trainer pinned to the text box stays)
+          local look = side and not item.rec.inAnim and not spec.pinBottom and self.lookFoot(side, (place(item.rec)) + d)
+          if look then
+            bx = sx0 + (look.u + (d - look.u0) * look.r) * ssx
+            by = sy0 + (look.v + (dy - look.v0) * look.r) * ssy
+            bsx, bsy = ssx * look.r, ssy * look.r
+          end
           -- (where its body lands on the window this frame: exports.battlerRect)
-          noteBattler(cur, item.rec, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy)
-          tagDraw(item.rec, cur, blit, sx0 + d * ssx, sy0 + dy * ssy, ssx, ssy, sceneBox, pin)
+          local b0, b1, b2, b3 = noteBattler(cur, item.rec, bx, by, bsx, bsy)
+          -- (and its body's box where it rests, kept on its anchor: what the Battle Camera keeps in
+          -- view and apart)
+          local anchor = b0 and side and not item.rec.inAnim and not spec.pinBottom
+            and self.lookFoot(side, (place(item.rec)) + d, true)
+          if anchor then
+            local body = anchor.body or {}
+            anchor.body = body
+            body[1], body[2], body[3], body[4] = b0 + d, b1 + dy, b2 + d, b3 + dy
+            anchor.bodyFrame = self.worldScene.look.frame
+          end
+          -- (what of the world stands in front of its feet over it: drawn through the occlusion
+          -- layer, within its body's box and as much again round it)
+          local occ = false
+          if anchor and anchor.d then
+            local x0, x1 = bx + b0 * bsx, bx + b2 * bsx
+            local y0, y1 = by + b1 * bsy, by + b3 * bsy
+            if x1 < x0 then x0, x1 = x1, x0 end
+            if y1 < y0 then y0, y1 = y1, y0 end
+            local ew, eh = x1 - x0, y1 - y0
+            occ = self.occBegin(anchor.d, x0 - ew, y0 - eh, x1 + ew, y1 + eh)
+          end
+          tagDraw(item.rec, cur, blit, bx, by, bsx, bsy, sceneBox, pin)
+          if occ then self.occEnd() end
         elseif byLayer then
           -- (the enemy's HUD's layer moved whole; the rest where it is)
           if inTop then

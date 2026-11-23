@@ -65,6 +65,35 @@ only as far as it needs to keep every one of them in view.
   view, rather than reaching across the middle and covering its opponent. Most of it always
   stays in view.
 
+## Look around 🎮
+
+With **Battle Camera** on, you can circle the camera around the battle once it has begun, and
+zoom in and out. Every Pokémon stands on its own spot on the ground, so as the view turns they
+move with the world, growing as they come nearer and shrinking as they go further away, their
+shadows under their feet.
+
+- **Controller:** Push the right stick left or right to turn the view up to 45° either way
+  around the middle of the battle, and up or down to tilt it, from near the ground to almost
+  overhead. Push the left stick up to zoom in and down to zoom out; the D-pad works the battle's
+  menus meanwhile. Click the right stick to bring the view back.
+- **Mouse:** Drag with the right mouse button to turn and tilt, and roll the wheel to zoom;
+  double-click the right button to bring the view back. Over a 3D battle the wheel zooms the
+  camera, not the game window.
+- **Always in view:** The camera pulls back as far as it needs to keep every Pokémon on screen,
+  and zooms in only as far as keeps most of each one in view. It stops turning before one
+  Pokémon would hide most of another, or before a tree, a wall or a building would hide most of
+  one.
+- **In the world:** A tree, a sign, a wall or a building that stands between the camera and a
+  Pokémon is drawn in front of it, shadow and all, just as it would be in the world.
+- **Stays put:** The view stays where you leave it, through moves and turns. Each new battle
+  starts at the usual view.
+- **Moves:** Move effects fly from where the attacker stands to where its target stands. Effects
+  that cover the whole screen stay flat.
+
+It needs a sprite mod that draws the battle Pokémon in HD, such as WoobleSpritePack; without one,
+the battle keeps its usual view. If you've bound the right stick, or the left stick's up and
+down, to something in the game's CONTROLS, it does both.
+
 ## HP boxes 🏷️
 
 The opponent's HP box (both of them in a double battle) sits just above the tallest Pokémon's

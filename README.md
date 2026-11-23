@@ -62,7 +62,10 @@ sandstorm, and WoobleDex's terrains glow on the ground under the battlers.
 
 Pokémon stand at their real sizes, so a Wailord towers over a Pikachu. **3D Sizing** lets you
 choose how true to life that is. The camera follows the battle, pulling back for giants and
-coming in close for small Pokémon.
+coming in close for small Pokémon. 🎮 Want a closer look? Your controller's right stick (or a
+right-mouse drag) circles the camera around the battle and the left stick (or the mouse wheel)
+zooms, with both Pokémon standing on the ground and always in view, and the trees, signs and
+buildings in front of them standing in front of them.
 
 ➡️ [Everything about 3D battles](docs/battle-scene.md)
 
@@ -79,6 +82,7 @@ Everything is on by default except the 3D battles, which you can turn on wheneve
 | **Battle Textbox** | On | The modern battle text box (Gen 3 games). |
 | **Battle Scene** | Classic | Overworld: battles in the 3D world. |
 | **3D Sizing** | Medium | How true to life the sizes are in 3D battles. |
+| **Battle Camera** | On | Look around and zoom in 3D battles with a controller or mouse. |
 | **Build / Clear 3D Cache** | – | Build the 3D world now, or delete it. |
 | **Scene Blur** | On | A soft miniature-style blur in 3D battles. |
 | **Time of Day** | On | 3D battles lit by the time of day. |

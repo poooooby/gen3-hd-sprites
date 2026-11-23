@@ -842,6 +842,9 @@ function Render.shader(G)
 end
 
 local target, targetW, targetH
+-- the world's depth, kept readable where the GPU can (the Battle Camera's occlusion: what of the
+-- world stands in front of a battler draws over it, src/hd.lua); false where it cannot
+local depthTarget
 --- Draw the scene into a canvas of ours w x h (screen pixels) and return it, or nil.
 ---   scene.meshes (Render.meshes), scene.ox, scene.oz (the meshes' origin, in map cells)
 ---   pose (Camera.pose, in map cells), proj/depth (Camera.screenProjection), rise (0..1)
@@ -897,10 +900,26 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
     target = G.newCanvas(w, h, { dpiscale = 1 })
     target:setFilter("linear", "linear")
     targetW, targetH = w, h
+    if depthTarget and depthTarget.release then pcall(depthTarget.release, depthTarget) end
+    depthTarget = false
+    local okF, formats = pcall(function() return G.getCanvasFormats and G.getCanvasFormats(true) end)
+    if okF and type(formats) == "table" and formats.depth24 then
+      local okD, d = pcall(G.newCanvas, w, h, { format = "depth24", readable = true, dpiscale = 1 })
+      if okD and d then
+        depthTarget = d
+        if d.setFilter then d:setFilter("nearest", "nearest") end
+      end
+    end
   end
+  -- (this draw's depth, readable, or nil: Render.depth)
+  Render.depth = depthTarget or nil
   local p = Camera.pose(pose.tx - scene.ox, pose.tz - scene.oz, pose.pitch, pose.dist, pose.ty, pose.yaw, drawPose)
   G.push("all")
-  G.setCanvas({ target, depth = true })
+  if depthTarget then
+    G.setCanvas({ target, depthstencil = depthTarget })
+  else
+    G.setCanvas({ target, depth = true })
+  end
   G.origin()
   G.setScissor()
   sky = sky or haze

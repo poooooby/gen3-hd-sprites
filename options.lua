@@ -46,6 +46,14 @@ return {
     description = "With Battle Scene on OVERWORLD, the Pokemon stand in the world sized by their real heights (a tile about a metre; double battles at the sprite pack's own sizes), the camera zooming out for big ones and in for small ones, a wide one stepping toward its own side, the opponent's HP box over their heads. MEDIUM: real sizes, the biggest gently scaled down to about 5 m tall and 6 m wide, the smallest raised so they are easy to see. MINIMAL: as MEDIUM, drawn toward the middle: small ones a little less small, big ones a little less big. ACCURATE: every Pokemon's real measured height, a Wailord towering over a Pikachu, scaled down only to fit the screen or the room. OFF: drawn and framed as in CLASSIC battles, at the sprite pack's own sizes, shrunk only if too big.",
   },
   {
+    key = "battle_camera",
+    label = "Battle Camera",
+    type = "toggle",
+    default = true,
+    visible_if = { key = "battle_scene", equals = "overworld" },
+    description = "With Battle Scene on OVERWORLD: look around the battle in 3D. The right stick on a controller (or dragging with the right mouse button) turns the view up to 45 degrees left or right and tilts it from near the ground to almost overhead, circling the middle of the battle with both Pokemon standing on the ground and always in view; the left stick's up and down (or the mouse wheel) zoom in and out, while the D-pad works the battle's menus. Trees, signs and buildings in front of a Pokemon stand in front of it. The view stays where you leave it; click the right stick (or double-click the right mouse button) to bring it back. Needs a sprite mod that draws the battle Pokemon in HD. Off: the battle's fixed view.",
+  },
+  {
     key = "scene_build",
     label = "Build 3D Cache",
     type = "choice",

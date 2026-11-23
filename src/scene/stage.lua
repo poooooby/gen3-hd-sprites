@@ -243,6 +243,20 @@ local function seen(Camera, grid, pose, r, x, z, f)
   if not ok or not f then return ok, c end
   return rayClear(Camera, grid, pose, f[1], f[2], depth, ty)
 end
+Stage.seen = seen
+
+--- (the Battle Camera, src/scene/orbit.lua) Whether most of a side's sprite (canvas rect r, its
+--- feet standing at (x, z)) is hidden from the camera at `pose`: something stands across both the
+--- line to its middle and the line a quarter up from its bottom. What stands in front of less
+--- of it is drawn over it (src/hd.lua), the turn going on.
+function Stage.hidden(Camera, grid, pose, r, x, z)
+  local ty = pose.ty or 0
+  local _, _, depth = Camera.view(pose, x, ty, z + ty)
+  if not depth or depth <= Camera.NEAR then return true end
+  local u = (r[1] + r[3]) / 2
+  if rayClear(Camera, grid, pose, u, (r[2] + r[4]) / 2, depth, ty) then return false end
+  return not rayClear(Camera, grid, pose, u, r[4] - (r[4] - r[2]) / 4, depth, ty)
+end
 
 -- whether what the camera at `pose` shows lies inside the window of cells, as far as `reach`
 -- tiles from the eye: the canvas's corners (and a margin either side, for a wider screen) cast

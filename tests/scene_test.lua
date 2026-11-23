@@ -2083,9 +2083,10 @@ do
     end
   end
   -- (only what a cache is built from: the camera, the light, the weather, the screen effects, the
-  -- drawing and the workshop's tuning are read fresh every session)
+  -- drawing, the workshop's tuning and the Battle Camera are read fresh every session)
   local FRESH = { camera = true, stage = true, render = true, light = true, lighting = true, sunfx = true,
-                  weather = true, screenfx = true, tune = true, cache = true, trees = true, battle_weather = true }
+                  weather = true, screenfx = true, tune = true, cache = true, trees = true, battle_weather = true,
+                  orbit = true }
   local h, n = 2166136261, 0
   table.sort(files)
   for _, path in ipairs(files) do
@@ -2237,6 +2238,267 @@ do
   for t = 13, 16, 0.05 do wk, wa, tc, ta = BW.frame(s, t) end
   check(wa == 0 and ta == 0, "the battle over: they fade out")
   BW.req, BW.terrainOf = nil, nil
+end
+
+-- the Battle Camera (src/scene/orbit.lua): the battlers anchored on the ground, the view turned
+-- about their middle by the right stick or a right-mouse drag, kept in view, nothing in front
+do
+  local Orbit = dofile("src/scene/orbit.lua")
+  local FEET = { enemy = { 176, 70 }, player = { 72, 114 } }
+  local SPRITES = { enemy = { 144, 8, 208, 72 }, player = { 40, 48, 104, 112 } }
+  Orbit.Camera, Orbit.Stage, Orbit.FEET, Orbit.SPRITES = Camera, Stage, FEET, SPRITES
+  Orbit.enabled = true
+  local pad = { x = 0, y = 0, down = false }
+  Orbit.readPad = function() return pad.x, pad.y, pad.down end
+  local t = 100
+  local function frame(st, allowed)
+    Orbit.foot(st, "enemy", "enemy", 176, 70)
+    Orbit.foot(st, "player", "player", 72, 114)
+    t = t + 1 / 60
+    return Orbit.step(st, t, allowed ~= false)
+  end
+  local function hold(st, n) local L for _ = 1, n do L = frame(st) end return L end
+  local s = { to = Camera.pose(20.5, 30.5), progress = 1 }
+  local L = frame(s)
+  local to = s.to
+  check(not L.on and L.pose.tx == to.tx and L.pose.tz == to.tz and L.pose.pitch == to.pitch
+    and L.pose.dist == to.dist and L.pose.yaw == 0, "Battle Camera: at rest its pose is the battle's own")
+  local fe, fp = L.feet.enemy, L.feet.player
+  check(fe.u == 176 and fe.v == 70 and fe.r == 1 and fp.u == 72 and fp.v == 114 and fp.r == 1,
+    "... each battler where it always stands, at its own size")
+  local u, v = Camera.project(to, fe.x, 0, fe.z)
+  check(near(u, 176, 1e-6) and near(v, 70, 1e-6), "a battler's anchor is its feet's ground")
+
+  pad.x = 0.15
+  L = hold(s, 30)
+  check(L.yaw == 0 and not L.on, "the stick's dead zone does nothing")
+  pad.x = -1
+  L = hold(s, 240)
+  check(near(L.yaw, -Orbit.YAW_MAX, 1e-9) and L.on, "a held stick turns the view as far as 45 degrees, no further")
+  pad.x = 0
+  L = hold(s, 120)
+  check(near(L.eyaw, -Orbit.YAW_MAX, 1e-9), "... and it stays where it is left")
+  fe, fp = L.feet.enemy, L.feet.player
+  local gx, gz = Camera.ground(L.pose, fe.u, fe.v, 0)
+  local hx, hz = Camera.ground(L.pose, fp.u, fp.v, 0)
+  check(near(gx, fe.x, 1e-6) and near(gz, fe.z, 1e-6) and near(hx, fp.x, 1e-6) and near(hz, fp.z, 1e-6),
+    "turned, each battler is drawn standing on its own ground")
+  check(fe.u ~= 176 and fp.u ~= 72, "... which the turn has moved across the canvas")
+  local function box(f)
+    local F, B = FEET[f.side], SPRITES[f.side]
+    return f.u + (B[1] - F[1]) * f.r, f.v + (B[2] - F[2]) * f.r, f.u + (B[3] - F[1]) * f.r, f.v + (B[4] - F[2]) * f.r
+  end
+  local ok = true
+  for _, f in ipairs({ fe, fp }) do
+    local a, b, c, d = box(f)
+    if a < -0.6 or b < -0.6 or c > 240.6 or d > 112.6 then ok = false end
+  end
+  check(ok and L.em >= 1, "... both battlers kept inside the view over the text box (pulled back " .. L.em .. ")")
+  check(Orbit.badness(s, L.yaw, L.pitch) == 0, "... neither covering the other")
+
+  pad.down = true
+  L = frame(s)
+  pad.down = false
+  L = hold(s, 240)
+  check(L.yaw == 0 and L.eyaw == 0 and L.epitch == L.p0 and not L.on and L.feet.enemy.u == 176,
+    "R3 brings the view back to rest, exactly")
+
+  -- turned the other way the two stand side by side
+  pad.x = 1
+  L = hold(s, 240)
+  pad.x = 0
+  check(near(L.yaw, Orbit.YAW_MAX, 1e-9) and L.feet.enemy.u - L.feet.player.u > 100,
+    "turned the other way, the two stand side by side")
+  pad.down = true
+  frame(s)
+  pad.down = false
+  hold(s, 240)
+  -- a nearer battler covering a farther one: bigger Pokemon, turned until they line up
+  Orbit.SPRITES = { enemy = { 112, -40, 240, 72 }, player = { 0, 0, 144, 114 } }
+  pad.x = -1
+  L = hold(s, 240)
+  pad.x = 0
+  check(L.yaw < 0 and L.yaw > -Orbit.YAW_MAX and Orbit.badness(s, L.yaw, L.pitch) == 0
+    and Orbit.badness(s, -Orbit.YAW_MAX, L.pitch) > 0,
+    ("big ones: the turn stops before the nearer covers the farther (%.1f degrees)"):format(math.deg(L.yaw)))
+  Orbit.SPRITES = SPRITES
+  pad.down = true
+  frame(s)
+  pad.down = false
+  hold(s, 240)
+
+  pad.y = -1
+  L = hold(s, 240)
+  check(L.pitch >= Orbit.PITCH_MIN - 1e-9 and L.pitch < L.p0,
+    ("the stick pushed up lowers the camera, no lower than 10 degrees (%.1f)"):format(math.deg(L.pitch)))
+  pad.y = 1
+  L = hold(s, 400)
+  check(near(L.pitch, Orbit.PITCH_MAX, 1e-9), "... pulled down raises it, no higher than 75 degrees")
+  check(L.flat > 1, "... the shadows rounder seen from above")
+  pad.y = 0
+  L = frame(s, false)
+  check(not L.on and L.yaw == 0 and L.pitch == L.p0 and L.feet.player.u == 72,
+    "not allowed (the entrance, the option off): at rest at once")
+
+  -- the mouse: a right-button drag turns it, a double-click recentres; ignored when no 3D battle
+  hold(s, 2)
+  check(Orbit.pointer({ source = "mouse", phase = "pressed", button = 2 }, t) == true,
+    "a right-button press over a 3D battle is the camera's")
+  Orbit.pointer({ source = "mouse", phase = "moved", dx = -60, dy = 0 }, t)
+  Orbit.pointer({ source = "mouse", phase = "released", button = 2 }, t)
+  L = hold(s, 5)
+  check(near(L.yaw, -60 * Orbit.MOUSE, 1e-9), "... its drag turns the view")
+  Orbit.pointer({ source = "mouse", phase = "pressed", button = 2 }, t + 0.01)
+  Orbit.pointer({ source = "mouse", phase = "released", button = 2 }, t + 0.01)
+  Orbit.pointer({ source = "mouse", phase = "pressed", button = 2 }, t + 0.1)
+  Orbit.pointer({ source = "mouse", phase = "released", button = 2 }, t + 0.1)
+  L = hold(s, 5)
+  check(L.yaw == 0, "... a double-click recentres it")
+  check(Orbit.pointer({ source = "mouse", phase = "pressed", button = 1 }, t) == false, "a left click is the game's")
+  check(Orbit.pointer({ source = "mouse", phase = "pressed", button = 2 }, t + 60) == false,
+    "no 3D battle shown: the right button is the game's")
+  hold(s, 240)
+
+  -- a wall stands between the turned camera and the player's Pokemon: the turn stops before it
+  local s2 = { to = Camera.pose(20.5, 30.5), progress = 1 }
+  frame(s2)
+  local Lt = Orbit.look(s2)
+  local yawW = -math.rad(30)
+  local m = Orbit.fit(s2, yawW, Lt.p0)
+  local pose = {}
+  do
+    -- (the rig as Orbit turns it, rebuilt here: the target turned about the middle)
+    local mx, mz = (Lt.feet.enemy.x + Lt.feet.player.x) / 2, (Lt.feet.enemy.z + Lt.feet.player.z) / 2
+    local c, sn = math.cos(yawW), math.sin(yawW)
+    local dx, dz = s2.to.tx - mx, s2.to.tz - mz
+    Camera.pose(mx + dx * c + dz * sn, mz - dx * sn + dz * c, Lt.p0, s2.to.dist * m, 0, yawW, pose)
+  end
+  local ex, _, ez = Camera.basis(pose)
+  local ax, az = Lt.feet.player.x, Lt.feet.player.z
+  local cells = {}
+  for i = 1, 2 do
+    local wx, wz = ax + (ex - ax) * (0.3 + 0.1 * i), az + (ez - az) * (0.3 + 0.1 * i)
+    local cx, cy = math.floor(wx), math.floor(wz) - 1
+    -- (one cell across: the battle's own view passes beside it)
+    cells[cy * 1000 + cx] = { cx = cx, cy = cy, model = true, top = 4, kind = "blocked" }
+  end
+  s2.grid = { w = 0, h = 0, at = function(cx, cy) return cells[cy * 1000 + cx] end }
+  check(Orbit.badness(s2, 0, Lt.p0) == 0 and Orbit.badness(s2, yawW, Lt.p0) >= 1,
+    "a wall between the turned camera and a battler counts against the turn")
+  pad.x = -1
+  L = hold(s2, 240)
+  pad.x = 0
+  check(L.yaw > yawW, ("... the turn stops before it (%.1f degrees)"):format(math.deg(L.yaw)))
+
+  -- a double battle: its battlers' own anchors, the sides' singles feet only setting the middle
+  local s3 = { to = Camera.pose(20.5, 30.5), progress = 1 }
+  local function frame3()
+    Orbit.foot(s3, "enemy", "enemy", 176, 70, true)
+    Orbit.foot(s3, "player", "player", 72, 114, true)
+    Orbit.foot(s3, 0, "player", 32, 114)
+    Orbit.foot(s3, 2, "player", 90, 122)
+    Orbit.foot(s3, 1, "enemy", 200, 70)
+    Orbit.foot(s3, 3, "enemy", 152, 62)
+    t = t + 1 / 60
+    return Orbit.step(s3, t, true)
+  end
+  pad.x = -1
+  for _ = 1, 60 do L = frame3() end
+  pad.x = 0
+  check(L.on and L.feet[0].u ~= 32 and L.feet[3].u ~= 152 and L.feet[0].r ~= 1,
+    "a double battle's four battlers each turn with the view")
+  Orbit.readPad, Orbit.enabled = nil, false
+end
+
+-- the Battle Camera's zoom: the mouse wheel and the left stick's up and down; zoomed in no
+-- nearer than keeps most of each battler in view, out no farther than FAR
+do
+  local Orbit = dofile("src/scene/orbit.lua")
+  local FEET = { enemy = { 176, 70 }, player = { 72, 114 } }
+  local SPRITES = { enemy = { 144, 8, 208, 72 }, player = { 40, 48, 104, 112 } }
+  Orbit.Camera, Orbit.Stage, Orbit.FEET, Orbit.SPRITES = Camera, Stage, FEET, SPRITES
+  Orbit.enabled = true
+  local pad = { x = 0, y = 0, down = false, ly = 0 }
+  Orbit.readPad = function() return pad.x, pad.y, pad.down, pad.ly end
+  local t = 500
+  local s = { to = Camera.pose(20.5, 30.5), progress = 1 }
+  local function frame()
+    Orbit.foot(s, "enemy", "enemy", 176, 70)
+    Orbit.foot(s, "player", "player", 72, 114)
+    t = t + 1 / 60
+    return Orbit.step(s, t, true)
+  end
+  local function hold(n) local L for _ = 1, n do L = frame() end return L end
+  local L = hold(2)
+  check(Orbit.wheel(1, t) == true and Orbit.wheel(1, t + 60) == false,
+    "zoom: the wheel is the camera's over a 3D battle, the window's elsewhere")
+  L = hold(60)
+  check(near(L.zoom, Orbit.ZOOM_STEP, 1e-9) or L.zoom > Orbit.ZOOM_STEP,
+    ("a notch up zooms in (as far as keeps them in view: %.3f)"):format(L.zoom))
+  for _ = 1, 6 do Orbit.wheel(-1, t) hold(1) end
+  L = hold(120)
+  check(L.zoom > 1 and L.em > 1 and L.on and L.feet.enemy.r < 1,
+    ("notches down zoom out: the camera farther, the battlers smaller (%.2f)"):format(L.em))
+  for _ = 1, 40 do Orbit.wheel(-1, t) hold(1) end
+  L = hold(120)
+  check(L.zoom <= Orbit.ZOOM_MAX + 1e-9 and L.em <= Orbit.FAR + 1e-9, "... no farther than its reach")
+  for _ = 1, 60 do Orbit.wheel(1, t) hold(1) end
+  L = hold(180)
+  local ok = true
+  for _, f in pairs({ L.feet.enemy, L.feet.player }) do
+    local F, B = FEET[f.side], SPRITES[f.side]
+    local u0, v0 = f.u + (B[1] - F[1]) * f.r, f.v + (B[2] - F[2]) * f.r
+    local u1, v1 = f.u + (B[3] - F[1]) * f.r, f.v + (B[4] - F[2]) * f.r
+    local w = math.min(u1, math.max(240, B[3])) - math.max(u0, math.min(0, B[1]))
+    local h = math.min(v1, math.max(112, B[4])) - math.max(v0, math.min(0, B[2]))
+    if w * h < (Orbit.KEEP - 0.02) * (u1 - u0) * (v1 - v0) then ok = false end
+  end
+  check(L.zoom >= Orbit.ZOOM_MIN - 1e-9 and ok,
+    ("zoomed all the way in, most of each battler stays in view (%.2f)"):format(L.em))
+  local zIn = L.zoom
+  Orbit.wheel(-1, t)
+  L = hold(5)
+  check(L.zoom > zIn, "... and a notch back out takes effect at once (no notches saved up)")
+  pad.down = true
+  frame()
+  pad.down = false
+  L = hold(240)
+  check(L.zoom == 1 and L.ezoom == 1 and not L.on, "R3 brings the zoom back too")
+  pad.ly = 1
+  L = hold(60)
+  pad.ly = 0
+  check(L.zoom > 1, "the left stick pulled down zooms out")
+  pad.ly = -1
+  L = hold(240)
+  pad.ly = 0
+  check(L.zoom < 1, "... pushed up, in")
+  pad.ly = -0.15
+  local z0 = L.zoom
+  L = hold(30)
+  pad.ly = 0
+  check(L.zoom == z0, "... its dead zone does nothing")
+  L = frame()
+  Orbit.enabled = false
+  L = frame()
+  check(L.zoom == 1 and L.ezoom == 1 and not L.on, "the option off: unzoomed at once")
+  -- the left stick off the game's menus while the camera has it (its default up and down)
+  local input = { effectiveStickBindings = { leftstick_up = "up", leftstick_down = "down",
+    leftstick_left = "left", lsup = "up", lsdown = "down" } }
+  local e = input.effectiveStickBindings
+  Orbit.gateSticks(input, true)
+  check(e.leftstick_up == nil and e.leftstick_down == nil and e.lsup == nil and e.leftstick_left == "left",
+    "the left stick's up and down are the camera's in a 3D battle; its left and right the menus'")
+  Orbit.gateSticks(input, true)
+  Orbit.gateSticks(input, false)
+  check(e.leftstick_up == "up" and e.leftstick_down == "down" and e.lsdown == "down", "... given back after")
+  -- (the engine rebuilt its bindings meanwhile: the new table is its own)
+  Orbit.gateSticks(input, true)
+  input.effectiveStickBindings = { leftstick_up = "up", leftstick_down = "down" }
+  Orbit.gateSticks(input, true)
+  check(input.effectiveStickBindings.leftstick_up == nil, "... a rebuilt table taken too")
+  Orbit.gateSticks(input, false)
+  check(input.effectiveStickBindings.leftstick_up == "up", "... and given back")
+  Orbit.readPad, Orbit.enabled = nil, false
 end
 
 print(("%d/%d checks passed (battle scene)"):format(passed, passed + failed))

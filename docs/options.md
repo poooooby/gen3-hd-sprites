@@ -3,8 +3,8 @@
 [← Back to the README](../README.md)
 
 Pick **WOOBLEVIEW** on the game's own OPTION screen, or open **OPTIONS → MODS → WoobleView**.
-Pressing B there takes you straight back. Battle Textbox, Battle Scene and the five options after
-it only show in FireRed, LeafGreen, Ruby, Sapphire and Emerald.
+Pressing B there takes you straight back. Battle Textbox and the 3D battle options only show in
+FireRed, LeafGreen, Ruby, Sapphire and Emerald.
 
 ## Sharp Pokémon
 
@@ -30,6 +30,7 @@ More in [Fitting battles to your screen](fitting-the-screen.md).
 |---|---|---|---|
 | **Battle Scene** | Classic / Overworld | Classic | Overworld: battles set in the 3D world around you. Needs Battle Fit. |
 | **3D Sizing** | Off / Minimal / Medium / Accurate | Medium | With Battle Scene on Overworld, how true to life the Pokémon's sizes are. Medium: real sizes, with the biggest gently scaled down to about 5 m tall and 6 m wide and the smallest raised so they're easy to see. Minimal: like Medium, with everyone drawn toward the middle. Accurate: every Pokémon at its real measured height, scaled down only to fit the screen or the room. Off: drawn and framed as in Classic battles, at your sprite pack's own sizes. |
+| **Battle Camera** | On / Off | On | With Battle Scene on Overworld, look around the battle: the right stick on a controller, or a drag with the right mouse button, turns the view up to 45° either way and tilts it from near the ground to almost overhead; the left stick's up and down, or the mouse wheel, zoom in and out (the D-pad works the battle's menus meanwhile). Both Pokémon are always in view, and trees, signs and buildings in front of them stand in front of them. It stays where you leave it; click the right stick (or double-click the right mouse button) to bring it back. Needs a sprite mod that draws the battle Pokémon in HD. Off: the battle's fixed view. |
 | **Build 3D Cache** | Press A | – | Builds the 3D world now (a minute or two) instead of a little at a time while you play. |
 | **Clear 3D Cache** | Press A | – | Deletes the saved 3D world. It's rebuilt when needed. |
 | **Scene Blur** | On / Off | On | A soft miniature-style blur on the far and near ground. |
