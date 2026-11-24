@@ -81,6 +81,8 @@ shadows under their feet.
 - **Mouse:** Drag with the right mouse button to turn and tilt, and roll the wheel to zoom;
   double-click the right button to bring the view back. Over a 3D battle the wheel zooms the
   camera, not the game window.
+- **Your way round:** If the camera turns the opposite way to what you expect, **Camera Invert**
+  swaps the stick's and the drag's left and right, up and down, or both.
 - **Always in view:** The camera pulls back as far as it needs to keep every Pokémon on screen,
   and zooms in only as far as keeps most of each one in view. It stops turning before one
   Pokémon would hide most of another, or before a tree, a wall or a building would hide most of

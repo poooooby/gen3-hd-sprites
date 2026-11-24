@@ -1629,7 +1629,8 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   `SNAP`; then projects each anchor (`f.u, f.v`, and `f.r`: its rest depth over its depth now).
   `look.on` is false at rest, and then nothing anywhere differs from no camera at all. **Input:**
   the right stick polled (`Orbit.readPad`: every gamepad's `rightx` / `righty`, the largest;
-  `DEADZONE`, `RATE` radians a second; R3's press edge recentres), never consumed, so
+  `DEADZONE`, `RATE` radians a second; R3's press edge recentres; the Camera Invert option,
+  `Orbit.invertX` / `invertY`, negates the stick's and the drag's yaw / pitch), never consumed, so
   `input.gamepad` stays unwrapped and a CONTROLS binding of `rightstick_*` still works; and a
   right-mouse drag through `input.pointer` (main.lua; `Orbit.pointer`, claimed only within
   0.25 s of a frame that let the camera turn, `Orbit.liveAt`; a right double-click recentres).

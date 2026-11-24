@@ -58,6 +58,8 @@ Orbit.SNAP = 1e-4                          -- radians (and dolly) close enough t
 Orbit.Camera, Orbit.Stage, Orbit.FEET, Orbit.SPRITES = nil, nil, nil, nil
 -- the Battle Camera option (main.lua)
 Orbit.enabled = false
+-- the Camera Invert option (main.lua): the stick's and the drag's turn (X) and tilt (Y) swapped
+Orbit.invertX, Orbit.invertY = false, false
 
 -- (the right stick, read by Orbit.readPad: overridden by the tests; the pads kept, listed again
 -- only when their count changes - getJoysticks makes a table each call)
@@ -397,6 +399,8 @@ local function input(dt)
   local notches = mouse.wheel - dead(ly or 0) * Orbit.ZOOM_RATE * dt / math.log(1 / Orbit.ZOOM_STEP)
   mouse.dx, mouse.dy, mouse.wheel = 0, 0, 0
   if mouse.recentre then re, mouse.recentre = true, false end
+  if Orbit.invertX then dyaw = -dyaw end
+  if Orbit.invertY then dpitch = -dpitch end
   return dyaw, dpitch, notches, re
 end
 

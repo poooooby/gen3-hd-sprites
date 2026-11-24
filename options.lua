@@ -54,6 +54,15 @@ return {
     description = "With Battle Scene on OVERWORLD: look around the battle in 3D. The right stick on a controller (or dragging with the right mouse button) turns the view up to 45 degrees left or right and tilts it from near the ground to almost overhead, circling the middle of the battle with both Pokemon standing on the ground and always in view; the left stick's up and down (or the mouse wheel) zoom in and out, while the D-pad works the battle's menus. Trees, signs and buildings in front of a Pokemon stand in front of it. The view stays where you leave it; click the right stick (or double-click the right mouse button) to bring it back. Needs a sprite mod that draws the battle Pokemon in HD. Off: the battle's fixed view.",
   },
   {
+    key = "camera_invert",
+    label = "Camera Invert",
+    type = "choice",
+    default = "off",
+    choices = { { "OFF", "off" }, { "X", "x" }, { "Y", "y" }, { "BOTH", "both" } },
+    visible_if = { key = "battle_scene", equals = "overworld" },
+    description = "With Battle Camera on: which way the right stick and a right-mouse drag turn the view. X: left and right swapped. Y: up and down swapped. BOTH: both swapped. OFF: as they are.",
+  },
+  {
     key = "scene_build",
     label = "Build 3D Cache",
     type = "choice",

@@ -84,6 +84,7 @@ Everything is on by default except the 3D battles, which you can turn on wheneve
 | **Battle Scene** | Classic | Overworld: battles in the 3D world. |
 | **3D Sizing** | Medium | How true to life the sizes are in 3D battles. |
 | **Battle Camera** | On | Look around and zoom in 3D battles with a controller or mouse. |
+| **Camera Invert** | Off | Swap the camera's left-right, up-down, or both. |
 | **Build / Clear 3D Cache** | – | Build the 3D world now, or delete it. |
 | **Scene Blur** | On | A soft miniature-style blur in 3D battles. |
 | **Time of Day** | On | 3D battles lit by the time of day. |

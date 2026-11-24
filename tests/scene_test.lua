@@ -2415,6 +2415,23 @@ do
   Orbit.pointer({ source = "mouse", phase = "released", button = 2 }, t + 0.1)
   L = hold(s, 5)
   check(L.yaw == 0, "... a double-click recentres it")
+
+  -- Camera Invert: the stick's and the drag's turn (X) and tilt (Y) swapped
+  Orbit.invertX, Orbit.invertY = true, true
+  pad.x = -0.6
+  L = hold(s, 30)
+  pad.x = 0
+  check(L.yaw > 0, "Camera Invert X: the stick pushed left turns the view the other way")
+  local p1 = L.pitch
+  Orbit.pointer({ source = "mouse", phase = "pressed", button = 2 }, t)
+  Orbit.pointer({ source = "mouse", phase = "moved", dx = 0, dy = 40 }, t)
+  Orbit.pointer({ source = "mouse", phase = "released", button = 2 }, t)
+  L = hold(s, 5)
+  check(near(L.pitch, p1 - 40 * Orbit.MOUSE, 1e-9), "Camera Invert Y: a drag down tilts the view the other way")
+  Orbit.invertX, Orbit.invertY = false, false
+  Orbit.recentre(s)
+  L = hold(s, 30)
+  check(L.yaw == 0 and L.pitch == L.p0, "... and back at rest")
   check(Orbit.pointer({ source = "mouse", phase = "pressed", button = 1 }, t) == false, "a left click is the game's")
   check(Orbit.pointer({ source = "mouse", phase = "pressed", button = 2 }, t + 60) == false,
     "no 3D battle shown: the right button is the game's")

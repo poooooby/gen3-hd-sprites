@@ -53,7 +53,7 @@ return function(mod)
   if type(schema) == "table" and Engine.generation() < 3 then
     local gen3Only = { battle_scene = true, scene_build = true, scene_clear = true, scene_blur = true,
                        scene_cache = true, battle_textbox = true, scene_daytime = true, scene_sizes = true,
-                       battle_camera = true }
+                       battle_camera = true, camera_invert = true }
     if Engine.generation() == 2 then gen3Only.fill_screen = true end
     local kept = {}
     for _, row in ipairs(schema) do
@@ -396,7 +396,13 @@ return function(mod)
       -- (the time of day the scene is lit by: src/clock.lua, the game's clock or WoobleDex's)
       Engine.Scene.timeOfDay = Clock and option("scene_daytime", true) ~= false and Clock.minute or nil
       -- (the Battle Camera: the right stick or a right-mouse drag turns the 3D battle's view)
-      if Engine.Scene.Orbit then Engine.Scene.Orbit.enabled = option("battle_camera", true) ~= false end
+      if Engine.Scene.Orbit then
+        local O = Engine.Scene.Orbit
+        O.enabled = option("battle_camera", true) ~= false
+        -- (Camera Invert: the stick's and the drag's left-right and up-down swapped)
+        local inv = option("camera_invert", "off")
+        O.invertX, O.invertY = inv == "x" or inv == "both", inv == "y" or inv == "both"
+      end
     end
   end
 
