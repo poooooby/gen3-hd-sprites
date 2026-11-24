@@ -58,7 +58,8 @@ Set **Battle Scene** to **Overworld** and battles leave the flat backdrop behind
 swoops down from the overworld, and you fight on open ground near where you stand. Around you
 are the towns, gyms, trees and buildings, rebuilt in 3D from the game's own art and lit by the
 time of day and the weather. A battle's own weather fills the world too, from a Rain Dance to a
-sandstorm, and WoobleDex's terrains glow on the ground under the battlers.
+sandstorm, and WoobleDex's terrains glow on the ground under the battlers, ringed in their
+colour, with leaves, sparks, mist or rings rising from them.
 
 Pokémon stand at their real sizes, so a Wailord towers over a Pikachu. **3D Sizing** lets you
 choose how true to life that is. The camera follows the battle, pulling back for giants and

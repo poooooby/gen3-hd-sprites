@@ -1607,6 +1607,15 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   `light.terrain` / `terrainGlow` (breathing, `BW.glow`), drawn by the world shader as a glow
   round the line between the battlers' feet (`Scene.FEET` cast onto the ground at the pose's
   height, `uTerrainSeg`), within `TERRAIN_RADIUS` tiles of it and about the ground's height.
+  The fill takes the ground to the terrain's hue at the ground's own brightness, plus a lift
+  toward the colour (`BW.TERRAIN[k].lift`, small for Misty's pale pink so it doesn't whiten);
+  a rim (`.rim`, deeper) at `RIM_AT` of the reach, `RIM_WIDTH` half wide (`uTerrainAt.zw`,
+  `uTerrainRim`), outlines the patch on ground of its own colour. **Motes** (`BW.motes`, drawn by
+  `Render.after` after the weather, depth tested, unwritten): one static mesh per kind
+  (`BW.MOTES` / `BW.SHAPES`: leaves, sparks, puffs, rings, named by `.motes`), each mote's
+  corners carrying its seeds; the shader picks each life's spot in the patch from them and the
+  life's number, rises, sways, spins or grows it and fades it with its life and the glow (its
+  fade and breath). Nothing made a frame (kept uniform tables).
   Per-frame only: in the cache guard's FRESH list.
 - `orbit.lua` (WoobleView's own): the Battle Camera, the 3D battle's view turned by the player
   (the Battle Camera option, `Orbit.enabled`). **Anchors:** each battler's rest canvas foot

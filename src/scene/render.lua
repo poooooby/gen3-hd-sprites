@@ -88,10 +88,12 @@ uniform vec3 uSky;
 uniform vec3 uMoon;
 // (a battle's terrain, src/scene/battle_weather.lua: a glow on the ground round the line between
 // the battlers' feet - uTerrainSeg their xz, uTerrain its colour and strength, uTerrainAt the
-// ground's height and the glow's reach)
+// ground's height, the glow's reach and its rim's middle and half width (shares of the reach),
+// uTerrainRim the rim's colour and how far the glow lifts the ground toward its own)
 uniform vec4 uTerrainSeg;
 uniform vec4 uTerrain;
-uniform vec2 uTerrainAt;
+uniform vec4 uTerrainAt;
+uniform vec4 uTerrainRim;
 vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
   // (a standing cell's own ground copy, marked by its alpha: gone once the cards stand)
   if (color.a < 0.75 && uHideFlat > 0.5) discard;
@@ -112,8 +114,16 @@ vec4 effect(vec4 color, Image tex, vec2 tc, vec2 sc) {
     vec2 a = uTerrainSeg.xy, ab = uTerrainSeg.zw - uTerrainSeg.xy, d = vWorld.xz - a;
     float along = clamp(dot(d, ab) / max(dot(ab, ab), 0.0001), 0.0, 1.0);
     float r = length(d - ab * along) / uTerrainAt.y;
-    float g = (1.0 - smoothstep(0.35, 1.0, r)) * (1.0 - smoothstep(0.5, 1.5, abs(vWorld.y - uTerrainAt.x))) * uTerrain.w;
-    lit = mix(lit, lit * (0.45 + 1.0 * uTerrain.rgb), 0.8 * g) + uTerrain.rgb * (0.40 * g);
+    float h = 1.0 - smoothstep(0.5, 1.5, abs(vWorld.y - uTerrainAt.x));
+    float g = (1.0 - smoothstep(0.30, uTerrainAt.z, r)) * h * uTerrain.w;
+    // (the fill: the ground in the terrain's colour at its own brightness, and lifted toward it)
+    vec3 luma = vec3(0.299, 0.587, 0.114);
+    float y = dot(lit, luma);
+    vec3 hue = uTerrain.rgb * (1.25 * y / max(dot(uTerrain.rgb, luma), 0.05));
+    lit = mix(lit, hue, 0.7 * g) + uTerrain.rgb * (uTerrainRim.w * g);
+    // (the rim: a thin band in the deeper colour, the patch's outline on any ground)
+    float e = (1.0 - smoothstep(0.0, uTerrainAt.w, abs(r - uTerrainAt.z))) * h * min(1.0, 1.4 * uTerrain.w);
+    lit = mix(lit, uTerrainRim.rgb * (0.55 + 0.6 * y), 0.85 * e);
   }
   float f = clamp((vDepth - uFog.x) / (uFog.y - uFog.x), 0.0, 1.0) * uFog.z;
   return vec4(mix(mix(lit, uHaze, f), uSky, vFade), 1.0);
@@ -888,7 +898,7 @@ end
 -- effects read them the same frame)
 local drawPose, drawView, drawGrade, drawDapple, afterO = {}, {}, {}, {}, { eye = {}, forward = {}, right = {}, up = {} }
 -- (the terrain glow's uniforms, kept: src/scene/battle_weather.lua)
-local drawTerrainSeg, drawTerrain, drawTerrainAt = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 1.9 }
+local drawTerrainSeg, drawTerrain, drawTerrainAt, drawTerrainRim = { 0, 0, 0, 0 }, { 0, 0, 0, 0 }, { 0, 1.9, 0.9, 0.07 }, { 0, 0, 0, 0 }
 local ONE3, DEFAULT_SUN = { 1, 1, 1 }, { dx = 0.85, dz = 0.55 }
 
 function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h, sky, light)
@@ -971,6 +981,9 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
       local c = light.terrain
       drawTerrain[1], drawTerrain[2], drawTerrain[3], drawTerrain[4] = c[1], c[2], c[3], glow
       drawTerrainAt[1], drawTerrainAt[2] = gy, light.terrainRadius or 1.9
+      drawTerrainAt[3], drawTerrainAt[4] = light.terrainRimAt or 0.9, light.terrainRimWidth or 0.07
+      local rim = c.rim or c
+      drawTerrainRim[1], drawTerrainRim[2], drawTerrainRim[3], drawTerrainRim[4] = rim[1], rim[2], rim[3], c.lift or 0.4
     else
       glow = 0
     end
@@ -979,6 +992,7 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   sh:send("uTerrainSeg", seg)
   sh:send("uTerrain", drawTerrain)
   sh:send("uTerrainAt", drawTerrainAt)
+  sh:send("uTerrainRim", drawTerrainRim)
   local sat = light and Render.SATURATION or 0
   local sent
   for _, m in ipairs(scene.meshes) do
@@ -1021,6 +1035,13 @@ function Render.after(G, Camera, target, p, proj, depth, haze, fog, w, h, light)
   if S then pcall(S.air, G, target, o) end
   if W and (light.weatherAmount or 0) > 0 then
     pcall(W.draw, G, o, light.weather, light.weatherAmount, light.lightning or 0)
+  end
+  -- (the terrain's motes rising from its glow, src/scene/battle_weather.lua: where Render.draw
+  -- laid the glow this frame)
+  local BW = Render.BattleWeather
+  if BW and BW.motes and light.terrain and drawTerrain[4] > 0 then
+    local ok, err = pcall(BW.motes, G, o, light.terrain, drawTerrainSeg, drawTerrainAt, drawTerrain[4])
+    if not ok then BW.moteError = tostring(err) end
   end
   -- the finish: the bloom taken from the world as it stands, the blurs laid over it, then the
   -- bloom added

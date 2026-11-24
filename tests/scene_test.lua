@@ -2238,6 +2238,41 @@ do
   for t = 13, 16, 0.05 do wk, wa, tc, ta = BW.frame(s, t) end
   check(wa == 0 and ta == 0, "the battle over: they fade out")
   BW.req, BW.terrainOf = nil, nil
+  -- each terrain's rim (deeper than its glow, the patch's outline) and the motes it sheds
+  local outlined, shed = true, true
+  local function luma(c) return 0.299 * c[1] + 0.587 * c[2] + 0.114 * c[3] end
+  for name, c in pairs(BW.TERRAIN) do
+    if not (c.rim and luma(c.rim) < luma(c) * 0.75 and c.lift and c.lift >= 0 and c.lift <= 0.5) then outlined = false end
+    if not (BW.MOTES[c.motes] and BW.SHAPES[c.motes]) then shed = false; print("  no motes for " .. name) end
+  end
+  check(outlined, "each terrain's rim: deeper than its glow")
+  check(shed, "each terrain sheds its own motes (Grassy leaves, Electric sparks, Misty puffs, Psychic rings)")
+  check(BW.TERRAIN.MISTY.lift < BW.TERRAIN.ELECTRIC.lift, "... Misty's pale pink lifts the ground little (no whitening)")
+  local verts = BW.moteVerts("leaves")
+  local kind, shape = BW.MOTES.leaves, BW.SHAPES.leaves
+  local inBox, lo, hi = true, 1, 0
+  for _, v in ipairs(verts) do
+    for k = 1, 4 do if not (v[k] >= 0 and v[k] < 1) then inBox = false end end
+    lo, hi = math.min(lo, v[3]), math.max(hi, v[3])
+  end
+  check(#verts == kind.count * #shape and inBox, "a mote mesh: each mote's corners, its seeds in [0, 1)")
+  check(lo < 0.05 and hi > 0.95, "... their lives spread across the cycle (none all at once)")
+  check(BW.moteVerts("nothing") == nil, "... none for an unknown kind")
+  -- drawn: once, the blend put back; nothing with no glow or no terrain
+  local drawn, blend = 0, nil
+  local G = {
+    newShader = function() return { send = function() end } end,
+    newMesh = function() return {} end,
+    setShader = function() end, setDepthMode = function() end, setColor = function() end,
+    setBlendMode = function(m) blend = m end,
+    draw = function() drawn = drawn + 1 end,
+  }
+  local o = { view = {}, proj = {}, depth = {}, fog = {}, haze = {}, seconds = 1e6, right = { 1, 0, 0 }, up = { 0, 1, 0 } }
+  local seg, at = { 0, 0, 4, 0 }, { 0, 1.9 }
+  check(BW.motes(G, o, BW.TERRAIN.ELECTRIC, seg, at, 0) == false and drawn == 0, "motes: none with the glow gone")
+  check(BW.motes(G, o, nil, seg, at, 1) == false and drawn == 0, "... none without a terrain")
+  check(BW.motes(G, o, BW.TERRAIN.ELECTRIC, seg, at, 0.8) == true and drawn == 1 and blend == "alpha"
+    and BW.lastMotes == "sparks", "... Electric's sparks drawn, the blend put back")
 end
 
 -- the Battle Camera (src/scene/orbit.lua): the battlers anchored on the ground, the view turned

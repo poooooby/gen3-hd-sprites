@@ -118,7 +118,10 @@ however far the camera pulls back.
   the route's own weather comes back.
 - **Terrain:** With [WoobleDex](https://github.com/poooooby/national_dex_gen3), Electric, Grassy,
   Misty and Psychic Terrain glow on the ground between the battlers in yellow, green, pink or
-  violet, breathing slowly while they last.
+  violet, breathing slowly while they last. A deeper ring of the same colour marks the patch's
+  edge, so it stands out on any ground, even Grassy Terrain on a grassy route. Each sheds
+  something that drifts up and fades: Grassy Terrain little leaves, Electric Terrain sparks,
+  Misty Terrain puffs of mist and Psychic Terrain rings.
 - **Time of day:** With **Time of Day** on, outdoor battles are lit by the clock: a warm morning,
   the plain day, an orange evening and a blue, moonlit night, easing from one to the next, under
   a sky that deepens overhead with the hour and glows warm at sunset.

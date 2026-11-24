@@ -29,6 +29,8 @@ return function(deps)
   end
   -- (optional: src/scene/screenfx.lua, the diorama's blur and the entrance's effects)
   if Render and deps.ScreenFx then Render.ScreenFx = deps.ScreenFx end
+  -- (optional: src/scene/battle_weather.lua, the terrain's motes drawn after the weather)
+  if Render and deps.BattleWeather then Render.BattleWeather = deps.BattleWeather end
   local hd = deps.hd
 
   local Scene = { enabled = false, Camera = Camera, Stage = Stage, Tune = deps.Tune, Trees = deps.Trees, Relief = deps.Relief }
@@ -5106,6 +5108,7 @@ return function(deps)
     light.terrain, light.terrainFeet = terrain, (s.look and s.look.on and s.look.uv) or Scene.FEET
     light.terrainGlow = terrain and BW.glow(tAmount, love.timer.getTime()) or 0
     light.terrainRadius = BW and BW.TERRAIN_RADIUS or nil
+    light.terrainRimAt, light.terrainRimWidth = BW and BW.RIM_AT or nil, BW and BW.RIM_WIDTH or nil
     -- (CtrVoxel_DrawsSand: the world blows the sandstorm itself, src/gen3.lua drops the battle's
     -- sandstorm picture)
     s.drawsSand = light.weather == "sand" and (light.weatherAmount or 0) > 0 and Render.Weather ~= nil
