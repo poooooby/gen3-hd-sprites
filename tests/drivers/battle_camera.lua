@@ -65,6 +65,30 @@ local function body(game, log)
     error("no species " .. name)
   end
   local spot = env("CAM_SPOT") or "EM_ROUTE101:10:10:down"
+  -- (MAP:find=METATILE: stood where that metatile covers the most of the 7x7 cells round it,
+  -- e.g. EM_ROUTE120:find=0x015 - in the thick of the long grass)
+  local findMap, findMid = spot:match("([^:]+):find=(%w+)")
+  if findMap then
+    pcall(Map.load, nil, game, findMap, { x = 10, y = 10, facing = "down" })
+    local FM = require("src.core.game3.fldeff_misc")
+    local want = tonumber(findMid)
+    local function is(x, y)
+      local ok, m = pcall(FM.metatileAt, x, y)
+      return ok and m and m % 1024 == want
+    end
+    local best, bx, by = -1, 10, 10
+    for y = 3, 160 do
+      for x = 3, 80 do
+        if is(x, y) then
+          local n = 0
+          for dy = -3, 3 do for dx = -3, 3 do if is(x + dx, y + dy) then n = n + 1 end end end
+          if n > best then best, bx, by = n, x, y end
+        end
+      end
+    end
+    log(("spot: %s %d,%d (%d of 49 cells %s)"):format(findMap, bx, by, best, findMid))
+    spot = ("%s:%d:%d:down"):format(findMap, bx, by)
+  end
   local mapId, sx, sy, facing = spot:match("([^:]+):(%d+):(%d+):?(%a*)")
   local px, py = tonumber(sx), tonumber(sy)
   facing = facing ~= "" and facing or "down"

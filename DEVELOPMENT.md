@@ -1682,7 +1682,11 @@ Modules in `src/scene/`, loaded by `main.lua` and handed to `init.lua`:
   screen through `OCC_GLSL` (`hd.occEnd`): each pixel's world depth `b / (z - a)` from the depth
   texture, left out where it stands nearer than the anchor's view depth (`f.d`) by more than
   `OCC_BIAS` (0.75 tiles: the ground just before the feet never cuts them), faded over
-  `OCC_SOFT`. At rest too (the stage search keeps the view clear, so rarely anything). Kept tables only
+  `OCC_SOFT`. At rest too (the stage search keeps the view clear, so rarely anything). Long
+  grass's tufts (`Trees.GRASS` cards) are their own mesh layer, `tufts`, drawn last with depth
+  tested but unwritten, so they never reach the depth the occlusion reads (else a small Pokemon
+  sank into the grass it stood in); laid north to south, the nearer row lands over the farther
+  for any turn under 90 degrees. Kept tables only
   (the look, its anchors, poses and boxes; loops, no closures). In the cache guard's FRESH list.
 - `weather.lua`: the weather in the scene (MakeFog/DrawBanks, MakeWeather/DrawWeather and
   voxel_weather.v.pica as a GLSL shader). Rain, sand and ash: 768 streaks or 512 flakes built once,
@@ -2318,7 +2322,9 @@ the relief's lifted cells and layouts (`sceneRelief`) and the build time phase b
 renderer on a synthetic field), `battle_camera.lua` (the Battle Camera: `CAM` yaw:pitch shots, a
 held stick each way, a move each way at `CAM_MOVE_YAW`, the zoom, the option off; `CAM_DOUBLE=1` a
 double battle, `CAM_DYNAMAX=1` a Gym Leader's battle with the player's Charizard Dynamaxed (Galar
-Rising installed), `CAM_OCC_BIAS` the occlusion's bias; logs each battler's projected foot, scale, body box and the pose's badness), `bridge_dump.lua` (the Cycling Road's triangles, its sliced build
+Rising installed), `CAM_OCC_BIAS` the occlusion's bias (a large one turns it off),
+`CAM_SPOT=MAP:find=0x015` stands the player in the thickest patch of a metatile (there, long
+grass); logs each battler's projected foot, scale, body box and the pose's badness), `bridge_dump.lua` (the Cycling Road's triangles, its sliced build
 and its cache read; see `models/bridge.lua` above), `room_dump.lua` (the rooms' pieces; see
 `models/interiors.lua` above) and `roles_dump.lua` (`ROLES_LAYOUTS`: each layout's roles as
 `voxel_cells.py` prints them, to diff). The relief is checked against Emerald 3DS's own scripts

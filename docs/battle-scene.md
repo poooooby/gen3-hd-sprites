@@ -86,7 +86,8 @@ shadows under their feet.
   Pokémon would hide most of another, or before a tree, a wall or a building would hide most of
   one.
 - **In the world:** A tree, a sign, a wall or a building that stands between the camera and a
-  Pokémon is drawn in front of it, shadow and all, just as it would be in the world.
+  Pokémon is drawn in front of it, shadow and all, just as it would be in the world. Long grass
+  never hides a Pokémon standing in it, however small.
 - **Stays put:** The view stays where you leave it, through moves and turns. Each new battle
   starts at the usual view.
 - **Moves:** Move effects fly from where the attacker stands to where its target stands. Effects

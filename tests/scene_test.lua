@@ -385,6 +385,32 @@ do
     "the card stands on its cell's southern edge, a tile high, shaded")
   check(near(lo[1][1], -1) and near(lo[1][3], -1), "positions are relative to the origin")
   check(lo[1][4] > 0 and lo[1][4] < 1 / 256, "uvs are kept off the tile's edge")
+  -- long grass's tufts: a layer of their own (drawn last, leaving no depth: a Pokemon standing in
+  -- the grass is never cut out by it), laid north to south; a small tree's crown stays a tree's
+  local Trees = dofile("src/scene/trees.lua")
+  local timg = img("trees")
+  local field = Cells.build(fakeEnv({ "...", "...", "..." }), 0, 0, 3, 3)
+  for j = 0, 2 do
+    for i = 0, 2 do
+      local c = field.rows[j][i]
+      c.pair, c.mid = "general__petalburg", (i == 2 and j == 2) and 0x0C6 or 0x015
+    end
+  end
+  local tl = Render.vertices(field, tiles, 0, 0, { Trees = Trees, image = timg, outdoor = true })
+  local tufts, crowns = tl.tufts and tl.tufts[timg], tl.trees and tl.trees[timg]
+  check(tufts and #tufts == 8 * 6, "long grass: each cell's tuft in the tufts' layer (" .. tostring(tufts and #tufts) .. ")")
+  local rising = true
+  for k = 2, tufts and #tufts or 0 do
+    if tufts[k][3] < tufts[k - 1][3] - 1.5 then rising = false end
+  end
+  check(rising and tufts[1][3] < tufts[#tufts][3], "... laid north to south")
+  local tall = 0
+  for _, v in ipairs(crowns or {}) do if v[2] > 0.5 then tall = tall + 1 end end
+  check(tall > 0 and tall <= 6, "... a small tree's crown stays in the trees' layer, nothing else standing there")
+  local made = {}
+  local G = { newMesh = function() local m = { setTexture = function() end }; made[#made + 1] = m; return m end }
+  local meshes = Render.meshes(G, tl)
+  check(meshes and meshes[#meshes].layer == "tufts", "... the tufts' mesh drawn last")
 end
 
 -- -------------------------------------------------------------------- trees

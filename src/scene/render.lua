@@ -166,7 +166,8 @@ end
 --- light (optional) = { L = a src/scene/lighting.lua lighting, H = how far the mesh's frame lies
 --- under Emerald 3DS's world, in height and rows }: every face lit by the sun as theirs is.
 function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
-  local out = { lower = {}, upper = {}, trees = {}, models = {} }
+  -- (tufts: long grass's cards, drawn last and leaving no depth - Render.draw)
+  local out = { lower = {}, upper = {}, trees = {}, models = {}, tufts = {} }
   local LT = light and light.L
   local OFF = light and { ox, light.H, oz + light.H }
   -- a quad (corners { x, y, z }, uv rect) lit as `kind` says (src/scene/lighting.lua face4), or as
@@ -334,10 +335,12 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
   -- a tree's quad (corners in map cells, uvs in atlas texels), lifted with its cell (`lift`) and
   -- as far south (`shift`: a border tree's is its belt's, VoxelTree_EmitBorder)
   local lift, shift = 0, 0
+  -- (the cell being emitted is long grass: its tuft's card goes in the tufts' list)
+  local tuft = false
   local function putTree(a, b, c, d, u0, v0, u1, v1, what)
     local function rel(p) return { p[1] - ox, p[2] + lift, p[3] - oz + shift } end
     -- (lit: a crown's card as the rounded crown it stands for, voxel_tree.c; its ground as ground)
-    litQuad(list("trees", timg), rel(a), rel(b), rel(c), rel(d),
+    litQuad(list(tuft and what == "card" and "tufts" or "trees", timg), rel(a), rel(b), rel(c), rel(d),
       (u0 + e) / dim, (v0 + e) / dim, (u1 - e) / dim, (v1 - e) / dim, 1, 1,
       what == "card" and { rounded = true } or { refine = true, lift = lift })
   end
@@ -754,6 +757,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
         if part then
           -- (against rock it stands up steeper; on a band's rock or a one-level slope the relief
           -- lays its ground: src/scene/init.lua, src/scene/relief.lua treeStep)
+          tuft = part == Trees.GRASS
           Trees.emit(putTree, sec, cell.mid, cell.cx, cell.cy, part, function(x, y)
             local o = grid.at(x, y)
             -- (false: outside this map; and true besides when outside the scene's window)
@@ -761,6 +765,7 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
             if o.pair ~= cell.pair then return false end
             return Trees.part(sec, o.mid)
           end, { rock = cell.treeRock, noGround = cell.treeGround ~= nil, mark = cell.treeMark })
+          tuft = false
         end
         if card then
           -- standing on the run's southern edge, `up` tiles high
@@ -824,10 +829,10 @@ function Render.vertices(grid, tiles, ox, oz, trees, buildings, light)
 end
 
 --- Make the scene's meshes (G: love.graphics). Returns a list of meshes, the lower layer's
---- first (the upper layer's art lies over it at the same depth), or nil.
+--- first (the upper layer's art lies over it at the same depth), the tufts' last, or nil.
 function Render.meshes(G, lists)
   local meshes = {}
-  for _, layer in ipairs({ "lower", "upper", "trees", "models" }) do
+  for _, layer in ipairs({ "lower", "upper", "trees", "models", "tufts" }) do
     for image, list in pairs(lists[layer] or {}) do
       if #list > 0 then
         for _, v in ipairs(list) do if not v[10] then v[10] = 0 end end
@@ -997,10 +1002,16 @@ function Render.draw(G, Camera, scene, pose, proj, depth, rise, haze, fog, w, h,
   local sent
   for _, m in ipairs(scene.meshes) do
     -- (the trees' art is graded as it loads, src/scene/light.lua gradeTrees)
-    local want = m.layer == "trees" and 0 or sat
+    local want = (m.layer == "trees" or m.layer == "tufts") and 0 or sat
     if want ~= sent then sh:send("uSaturation", want); sent = want end
+    -- (long grass's tufts, last: hidden by what stands in front of them, but leaving no depth, so
+    -- the Battle Camera's occlusion - src/hd.lua, reading this depth - never sinks a Pokemon
+    -- into the grass it stands in. Laid north to south, the nearer row over the farther as the
+    -- camera sees them from the south, turned up to 90 degrees either way)
+    if m.layer == "tufts" then G.setDepthMode("lequal", false) end
     G.draw(m.mesh)
   end
+  G.setDepthMode("lequal", true)
   if light then Render.after(G, Camera, target, p, proj, depth, haze, fog, w, h, light) end
   G.pop()
   return target
